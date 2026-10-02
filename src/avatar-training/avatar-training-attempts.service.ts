@@ -12,6 +12,7 @@ import { AvatarTrainingIntegrationsService } from './avatar-training-integration
 import { AvatarTrainingAssessmentsService } from './avatar-training-assessments.service';
 import { AvatarTrainingDevelopmentService } from './avatar-training-development.service';
 import { AvatarTrainingNotificationsService } from './avatar-training-notifications.service';
+import { AvatarTrainingLinksService } from './avatar-training-links.service';
 import {
   AvatarProgressFilterDto,
   RecordInteractionDto,
@@ -24,8 +25,11 @@ import {
   AVATAR_PROGRESS_ROLES,
   StoredStep,
   branchTarget,
+  failureReinforcement,
   parseJson,
+  parseRules,
   parseSteps,
+  stepReinforcement,
   stripAnswers,
 } from './avatar-training.helpers';
 
@@ -47,6 +51,7 @@ export class AvatarTrainingAttemptsService {
     private readonly assessments: AvatarTrainingAssessmentsService,
     private readonly development: AvatarTrainingDevelopmentService,
     private readonly notifications: AvatarTrainingNotificationsService,
+    private readonly links: AvatarTrainingLinksService,
   ) {}
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -294,8 +299,18 @@ export class AvatarTrainingAttemptsService {
       dto.interactionType === 'USER_ANSWER' && step
         ? this.assessments.gradeAnswer(step, dto.content)
         : null;
-    const target =
+    // Reforço (§7): resposta errada pode obrigar a repetir a etapa e mostra conteúdo de revisão.
+    const previousAnswers =
       dto.interactionType === 'USER_ANSWER' && step
+        ? await this.prisma.avatarTrainingInteraction.count({
+            where: { attemptId, interactionType: 'USER_ANSWER', stepKey: step.key },
+          })
+        : 0;
+    const reinforcement =
+      graded && !graded.correct && step ? stepReinforcement(step, steps, previousAnswers) : null;
+    const repeatStep = !!reinforcement?.retry;
+    const target =
+      dto.interactionType === 'USER_ANSWER' && step && !repeatStep
         ? branchTarget(step, dto.content, graded ? graded.correct : null)
         : null;
     const stepIdx = step ? steps.findIndex(s => s.key === step.key) : -1;
@@ -318,11 +333,15 @@ export class AvatarTrainingAttemptsService {
             interactionType: 'FEEDBACK',
             stepKey: step.key,
             content: feedback.correct ? 'Resposta correcta.' : 'Resposta incorrecta.',
-            metadata: { explanation: feedback.explanation ?? null },
+            metadata: { explanation: feedback.explanation ?? null, reinforcement },
           });
         }
       }
-      if (dto.interactionType === 'STEP_ADVANCE' || dto.interactionType === 'USER_ANSWER') {
+      // Etapa a repetir: a resposta fica registada mas o formando não avança.
+      const advances =
+        dto.interactionType === 'STEP_ADVANCE' ||
+        (dto.interactionType === 'USER_ANSWER' && !repeatStep);
+      if (advances) {
         const idx = step ? steps.findIndex(s => s.key === step.key) : attempt.currentStep;
         const next = Math.min(Math.max(attempt.currentStep, jump ?? idx + 1), steps.length);
         await tx.avatarTrainingAttempt.update({
@@ -333,12 +352,12 @@ export class AvatarTrainingAttemptsService {
           },
         });
       }
-      return { interaction, feedback };
+      return { interaction, feedback, reinforcement };
     });
     if (dto.interactionType === 'HELP_REQUEST') {
       // Encaminhamento para um formador humano (§5): avisa o responsável da formação.
       await this.notifications.helpRequested({
-        responsibleId: attempt.assignment.session.program.responsibleId,
+        responsibleId: await this.links.humanResponsible(attempt.assignment.session.program),
         learnerId: attempt.userId,
         sessionTitle: attempt.assignment.session.title,
         attemptId,
@@ -520,6 +539,19 @@ export class AvatarTrainingAttemptsService {
     const scored = hasGraded || hasRubric;
     const passed = scored ? (attempt.score ?? 0) >= config.passingScore : null;
     const status = passed === false ? 'FAILED' : 'COMPLETED';
+    // Abaixo da nota mínima: conteúdo complementar e etapas a rever (sem alterar nada formal).
+    const reinforcement =
+      status === 'FAILED'
+        ? failureReinforcement(
+            steps,
+            this.assessments.gradeKnowledge(
+              steps,
+              await this.latestAnswers(attemptId),
+              await this.skippedStepKeys(attemptId),
+            ).breakdown,
+            parseRules(assignment.session.contentConfig),
+          )
+        : null;
     const now = new Date();
 
     await this.prisma.$transaction([
@@ -552,6 +584,25 @@ export class AvatarTrainingAttemptsService {
       passed: status === 'COMPLETED',
       score: attempt.score,
     });
+    // Presença (contexto LMS) e eventos para Automations — melhor esforço.
+    await this.links.onSessionFinished({
+      attemptId,
+      userId: attempt.userId,
+      passed: status === 'COMPLETED',
+      score: attempt.score,
+      startedAt: attempt.startedAt,
+      completedAt: now,
+      pausedSeconds: attempt.pausedSeconds,
+      session: {
+        id: assignment.session.id,
+        title: assignment.session.title,
+        program: {
+          id: assignment.session.program.id,
+          title: assignment.session.program.title,
+          courseId: assignment.session.program.courseId,
+        },
+      },
+    });
     // Só uma sessão aprovada alimenta Competências, PDI e Onboarding.
     const development =
       status === 'COMPLETED'
@@ -578,6 +629,7 @@ export class AvatarTrainingAttemptsService {
       score: attempt.score,
       passed,
       passingScore: scored ? config.passingScore : null,
+      reinforcement,
       course: await this.integrations.courseStatus(assignment.enrollmentId),
     };
   }

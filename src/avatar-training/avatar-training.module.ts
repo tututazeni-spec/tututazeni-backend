@@ -19,6 +19,9 @@ import { AvatarTrainingNotificationsService } from './avatar-training-notificati
 import { AvatarTrainingReportsService } from './avatar-training-reports.service';
 import { AvatarTrainingRetentionService } from './avatar-training-retention.service';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { CourseCompletionModule } from '../course-completion/course-completion.module';
+import { AutomationModule } from '../automation/automation.module';
+import { AvatarTrainingLinksService } from './avatar-training-links.service';
 
 @Module({
   imports: [
@@ -29,6 +32,8 @@ import { NotificationsModule } from '../notifications/notifications.module';
     DevelopmentPlansModule,
     OnboardingModule,
     NotificationsModule,
+    CourseCompletionModule,
+    AutomationModule,
   ],
   providers: [
     AvatarTrainingAiTutorService,
@@ -42,6 +47,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     AvatarTrainingNotificationsService,
     AvatarTrainingReportsService,
     AvatarTrainingRetentionService,
+    AvatarTrainingLinksService,
   ],
   controllers: [AvatarTrainingController],
   exports: [AvatarTrainingService, AvatarTrainingProgramsService, AvatarTrainingAttemptsService],

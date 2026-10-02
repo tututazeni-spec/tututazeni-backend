@@ -381,6 +381,72 @@ export class StepBranchesDto {
   byOption?: Record<string, string>;
 }
 
+/**
+ * Reforço de uma etapa com pergunta (§7: «avançar, repetir ou recomendar conteúdo
+ * complementar»). Quando a resposta está errada o formando recebe a mensagem e as
+ * ligações de revisão; com `retryOnIncorrect` só avança depois de acertar ou de
+ * esgotar `maxRetries` repetições.
+ */
+export class StepReinforcementDto {
+  @ApiPropertyOptional({ description: 'Mensagem de reforço apresentada após resposta errada' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  message?: string;
+
+  @ApiPropertyOptional({ description: 'Chave de uma etapa anterior a rever' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  reviewStepKey?: string;
+
+  @ApiPropertyOptional({ description: 'Conteúdo complementar (documento, vídeo, página)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  resourceUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Repetir a etapa em vez de avançar com resposta errada' })
+  @IsOptional()
+  @IsBoolean()
+  retryOnIncorrect?: boolean;
+
+  @ApiPropertyOptional({ default: 2, description: 'Repetições permitidas antes de avançar' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  maxRetries?: number;
+}
+
+export class SessionFailRuleDto {
+  @ApiPropertyOptional({ description: 'Mensagem quando a nota fica abaixo da mínima' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  message?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  resourceUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Sessão complementar recomendada (mesma formação)' })
+  @IsOptional()
+  @IsInt()
+  recommendSessionId?: number;
+}
+
+/** Regras de conclusão da sessão: o que recomendar quando a nota fica abaixo da mínima. */
+export class SessionRulesDto {
+  @ApiPropertyOptional({ type: SessionFailRuleDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SessionFailRuleDto)
+  onFail?: SessionFailRuleDto;
+}
+
 export class SessionStepDto {
   @ApiProperty({ description: 'Chave única da etapa dentro da sessão' })
   @IsString()
@@ -418,6 +484,12 @@ export class SessionStepDto {
   @ValidateNested()
   @Type(() => StepBranchesDto)
   branches?: StepBranchesDto;
+
+  @ApiPropertyOptional({ type: StepReinforcementDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => StepReinforcementDto)
+  reinforcement?: StepReinforcementDto;
 
   @ApiPropertyOptional({ default: true })
   @IsOptional()
@@ -470,6 +542,12 @@ export class CreateAvatarSessionDto {
   @ValidateNested({ each: true })
   @Type(() => SessionStepDto)
   steps?: SessionStepDto[];
+
+  @ApiPropertyOptional({ type: SessionRulesDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SessionRulesDto)
+  rules?: SessionRulesDto;
 
   @ApiPropertyOptional()
   @IsOptional()

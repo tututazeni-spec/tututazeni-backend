@@ -3,6 +3,8 @@ import {
   AVATAR_ASSIGN_ROLES,
   AVATAR_AUTHOR_ROLES,
   AVATAR_PROGRESS_ROLES,
+  failureReinforcement,
+  stepReinforcement,
   isGradedStep,
   normalizeAnswer,
   parseJson,
@@ -88,5 +90,55 @@ describe('personalização por nível', () => {
     expect(h.levelFit('ADVANCED', 1)).toBe('MATCH');
     expect(h.levelFit('EXPERT', 1)).toBe('HARDER');
     expect(h.levelFit('ADVANCED', 0)).toBe('HARDER');
+  });
+});
+
+describe('reforço e repetição (§7)', () => {
+  const steps = [
+    { key: 'a', title: 'Introdução', type: 'CONTENT' },
+    {
+      key: 'q',
+      title: 'Pergunta',
+      type: 'QUESTION',
+      question: { kind: 'SINGLE', options: ['x', 'y'], correctAnswer: 'x' },
+      reinforcement: {
+        message: 'Reveja a introdução',
+        reviewStepKey: 'a',
+        resourceUrl: 'https://exemplo.test/doc',
+        retryOnIncorrect: true,
+        maxRetries: 2,
+      },
+    },
+  ] as any[];
+
+  it('sem regra de reforço não devolve nada', () => {
+    expect(stepReinforcement(steps[0], steps, 0)).toBeNull();
+  });
+
+  it('manda repetir enquanto restam tentativas e deixa avançar depois', () => {
+    expect(stepReinforcement(steps[1], steps, 0)).toMatchObject({
+      retry: true,
+      retriesLeft: 2,
+      reviewStepTitle: 'Introdução',
+    });
+    expect(stepReinforcement(steps[1], steps, 2)).toMatchObject({ retry: false, retriesLeft: 0 });
+  });
+
+  it('o gabarito e o reforço nunca chegam ao formando', () => {
+    const [, q] = stripAnswers(steps);
+    expect(q.question?.correctAnswer).toBeUndefined();
+    expect(q.reinforcement).toBeUndefined();
+  });
+
+  it('reprovação lista as etapas fracas e a regra da sessão', () => {
+    const out = failureReinforcement(steps, [{ stepKey: 'q', correct: false, answered: true }], {
+      onFail: { message: 'Volte a tentar', recommendSessionId: 9 },
+    });
+    expect(out).toMatchObject({
+      message: 'Volte a tentar',
+      recommendSessionId: 9,
+      weakSteps: [{ stepKey: 'q', reviewStepKey: 'a' }],
+    });
+    expect(failureReinforcement(steps, [], {})).toBeNull();
   });
 });

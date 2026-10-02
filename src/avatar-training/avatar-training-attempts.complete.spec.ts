@@ -60,6 +60,7 @@ describe('AvatarTrainingAttemptsService.complete', () => {
   };
   const development = { onAttemptCompleted: jest.fn() };
   const notifications = { finished: jest.fn() };
+  const links = { onSessionFinished: jest.fn(), humanResponsible: jest.fn() };
   let svc: AvatarTrainingAttemptsService;
 
   const load = (a: unknown) => prisma.avatarTrainingAttempt.findUnique.mockResolvedValue(a);
@@ -81,6 +82,7 @@ describe('AvatarTrainingAttemptsService.complete', () => {
       new AvatarTrainingAssessmentsService(prisma),
       development as any,
       notifications as any,
+      links as any,
     );
   });
 

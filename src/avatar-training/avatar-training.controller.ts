@@ -31,6 +31,7 @@ import { AvatarTrainingAiTutorService } from './avatar-training-ai-tutor.service
 import { AvatarTrainingDevelopmentService } from './avatar-training-development.service';
 import { AvatarTrainingRetentionService } from './avatar-training-retention.service';
 import { AvatarTrainingReportsService } from './avatar-training-reports.service';
+import { AvatarTrainingLinksService } from './avatar-training-links.service';
 import {
   AddKnowledgeSourceDto,
   AskTutorDto,
@@ -83,6 +84,7 @@ export class AvatarTrainingController {
     private readonly development: AvatarTrainingDevelopmentService,
     private readonly reports: AvatarTrainingReportsService,
     private readonly retention: AvatarTrainingRetentionService,
+    private readonly links: AvatarTrainingLinksService,
   ) {}
 
   // ── Avatares (fase 1) ──────────────────────────────────────────────────────
@@ -179,6 +181,23 @@ export class AvatarTrainingController {
   @ApiOperation({ summary: 'Elegibilidade do utilizador ao certificado da formação' })
   certificationStatus(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
     return this.programs.certificationStatus(user, id);
+  }
+
+  @Post('programs/:id/certificate-request')
+  @HttpCode(HttpStatus.OK)
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({
+    summary: 'Pedir a emissão do certificado (emite se o curso ligado estiver concluído)',
+  })
+  requestCertificate(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
+    return this.links.requestCertificate(user, id);
+  }
+
+  @Get('programs/:id/links')
+  @Roles(...AVATAR_AUTHOR_ROLES)
+  @ApiOperation({ summary: 'Formações (Trainings) e percursos ligados ao curso da formação' })
+  linkedModules(@Param('id', ParseIntPipe) id: number) {
+    return this.links.linkedModules(id);
   }
 
   @Post('programs/:id/submit-review')

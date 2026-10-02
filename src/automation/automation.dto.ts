@@ -28,6 +28,8 @@ export enum TriggerType {
   COURSE_COMPLETED = 'course.completed',
   COURSE_NOT_COMPLETED = 'course.not_completed',
   COURSE_ENROLLED = 'course.enrolled',
+  AVATAR_SESSION_COMPLETED = 'avatar_training.session_completed',
+  AVATAR_SESSION_FAILED = 'avatar_training.session_failed',
   PDI_CREATED = 'pdi.created',
   PDI_APPROVED = 'pdi.approved',
   PDI_AT_RISK = 'pdi.at_risk',

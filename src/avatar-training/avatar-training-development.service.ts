@@ -28,6 +28,8 @@ import {
 
 /** Abaixo desta nota a competência é sugerida para reforço (sem alterar nada formal). */
 const WEAK_SCORE = 70;
+/** Avaliação de desempenho/360 com nível avaliado igual ou abaixo disto conta como necessidade de desenvolvimento. */
+const PERFORMANCE_WEAK_LEVEL = 2;
 const OPEN_ACTION_STATES = ['TODO', 'IN_PROGRESS', 'OVERDUE', 'BLOCKED'] as const;
 
 export interface FinishedAttemptContext {
@@ -303,15 +305,27 @@ export class AvatarTrainingDevelopmentService {
   // ── Recomendações ──────────────────────────────────────────────────────────
 
   /**
-   * Sugestões de formações publicadas a partir de três sinais: lacunas de
-   * competência, acções de PDI em aberto e tarefas de onboarding por fazer.
-   * Só recomenda — não atribui nem altera notas.
+   * Sugestões de formações publicadas a partir de sinais dos módulos de origem:
+   * lacunas de competência, avaliações de desempenho/360 publicadas, acções de
+   * PDI em aberto, objectivos do plano de carreira, tarefas de onboarding,
+   * percursos de aprendizagem e formações (Trainings) em que está inscrito.
+   * Só lê e recomenda — não atribui nem altera notas.
    */
   async recommendations(user: CurrentUserData, userId?: number) {
     const target = userId ?? user.id;
     if (target !== user.id) await this.assertCanSeeUser(user, target);
 
-    const [gaps, weak, actions, tasks, finished] = await Promise.all([
+    const [
+      gaps,
+      weak,
+      actions,
+      tasks,
+      finished,
+      reviewGaps,
+      careerGoals,
+      pathEnrolments,
+      trainings,
+    ] = await Promise.all([
       this.prisma.userCompetency.findMany({
         where: { userId: target, targetLevel: { not: null } },
         select: { competencyId: true, currentLevel: true, targetLevel: true },
@@ -340,6 +354,37 @@ export class AvatarTrainingDevelopmentService {
         take: 10,
         select: { score: true },
       }),
+      // Avaliação de desempenho/360: só avaliações já publicadas ao colaborador.
+      this.prisma.competencyEvaluation.findMany({
+        where: {
+          evaluatedLevel: { lte: PERFORMANCE_WEAK_LEVEL },
+          review: { userId: target, status: { in: ['PUBLISHED', 'FINALIZED'] } },
+        },
+        orderBy: { id: 'desc' },
+        take: 50,
+        select: { competencyId: true },
+      }),
+      // Plano de carreira activo: objectivos em aberto ligados a um curso.
+      this.prisma.careerGoal.findMany({
+        where: {
+          courseId: { not: null },
+          status: { in: ['PENDING', 'IN_PROGRESS'] },
+          careerPlan: { userId: target, status: 'ACTIVE' },
+        },
+        select: { id: true, title: true, courseId: true },
+      }),
+      this.prisma.learningPathEnrollment.findMany({
+        where: { userId: target, status: { in: ['NOT_STARTED', 'IN_PROGRESS'] } },
+        select: {
+          learningPath: {
+            select: { id: true, title: true, courses: { select: { courseId: true } } },
+          },
+        },
+      }),
+      this.prisma.trainingParticipant.findMany({
+        where: { userId: target, status: { in: ['REGISTERED', 'PENDING_APPROVAL'] } },
+        select: { training: { select: { id: true, title: true, courseId: true } } },
+      }),
     ]);
 
     const levelIndex = learnerLevelIndex(finished.map(a => a.score as number));
@@ -347,11 +392,22 @@ export class AvatarTrainingDevelopmentService {
     const gapIds = new Set<number>([
       ...gaps.filter(g => g.currentLevel < (g.targetLevel ?? 0)).map(g => g.competencyId),
       ...weak.map(w => w.competencyId),
+      ...reviewGaps.map(r => r.competencyId),
     ]);
+    const reviewGapIds = new Set(reviewGaps.map(r => r.competencyId));
+    const pathCourses = pathEnrolments.flatMap(e =>
+      e.learningPath.courses.map(c => ({ courseId: c.courseId, title: e.learningPath.title })),
+    );
+    const trainingCourses = trainings.flatMap(t =>
+      t.training?.courseId ? [{ courseId: t.training.courseId, title: t.training.title }] : [],
+    );
     const actionCompIds = new Set(actions.flatMap(a => a.competencyIds));
     const courseIds = [
       ...actions.map(a => a.courseId),
       ...tasks.map(t => t.templateTask.courseId),
+      ...careerGoals.map(g => g.courseId),
+      ...pathCourses.map(c => c.courseId),
+      ...trainingCourses.map(c => c.courseId),
     ].filter((c): c is number => c !== null);
     const competencyFilter = [...gapIds, ...actionCompIds];
 
@@ -407,6 +463,30 @@ export class AvatarTrainingDevelopmentService {
           type: 'COMPETENCY_GAP',
           detail: `Competência ${id} abaixo do nível-alvo ou com resultado fraco`,
         });
+      }
+      for (const id of p.competencyIds.filter(c => reviewGapIds.has(c))) {
+        reasons.push({
+          type: 'PERFORMANCE_REVIEW',
+          detail: `Competência ${id} com nível baixo na avaliação de desempenho/360`,
+        });
+      }
+      for (const g of careerGoals) {
+        if (g.courseId && g.courseId === p.courseId) {
+          reasons.push({
+            type: 'CAREER_GOAL',
+            detail: `Objectivo de carreira «${g.title}» (id ${g.id})`,
+          });
+        }
+      }
+      for (const c of pathCourses) {
+        if (c.courseId === p.courseId) {
+          reasons.push({ type: 'LEARNING_PATH', detail: `Percurso de aprendizagem «${c.title}»` });
+        }
+      }
+      for (const c of trainingCourses) {
+        if (c.courseId === p.courseId) {
+          reasons.push({ type: 'TRAINING', detail: `Formação inscrita «${c.title}»` });
+        }
       }
       for (const a of actions) {
         if (

@@ -18,6 +18,7 @@ const TYPES = {
   COMPLETED: 'AVATAR_TRAINING_COMPLETED',
   FAILED: 'AVATAR_TRAINING_FAILED',
   HELP: 'AVATAR_TRAINING_HELP_REQUEST',
+  CERTIFICATE: 'AVATAR_TRAINING_CERTIFICATE_REQUEST',
 } as const;
 
 const fmt = (d: Date) => d.toLocaleDateString('pt-PT');
@@ -91,6 +92,23 @@ export class AvatarTrainingNotificationsService {
       `Um formando pediu ajuda na sessão «${input.sessionTitle}»: ${input.message.slice(0, 200)}`,
       'MEDIUM',
       { attemptId: input.attemptId, learnerId: input.learnerId },
+    );
+  }
+
+  /** Pedido de certificado de um formando elegível — avisa quem gere a formação. */
+  async certificateRequested(input: {
+    recipientId: number;
+    learnerId: number;
+    programId: number;
+    programTitle: string;
+  }) {
+    await this.safeSend(
+      input.recipientId,
+      TYPES.CERTIFICATE,
+      'Pedido de certificado',
+      `Um formando cumpre as regras de certificação da formação «${input.programTitle}» e pediu o certificado.`,
+      'MEDIUM',
+      { programId: input.programId, learnerId: input.learnerId },
     );
   }
 

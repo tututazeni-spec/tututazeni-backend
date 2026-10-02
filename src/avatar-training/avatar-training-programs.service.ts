@@ -30,6 +30,7 @@ import {
   AVATAR_ADMIN_ROLES,
   AVATAR_AUTHOR_ROLES,
   parseJson,
+  parseRules,
   parseSteps,
   serializeSteps,
   stripAnswers,
@@ -368,7 +369,12 @@ export class AvatarTrainingProgramsService {
   private presentSession<T extends { contentConfig: string | null }>(s: T, withAnswers: boolean) {
     const { contentConfig, ...rest } = s;
     const steps = parseSteps(contentConfig);
-    return { ...rest, steps: withAnswers ? steps : stripAnswers(steps) };
+    return {
+      ...rest,
+      steps: withAnswers ? steps : stripAnswers(steps),
+      // Regras de conclusão (reforço) só são visíveis a quem constrói a sessão.
+      ...(withAnswers ? { rules: parseRules(contentConfig) } : {}),
+    };
   }
 
   private validateSteps(steps: SessionStepDto[]) {
@@ -404,6 +410,20 @@ export class AvatarTrainingProgramsService {
         }
       }
     });
+    for (const s of steps) {
+      const review = s.reinforcement?.reviewStepKey;
+      if (review) {
+        const at = steps.findIndex(x => x.key === review);
+        if (at < 0 || at >= steps.indexOf(s)) {
+          throw new BadRequestException(
+            `O reforço da etapa ${s.key} tem de apontar para uma etapa anterior existente`,
+          );
+        }
+      }
+      if (s.reinforcement && s.type !== 'QUESTION') {
+        throw new BadRequestException(`O reforço só se aplica a etapas com pergunta (${s.key})`);
+      }
+    }
     for (const s of steps) {
       if (s.type === 'QUESTION') {
         if (!s.question)
@@ -478,12 +498,12 @@ export class AvatarTrainingProgramsService {
       where: { programId: dto.programId },
       _max: { position: true },
     });
-    const { steps, ...rest } = dto;
+    const { steps, rules, ...rest } = dto;
     const row = await this.prisma.avatarTrainingSession.create({
       data: {
         ...rest,
         position: dto.position ?? (last._max.position ?? 0) + 1,
-        contentConfig: serializeSteps(steps ?? []),
+        contentConfig: serializeSteps(steps ?? [], rules),
         // Sessão nova numa formação já publicada nasce em rascunho até nova aprovação.
         status: 'DRAFT',
       },
@@ -510,14 +530,24 @@ export class AvatarTrainingProgramsService {
     }
     await this.assertAvatarUsable(dto.avatarId);
     if (dto.steps) this.validateSteps(dto.steps);
-    const { steps, programId: _p, ...rest } = dto;
+    const { steps, rules, programId: _p, ...rest } = dto;
+    const contentChanged = !!steps || rules !== undefined;
     const row = await this.prisma.avatarTrainingSession.update({
       where: { id },
       data: {
         ...rest,
-        ...(steps ? { contentConfig: serializeSteps(steps) } : {}),
+        ...(contentChanged
+          ? {
+              contentConfig: serializeSteps(
+                steps ?? parseSteps(session.contentConfig),
+                rules ?? parseRules(session.contentConfig),
+              ),
+            }
+          : {}),
         // Conteúdo/regras alteradas ficam versionadas para auditoria.
-        ...(steps || dto.welcomeMessage !== undefined ? { version: { increment: 1 } } : {}),
+        ...(contentChanged || dto.welcomeMessage !== undefined
+          ? { version: { increment: 1 } }
+          : {}),
       },
     });
     await this.audit.log({

@@ -1,6 +1,6 @@
 // src/avatar-training/avatar-training.helpers.ts
 import { Role } from '../auth/enums/role.enum';
-import { AvatarStepType, SessionStepDto } from './dto/avatar-training.dto';
+import { AvatarStepType, SessionRulesDto, SessionStepDto } from './dto/avatar-training.dto';
 
 /** Gestão de avatares, aprovação/publicação, revisão de tentativas e leitura global. */
 export const AVATAR_ADMIN_ROLES = [Role.ADMIN, Role.RH];
@@ -25,13 +25,23 @@ export function parseSteps(contentConfig: string | null | undefined): StoredStep
   }
 }
 
-export function serializeSteps(steps: SessionStepDto[]): string {
-  return JSON.stringify({ steps });
+export function parseRules(contentConfig: string | null | undefined): SessionRulesDto {
+  if (!contentConfig) return {};
+  try {
+    const parsed = JSON.parse(contentConfig) as { rules?: SessionRulesDto };
+    return parsed.rules ?? {};
+  } catch {
+    return {};
+  }
 }
 
-/** Remove correctAnswer e as ramificações — o formando nunca vê o gabarito nem o caminho. */
+export function serializeSteps(steps: SessionStepDto[], rules: SessionRulesDto = {}): string {
+  return JSON.stringify(Object.keys(rules).length ? { steps, rules } : { steps });
+}
+
+/** Remove correctAnswer, ramificações e reforço — o formando nunca vê o gabarito, o caminho nem a regra. */
 export function stripAnswers(steps: StoredStep[]): StoredStep[] {
-  return steps.map(({ branches: _branches, ...s }) =>
+  return steps.map(({ branches: _branches, reinforcement: _reinforcement, ...s }) =>
     s.question ? { ...s, question: { ...s.question, correctAnswer: undefined } } : s,
   );
 }
@@ -69,6 +79,72 @@ export function parseJson<T>(raw: string | null | undefined, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+// ── Reforço e repetição (docs/Avatar_Training.md §7) ─────────────────────────
+
+const DEFAULT_MAX_RETRIES = 2;
+
+export interface StepReinforcementPayload {
+  message: string | null;
+  reviewStepKey: string | null;
+  reviewStepTitle: string | null;
+  resourceUrl: string | null;
+  /** Verdadeiro quando a etapa deve ser repetida antes de avançar. */
+  retry: boolean;
+  retriesLeft: number;
+}
+
+/**
+ * Reforço a apresentar após uma resposta errada. `previousAnswers` é o número de
+ * respostas já dadas a esta etapa (sem contar a actual). Null quando a etapa não
+ * tem regra de reforço.
+ */
+export function stepReinforcement(
+  step: StoredStep,
+  steps: StoredStep[],
+  previousAnswers: number,
+): StepReinforcementPayload | null {
+  const r = step.reinforcement;
+  if (!r) return null;
+  const max = r.maxRetries ?? DEFAULT_MAX_RETRIES;
+  const retry = !!r.retryOnIncorrect && previousAnswers < max;
+  const review = r.reviewStepKey ? steps.find(s => s.key === r.reviewStepKey) : undefined;
+  return {
+    message: r.message ?? null,
+    reviewStepKey: review?.key ?? null,
+    reviewStepTitle: review?.title ?? null,
+    resourceUrl: r.resourceUrl ?? null,
+    retry,
+    retriesLeft: retry ? max - previousAnswers : 0,
+  };
+}
+
+/** Sumário para o formando que ficou abaixo da nota mínima: etapas fracas + regra da sessão. */
+export function failureReinforcement(
+  steps: StoredStep[],
+  breakdown: { stepKey: string; correct: boolean; answered: boolean }[],
+  rules: SessionRulesDto,
+) {
+  const weakSteps = breakdown
+    .filter(b => !b.correct)
+    .map(b => steps.find(s => s.key === b.stepKey))
+    .filter((s): s is StoredStep => !!s)
+    .map(s => ({
+      stepKey: s.key,
+      title: s.title,
+      message: s.reinforcement?.message ?? null,
+      reviewStepKey: s.reinforcement?.reviewStepKey ?? null,
+      resourceUrl: s.reinforcement?.resourceUrl ?? null,
+    }));
+  const fail = rules.onFail;
+  if (!weakSteps.length && !fail) return null;
+  return {
+    message: fail?.message ?? null,
+    resourceUrl: fail?.resourceUrl ?? null,
+    recommendSessionId: fail?.recommendSessionId ?? null,
+    weakSteps,
+  };
 }
 
 // ── Personalização por nível (docs/Avatar_Training.md §1) ────────────────────
