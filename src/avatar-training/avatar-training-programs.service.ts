@@ -376,6 +376,35 @@ export class AvatarTrainingProgramsService {
     for (const s of steps) {
       if (keys.has(s.key)) throw new BadRequestException(`Chave de etapa duplicada: ${s.key}`);
       keys.add(s.key);
+    }
+    // Ramificações: só para etapas posteriores (garante que a sessão termina).
+    steps.forEach((s, idx) => {
+      const b = s.branches;
+      if (!b) return;
+      const targets = [b.onCorrect, b.onIncorrect, ...Object.values(b.byOption ?? {})].filter(
+        (t): t is string => !!t,
+      );
+      for (const t of targets) {
+        const at = steps.findIndex(x => x.key === t);
+        if (at < 0) {
+          throw new BadRequestException(
+            `A ramificação da etapa ${s.key} aponta para «${t}», que não existe`,
+          );
+        }
+        if (at <= idx) {
+          throw new BadRequestException(
+            `A ramificação da etapa ${s.key} tem de apontar para uma etapa posterior`,
+          );
+        }
+      }
+      const options = s.question?.kind === 'SINGLE' ? s.question.options : undefined;
+      for (const opt of Object.keys(b.byOption ?? {})) {
+        if (options && !options.includes(opt)) {
+          throw new BadRequestException(`A etapa ${s.key} não tem a opção «${opt}»`);
+        }
+      }
+    });
+    for (const s of steps) {
       if (s.type === 'QUESTION') {
         if (!s.question)
           throw new BadRequestException(`A etapa ${s.key} exige a definição da pergunta`);

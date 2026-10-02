@@ -23,6 +23,7 @@ import {
   AVATAR_ADMIN_ROLES,
   AVATAR_PROGRESS_ROLES,
   StoredStep,
+  branchTarget,
   parseJson,
   parseSteps,
   stripAnswers,
@@ -122,7 +123,18 @@ export class AvatarTrainingAttemptsService {
     });
   }
 
-  /** Chaves das etapas concluídas (avançadas ou respondidas). */
+  /** Etapas saltadas por ramificações (guardadas nos metadados da resposta que as saltou). */
+  private async skippedStepKeys(attemptId: number): Promise<Set<string>> {
+    const rows = await this.prisma.avatarTrainingInteraction.findMany({
+      where: { attemptId, interactionType: 'USER_ANSWER', metadata: { contains: '"skipped"' } },
+      select: { metadata: true },
+    });
+    return new Set(
+      rows.flatMap(r => parseJson<{ skipped?: string[] }>(r.metadata, {}).skipped ?? []),
+    );
+  }
+
+  /** Chaves das etapas concluídas (avançadas, respondidas ou saltadas por ramificação). */
   private async doneStepKeys(attemptId: number): Promise<Set<string>> {
     const rows = await this.prisma.avatarTrainingInteraction.findMany({
       where: {
@@ -132,7 +144,9 @@ export class AvatarTrainingAttemptsService {
       },
       select: { stepKey: true },
     });
-    return new Set(rows.map(r => r.stepKey));
+    const done = new Set(rows.map(r => r.stepKey));
+    for (const k of await this.skippedStepKeys(attemptId)) done.add(k);
+    return done;
   }
 
   private async latestAnswers(attemptId: number): Promise<Map<string, string>> {
@@ -275,16 +289,30 @@ export class AvatarTrainingAttemptsService {
       throw new ConflictException('Uma resposta exige stepKey');
     }
 
+    // Ramificação (role-play): a resposta pode levar a outra etapa; as saltadas deixam de ser exigidas.
+    const graded =
+      dto.interactionType === 'USER_ANSWER' && step
+        ? this.assessments.gradeAnswer(step, dto.content)
+        : null;
+    const target =
+      dto.interactionType === 'USER_ANSWER' && step
+        ? branchTarget(step, dto.content, graded ? graded.correct : null)
+        : null;
+    const stepIdx = step ? steps.findIndex(s => s.key === step.key) : -1;
+    const targetIdx = target ? steps.findIndex(s => s.key === target) : -1;
+    const jump = stepIdx >= 0 && targetIdx > stepIdx ? targetIdx : null;
+    const skipped = jump !== null ? steps.slice(stepIdx + 1, jump).map(s => s.key) : [];
+
     const result = await this.prisma.$transaction(async tx => {
       const interaction = await this.appendInteraction(tx, attemptId, {
         interactionType: dto.interactionType,
         content: dto.content,
         stepKey: dto.stepKey,
-        metadata: dto.metadata,
+        metadata: skipped.length ? { ...dto.metadata, skipped, branchTo: target } : dto.metadata,
       });
       let feedback: { correct: boolean; explanation?: string } | null = null;
       if (dto.interactionType === 'USER_ANSWER' && step) {
-        feedback = this.assessments.gradeAnswer(step, dto.content);
+        feedback = graded;
         if (feedback) {
           await this.appendInteraction(tx, attemptId, {
             interactionType: 'FEEDBACK',
@@ -296,7 +324,7 @@ export class AvatarTrainingAttemptsService {
       }
       if (dto.interactionType === 'STEP_ADVANCE' || dto.interactionType === 'USER_ANSWER') {
         const idx = step ? steps.findIndex(s => s.key === step.key) : attempt.currentStep;
-        const next = Math.min(Math.max(attempt.currentStep, idx + 1), steps.length);
+        const next = Math.min(Math.max(attempt.currentStep, jump ?? idx + 1), steps.length);
         await tx.avatarTrainingAttempt.update({
           where: { id: attemptId },
           data: {
@@ -384,7 +412,11 @@ export class AvatarTrainingAttemptsService {
       }
       const answers = await this.latestAnswers(attemptId);
       for (const a of dto.answers ?? []) answers.set(a.stepKey, a.answer);
-      const graded = this.assessments.gradeKnowledge(steps, answers);
+      const graded = this.assessments.gradeKnowledge(
+        steps,
+        answers,
+        await this.skippedStepKeys(attemptId),
+      );
       await tx.avatarTrainingAttempt.update({
         where: { id: attemptId },
         data: {
@@ -563,7 +595,11 @@ export class AvatarTrainingAttemptsService {
     const steps = this.stepsOf(attempt);
     const config = await this.assessments.getConfig(attempt.assignment.sessionId);
     const answers = await this.latestAnswers(attemptId);
-    const knowledge = this.assessments.gradeKnowledge(steps, answers);
+    const knowledge = this.assessments.gradeKnowledge(
+      steps,
+      answers,
+      await this.skippedStepKeys(attemptId),
+    );
     const review = await this.prisma.avatarTrainingInteraction.findFirst({
       where: { attemptId, stepKey: 'REVIEW' },
       orderBy: { sequence: 'desc' },

@@ -359,6 +359,28 @@ export class StepQuestionDto {
   explanation?: string;
 }
 
+/** Ramificação (role-play): para onde segue o formando conforme a resposta. Só para etapas à frente. */
+export class StepBranchesDto {
+  @ApiPropertyOptional({ description: 'Chave da etapa seguinte se a resposta estiver certa' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  onCorrect?: string;
+
+  @ApiPropertyOptional({ description: 'Chave da etapa seguinte se a resposta estiver errada' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  onIncorrect?: string;
+
+  @ApiPropertyOptional({
+    description: 'Opção escolhida → chave da etapa seguinte (tem prioridade sobre certo/errado)',
+  })
+  @IsOptional()
+  @IsObject()
+  byOption?: Record<string, string>;
+}
+
 export class SessionStepDto {
   @ApiProperty({ description: 'Chave única da etapa dentro da sessão' })
   @IsString()
@@ -390,6 +412,12 @@ export class SessionStepDto {
   @ValidateNested()
   @Type(() => StepQuestionDto)
   question?: StepQuestionDto;
+
+  @ApiPropertyOptional({ type: StepBranchesDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => StepBranchesDto)
+  branches?: StepBranchesDto;
 
   @ApiPropertyOptional({ default: true })
   @IsOptional()

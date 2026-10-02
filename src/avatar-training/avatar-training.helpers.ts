@@ -29,11 +29,29 @@ export function serializeSteps(steps: SessionStepDto[]): string {
   return JSON.stringify({ steps });
 }
 
-/** Remove correctAnswer — o formando nunca vê o gabarito. */
+/** Remove correctAnswer e as ramificações — o formando nunca vê o gabarito nem o caminho. */
 export function stripAnswers(steps: StoredStep[]): StoredStep[] {
-  return steps.map(s =>
+  return steps.map(({ branches: _branches, ...s }) =>
     s.question ? { ...s, question: { ...s.question, correctAnswer: undefined } } : s,
   );
+}
+
+/**
+ * Chave da etapa seguinte pedida pelas ramificações, ou null para seguir em sequência.
+ * `correct` é null quando a etapa não tem gabarito (ex.: cenário de role-play).
+ */
+export function branchTarget(
+  step: StoredStep,
+  answer: string,
+  correct: boolean | null,
+): string | null {
+  const b = step.branches;
+  if (!b) return null;
+  const byOption = b.byOption?.[answer.trim()];
+  if (byOption) return byOption;
+  if (correct === true) return b.onCorrect ?? null;
+  if (correct === false) return b.onIncorrect ?? null;
+  return null;
 }
 
 export function isGradedStep(step: StoredStep): boolean {

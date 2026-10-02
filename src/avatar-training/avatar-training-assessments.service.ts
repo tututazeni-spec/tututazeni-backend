@@ -50,8 +50,10 @@ export class AvatarTrainingAssessmentsService {
   gradeKnowledge(
     steps: StoredStep[],
     answers: Map<string, string>,
+    /** Etapas saltadas por uma ramificação — não contam para a nota. */
+    skipped: ReadonlySet<string> = new Set(),
   ): { score: number | null; breakdown: KnowledgeBreakdownItem[] } {
-    const graded = steps.filter(isGradedStep);
+    const graded = steps.filter(s => isGradedStep(s) && !skipped.has(s.key));
     if (!graded.length) return { score: null, breakdown: [] };
     let total = 0;
     let earned = 0;
