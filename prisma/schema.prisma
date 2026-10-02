@@ -12506,6 +12506,7 @@ model AvatarTrainingProgram {
   language              String                       @default("pt")
   durationMinutes       Int?
   prerequisiteCourseIds Int[]                        @default([])
+  competencyIds         Int[]                        @default([]) // competências-alvo (Fase 6)
   certificateEnabled    Boolean                      @default(false)
   status                AvatarTrainingStatus         @default(DRAFT)
   version               Int                          @default(1)
@@ -12552,20 +12553,25 @@ model AvatarTrainingSession {
 }
 
 model AvatarTrainingAssignment {
-  id           Int                            @id @default(autoincrement())
-  sessionId    Int
-  userId       Int
-  enrollmentId Int?
-  assignedById Int?
-  mandatory    Boolean                        @default(false)
-  dueDate      DateTime?
-  status       AvatarTrainingAssignmentStatus @default(ASSIGNED)
-  assignedAt   DateTime                       @default(now())
-  completedAt  DateTime?
-  session      AvatarTrainingSession          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  user         User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  enrollment   Enrollment?                    @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
-  attempts     AvatarTrainingAttempt[]
+  id                       Int                            @id @default(autoincrement())
+  sessionId                Int
+  userId                   Int
+  enrollmentId             Int?
+  assignedById             Int?
+  mandatory                Boolean                        @default(false)
+  dueDate                  DateTime?
+  // Fase 6 — ligações aos módulos de origem (sem FK: o registo de origem pode ser
+  // apagado sem arrastar a atribuição; é validado na leitura/escrita).
+  origin                   String                         @default("MANUAL") // MANUAL | PDI | ONBOARDING | RECOMMENDATION
+  developmentPlanActionId  Int?
+  onboardingTaskInstanceId Int?
+  status                   AvatarTrainingAssignmentStatus @default(ASSIGNED)
+  assignedAt               DateTime                       @default(now())
+  completedAt              DateTime?
+  session                  AvatarTrainingSession          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user                     User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enrollment               Enrollment?                    @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  attempts                 AvatarTrainingAttempt[]
 
   @@unique([sessionId, userId])
   @@index([userId])
@@ -12574,26 +12580,27 @@ model AvatarTrainingAssignment {
 }
 
 model AvatarTrainingAttempt {
-  id            Int                         @id @default(autoincrement())
-  assignmentId  Int
-  userId        Int
-  attemptNumber Int
-  status        AvatarTrainingAttemptStatus @default(IN_PROGRESS)
-  textOnly      Boolean                     @default(true)
-  currentStep   Int                         @default(0)
-  progress      Int                         @default(0)
-  score         Float?
-  passed        Boolean?
-  feedback      String?                     @db.Text
-  reviewedById  Int?
-  startedAt     DateTime                    @default(now())
-  pausedAt      DateTime?
-  pausedSeconds Int                         @default(0)
-  submittedAt   DateTime?
-  completedAt   DateTime?
-  assignment    AvatarTrainingAssignment    @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  user          User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  interactions  AvatarTrainingInteraction[]
+  id                Int                              @id @default(autoincrement())
+  assignmentId      Int
+  userId            Int
+  attemptNumber     Int
+  status            AvatarTrainingAttemptStatus      @default(IN_PROGRESS)
+  textOnly          Boolean                          @default(true)
+  currentStep       Int                              @default(0)
+  progress          Int                              @default(0)
+  score             Float?
+  passed            Boolean?
+  feedback          String?                          @db.Text
+  reviewedById      Int?
+  startedAt         DateTime                         @default(now())
+  pausedAt          DateTime?
+  pausedSeconds     Int                              @default(0)
+  submittedAt       DateTime?
+  completedAt       DateTime?
+  assignment        AvatarTrainingAssignment         @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  user              User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interactions      AvatarTrainingInteraction[]
+  competencyResults AvatarTrainingCompetencyResult[]
 
   @@unique([assignmentId, attemptNumber])
   @@index([userId])
@@ -12626,6 +12633,26 @@ model AvatarTrainingAssessment {
   updatedAt               DateTime              @updatedAt
   session                 AvatarTrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   assessment              Assessment?           @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
+}
+
+// Fase 6 — competências demonstradas numa tentativa concluída. O nível oficial
+// continua em UserCompetency (CompetenciesService); aqui fica a evidência.
+model AvatarTrainingCompetencyResult {
+  id           Int                   @id @default(autoincrement())
+  attemptId    Int
+  userId       Int
+  competencyId Int
+  score        Float
+  levelBefore  Int?
+  levelAfter   Int?
+  applied      Boolean               @default(false) // true = UserCompetency foi actualizado
+  evidence     String?               @db.Text
+  assessedAt   DateTime              @default(now())
+  attempt      AvatarTrainingAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, competencyId])
+  @@index([userId])
+  @@index([competencyId])
 }
 
 model AvatarTrainingKnowledgeSource {

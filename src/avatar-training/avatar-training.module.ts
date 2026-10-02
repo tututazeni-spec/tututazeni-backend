@@ -11,9 +11,20 @@ import { AvatarTrainingIntegrationsService } from './avatar-training-integration
 import { AvatarTrainingAiTutorService } from './avatar-training-ai-tutor.service';
 import { AvatarTrainingProvidersService } from './avatar-training-providers.service';
 import { AiTutorModule } from '../ai-tutor/ai-tutor.module';
+import { CompetenciesModule } from '../competencies/competencies.module';
+import { DevelopmentPlansModule } from '../development-plans/development-plans.module';
+import { OnboardingModule } from '../onboarding/onboarding.module';
+import { AvatarTrainingDevelopmentService } from './avatar-training-development.service';
 
 @Module({
-  imports: [PrismaModule, AuditModule, AiTutorModule],
+  imports: [
+    PrismaModule,
+    AuditModule,
+    AiTutorModule,
+    CompetenciesModule,
+    DevelopmentPlansModule,
+    OnboardingModule,
+  ],
   providers: [
     AvatarTrainingAiTutorService,
     AvatarTrainingProvidersService,
@@ -22,6 +33,7 @@ import { AiTutorModule } from '../ai-tutor/ai-tutor.module';
     AvatarTrainingAttemptsService,
     AvatarTrainingAssessmentsService,
     AvatarTrainingIntegrationsService,
+    AvatarTrainingDevelopmentService,
   ],
   controllers: [AvatarTrainingController],
   exports: [AvatarTrainingService, AvatarTrainingProgramsService, AvatarTrainingAttemptsService],
