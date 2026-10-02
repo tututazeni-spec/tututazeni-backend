@@ -10,6 +10,7 @@ import { assertCanAccess, isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { AvatarTrainingIntegrationsService } from './avatar-training-integrations.service';
 import { AvatarTrainingAssessmentsService } from './avatar-training-assessments.service';
+import { AvatarTrainingDevelopmentService } from './avatar-training-development.service';
 import {
   AvatarProgressFilterDto,
   RecordInteractionDto,
@@ -35,6 +36,7 @@ export class AvatarTrainingAttemptsService {
     private readonly audit: AuditService,
     private readonly integrations: AvatarTrainingIntegrationsService,
     private readonly assessments: AvatarTrainingAssessmentsService,
+    private readonly development: AvatarTrainingDevelopmentService,
   ) {}
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -478,8 +480,27 @@ export class AvatarTrainingAttemptsService {
       entityId: attemptId,
       metadata: { status, score: attempt.score, passed },
     });
+    // Só uma sessão aprovada alimenta Competências, PDI e Onboarding.
+    const development =
+      status === 'COMPLETED'
+        ? await this.development.onAttemptCompleted(user, {
+            attemptId,
+            userId: attempt.userId,
+            score: attempt.score,
+            assignment: {
+              id: assignment.id,
+              developmentPlanActionId: assignment.developmentPlanActionId,
+              onboardingTaskInstanceId: assignment.onboardingTaskInstanceId,
+              session: {
+                title: assignment.session.title,
+                program: assignment.session.program,
+              },
+            },
+          })
+        : null;
     // Concluir a sessão não conclui o curso: devolve-se o estado oficial (só leitura).
     return {
+      development,
       attemptId,
       status,
       score: attempt.score,

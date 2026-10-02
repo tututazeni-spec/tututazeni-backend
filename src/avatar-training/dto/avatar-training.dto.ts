@@ -233,6 +233,13 @@ export class CreateAvatarProgramDto {
   @IsInt({ each: true })
   prerequisiteCourseIds?: number[];
 
+  @ApiPropertyOptional({ type: [Number], description: 'Competências-alvo da formação' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsInt({ each: true })
+  competencyIds?: number[];
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
@@ -505,6 +512,20 @@ export class AssignAvatarSessionDto {
   @IsOptional()
   @IsBoolean()
   autoEnroll?: boolean;
+}
+
+export class LinkAvatarSessionDto {
+  @ApiProperty({ description: 'Sessão publicada a atribuir' })
+  @IsInt()
+  sessionId: number;
+}
+
+export class RecommendationsQueryDto {
+  @ApiPropertyOptional({ description: 'Utilizador (omitir = o próprio)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  userId?: number;
 }
 
 // ─── Tentativas ──────────────────────────────────────────────────────────────

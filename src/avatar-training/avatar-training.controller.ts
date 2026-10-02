@@ -28,6 +28,7 @@ import { AvatarTrainingProgramsService } from './avatar-training-programs.servic
 import { AvatarTrainingAttemptsService } from './avatar-training-attempts.service';
 import { AvatarTrainingProvidersService } from './avatar-training-providers.service';
 import { AvatarTrainingAiTutorService } from './avatar-training-ai-tutor.service';
+import { AvatarTrainingDevelopmentService } from './avatar-training-development.service';
 import {
   AddKnowledgeSourceDto,
   AskTutorDto,
@@ -37,6 +38,8 @@ import {
   AvatarProgressFilterDto,
   AvatarTrainingProviderService,
   CaptionsQueryDto,
+  LinkAvatarSessionDto,
+  RecommendationsQueryDto,
   AvatarSessionFilterDto,
   CreateAvatarProgramDto,
   CreateAvatarSessionDto,
@@ -72,6 +75,7 @@ export class AvatarTrainingController {
     private readonly attempts: AvatarTrainingAttemptsService,
     private readonly aiTutor: AvatarTrainingAiTutorService,
     private readonly providers: AvatarTrainingProvidersService,
+    private readonly development: AvatarTrainingDevelopmentService,
   ) {}
 
   // ── Avatares (fase 1) ──────────────────────────────────────────────────────
@@ -461,5 +465,54 @@ export class AvatarTrainingController {
   @Roles(...AUTHENTICATED_ROLES)
   results(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
     return this.attempts.results(user, id);
+  }
+
+  // ── Desenvolvimento (fase 6) ───────────────────────────────────────────────
+
+  @Get('attempts/:id/competencies')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Competências demonstradas numa tentativa' })
+  attemptCompetencies(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
+    return this.development.attemptCompetencies(user, id);
+  }
+
+  @Get('competencies')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Competências demonstradas por um utilizador (próprio ou da equipa)' })
+  userCompetencies(@CurrentUser() user: CurrentUserData, @Query() query: RecommendationsQueryDto) {
+    return this.development.userCompetencies(user, query.userId);
+  }
+
+  @Get('recommendations')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Formações recomendadas: lacunas, PDI em aberto e onboarding' })
+  recommendations(@CurrentUser() user: CurrentUserData, @Query() query: RecommendationsQueryDto) {
+    return this.development.recommendations(user, query.userId);
+  }
+
+  @Post('pdi-actions/:actionId/assign')
+  @HttpCode(HttpStatus.OK)
+  @Roles(...AVATAR_ASSIGN_ROLES)
+  @ApiOperation({
+    summary: 'Ligar uma acção de PDI a uma sessão; concluir a sessão conclui a acção',
+  })
+  assignPdiAction(
+    @CurrentUser() user: CurrentUserData,
+    @Param('actionId', ParseIntPipe) actionId: number,
+    @Body() dto: LinkAvatarSessionDto,
+  ) {
+    return this.development.assignForPdiAction(user, actionId, dto.sessionId);
+  }
+
+  @Post('onboarding-tasks/:taskId/assign')
+  @HttpCode(HttpStatus.OK)
+  @Roles(...AVATAR_ASSIGN_ROLES)
+  @ApiOperation({ summary: 'Ligar uma tarefa de onboarding a uma sessão com avatar' })
+  assignOnboardingTask(
+    @CurrentUser() user: CurrentUserData,
+    @Param('taskId', ParseIntPipe) taskId: number,
+    @Body() dto: LinkAvatarSessionDto,
+  ) {
+    return this.development.assignForOnboardingTask(user, taskId, dto.sessionId);
   }
 }
