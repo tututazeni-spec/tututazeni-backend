@@ -1939,11 +1939,16 @@ const InstanceStatus = {
 const StepProgressStatus = {
   WAITING: 'WAITING',
   PENDING: 'PENDING',
+  IN_PROGRESS: 'IN_PROGRESS',
+  BLOCKED: 'BLOCKED',
   COMPLETED: 'COMPLETED',
   REJECTED: 'REJECTED',
   ESCALATED: 'ESCALATED',
   SKIPPED: 'SKIPPED',
+  CANCELLED: 'CANCELLED',
 };
+
+const ProcessPriority = { LOW: 'LOW', NORMAL: 'NORMAL', HIGH: 'HIGH', URGENT: 'URGENT' };
 
 const NotificationPriority = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', CRITICAL: 'CRITICAL' };
 
@@ -2760,6 +2765,7 @@ module.exports = {
   StepType,
   InstanceStatus,
   StepProgressStatus,
+  ProcessPriority,
   NotificationPriority,
   NotificationCategory,
   DigestFrequency,

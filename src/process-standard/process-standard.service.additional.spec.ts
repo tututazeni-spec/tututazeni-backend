@@ -47,6 +47,8 @@ const mockPrisma: any = new Proxy(
       findFirst: makeFind(null),
       count: makeCount(0),
       update: makeFind({}),
+      findMany: makeFindMany([]),
+      updateMany: makeFind({ count: 0 }),
     },
     processParticipant: {
       create: makeFind({}),
@@ -138,12 +140,47 @@ describe('ProcessStandardService — additional coverage', () => {
       mockPrisma.processStandard.findUnique.mockResolvedValue({
         ...baseProcess,
         status: 'DRAFT',
-        steps: [{ id: 1 }],
+        steps: [{ id: 1, order: 0, title: 'Passo', type: 'TASK', responsibleRole: 'RH' }],
       });
       mockPrisma.processStandard.update.mockResolvedValue({ ...baseProcess, status: 'IN_REVIEW' });
 
       const result = await service.submitForReview(1, 1);
       expect(result).toBeDefined();
+    });
+
+    it('deve recusar fluxo com ciclo de dependências (§8)', async () => {
+      mockPrisma.processStandard.findUnique.mockResolvedValue({
+        ...baseProcess,
+        status: 'DRAFT',
+        steps: [
+          {
+            id: 1,
+            order: 0,
+            title: 'A',
+            type: 'TASK',
+            responsibleRole: 'RH',
+            dependsOnOrders: [1],
+          },
+          {
+            id: 2,
+            order: 1,
+            title: 'B',
+            type: 'TASK',
+            responsibleRole: 'RH',
+            dependsOnOrders: [0],
+          },
+        ],
+      });
+      await expect(service.submitForReview(1, 1)).rejects.toThrow(BadRequestException);
+    });
+
+    it('deve recusar etapa sem responsável nem função (§5)', async () => {
+      mockPrisma.processStandard.findUnique.mockResolvedValue({
+        ...baseProcess,
+        status: 'DRAFT',
+        steps: [{ id: 1, order: 0, title: 'Sem dono', type: 'TASK' }],
+      });
+      await expect(service.submitForReview(1, 1)).rejects.toThrow(/responsável/);
     });
 
     it('deve lançar BadRequestException se não está em DRAFT', async () => {

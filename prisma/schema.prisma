@@ -872,6 +872,11 @@ model User {
   // ─── Processos ────────────────────────────────────────────────
   processStandardsOwned ProcessStandard[]
   processStepsOwned     ProcessStep[]
+  processStepsReviewed  ProcessStep[]        @relation("ProcessStepReviewer")
+  responsibleInstances  ProcessInstance[]    @relation("InstanceCurrentResponsible")
+  assignedStepProgress  StepProgress[]       @relation("StepAssignee")
+  reviewedStepProgress  StepProgress[]       @relation("StepReviewer")
+  processStepComments   ProcessStepComment[] @relation("ProcessStepCommentAuthor")
   initiatedInstances    ProcessInstance[]    @relation("InstanceInitiator")
   targetInstances       ProcessInstance[]    @relation("InstanceTarget")
   completedSteps        StepProgress[]
@@ -5661,38 +5666,58 @@ enum InstanceStatus {
 enum StepProgressStatus {
   WAITING
   PENDING
+  IN_PROGRESS
+  BLOCKED
   COMPLETED
   REJECTED
   ESCALATED
   SKIPPED
+  CANCELLED
+}
+
+enum ProcessPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
 }
 
 model ProcessStandard {
-  id               Int                  @id @default(autoincrement())
-  code             String               @unique
-  title            String
-  description      String?
-  objective        String?
-  scope            String?
-  version          String               @default("1.0")
-  status           ProcessStatus        @default(DRAFT)
-  riskLevel        RiskLevel            @default(LOW)
-  category         String?
-  tags             String[]
-  defaultSlaHours  Float?
-  estimatedMinutes Float?
-  nextReviewDate   DateTime?
-  publishedAt      DateTime?
-  ownerId          Int
-  departmentId     Int?
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
-  owner            User                 @relation(fields: [ownerId], references: [id])
-  department       Department?          @relation(fields: [departmentId], references: [id])
-  steps            ProcessStep[]
-  instances        ProcessInstance[]
-  versions         ProcessVersion[]
-  approvalLogs     ProcessApprovalLog[]
+  id                   Int                  @id @default(autoincrement())
+  code                 String               @unique
+  title                String
+  description          String?
+  objective            String?
+  scope                String?
+  version              String               @default("1.0")
+  status               ProcessStatus        @default(DRAFT)
+  riskLevel            RiskLevel            @default(LOW)
+  category             String?
+  tags                 String[]
+  defaultSlaHours      Float?
+  estimatedMinutes     Float?
+  nextReviewDate       DateTime?
+  publishedAt          DateTime?
+  // docs/Modulo_Processes.md §5
+  involvedModules      String[]
+  effectiveFrom        DateTime?
+  reviewPolicy         String?
+  confidentiality      String               @default("INTERNAL")
+  accessRoles          String[]
+  requiredDocuments    String[]
+  approvalRules        String?
+  startConditions      String?
+  completionConditions String?
+  ownerId              Int
+  departmentId         Int?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  owner                User                 @relation(fields: [ownerId], references: [id])
+  department           Department?          @relation(fields: [departmentId], references: [id])
+  steps                ProcessStep[]
+  instances            ProcessInstance[]
+  versions             ProcessVersion[]
+  approvalLogs         ProcessApprovalLog[]
 
   @@index([status])
   @@index([category])
@@ -5713,35 +5738,58 @@ model ProcessStep {
   exitConditions   String?
   requiresUpload   Boolean         @default(false)
   checklist        String[]
+  // docs/Modulo_Processes.md §6 — `dependsOnOrders` referencia o `order` de
+  // outras etapas do mesmo modelo (sobrevive à substituição das etapas);
+  // vazio + parallel=false → depende da etapa anterior; parallel=true →
+  // arranca logo com a instância.
+  dependsOnOrders  Int[]
+  parallel         Boolean         @default(false)
+  reviewerId       Int?
   process          ProcessStandard @relation(fields: [processId], references: [id], onDelete: Cascade)
   responsible      User?           @relation(fields: [responsibleId], references: [id])
+  reviewer         User?           @relation("ProcessStepReviewer", fields: [reviewerId], references: [id])
   stepProgress     StepProgress[]
 
   @@index([processId])
 }
 
 model ProcessInstance {
-  id             Int             @id @default(autoincrement())
-  processId      Int
-  processVersion String
-  initiatedById  Int
-  targetUserId   Int
-  status         InstanceStatus  @default(IN_PROGRESS)
-  notes          String?
-  cancelReason   String?
-  startedAt      DateTime        @default(now())
-  completedAt    DateTime?
-  cancelledAt    DateTime?
-  slaDeadline    DateTime?
-  sourceModule   String?
-  process        ProcessStandard @relation(fields: [processId], references: [id])
-  initiatedBy    User            @relation("InstanceInitiator", fields: [initiatedById], references: [id])
-  targetUser     User            @relation("InstanceTarget", fields: [targetUserId], references: [id])
-  stepProgress   StepProgress[]
+  id                   Int                  @id @default(autoincrement())
+  processId            Int
+  processVersion       String
+  initiatedById        Int
+  targetUserId         Int
+  status               InstanceStatus       @default(IN_PROGRESS)
+  notes                String?
+  cancelReason         String?
+  startedAt            DateTime             @default(now())
+  completedAt          DateTime?
+  cancelledAt          DateTime?
+  slaDeadline          DateTime?
+  sourceModule         String?
+  // docs/Modulo_Processes.md §4
+  code                 String?              @unique
+  title                String?
+  description          String?
+  priority             ProcessPriority      @default(NORMAL)
+  sourceEntityType     String?
+  sourceEntityId       String?
+  currentResponsibleId Int?
+  suspendedAt          DateTime?
+  archivedAt           DateTime?
+  updatedAt            DateTime             @default(now()) @updatedAt
+  process              ProcessStandard      @relation(fields: [processId], references: [id])
+  initiatedBy          User                 @relation("InstanceInitiator", fields: [initiatedById], references: [id])
+  targetUser           User                 @relation("InstanceTarget", fields: [targetUserId], references: [id])
+  currentResponsible   User?                @relation("InstanceCurrentResponsible", fields: [currentResponsibleId], references: [id])
+  stepProgress         StepProgress[]
+  stepComments         ProcessStepComment[]
 
   @@index([status])
   @@index([processId])
   @@index([sourceModule])
+  @@index([priority])
+  @@index([currentResponsibleId])
 }
 
 model StepProgress {
@@ -5759,13 +5807,43 @@ model StepProgress {
   completedAt   DateTime?
   slaDeadline   DateTime?
   duration      Int?
+  // docs/Modulo_Processes.md §6
+  assigneeId    Int?
+  reviewerId    Int?
+  assignedAt    DateTime?
+  blockedReason String?
+  result        String?
+  checklistDone String[]
+  returnCount   Int                @default(0)
+  returnReason  String?
 
-  instance    ProcessInstance @relation(fields: [instanceId], references: [id])
-  step        ProcessStep     @relation(fields: [stepId], references: [id])
-  completedBy User?           @relation(fields: [completedById], references: [id])
+  instance    ProcessInstance      @relation(fields: [instanceId], references: [id])
+  step        ProcessStep          @relation(fields: [stepId], references: [id])
+  completedBy User?                @relation(fields: [completedById], references: [id])
+  assignee    User?                @relation("StepAssignee", fields: [assigneeId], references: [id])
+  reviewer    User?                @relation("StepReviewer", fields: [reviewerId], references: [id])
+  comments    ProcessStepComment[]
 
   @@unique([instanceId, stepId])
   @@index([status])
+  @@index([assigneeId])
+}
+
+model ProcessStepComment {
+  id         Int             @id @default(autoincrement())
+  instanceId Int
+  stepId     Int
+  authorId   Int
+  // COMMENT | CLARIFICATION | SYSTEM
+  kind       String          @default("COMMENT")
+  body       String
+  mentionIds Int[]
+  createdAt  DateTime        @default(now())
+  instance   ProcessInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  step       StepProgress    @relation(fields: [instanceId, stepId], references: [instanceId, stepId], onDelete: Cascade)
+  author     User            @relation("ProcessStepCommentAuthor", fields: [authorId], references: [id])
+
+  @@index([instanceId, stepId])
 }
 
 model ProcessVersion {
@@ -12492,41 +12570,41 @@ model TrainingAvatar {
 }
 
 model AvatarTrainingProgram {
-  id                    Int                          @id @default(autoincrement())
-  code                  String                       @unique
-  title                 String
-  description           String?                      @db.Text
-  objectives            String[]
-  category              String?
-  difficulty            Difficulty                   @default(BEGINNER)
-  experienceType        AvatarTrainingExperienceType @default(GUIDED_LESSON)
-  courseId              Int?
-  moduleId              Int?
-  avatarId              Int?
-  responsibleId         Int?
-  targetDepartmentIds   Int[]                        @default([])
-  targetRoleNames       String[]                     @default([])
-  language              String                       @default("pt")
-  languageVariant       String?
-  durationMinutes       Int?
-  prerequisiteCourseIds Int[]                        @default([])
-  competencyIds         Int[]                        @default([]) // competências-alvo (Fase 6)
-  certificateEnabled    Boolean                      @default(false)
+  id                            Int                          @id @default(autoincrement())
+  code                          String                       @unique
+  title                         String
+  description                   String?                      @db.Text
+  objectives                    String[]
+  category                      String?
+  difficulty                    Difficulty                   @default(BEGINNER)
+  experienceType                AvatarTrainingExperienceType @default(GUIDED_LESSON)
+  courseId                      Int?
+  moduleId                      Int?
+  avatarId                      Int?
+  responsibleId                 Int?
+  targetDepartmentIds           Int[]                        @default([])
+  targetRoleNames               String[]                     @default([])
+  language                      String                       @default("pt")
+  languageVariant               String?
+  durationMinutes               Int?
+  prerequisiteCourseIds         Int[]                        @default([])
+  competencyIds                 Int[]                        @default([]) // competências-alvo (Fase 6)
+  certificateEnabled            Boolean                      @default(false)
   // Regras de conclusão para elegibilidade ao certificado (§4 «Certificação»).
   certificateMinScore           Int?
-  certificateRequireAllSessions Boolean              @default(true)
-  status                AvatarTrainingStatus         @default(DRAFT)
-  version               Int                          @default(1)
-  reviewSubmittedAt     DateTime?
-  approvedById          Int?
-  approvedAt            DateTime?
-  publishedAt           DateTime?
-  createdById           Int?
-  createdAt             DateTime                     @default(now())
-  updatedAt             DateTime                     @updatedAt
-  course                Course?                      @relation(fields: [courseId], references: [id], onDelete: SetNull)
-  avatar                TrainingAvatar?              @relation(fields: [avatarId], references: [id], onDelete: SetNull)
-  sessions              AvatarTrainingSession[]
+  certificateRequireAllSessions Boolean                      @default(true)
+  status                        AvatarTrainingStatus         @default(DRAFT)
+  version                       Int                          @default(1)
+  reviewSubmittedAt             DateTime?
+  approvedById                  Int?
+  approvedAt                    DateTime?
+  publishedAt                   DateTime?
+  createdById                   Int?
+  createdAt                     DateTime                     @default(now())
+  updatedAt                     DateTime                     @updatedAt
+  course                        Course?                      @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  avatar                        TrainingAvatar?              @relation(fields: [avatarId], references: [id], onDelete: SetNull)
+  sessions                      AvatarTrainingSession[]
 
   @@index([status])
   @@index([courseId])

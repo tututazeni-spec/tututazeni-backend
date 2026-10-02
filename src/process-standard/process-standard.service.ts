@@ -10,6 +10,13 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { buildOverview } from './process-overview';
+import {
+  effectiveDependencies,
+  formatInstanceCode,
+  sequenceFromCode,
+  validateWorkflow,
+} from './process-workflow';
+import { syncStepActivation } from './process-activation';
 import { createHash } from 'crypto';
 import { isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
@@ -25,9 +32,16 @@ import {
   RejectStepDto,
   ApprovalActionDto,
   ProcessDashboardFilterDto,
+  ProcessStepDto,
+  DuplicateProcessDto,
 } from './process-standard.dto';
 
 const PROCESS_PRIVILEGED_ROLES = [Role.ADMIN, Role.RH, Role.GESTOR];
+const TEMPLATE_ADMIN_ROLES = [Role.ADMIN, Role.RH];
+const ACTIVE_TASK_STATUSES = ['PENDING', 'IN_PROGRESS', 'BLOCKED', 'ESCALATED'] as const;
+const COMPLETABLE_STATUSES = ['PENDING', 'IN_PROGRESS', 'ESCALATED'];
+
+const toDate = (v?: string | null) => (v ? new Date(v) : undefined);
 
 @Injectable()
 export class ProcessStandardService {
@@ -43,11 +57,37 @@ export class ProcessStandardService {
     return parts.join('.');
   }
 
+  private stepData(s: ProcessStepDto) {
+    return {
+      type: s.type,
+      title: s.title,
+      description: s.description,
+      order: s.order,
+      responsibleId: s.responsibleId,
+      responsibleRole: s.responsibleRole,
+      slaHours: s.slaHours,
+      estimatedMinutes: s.estimatedMinutes,
+      formSchema: s.formSchema ? JSON.stringify(s.formSchema) : null,
+      exitConditions: s.exitConditions ? JSON.stringify(s.exitConditions) : null,
+      requiresUpload: s.requiresUpload ?? false,
+      checklist: s.checklist ?? [],
+      dependsOnOrders: s.dependsOnOrders ?? [],
+      parallel: s.parallel ?? false,
+      reviewerId: s.reviewerId,
+    };
+  }
+
+  /** Dependências inválidas ou ciclos impedem guardar o modelo (§8: "validar ciclos infinitos"). */
+  private assertStructure(steps: ProcessStepDto[]) {
+    const { structural } = validateWorkflow(steps);
+    if (structural.length) throw new BadRequestException(structural.join(' '));
+  }
+
   private hashPayload(payload: object): string {
     return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
   }
 
-  private async writeAuditLog(opts: {
+  async writeAuditLog(opts: {
     processId?: number;
     instanceId?: number;
     userId: number;
@@ -81,8 +121,18 @@ export class ProcessStandardService {
 
   // ─── LISTAGEM ─────────────────────────────────────────────────────────────
 
-  async findAll(filters: ProcessFilterDto) {
-    const { page = 1, limit = 20, search, status, riskLevel, departmentId, category } = filters;
+  async findAll(filters: ProcessFilterDto, user?: CurrentUserData) {
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      status,
+      riskLevel,
+      departmentId,
+      category,
+      involvedModule,
+      ownerId,
+    } = filters;
     const skip = (page - 1) * limit;
 
     const where: Prisma.ProcessStandardWhereInput = {};
@@ -90,6 +140,20 @@ export class ProcessStandardService {
     if (riskLevel) where.riskLevel = riskLevel;
     if (departmentId) where.departmentId = departmentId;
     if (category) where.category = category;
+    if (involvedModule) where.involvedModules = { has: involvedModule };
+    if (ownerId) where.ownerId = ownerId;
+
+    // §5 regras de acesso/confidencialidade: quem não gere modelos só vê os
+    // publicados, não restritos e abertos à sua função.
+    if (user && !isPrivileged(user, PROCESS_PRIVILEGED_ROLES)) {
+      where.status = 'ACTIVE';
+      where.confidentiality = { not: 'RESTRICTED' };
+      where.AND = [
+        {
+          OR: [{ accessRoles: { isEmpty: true } }, { accessRoles: { has: user.role?.name ?? '' } }],
+        },
+      ];
+    }
     if (search) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
@@ -126,6 +190,7 @@ export class ProcessStandardService {
           orderBy: { order: 'asc' },
           include: {
             responsible: { select: { id: true, fullName: true } },
+            reviewer: { select: { id: true, fullName: true } },
           },
         },
         owner: { select: { id: true, fullName: true } },
@@ -146,31 +211,19 @@ export class ProcessStandardService {
     });
     if (existing) throw new ConflictException(`Código ${dto.code} já existe`);
 
+    this.assertStructure(dto.steps);
     const { steps, ...data } = dto;
 
     const process = await this.prisma.processStandard.create({
       data: {
         ...data,
-        ownerId,
+        nextReviewDate: toDate(data.nextReviewDate),
+        effectiveFrom: toDate(data.effectiveFrom),
+        ownerId: data.ownerId ?? ownerId,
         status: 'DRAFT',
         version: '1.0',
         tags: data.tags ?? [],
-        steps: {
-          create: steps.map(s => ({
-            type: s.type,
-            title: s.title,
-            description: s.description,
-            order: s.order,
-            responsibleId: s.responsibleId,
-            responsibleRole: s.responsibleRole,
-            slaHours: s.slaHours,
-            estimatedMinutes: s.estimatedMinutes,
-            formSchema: s.formSchema ? JSON.stringify(s.formSchema) : null,
-            exitConditions: s.exitConditions ? JSON.stringify(s.exitConditions) : null,
-            requiresUpload: s.requiresUpload ?? false,
-            checklist: s.checklist ?? [],
-          })),
-        },
+        steps: { create: steps.map(s => this.stepData(s)) },
       },
       include: {
         steps: { orderBy: { order: 'asc' } },
@@ -212,12 +265,15 @@ export class ProcessStandardService {
       if (codeExists) throw new ConflictException(`Código ${dto.code} já em uso`);
     }
 
+    if (dto.steps?.length) this.assertStructure(dto.steps);
     const { steps, ...data } = dto;
 
     await this.prisma.processStandard.update({
       where: { id },
       data: {
         ...data,
+        nextReviewDate: toDate(data.nextReviewDate),
+        effectiveFrom: toDate(data.effectiveFrom),
         tags: data.tags ?? undefined,
       },
     });
@@ -241,21 +297,7 @@ export class ProcessStandardService {
       }
       await this.prisma.processStep.deleteMany({ where: { processId: id } });
       await this.prisma.processStep.createMany({
-        data: steps.map(s => ({
-          processId: id,
-          type: s.type,
-          title: s.title,
-          description: s.description,
-          order: s.order,
-          responsibleId: s.responsibleId,
-          responsibleRole: s.responsibleRole,
-          slaHours: s.slaHours,
-          estimatedMinutes: s.estimatedMinutes,
-          formSchema: s.formSchema ? JSON.stringify(s.formSchema) : null,
-          exitConditions: s.exitConditions ? JSON.stringify(s.exitConditions) : null,
-          requiresUpload: s.requiresUpload ?? false,
-          checklist: s.checklist ?? [],
-        })),
+        data: steps.map(s => ({ processId: id, ...this.stepData(s) })),
       });
     }
 
@@ -313,6 +355,10 @@ export class ProcessStandardService {
     }
     if (p.steps.length === 0) {
       throw new BadRequestException('Processo sem etapas não pode ser submetido');
+    }
+    const check = validateWorkflow(p.steps);
+    if (!check.valid) {
+      throw new BadRequestException(`Fluxo inválido: ${check.errors.join(' ')}`);
     }
 
     const updated = await this.prisma.processStandard.update({
@@ -381,6 +427,105 @@ export class ProcessStandardService {
     return updated;
   }
 
+  // ─── TESTAR FLUXO / DUPLICAR / VERSÕES (§5) ────────────────────────────────
+
+  /** "Testar o fluxo": valida o grafo de etapas e simula as ondas de execução. */
+  async validateTemplate(id: number) {
+    const p = await this.findOne(id);
+    return { processId: id, code: p.code, version: p.version, ...validateWorkflow(p.steps) };
+  }
+
+  async duplicate(id: number, userId: number, dto: DuplicateProcessDto) {
+    const src = await this.findOne(id);
+
+    let code = dto.code?.trim();
+    if (!code) {
+      let n = 1;
+      code = `${src.code}-COPIA`;
+      while (await this.prisma.processStandard.findFirst({ where: { code } })) {
+        n++;
+        code = `${src.code}-COPIA-${n}`;
+      }
+    } else if (await this.prisma.processStandard.findFirst({ where: { code } })) {
+      throw new ConflictException(`Código ${code} já existe`);
+    }
+
+    const copy = await this.prisma.processStandard.create({
+      data: {
+        code,
+        title: dto.title?.trim() || `${src.title} (cópia)`,
+        description: src.description,
+        objective: src.objective,
+        scope: src.scope,
+        riskLevel: src.riskLevel,
+        category: src.category,
+        tags: src.tags,
+        defaultSlaHours: src.defaultSlaHours,
+        estimatedMinutes: src.estimatedMinutes,
+        involvedModules: src.involvedModules,
+        reviewPolicy: src.reviewPolicy,
+        confidentiality: src.confidentiality,
+        accessRoles: src.accessRoles,
+        requiredDocuments: src.requiredDocuments,
+        approvalRules: src.approvalRules,
+        startConditions: src.startConditions,
+        completionConditions: src.completionConditions,
+        departmentId: src.departmentId,
+        ownerId: userId,
+        status: 'DRAFT',
+        version: '1.0',
+        steps: {
+          create: src.steps.map(s => ({
+            type: s.type,
+            title: s.title,
+            description: s.description,
+            order: s.order,
+            responsibleId: s.responsibleId,
+            responsibleRole: s.responsibleRole,
+            slaHours: s.slaHours,
+            estimatedMinutes: s.estimatedMinutes,
+            formSchema: s.formSchema,
+            exitConditions: s.exitConditions,
+            requiresUpload: s.requiresUpload,
+            checklist: s.checklist,
+            dependsOnOrders: s.dependsOnOrders,
+            parallel: s.parallel,
+            reviewerId: s.reviewerId,
+          })),
+        },
+      },
+      include: { steps: { orderBy: { order: 'asc' } } },
+    });
+
+    await this.writeAuditLog({
+      processId: copy.id,
+      userId,
+      action: 'DUPLICATED',
+      meta: { from: src.id, fromCode: src.code },
+    });
+    return copy;
+  }
+
+  /** Versão actual + versões anteriores (snapshots), mais recente primeiro. */
+  async listVersions(id: number) {
+    const p = await this.findOne(id);
+    const past = await this.prisma.read.processVersion.findMany({
+      where: { processId: id },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, version: true, createdAt: true, createdById: true },
+    });
+    return [
+      {
+        version: p.version,
+        current: true,
+        status: p.status,
+        createdAt: p.publishedAt ?? p.updatedAt,
+        createdById: null,
+      },
+      ...past.map(v => ({ ...v, current: false, status: null as string | null })),
+    ];
+  }
+
   // ─── COMPARAR VERSÕES ─────────────────────────────────────────────────────
 
   async compareVersions(id: number, versionA: string, versionB: string) {
@@ -425,33 +570,224 @@ export class ProcessStandardService {
 
   // ─── INSTÂNCIAS ────────────────────────────────────────────────────────────
 
-  async startInstance(processId: number, initiatedById: number, dto: StartInstanceDto) {
+  private async pickAssigneeByRole(roleName: string): Promise<number | null> {
+    const users = await this.prisma.read.user.findMany({
+      where: { active: true, role: { name: roleName } },
+      select: {
+        id: true,
+        _count: {
+          select: {
+            assignedStepProgress: { where: { status: { in: [...ACTIVE_TASK_STATUSES] } } },
+          },
+        },
+      },
+      take: 100,
+    });
+    users.sort(
+      (a, b) => a._count.assignedStepProgress - b._count.assignedStepProgress || a.id - b.id,
+    );
+    return users[0]?.id ?? null;
+  }
+
+  // Atribuição automática (§6): responsável nomeado → esse; senão, quem tiver
+  // a função com menos tarefas activas; senão fica por atribuir (manual).
+  private async resolveAssignments(
+    steps: Array<{ id: number; responsibleId: number | null; responsibleRole: string | null }>,
+  ) {
+    const byRole = new Map<string, number | null>();
+    const result = new Map<number, number | null>();
+    for (const s of steps) {
+      if (s.responsibleId) {
+        result.set(s.id, s.responsibleId);
+      } else if (s.responsibleRole) {
+        if (!byRole.has(s.responsibleRole)) {
+          byRole.set(s.responsibleRole, await this.pickAssigneeByRole(s.responsibleRole));
+        }
+        result.set(s.id, byRole.get(s.responsibleRole) ?? null);
+      } else {
+        result.set(s.id, null);
+      }
+    }
+    return result;
+  }
+
+  // Código legível PROC-AAAA-NNNN; repete em caso de colisão concorrente.
+  private async nextInstanceCode(year: number): Promise<string> {
+    const last = await this.prisma.processInstance.findFirst({
+      where: { code: { startsWith: `PROC-${year}-` } },
+      orderBy: { code: 'desc' },
+      select: { code: true },
+    });
+    return formatInstanceCode(year, sequenceFromCode(last?.code) + 1);
+  }
+
+  async startInstance(
+    processId: number,
+    initiatedById: number,
+    dto: StartInstanceDto,
+    user?: CurrentUserData,
+  ) {
     const process = await this.findOne(processId);
 
     if (process.status !== 'ACTIVE') {
       throw new BadRequestException('Apenas processos activos podem ser instanciados');
     }
+    const now = new Date();
+    if (process.effectiveFrom && process.effectiveFrom > now) {
+      throw new BadRequestException(
+        `O modelo só entra em vigor em ${process.effectiveFrom.toISOString().slice(0, 10)}`,
+      );
+    }
+    if (
+      user &&
+      process.accessRoles.length > 0 &&
+      !isPrivileged(user, TEMPLATE_ADMIN_ROLES) &&
+      !process.accessRoles.includes(user.role?.name ?? '')
+    ) {
+      throw new ForbiddenException('A sua função não tem acesso a este modelo de processo');
+    }
 
-    const instance = await this.prisma.processInstance.create({
+    const targetUserId = dto.targetUserId ?? initiatedById;
+    const sourceEntityType = dto.sourceEntityType?.trim() || null;
+    const sourceEntityId = dto.sourceEntityId?.trim() || null;
+
+    // Não duplicar: um pedido de origem só pode ter um processo activo por modelo.
+    if (sourceEntityType && sourceEntityId) {
+      const dup = await this.prisma.processInstance.findFirst({
+        where: {
+          processId,
+          sourceEntityType,
+          sourceEntityId,
+          status: { in: ['IN_PROGRESS', 'ON_HOLD'] },
+        },
+        select: { id: true, code: true },
+      });
+      if (dup) {
+        throw new ConflictException(
+          `Já existe um processo activo (${dup.code ?? `#${dup.id}`}) para este pedido`,
+        );
+      }
+    }
+
+    const deps = effectiveDependencies(process.steps);
+    const assignments = await this.resolveAssignments(process.steps);
+    const dueAt = dto.dueAt
+      ? new Date(dto.dueAt)
+      : process.defaultSlaHours
+        ? new Date(now.getTime() + process.defaultSlaHours * 3600 * 1000)
+        : null;
+    const ready = (order: number) => (deps.get(order) ?? []).length === 0;
+    const firstActive = [...process.steps]
+      .sort((a, b) => a.order - b.order)
+      .find(s => ready(s.order) && assignments.get(s.id));
+
+    let instance: Awaited<ReturnType<typeof this.createInstanceRow>> | null = null;
+    for (let attempt = 0; attempt < 5 && !instance; attempt++) {
+      const code = await this.nextInstanceCode(now.getFullYear());
+      try {
+        instance = await this.createInstanceRow({
+          code,
+          process,
+          processId,
+          initiatedById,
+          targetUserId,
+          dto,
+          now,
+          dueAt,
+          sourceEntityType,
+          sourceEntityId,
+          assignments,
+          ready,
+          currentResponsibleId: firstActive ? (assignments.get(firstActive.id) ?? null) : null,
+        });
+      } catch (e: unknown) {
+        const isCodeClash =
+          typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002';
+        if (!isCodeClash || attempt === 4) throw e;
+      }
+    }
+    if (!instance) throw new ConflictException('Não foi possível gerar o código do processo');
+
+    await this.writeAuditLog({
+      processId,
+      instanceId: instance.id,
+      userId: initiatedById,
+      action: 'INSTANCE_STARTED',
+      meta: { targetUserId, version: process.version, code: instance.code },
+    });
+
+    // Notificar o colaborador alvo e os responsáveis das etapas já activas
+    if (targetUserId !== initiatedById) {
+      await createNotificationSafe(this.prisma, this.logger, {
+        userId: targetUserId,
+        type: 'PROCESS_STARTED',
+        message: `O processo "${instance.title ?? process.title}" foi iniciado para si`,
+      });
+    }
+    const notified = new Set<number>([initiatedById, targetUserId]);
+    for (const sp of instance.stepProgress) {
+      if (sp.status === 'PENDING' && sp.assigneeId && !notified.has(sp.assigneeId)) {
+        notified.add(sp.assigneeId);
+        await createNotificationSafe(this.prisma, this.logger, {
+          userId: sp.assigneeId,
+          type: 'PROCESS_TASK_ASSIGNED',
+          message: `Nova tarefa atribuída em ${instance.code}: ${instance.title ?? process.title}`,
+        });
+      }
+    }
+
+    return instance;
+  }
+
+  private createInstanceRow(a: {
+    code: string;
+    process: Awaited<ReturnType<ProcessStandardService['findOne']>>;
+    processId: number;
+    initiatedById: number;
+    targetUserId: number;
+    dto: StartInstanceDto;
+    now: Date;
+    dueAt: Date | null;
+    sourceEntityType: string | null;
+    sourceEntityId: string | null;
+    assignments: Map<number, number | null>;
+    ready: (order: number) => boolean;
+    currentResponsibleId: number | null;
+  }) {
+    const { process, now } = a;
+    return this.prisma.processInstance.create({
       data: {
-        processId,
+        code: a.code,
+        processId: a.processId,
         processVersion: process.version,
-        initiatedById,
-        targetUserId: dto.targetUserId,
+        initiatedById: a.initiatedById,
+        targetUserId: a.targetUserId,
         status: 'IN_PROGRESS',
-        notes: dto.notes,
-        sourceModule: dto.sourceModule?.trim() || null,
-        startedAt: new Date(),
-        slaDeadline: process.defaultSlaHours
-          ? new Date(Date.now() + process.defaultSlaHours * 3600 * 1000)
-          : null,
+        title: a.dto.title?.trim() || process.title,
+        description: a.dto.description?.trim() || null,
+        priority: a.dto.priority ?? 'NORMAL',
+        notes: a.dto.notes,
+        sourceModule: a.dto.sourceModule?.trim() || null,
+        sourceEntityType: a.sourceEntityType,
+        sourceEntityId: a.sourceEntityId,
+        currentResponsibleId: a.currentResponsibleId,
+        startedAt: now,
+        slaDeadline: a.dueAt,
         stepProgress: {
-          create: process.steps.map((s, idx) => ({
-            stepId: s.id,
-            stepOrder: s.order,
-            status: idx === 0 ? 'PENDING' : 'WAITING',
-            slaDeadline: s.slaHours ? new Date(Date.now() + s.slaHours * 3600 * 1000) : null,
-          })),
+          create: process.steps.map(s => {
+            const assigneeId = a.assignments.get(s.id) ?? null;
+            const isReady = a.ready(s.order);
+            return {
+              stepId: s.id,
+              stepOrder: s.order,
+              status: isReady ? ('PENDING' as const) : ('WAITING' as const),
+              startedAt: isReady ? now : null,
+              slaDeadline: s.slaHours ? new Date(now.getTime() + s.slaHours * 3600 * 1000) : null,
+              assigneeId,
+              assignedAt: assigneeId ? now : null,
+              reviewerId: s.reviewerId,
+            };
+          }),
         },
       },
       include: {
@@ -461,23 +797,6 @@ export class ProcessStandardService {
         process: { select: { id: true, title: true, code: true } },
       },
     });
-
-    await this.writeAuditLog({
-      processId,
-      instanceId: instance.id,
-      userId: initiatedById,
-      action: 'INSTANCE_STARTED',
-      meta: { targetUserId: dto.targetUserId, version: process.version },
-    });
-
-    // Notificar o colaborador alvo
-    await createNotificationSafe(this.prisma, this.logger, {
-      userId: dto.targetUserId,
-      type: 'PROCESS_STARTED',
-      message: `O processo "${process.title}" foi iniciado para si`,
-    });
-
-    return instance;
   }
 
   async getInstances(filters: {
@@ -532,10 +851,13 @@ export class ProcessStandardService {
         process: { include: { steps: { orderBy: { order: 'asc' } } } },
         initiatedBy: { select: { id: true, fullName: true } },
         targetUser: { select: { id: true, fullName: true } },
+        currentResponsible: { select: { id: true, fullName: true } },
         stepProgress: {
           orderBy: { stepOrder: 'asc' },
           include: {
             completedBy: { select: { id: true, fullName: true } },
+            assignee: { select: { id: true, fullName: true } },
+            reviewer: { select: { id: true, fullName: true } },
           },
         },
       },
@@ -567,7 +889,7 @@ export class ProcessStandardService {
 
     const instance = await this.prisma.read.processInstance.findUnique({
       where: { id: instanceId },
-      select: { targetUserId: true },
+      select: { targetUserId: true, status: true, code: true, initiatedById: true },
     });
     if (!instance) throw new NotFoundException('Instância não encontrada');
 
@@ -577,14 +899,35 @@ export class ProcessStandardService {
     // aprovação de) o passo de qualquer instância de processo.
     const isResponsible =
       String(userId) === String(instance.targetUserId) ||
+      (sp.assigneeId != null && String(userId) === String(sp.assigneeId)) ||
       (step?.responsibleId != null && String(userId) === String(step.responsibleId));
     if (!isResponsible && !isPrivileged(user, PROCESS_PRIVILEGED_ROLES)) {
       throw new NotFoundException('Passo não encontrado nesta instância');
     }
 
-    // Validar upload obrigatório
-    if (step?.requiresUpload && (!dto.evidenceIds || dto.evidenceIds.length === 0)) {
+    // §6: só se conclui uma tarefa activa, de uma instância em execução.
+    if (['ON_HOLD', 'CANCELLED', 'COMPLETED'].includes(instance.status)) {
+      throw new BadRequestException(`A instância está ${instance.status} — não aceita conclusões`);
+    }
+    if (!COMPLETABLE_STATUSES.includes(sp.status)) {
+      throw new BadRequestException(
+        sp.status === 'WAITING'
+          ? 'Esta tarefa aguarda a conclusão das etapas de que depende'
+          : sp.status === 'BLOCKED'
+            ? `Tarefa bloqueada${sp.blockedReason ? `: ${sp.blockedReason}` : ''} — desbloqueie-a primeiro`
+            : `Tarefa em estado ${sp.status} não pode ser concluída`,
+      );
+    }
+
+    // Requisitos obrigatórios (§6): evidência e checklist completa.
+    const evidenceIds = dto.evidenceIds?.length ? dto.evidenceIds : (sp.evidenceIds ?? []);
+    if (step?.requiresUpload && evidenceIds.length === 0) {
       throw new BadRequestException('Esta etapa requer upload de evidência');
+    }
+    const checklistDone = [...new Set([...(sp.checklistDone ?? []), ...(dto.checklistDone ?? [])])];
+    const missing = (step?.checklist ?? []).filter(item => !checklistDone.includes(item));
+    if (missing.length > 0) {
+      throw new BadRequestException(`Checklist incompleta: falta ${missing.join('; ')}`);
     }
 
     const updated = await this.prisma.stepProgress.update({
@@ -594,47 +937,63 @@ export class ProcessStandardService {
         completedById: userId,
         completedAt: new Date(),
         notes: dto.notes,
+        result: dto.result,
+        checklistDone,
         formData: dto.formData ? JSON.stringify(dto.formData) : null,
         action: dto.action,
-        evidenceIds: dto.evidenceIds ?? [],
+        evidenceIds,
+        returnReason: null,
         duration: sp.startedAt
           ? Math.round((Date.now() - new Date(sp.startedAt).getTime()) / 60000)
           : null,
       },
     });
 
-    // Activar próximo passo
-    const nextStep = await this.prisma.read.stepProgress.findFirst({
-      where: { instanceId, stepOrder: { gt: sp.stepOrder }, status: 'WAITING' },
-      orderBy: { stepOrder: 'asc' },
-    });
-    if (nextStep) {
-      await this.prisma.stepProgress.update({
-        where: { id: nextStep.id },
-        data: { status: 'PENDING', startedAt: new Date() },
-      });
-    }
-
-    // Verificar conclusão total
-    const pendingCount = await this.prisma.read.stepProgress.count({
-      where: { instanceId, status: { notIn: ['COMPLETED', 'SKIPPED'] } },
-    });
-    if (pendingCount === 0) {
-      await this.prisma.processInstance.update({
-        where: { id: instanceId },
-        data: {
-          status: 'COMPLETED',
-          completedAt: new Date(),
-        },
-      });
-    }
+    // Activa as etapas cujas dependências ficaram satisfeitas e fecha a instância.
+    const activation = await syncStepActivation(this.prisma, instanceId);
 
     await this.writeAuditLog({
       instanceId,
       userId,
       action: 'STEP_COMPLETED',
-      meta: { stepId, action: dto.action, hasEvidence: (dto.evidenceIds?.length ?? 0) > 0 },
+      meta: { stepId, action: dto.action, hasEvidence: evidenceIds.length > 0 },
     });
+
+    // Revisor (§6) e responsáveis das etapas desbloqueadas.
+    const label = instance.code ?? `#${instanceId}`;
+    if (sp.reviewerId && sp.reviewerId !== userId) {
+      await createNotificationSafe(this.prisma, this.logger, {
+        userId: sp.reviewerId,
+        type: 'PROCESS_TASK_REVIEW',
+        message: `A tarefa "${step?.title ?? stepId}" de ${label} aguarda a sua revisão`,
+      });
+    }
+    if (activation.activatedStepIds.length > 0) {
+      const next = await this.prisma.stepProgress.findMany({
+        where: {
+          instanceId,
+          stepId: { in: activation.activatedStepIds },
+          assigneeId: { not: null },
+        },
+        select: { assigneeId: true, step: { select: { title: true } } },
+      });
+      for (const n of next) {
+        if (n.assigneeId && n.assigneeId !== userId) {
+          await createNotificationSafe(this.prisma, this.logger, {
+            userId: n.assigneeId,
+            type: 'PROCESS_TASK_ASSIGNED',
+            message: `Tarefa "${n.step.title}" de ${label} está pronta para si`,
+          });
+        }
+      }
+    }
+    if (activation.instanceCompleted) {
+      await createNotificationSafe(this.prisma, this.logger, {
+        userId: instance.initiatedById,
+        type: 'PROCESS_COMPLETED',
+        message: `O processo ${label} foi concluído`,
+      });
+    }
 
     return updated;
   }
@@ -674,7 +1033,7 @@ export class ProcessStandardService {
 
     await this.prisma.processInstance.update({
       where: { id: instanceId },
-      data: { status: 'ON_HOLD' },
+      data: { status: 'ON_HOLD', suspendedAt: new Date() },
     });
 
     await this.writeAuditLog({
@@ -688,20 +1047,34 @@ export class ProcessStandardService {
   }
 
   async cancelInstance(instanceId: number, userId: number, reason: string) {
+    if (!reason?.trim()) {
+      throw new BadRequestException('O cancelamento exige uma justificação');
+    }
     const inst = await this.prisma.read.processInstance.findUnique({ where: { id: instanceId } });
     if (!inst) throw new NotFoundException('Instância não encontrada');
     if (inst.status === 'COMPLETED') throw new ForbiddenException('Instância já concluída');
+    if (inst.status === 'CANCELLED') throw new ConflictException('Instância já cancelada');
 
     await this.prisma.processInstance.update({
       where: { id: instanceId },
-      data: { status: 'CANCELLED', cancelledAt: new Date(), cancelReason: reason },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt: new Date(),
+        cancelReason: reason.trim(),
+        currentResponsibleId: null,
+      },
+    });
+    // O histórico das etapas concluídas mantém-se; as restantes ficam canceladas.
+    await this.prisma.stepProgress.updateMany({
+      where: { instanceId, status: { notIn: ['COMPLETED', 'SKIPPED', 'CANCELLED'] } },
+      data: { status: 'CANCELLED' },
     });
 
     await this.writeAuditLog({
       instanceId,
       userId,
       action: 'INSTANCE_CANCELLED',
-      meta: { reason },
+      meta: { reason: reason.trim() },
     });
     return { message: 'Instância cancelada com sucesso' };
   }
@@ -711,8 +1084,13 @@ export class ProcessStandardService {
   async getMyTasks(userId: number) {
     const tasks = await this.prisma.read.stepProgress.findMany({
       where: {
-        OR: [{ instance: { targetUserId: userId } }, { step: { responsibleId: userId } }],
-        status: 'PENDING',
+        OR: [
+          { assigneeId: userId },
+          { instance: { targetUserId: userId } },
+          { step: { responsibleId: userId } },
+        ],
+        status: { in: [...ACTIVE_TASK_STATUSES] },
+        instance: { status: 'IN_PROGRESS' },
       },
       include: {
         instance: {
