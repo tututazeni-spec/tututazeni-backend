@@ -97,6 +97,9 @@ jobs:
         run: npm run test:coverage
         env:
           DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/innova_test'
+          # Os workers do Jest (herdam NODE_OPTIONS) rebentavam o heap por defeito
+          # com a cobertura activa ("Jest worker ran out of memory and crashed")
+          NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Testes de integração
         run: npm run test:integration
