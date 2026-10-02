@@ -21,6 +21,8 @@ import {
   PermissionSubject,
   SeniorityLevel,
   DepartmentStatus,
+  DepartmentVisibility,
+  ContractType,
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
@@ -37,6 +39,12 @@ export class CreateDepartmentDto {
   @MaxLength(30)
   code: string;
 
+  @ApiPropertyOptional({ example: 'RH', description: 'Sigla do departamento' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(15)
+  acronym?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -51,6 +59,11 @@ export class CreateDepartmentDto {
   @IsOptional()
   @IsInt()
   headId?: number;
+
+  @ApiPropertyOptional({ description: 'ID do substituto do responsável' })
+  @IsOptional()
+  @IsInt()
+  deputyHeadId?: number;
 
   @ApiPropertyOptional({ description: 'Cor do departamento (hex)' })
   @IsOptional()
@@ -143,6 +156,12 @@ export class CreateDepartmentDto {
   @MaxLength(120)
   functionalArea?: string;
 
+  @ApiPropertyOptional({ description: 'Área de negócio' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  businessArea?: string;
+
   @ApiPropertyOptional({ description: 'Departamento estratégico', default: false })
   @IsOptional()
   @IsBoolean()
@@ -152,9 +171,56 @@ export class CreateDepartmentDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Número de colaboradores previsto (headcount planeado)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  expectedEmployees?: number;
+
+  @ApiPropertyOptional({ description: 'Contacto institucional (nome/descrição geral)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  institutionalContact?: string;
+
+  @ApiPropertyOptional({
+    enum: DepartmentVisibility,
+    default: DepartmentVisibility.DEPARTMENT_ONLY,
+    description: 'Visibilidade dos dados do departamento',
+  })
+  @IsOptional()
+  @IsEnum(DepartmentVisibility)
+  dataVisibility?: DepartmentVisibility;
+
+  @ApiPropertyOptional({
+    description: 'Exige aprovação para processos deste departamento',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  approvalRequired?: boolean;
+
+  @ApiPropertyOptional({ description: 'IDs dos aprovadores', type: [Number] })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  approverIds?: number[];
+
+  @ApiPropertyOptional({ description: 'Departamento responsável por processos (ex.: RH central)' })
+  @IsOptional()
+  @IsInt()
+  processOwnerDepartmentId?: number;
 }
 
-export class UpdateDepartmentDto extends PartialType(CreateDepartmentDto) {}
+export class UpdateDepartmentDto extends PartialType(CreateDepartmentDto) {
+  @ApiPropertyOptional({
+    description: 'Motivo da alteração de responsável (registado no histórico quando headId muda)',
+  })
+  @IsOptional()
+  @IsString()
+  headChangeReason?: string;
+}
 
 export class DepartmentFilterDto extends BaseFilterDto {
   @ApiPropertyOptional()
@@ -187,6 +253,45 @@ export class DepartmentFilterDto extends BaseFilterDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   rootOnly?: boolean;
+
+  @ApiPropertyOptional({ enum: DepartmentStatus, description: 'Estado exacto (inclui ARCHIVED)' })
+  @IsOptional()
+  @IsEnum(DepartmentStatus)
+  status?: DepartmentStatus;
+
+  @ApiPropertyOptional({ description: 'Unidade/empresa' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  unitId?: number;
+
+  @ApiPropertyOptional({ description: 'Responsável pelo departamento' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  headId?: number;
+
+  @ApiPropertyOptional({ description: 'Localização (correspondência parcial)' })
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional({ description: 'Criados a partir desta data (inclusive)' })
+  @IsOptional()
+  @IsDateString()
+  createdFrom?: string;
+
+  @ApiPropertyOptional({ description: 'Criados até esta data (inclusive)' })
+  @IsOptional()
+  @IsDateString()
+  createdTo?: string;
+}
+
+export class ArchiveDepartmentDto {
+  @ApiPropertyOptional({ description: 'Motivo do arquivamento/encerramento' })
+  @IsOptional()
+  @IsString()
+  reason?: string;
 }
 
 // ─── Member Transfer ──────────────────────────────────────────────────────────
@@ -342,9 +447,201 @@ export class CreatePositionDto {
   @IsArray()
   @IsInt({ each: true })
   competencyIds?: number[];
+
+  // ─── docs/modulo_departments.md Ponto 6 — Cargos & Funções ─────────────────
+
+  @ApiPropertyOptional({ description: 'Função — distinta do nome do cargo' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  jobFunction?: string;
+
+  @ApiPropertyOptional({ description: 'Família profissional' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  jobFamily?: string;
+
+  @ApiPropertyOptional({ description: 'Responsabilidades do cargo' })
+  @IsOptional()
+  @IsString()
+  responsibilities?: string;
+
+  @ApiPropertyOptional({ description: 'Requisitos do cargo' })
+  @IsOptional()
+  @IsString()
+  requirements?: string;
+
+  @ApiPropertyOptional({ description: 'Formação necessária' })
+  @IsOptional()
+  @IsString()
+  requiredTraining?: string;
+
+  @ApiPropertyOptional({ description: 'Experiência necessária' })
+  @IsOptional()
+  @IsString()
+  requiredExperience?: string;
+
+  @ApiPropertyOptional({ description: 'Cargo ao qual este reporta hierarquicamente' })
+  @IsOptional()
+  @IsInt()
+  reportsToPositionId?: number;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  active?: boolean;
 }
 
 export class UpdatePositionDto extends PartialType(CreatePositionDto) {}
+
+export class PositionFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional({ enum: PositionLevel })
+  @IsOptional()
+  @IsEnum(PositionLevel)
+  level?: PositionLevel;
+
+  @ApiPropertyOptional({ description: 'Família profissional' })
+  @IsOptional()
+  @IsString()
+  jobFamily?: string;
+
+  // @Type(() => Boolean) coage '?active=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
+  // @Transform evita a coerção Boolean automática do class-transformer.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  active?: boolean;
+}
+
+// ─── Employees (docs/modulo_departments.md Ponto 5 — Colaboradores) ────────────
+
+export class EmployeeFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({ description: 'Departamento (inclui sub-departamentos)' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  positionId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional({ enum: ContractType })
+  @IsOptional()
+  @IsEnum(ContractType)
+  contractType?: ContractType;
+
+  // @Type(() => Boolean) coage '?active=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
+  // @Transform evita a coerção Boolean automática do class-transformer.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  active?: boolean;
+}
+
+// ─── Hierarquia (docs/modulo_departments.md Ponto 7) ───────────────────────────
+
+export class HierarchyFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({ description: 'Departamento (inclui sub-departamentos)' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  positionId?: number;
+}
+
+// ─── Histórico (docs/modulo_departments.md Ponto 8) ────────────────────────────
+
+export class HistoryFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional({ description: 'Filtrar por um departamento específico' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+}
+
+// ─── Relatórios (docs/modulo_departments.md Ponto 9) ───────────────────────────
+
+export class ReportsFilterDto {
+  @ApiPropertyOptional({ description: 'Departamento (inclui sub-departamentos)' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  unitId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  // @Type(() => Boolean) coage '?active=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
+  // @Transform evita a coerção Boolean automática do class-transformer.
+  @ApiPropertyOptional({ description: 'Estado do colaborador' })
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  active?: boolean;
+
+  @ApiPropertyOptional({ description: 'Admissões/saídas a partir desta data (ISO)' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'Admissões/saídas até esta data (ISO)' })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+}
 
 // ─── Career ───────────────────────────────────────────────────────────────────
 

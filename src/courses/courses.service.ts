@@ -1711,6 +1711,15 @@ export class CoursesService {
     return this.prisma.courseCohort.update({ where: { id }, data: { status: 'CLOSED' } });
   }
 
+  async deleteCohort(id: number, user: CurrentUserData) {
+    const cohort = await this.prisma.courseCohort.findUnique({ where: { id } });
+    if (!cohort) throw new NotFoundException('Turma não encontrada');
+    this.assertCohortAccess(cohort, user);
+    // Participantes são removidos em cascata (onDelete: Cascade no schema).
+    await this.prisma.courseCohort.delete({ where: { id } });
+    return { id, deleted: true };
+  }
+
   async addCohortParticipants(
     cohortId: number,
     dto: AddCohortParticipantsDto,

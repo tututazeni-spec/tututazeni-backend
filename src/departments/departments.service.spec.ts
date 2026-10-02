@@ -2,6 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { DepartmentsService } from './departments.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../common/services/audit.service';
+
+const mockAudit = { log: jest.fn().mockResolvedValue(undefined) };
 
 const mockPrisma = {
   department: {
@@ -16,6 +19,7 @@ const mockPrisma = {
   departmentHeadHistory: {
     create: jest.fn().mockResolvedValue({}),
     updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+    findMany: jest.fn().mockResolvedValue([]),
   },
   user: {
     findMany: jest.fn(),
@@ -55,6 +59,7 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
     count: jest.fn(),
+    groupBy: jest.fn().mockResolvedValue([]),
   },
   careerPosition: { create: jest.fn(), findMany: jest.fn() },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
@@ -87,7 +92,11 @@ describe('DepartmentsService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [DepartmentsService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        DepartmentsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: AuditService, useValue: mockAudit },
+      ],
     }).compile();
     service = module.get<DepartmentsService>(DepartmentsService);
   });
@@ -146,6 +155,83 @@ describe('DepartmentsService', () => {
       expect(result).toHaveLength(1);
       expect(result[0].children).toHaveLength(1);
     });
+
+    it('anota nível hierárquico e nº de cargos (docs Ponto 3)', async () => {
+      mockPrisma.department.findMany.mockResolvedValue([
+        { ...baseDept, id: 1, parentId: null },
+        { ...baseDept, id: 2, parentId: 1 },
+      ]);
+      mockPrisma.position.groupBy.mockResolvedValue([{ departmentId: 1, _count: { _all: 3 } }]);
+
+      const result = await service.getTree();
+
+      expect(result[0].level).toBe(0);
+      expect(result[0].positionsCount).toBe(3);
+      expect(result[0].children[0].level).toBe(1);
+      expect(result[0].children[0].positionsCount).toBe(0);
+    });
+  });
+
+  // ─── getHeads / getHeadHistory ────────────────────────────────────────────
+
+  describe('getHeads', () => {
+    it('devolve responsáveis de todos os departamentos activos (docs Ponto 4)', async () => {
+      mockPrisma.department.findMany.mockResolvedValue([
+        {
+          ...baseDept,
+          head: {
+            id: 10,
+            fullName: 'Ana',
+            email: 'ana@innova.com',
+            position: { name: 'Directora' },
+          },
+          deputyHead: { id: 11, fullName: 'Bruno' },
+          headHistory: [{ startedAt: new Date('2026-01-01') }],
+        },
+      ]);
+
+      const result = await service.getHeads();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].position).toBe('Directora');
+      expect(result[0].usersUnderResponsibility).toBe(5);
+      expect(result[0].subdepartmentsUnderResponsibility).toBe(2);
+    });
+  });
+
+  describe('getHeadHistory', () => {
+    it('agrega histórico entre departamentos com responsável anterior/novo', async () => {
+      mockPrisma.departmentHeadHistory.findMany.mockResolvedValue([
+        {
+          id: 1,
+          departmentId: 1,
+          department: { id: 1, name: 'TI', code: 'TI' },
+          head: { id: 10, fullName: 'Ana' },
+          startedAt: new Date('2026-01-01'),
+          endedAt: new Date('2026-06-01'),
+          reason: null,
+          changedBy: null,
+        },
+        {
+          id: 2,
+          departmentId: 1,
+          department: { id: 1, name: 'TI', code: 'TI' },
+          head: { id: 12, fullName: 'Carla' },
+          startedAt: new Date('2026-06-01'),
+          endedAt: null,
+          reason: 'Promoção',
+          changedBy: { id: 5, fullName: 'RH Admin' },
+        },
+      ]);
+
+      const result = await service.getHeadHistory();
+
+      expect(result).toHaveLength(2);
+      const latest = result[0];
+      expect(latest.newHead.fullName).toBe('Carla');
+      expect(latest.previousHead?.fullName).toBe('Ana');
+      expect(latest.reason).toBe('Promoção');
+    });
   });
 
   // ─── findOne ──────────────────────────────────────────────────────────────
@@ -174,27 +260,27 @@ describe('DepartmentsService', () => {
       mockPrisma.department.findFirst.mockResolvedValue(null);
       mockPrisma.department.create.mockResolvedValue({ ...baseDept, name: 'RH', code: 'RH001' });
 
-      const result = await service.create(dto);
+      const result = await service.create(dto, 1);
 
       expect(result.name).toBe('RH');
     });
 
     it('deve lançar ConflictException se código duplicado', async () => {
       mockPrisma.department.findFirst.mockResolvedValue(baseDept);
-      await expect(service.create(dto)).rejects.toThrow(ConflictException);
+      await expect(service.create(dto, 1)).rejects.toThrow(ConflictException);
     });
 
     it('deve lançar NotFoundException se parentId não existe', async () => {
       mockPrisma.department.findFirst.mockResolvedValue(null);
       mockPrisma.department.findUnique.mockResolvedValue(null);
-      await expect(service.create({ ...dto, parentId: 99 })).rejects.toThrow(NotFoundException);
+      await expect(service.create({ ...dto, parentId: 99 }, 1)).rejects.toThrow(NotFoundException);
     });
 
     it('deve criar histórico de gestor se headId fornecido', async () => {
       mockPrisma.department.findFirst.mockResolvedValue(null);
       mockPrisma.department.create.mockResolvedValue({ ...baseDept, id: 2, headId: 1 });
 
-      await service.create({ ...dto, headId: 1 });
+      await service.create({ ...dto, headId: 1 }, 1);
 
       expect(mockPrisma.departmentHeadHistory.create).toHaveBeenCalled();
     });
@@ -205,7 +291,7 @@ describe('DepartmentsService', () => {
         Promise.resolve({ id: 1, ...data }),
       );
 
-      await service.create({ name: 'Eng', code: 'eng' } as any);
+      await service.create({ name: 'Eng', code: 'eng' } as any, 1);
 
       expect(mockPrisma.department.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -225,13 +311,16 @@ describe('DepartmentsService', () => {
         Promise.resolve({ id: 1, ...data }),
       );
 
-      await service.create({
-        name: 'Ops',
-        code: 'OPS',
-        unitId: 4,
-        annualBudget: 100000,
-        status: 'INACTIVE',
-      } as any);
+      await service.create(
+        {
+          name: 'Ops',
+          code: 'OPS',
+          unitId: 4,
+          annualBudget: 100000,
+          status: 'INACTIVE',
+        } as any,
+        1,
+      );
 
       expect(mockPrisma.department.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -251,7 +340,7 @@ describe('DepartmentsService', () => {
         Promise.resolve({ id: 1, ...data }),
       );
 
-      await service.create({ name: 'X', code: 'X' } as any);
+      await service.create({ name: 'X', code: 'X' } as any, 1);
 
       expect(mockPrisma.department.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -331,7 +420,7 @@ describe('DepartmentsService', () => {
   describe('remove', () => {
     it('departamento inexistente → NotFoundException', async () => {
       mockPrisma.department.findUnique.mockResolvedValue(null);
-      await expect(service.remove(999)).rejects.toThrow(NotFoundException);
+      await expect(service.remove(999, 1)).rejects.toThrow(NotFoundException);
     });
 
     it('com colaboradores → BadRequestException', async () => {
@@ -339,7 +428,7 @@ describe('DepartmentsService', () => {
         id: 1,
         _count: { users: 3, children: 0 },
       });
-      await expect(service.remove(1)).rejects.toThrow(BadRequestException);
+      await expect(service.remove(1, 1)).rejects.toThrow(BadRequestException);
       expect(mockPrisma.department.delete).not.toHaveBeenCalled();
     });
 
@@ -348,7 +437,7 @@ describe('DepartmentsService', () => {
         id: 1,
         _count: { users: 0, children: 2 },
       });
-      await expect(service.remove(1)).rejects.toThrow(BadRequestException);
+      await expect(service.remove(1, 1)).rejects.toThrow(BadRequestException);
       expect(mockPrisma.department.delete).not.toHaveBeenCalled();
     });
 
@@ -358,7 +447,7 @@ describe('DepartmentsService', () => {
         _count: { users: 0, children: 0 },
       });
       mockPrisma.department.delete.mockResolvedValue({ id: 1 });
-      expect(await service.remove(1)).toEqual({ message: 'Departamento eliminado' });
+      expect(await service.remove(1, 1)).toEqual({ message: 'Departamento eliminado' });
     });
   });
 });

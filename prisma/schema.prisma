@@ -707,34 +707,43 @@ model User {
   managerId    Int?
 
   // ─── Relações Organizacionais ─────────────────────────────────
-  role                    Role?                   @relation(fields: [roleId], references: [id], onDelete: SetNull)
-  department              Department?             @relation("DeptMembers", fields: [departmentId], references: [id], onDelete: SetNull)
-  position                Position?               @relation("PositionUsers", fields: [positionId], references: [id])
-  unit                    Unit?                   @relation(fields: [unitId], references: [id])
-  manager                 User?                   @relation("Hierarchy", fields: [managerId], references: [id])
-  subordinates            User[]                  @relation("Hierarchy")
-  departmentHead          Department[]            @relation("DeptHead")
-  departmentDirectManager Department[]            @relation("DeptDirectManager")
-  departmentHeadHistory   DepartmentHeadHistory[]
-  departmentTransferLogs  DepartmentTransferLog[]
-  orgChanges              OrgChangeLog[]          @relation("OrgChangeUser")
-  orgChangesPerformed     OrgChangeLog[]          @relation("OrgChangePerformer")
-  developmentPlansManaged DevelopmentPlan[]       @relation("PDIManager")
-  pdiEvidences            PdiEvidence[]
-  pdiApprovals            PdiApproval[]
-  reportApprovals         ReportApproval[]
-  reportAccessLogs        ReportAccessLog[]
-  savedReports            SavedReport[]           @relation("UserSavedReports")
-  reportSchedules         ReportSchedule[]        @relation("UserReportSchedules")
-  notificationPreference  NotificationPreference?
-  aiTutorMemory           AiTutorMemory?
-  cohortParticipations    CohortParticipant[]
-  eventParticipations     EventParticipant[]
-  eventFeedbacks          EventFeedback[]
-  attendanceRecords       AttendanceRecord[]      @relation("UserAttendanceRecords")
-  createdVacancies        InternalVacancy[]       @relation("VacancyCreator")
-  managedVacancies        InternalVacancy[]       @relation("VacancyResponsibleManager")
-  vacancyApplications     InternalApplication[]
+  role                      Role?                     @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  department                Department?               @relation("DeptMembers", fields: [departmentId], references: [id], onDelete: SetNull)
+  position                  Position?                 @relation("PositionUsers", fields: [positionId], references: [id])
+  unit                      Unit?                     @relation(fields: [unitId], references: [id])
+  manager                   User?                     @relation("Hierarchy", fields: [managerId], references: [id])
+  subordinates              User[]                    @relation("Hierarchy")
+  departmentHead            Department[]              @relation("DeptHead")
+  departmentDeputyHead      Department[]              @relation("DeptDeputyHead")
+  departmentDirectManager   Department[]              @relation("DeptDirectManager")
+  departmentHeadHistory     DepartmentHeadHistory[]
+  departmentHeadChangesMade DepartmentHeadHistory[]   @relation("HeadHistoryChangedBy")
+  departmentTransferLogs    DepartmentTransferLog[]
+  orgChanges                OrgChangeLog[]            @relation("OrgChangeUser")
+  orgChangesPerformed       OrgChangeLog[]            @relation("OrgChangePerformer")
+  developmentPlansManaged   DevelopmentPlan[]         @relation("PDIManager")
+  pdiEvidences              PdiEvidence[]
+  pdiApprovals              PdiApproval[]
+  reportApprovals           ReportApproval[]
+  reportAccessLogs          ReportAccessLog[]
+  execReportTemplates       ExecutiveReportTemplate[] @relation("ExecReportTemplateCreator")
+  execReportSchedules       ExecutiveReportSchedule[] @relation("ExecReportScheduleCreator")
+  execAlertsOwned           ExecutiveAlert[]          @relation("ExecAlertOwner")
+  execAlertEvents           ExecutiveAlertEvent[]     @relation("ExecAlertEventUser")
+  execAlertRulesOwned       ExecutiveAlertRule[]      @relation("ExecAlertRuleOwner")
+  execKpiDefinitionsOwned   ExecutiveKPIDefinition[]  @relation("ExecKpiDefinitionOwner")
+  execReportAudits          ExecutiveReportAudit[]    @relation("ExecReportAuditUser")
+  savedReports              SavedReport[]             @relation("UserSavedReports")
+  reportSchedules           ReportSchedule[]          @relation("UserReportSchedules")
+  notificationPreference    NotificationPreference?
+  aiTutorMemory             AiTutorMemory?
+  cohortParticipations      CohortParticipant[]
+  eventParticipations       EventParticipant[]
+  eventFeedbacks            EventFeedback[]
+  attendanceRecords         AttendanceRecord[]        @relation("UserAttendanceRecords")
+  createdVacancies          InternalVacancy[]         @relation("VacancyCreator")
+  managedVacancies          InternalVacancy[]         @relation("VacancyResponsibleManager")
+  vacancyApplications       InternalApplication[]
 
   // ─── Permissões Adicionais (docs/modulo_users.md Ponto 2) ──────
   additionalPermissions UserPermission[]
@@ -1047,15 +1056,15 @@ model User {
   refreshTokens       RefreshToken[]
 
   // ─── ROI & Impact ─────────────────────────────────────────────
-  createdRoiAnalyses  RoiAnalysis[]
-  impactRecords       ImpactRecord[]       @relation("ImpactRecordSubject")
-  createdImpactRecords ImpactRecord[]      @relation("ImpactRecordCreatedBy")
+  createdRoiAnalyses         RoiAnalysis[]
+  impactRecords              ImpactRecord[]       @relation("ImpactRecordSubject")
+  createdImpactRecords       ImpactRecord[]       @relation("ImpactRecordCreatedBy")
   createdRoiEvaluationModels RoiEvaluationModel[]
-  createdCostEntries        CostEntry[]
-  createdKpiDefinitions     KpiDefinition[]
-  createdCorrelations       Correlation[]
-  createdScenarios          Scenario[]
-  createdBenchmarks         Benchmark[]
+  createdCostEntries         CostEntry[]
+  createdKpiDefinitions      KpiDefinition[]
+  createdCorrelations        Correlation[]
+  createdScenarios           Scenario[]
+  createdBenchmarks          Benchmark[]
 
   @@index([accountStatus])
   @@index([departmentId])
@@ -1225,58 +1234,82 @@ model RoleTemplate {
 enum DepartmentStatus {
   ACTIVE
   INACTIVE
+  ARCHIVED
+}
+
+// Visibilidade dos dados do departamento (docs/modulo_departments.md Ponto 2,
+// secção "Configurações").
+enum DepartmentVisibility {
+  PUBLIC
+  DEPARTMENT_ONLY
+  RESTRICTED
 }
 
 model Department {
-  id                   Int                     @id @default(autoincrement())
-  code                 String                  @unique
-  name                 String
-  description          String?
-  active               Boolean                 @default(true)
-  status               DepartmentStatus        @default(ACTIVE)
-  color                String?
-  icon                 String?
-  costCenter           String?
-  annualBudget         Float?
-  trainingBudget       Int?
-  parentId             Int?
-  headId               Int?
-  directManagerId      Int?
-  unitId               Int?
-  maxEmployees         Int?
-  operationalStartDate DateTime?
-  institutionalEmail   String?
-  phoneExtension       String?
-  location             String?
-  physicalLocation     String?
-  objective            String?
-  mainResponsibilities String?
-  functionalArea       String?
-  isStrategic          Boolean                 @default(false)
-  notes                String?
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
-  parent               Department?             @relation("DeptHierarchy", fields: [parentId], references: [id])
-  children             Department[]            @relation("DeptHierarchy")
-  head                 User?                   @relation("DeptHead", fields: [headId], references: [id])
-  directManager        User?                   @relation("DeptDirectManager", fields: [directManagerId], references: [id])
-  unit                 Unit?                   @relation(fields: [unitId], references: [id])
-  users                User[]                  @relation("DeptMembers")
-  headHistory          DepartmentHeadHistory[]
-  transfersIn          DepartmentTransferLog[] @relation("TransferTo")
-  transfersOut         DepartmentTransferLog[] @relation("TransferFrom")
-  dashboardSnapshots   DashboardSnapshot[]
-  companyDocuments     CompanyDocument[]
-  executiveReports     ExecutiveReport[]
-  processStandards     ProcessStandard[]
-  onboardingTemplates  OnboardingTemplate[]
-  orgChangesFrom       OrgChangeLog[]          @relation("OrgChangeFrom")
-  orgChangesTo         OrgChangeLog[]          @relation("OrgChangeTo")
-  courses              Course[]
-  internalVacancies    InternalVacancy[]
-  careerPaths          CareerPath[]
-  engagementActions    EngagementAction[]
-  competencyModels     CompetencyModel[]
+  id                       Int                     @id @default(autoincrement())
+  code                     String                  @unique
+  name                     String
+  acronym                  String?
+  description              String?
+  active                   Boolean                 @default(true)
+  status                   DepartmentStatus        @default(ACTIVE)
+  closedAt                 DateTime?
+  closureReason            String?
+  color                    String?
+  icon                     String?
+  costCenter               String?
+  annualBudget             Float?
+  trainingBudget           Int?
+  parentId                 Int?
+  headId                   Int?
+  deputyHeadId             Int?
+  directManagerId          Int?
+  unitId                   Int?
+  maxEmployees             Int?
+  operationalStartDate     DateTime?
+  institutionalEmail       String?
+  phoneExtension           String?
+  location                 String?
+  physicalLocation         String?
+  objective                String?
+  mainResponsibilities     String?
+  functionalArea           String?
+  businessArea             String?
+  isStrategic              Boolean                 @default(false)
+  notes                    String?
+  expectedEmployees        Int?
+  institutionalContact     String?
+  dataVisibility           DepartmentVisibility    @default(DEPARTMENT_ONLY)
+  approvalRequired         Boolean                 @default(false)
+  approverIds              Int[]                   @default([])
+  processOwnerDepartmentId Int?
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
+  parent                   Department?             @relation("DeptHierarchy", fields: [parentId], references: [id])
+  children                 Department[]            @relation("DeptHierarchy")
+  head                     User?                   @relation("DeptHead", fields: [headId], references: [id])
+  deputyHead               User?                   @relation("DeptDeputyHead", fields: [deputyHeadId], references: [id])
+  directManager            User?                   @relation("DeptDirectManager", fields: [directManagerId], references: [id])
+  unit                     Unit?                   @relation(fields: [unitId], references: [id])
+  processOwnerDepartment   Department?             @relation("DeptProcessOwner", fields: [processOwnerDepartmentId], references: [id])
+  processOwnerFor          Department[]            @relation("DeptProcessOwner")
+  users                    User[]                  @relation("DeptMembers")
+  positions                Position[]
+  headHistory              DepartmentHeadHistory[]
+  transfersIn              DepartmentTransferLog[] @relation("TransferTo")
+  transfersOut             DepartmentTransferLog[] @relation("TransferFrom")
+  dashboardSnapshots       DashboardSnapshot[]
+  companyDocuments         CompanyDocument[]
+  executiveReports         ExecutiveReport[]
+  processStandards         ProcessStandard[]
+  onboardingTemplates      OnboardingTemplate[]
+  orgChangesFrom           OrgChangeLog[]          @relation("OrgChangeFrom")
+  orgChangesTo             OrgChangeLog[]          @relation("OrgChangeTo")
+  courses                  Course[]
+  internalVacancies        InternalVacancy[]
+  careerPaths              CareerPath[]
+  engagementActions        EngagementAction[]
+  competencyModels         CompetencyModel[]
 
   leadershipPrograms   LeadershipProgram[]
   leadershipTargetings LeadershipProgramTargeting[]
@@ -1297,8 +1330,11 @@ model DepartmentHeadHistory {
   headId       Int
   startedAt    DateTime   @default(now())
   endedAt      DateTime?
+  reason       String?
+  changedById  Int?
   department   Department @relation(fields: [departmentId], references: [id])
   head         User       @relation(fields: [headId], references: [id])
+  changedBy    User?      @relation("HeadHistoryChangedBy", fields: [changedById], references: [id])
 }
 
 model DepartmentTransferLog {
@@ -1366,6 +1402,19 @@ model Position {
   salaryMin           Float?
   salaryMax           Float?
   headcountPlanned    Int?                 @default(1)
+  // ─── docs/modulo_departments.md Ponto 6 — Cargos & Funções ───────────────
+  jobFunction         String? // "Função" — distinta do nome do cargo
+  jobFamily           String? // Família profissional
+  active              Boolean              @default(true)
+  createdAt           DateTime             @default(now())
+  responsibilities    String?              @db.Text
+  requirements        String?              @db.Text
+  requiredTraining    String?
+  requiredExperience  String?
+  reportsToPositionId Int?
+  department          Department?          @relation(fields: [departmentId], references: [id])
+  reportsTo           Position?            @relation("PositionHierarchy", fields: [reportsToPositionId], references: [id])
+  subordinates        Position[]           @relation("PositionHierarchy")
   users               User[]               @relation("PositionUsers")
   successionPlans     SuccessionPlan[]
   competencies        PositionCompetency[]
@@ -1378,6 +1427,8 @@ model Position {
   roleTemplates       RoleTemplate[]
 
   leadershipTargetings LeadershipProgramTargeting[]
+
+  @@index([departmentId])
 }
 
 enum OrgChangeType {
@@ -7267,12 +7318,12 @@ enum KpiStatus {
 }
 
 model ExecutiveReport {
-  id              Int                   @id @default(autoincrement())
+  id              Int                      @id @default(autoincrement())
   title           String
   subtitle        String?
-  type            ReportType            @default(MONTHLY)
-  status          ExecutiveReportStatus @default(DRAFT)
-  confidentiality ReportConfidentiality @default(CONFIDENTIAL)
+  type            ReportType               @default(MONTHLY)
+  status          ExecutiveReportStatus    @default(DRAFT)
+  confidentiality ReportConfidentiality    @default(CONFIDENTIAL)
   generatedById   Int
   departmentId    Int?
   period          String?
@@ -7282,23 +7333,35 @@ model ExecutiveReport {
   risks           String[]
   recommendations String[]
   nextSteps       String[]
-  narrative       String?               @db.Text
+  narrative       String?                  @db.Text
   filePath        String
   format          ReportFormat
   approvedAt      DateTime?
   publishedAt     DateTime?
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
-  generatedBy     User                  @relation(fields: [generatedById], references: [id], onDelete: Cascade)
-  department      Department?           @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  // Contexto de geração preservado (docs/Executive_Reports.md §7/§12.4):
+  // filtros usados, modelo + versão, versão das fórmulas e o conteúdo gerado.
+  filters         Json?
+  templateCode    String?
+  templateVersion Int?
+  formulaVersion  String?
+  content         Json?
+  scheduleId      Int?
+  schedule        ExecutiveReportSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  generatedBy     User                     @relation(fields: [generatedById], references: [id], onDelete: Cascade)
+  department      Department?              @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   metrics         ExecutiveMetric[]
   approvals       ReportApproval[]
   accessLogs      ReportAccessLog[]
+  audits          ExecutiveReportAudit[]
 
   @@index([generatedById])
   @@index([departmentId])
   @@index([status])
   @@index([type])
+  @@index([templateCode])
+  @@index([scheduleId])
 }
 
 model ExecutiveMetric {
@@ -7340,6 +7403,186 @@ model ReportAccessLog {
 
   @@index([reportId])
   @@index([userId])
+}
+
+enum ExecutiveExportFormat {
+  PDF
+  XLSX
+  CSV
+}
+
+enum ExecutiveScheduleFrequency {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+}
+
+enum ExecutiveAlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+  DISMISSED
+}
+
+enum ExecutiveAlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// Modelo personalizado guardado (docs/Executive_Reports.md §8). Os modelos
+// predefinidos vivem em código (executive-reports.templates.ts).
+model ExecutiveReportTemplate {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  category    String   @default("CUSTOM")
+  config      Json
+  version     Int      @default(1)
+  createdById Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   User     @relation("ExecReportTemplateCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([createdById])
+}
+
+model ExecutiveReportSchedule {
+  id           Int                          @id @default(autoincrement())
+  name         String
+  templateCode String?
+  templateId   Int?
+  frequency    ExecutiveScheduleFrequency
+  hour         Int                          @default(8)
+  dayOfWeek    Int?
+  dayOfMonth   Int?
+  format       ExecutiveExportFormat        @default(PDF)
+  filters      Json?
+  recipientIds Int[]                        @default([])
+  active       Boolean                      @default(true)
+  nextRunAt    DateTime
+  lastRunAt    DateTime?
+  lastStatus   String?
+  lastError    String?
+  lastReportId Int?
+  createdById  Int
+  createdAt    DateTime                     @default(now())
+  updatedAt    DateTime                     @updatedAt
+  createdBy    User                         @relation("ExecReportScheduleCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  reports      ExecutiveReport[]
+  runs         ExecutiveReportScheduleRun[]
+
+  @@index([active, nextRunAt])
+  @@index([createdById])
+}
+
+// Registo de cada execução (sucesso, falha ou destinatários rejeitados).
+model ExecutiveReportScheduleRun {
+  id           Int                     @id @default(autoincrement())
+  scheduleId   Int
+  startedAt    DateTime                @default(now())
+  finishedAt   DateTime?
+  status       String
+  reportId     Int?
+  delivered    Int[]                   @default([])
+  rejected     Int[]                   @default([])
+  errorMessage String?
+  schedule     ExecutiveReportSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@index([scheduleId, startedAt])
+}
+
+// Limiares configuráveis e aprovados pelo responsável (§9).
+model ExecutiveAlertRule {
+  id           Int                    @id @default(autoincrement())
+  code         String                 @unique
+  name         String
+  sourceModule String
+  description  String
+  threshold    Float?
+  unit         String?
+  severity     ExecutiveAlertSeverity @default(MEDIUM)
+  ownerId      Int?
+  approvedById Int?
+  approvedAt   DateTime?
+  active       Boolean                @default(true)
+  updatedAt    DateTime               @updatedAt
+  owner        User?                  @relation("ExecAlertRuleOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+}
+
+model ExecutiveAlert {
+  id           Int                    @id @default(autoincrement())
+  ruleCode     String
+  fingerprint  String                 @unique
+  title        String
+  description  String                 @db.Text
+  severity     ExecutiveAlertSeverity
+  sourceModule String
+  sourceType   String?
+  sourceId     Int?
+  link         String?
+  value        Float?
+  departmentId Int?
+  ownerId      Int?
+  dueDate      DateTime?
+  status       ExecutiveAlertStatus   @default(OPEN)
+  detectedAt   DateTime               @default(now())
+  lastSeenAt   DateTime               @default(now())
+  resolvedAt   DateTime?
+  owner        User?                  @relation("ExecAlertOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  events       ExecutiveAlertEvent[]
+
+  @@index([status, severity])
+  @@index([ruleCode])
+  @@index([ownerId])
+  @@index([departmentId])
+}
+
+model ExecutiveAlertEvent {
+  id        Int            @id @default(autoincrement())
+  alertId   Int
+  userId    Int?
+  action    String
+  comment   String?
+  createdAt DateTime       @default(now())
+  alert     ExecutiveAlert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  user      User?          @relation("ExecAlertEventUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([alertId])
+}
+
+// Sobreposição configurável de meta/limiares de um KPI (§11, §12.1). A fórmula
+// e a fonte continuam a viver no catálogo em código (definição única).
+model ExecutiveKPIDefinition {
+  id                Int      @id @default(autoincrement())
+  code              String   @unique
+  target            Float?
+  warningThreshold  Float?
+  criticalThreshold Float?
+  ownerId           Int?
+  active            Boolean  @default(true)
+  updatedAt         DateTime @updatedAt
+  owner             User?    @relation("ExecKpiDefinitionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+}
+
+// Auditoria de geração, consulta, exportação e falhas (§11, §12.7/12.10).
+model ExecutiveReportAudit {
+  id           Int              @id @default(autoincrement())
+  userId       Int?
+  reportId     Int?
+  action       String
+  filters      Json?
+  status       String           @default("SUCCESS")
+  errorMessage String?
+  createdAt    DateTime         @default(now())
+  user         User?            @relation("ExecReportAuditUser", fields: [userId], references: [id], onDelete: SetNull)
+  report       ExecutiveReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+
+  @@index([reportId])
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
 }
 
 model Organization {
@@ -7690,13 +7933,13 @@ enum ImpactCategory {
 }
 
 model ImpactRecord {
-  id          Int               @id @default(autoincrement())
-  subjectType ImpactSubjectType
-  userId      Int?
-  user        User?             @relation("ImpactRecordSubject", fields: [userId], references: [id])
-  team        String?
+  id           Int               @id @default(autoincrement())
+  subjectType  ImpactSubjectType
+  userId       Int?
+  user         User?             @relation("ImpactRecordSubject", fields: [userId], references: [id])
+  team         String?
   departmentId Int?
-  department  Department?       @relation(fields: [departmentId], references: [id])
+  department   Department?       @relation(fields: [departmentId], references: [id])
 
   initiativeType RoiInitiativeType
   initiativeId   Int?
@@ -7861,21 +8104,21 @@ enum KpiDefinitionStatus {
 }
 
 model KpiDefinition {
-  id          Int         @id @default(autoincrement())
-  name        String
-  code        String      @unique
-  category    KpiCategory
-  description String?
-  unit        String
-  formula     String?
-  dataSource  String?
-  frequency   KpiFrequency
-  targetValue Float?
+  id            Int                 @id @default(autoincrement())
+  name          String
+  code          String              @unique
+  category      KpiCategory
+  description   String?
+  unit          String
+  formula       String?
+  dataSource    String?
+  frequency     KpiFrequency
+  targetValue   Float?
   benchmarkNote String?
   // FK solta para User (padrão PayslipAccessLog.userId/RoiAnalysis.responsibleId)
   // — sem @relation para não multiplicar back-relations em User.
   responsibleId Int?
-  status      KpiDefinitionStatus   @default(ACTIVO)
+  status        KpiDefinitionStatus @default(ACTIVO)
 
   createdById Int
   createdBy   User     @relation(fields: [createdById], references: [id])
@@ -7906,10 +8149,10 @@ enum CorrelationType {
 }
 
 model Correlation {
-  id           Int              @id @default(autoincrement())
+  id           Int             @id @default(autoincrement())
   type         CorrelationType
   departmentId Int?
-  department   Department?      @relation(fields: [departmentId], references: [id])
+  department   Department?     @relation(fields: [departmentId], references: [id])
 
   periodStart DateTime?
   periodEnd   DateTime?
@@ -8007,13 +8250,13 @@ enum BenchmarkType {
 }
 
 model Benchmark {
-  id            Int           @id @default(autoincrement())
-  name          String
-  type          BenchmarkType
-  source        String
-  referenceYear Int
-  value         Float
-  unit          String
+  id              Int           @id @default(autoincrement())
+  name            String
+  type            BenchmarkType
+  source          String
+  referenceYear   Int
+  value           Float
+  unit            String
   // "Aplicável a" — FK solta para KpiDefinition (mesmo padrão de
   // Scenario.basedOnAnalysisId, sem @relation, para não multiplicar
   // back-relations em KpiDefinition); indicatorName cobre o indicador livre

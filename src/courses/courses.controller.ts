@@ -569,6 +569,16 @@ export class CoursesController {
     return this.svc.closeCohort(cohortId, user);
   }
 
+  @Delete('cohorts/:cohortId')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Eliminar turma (remove também os participantes)' })
+  deleteCohort(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.deleteCohort(cohortId, user);
+  }
+
   @Post('cohorts/:cohortId/participants')
   @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
   @ApiOperation({ summary: 'Adicionar participantes à turma' })
