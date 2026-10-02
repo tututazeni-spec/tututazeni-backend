@@ -164,7 +164,14 @@ describe('Executive Reports — geração, agendamentos e alertas (integração)
     });
 
     it('vistas por domínio: RH acede, /costs só ADMIN/DIRECTOR', async () => {
-      for (const d of ['workforce', 'training', 'performance', 'attendance', 'organization']) {
+      for (const d of [
+        'workforce',
+        'training',
+        'performance',
+        'attendance',
+        'organization',
+        'projects',
+      ]) {
         await request(http()).get(`/executive-reports/${d}`).set(as(rhToken)).expect(200);
       }
       await request(http()).get('/executive-reports/costs').set(as(rhToken)).expect(403);

@@ -200,6 +200,13 @@ export class ExecutiveReportsController {
     return this.data.domain(user, 'organization', filters);
   }
 
+  @Get('projects')
+  @Roles(...EXEC_MGMT)
+  @ApiOperation({ summary: 'Projectos e planos: metas, PDI e integração' })
+  projects(@CurrentUser() user: CurrentUserData, @Query() filters: ExecutiveFiltersDto) {
+    return this.data.domain(user, 'projects', filters);
+  }
+
   @Get('costs')
   @Roles(Role.ADMIN, Role.DIRECTOR)
   @ApiOperation({ summary: 'Custos autorizados (acesso restrito)' })

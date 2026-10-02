@@ -13,7 +13,7 @@ import type { KpiCode } from './executive-reports.kpi-catalog';
 import type { CurrentUserData } from '../common/decorators';
 
 export type ExecutiveDomain =
-  'workforce' | 'training' | 'performance' | 'attendance' | 'organization' | 'costs';
+  'workforce' | 'training' | 'performance' | 'attendance' | 'organization' | 'projects' | 'costs';
 
 interface DomainDef {
   title: string;
@@ -48,6 +48,11 @@ export const DOMAINS: Record<ExecutiveDomain, DomainDef> = {
     title: 'Comparação entre unidades',
     sections: ['departments'],
     kpiCodes: [],
+  },
+  projects: {
+    title: 'Projectos e planos',
+    sections: ['goals', 'pdi', 'onboarding'],
+    kpiCodes: ['PDI_OVERDUE'],
   },
   costs: {
     title: 'Custos autorizados',
