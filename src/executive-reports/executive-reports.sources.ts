@@ -16,7 +16,8 @@ export type SourceCounterKey =
   | 'performance'
   | 'competencies'
   | 'development-plans'
-  | 'onboarding';
+  | 'onboarding'
+  | 'avatar-training';
 
 export interface SourceDefinition {
   module: string;
@@ -165,6 +166,14 @@ export const SOURCE_MATRIX: SourceDefinition[] = [
     status: 'INTEGRATED',
     usedBy: ['Onboarding em curso/concluído', 'Execução de planos'],
     counter: 'onboarding',
+  },
+  {
+    module: 'avatar-training',
+    consumes:
+      'Sessões com avatar, tentativas, aproveitamento, formação obrigatória atribuída e prazos',
+    status: 'INTEGRATED',
+    usedBy: ['Execução de planos — formação com avatar obrigatória'],
+    counter: 'avatar-training',
   },
   {
     module: 'leadership',

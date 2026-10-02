@@ -15,6 +15,9 @@ import { CompetenciesModule } from '../competencies/competencies.module';
 import { DevelopmentPlansModule } from '../development-plans/development-plans.module';
 import { OnboardingModule } from '../onboarding/onboarding.module';
 import { AvatarTrainingDevelopmentService } from './avatar-training-development.service';
+import { AvatarTrainingNotificationsService } from './avatar-training-notifications.service';
+import { AvatarTrainingReportsService } from './avatar-training-reports.service';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -24,6 +27,7 @@ import { AvatarTrainingDevelopmentService } from './avatar-training-development.
     CompetenciesModule,
     DevelopmentPlansModule,
     OnboardingModule,
+    NotificationsModule,
   ],
   providers: [
     AvatarTrainingAiTutorService,
@@ -34,6 +38,8 @@ import { AvatarTrainingDevelopmentService } from './avatar-training-development.
     AvatarTrainingAssessmentsService,
     AvatarTrainingIntegrationsService,
     AvatarTrainingDevelopmentService,
+    AvatarTrainingNotificationsService,
+    AvatarTrainingReportsService,
   ],
   controllers: [AvatarTrainingController],
   exports: [AvatarTrainingService, AvatarTrainingProgramsService, AvatarTrainingAttemptsService],

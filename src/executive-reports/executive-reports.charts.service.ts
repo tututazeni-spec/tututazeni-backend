@@ -225,7 +225,16 @@ export class ExecutiveReportsChartsService {
       }));
 
     const enr = f.courseId ? { courseId: f.courseId } : {};
-    const [actionsTotal, actionsDone, mandTotal, mandDone, onbTotal, onbDone] = await Promise.all([
+    const [
+      actionsTotal,
+      actionsDone,
+      mandTotal,
+      mandDone,
+      onbTotal,
+      onbDone,
+      avatarTotal,
+      avatarDone,
+    ] = await Promise.all([
       this.prisma.read.developmentPlanAction.count({
         where: { plan: { user: scope }, status: { not: 'CANCELLED' } },
       }),
@@ -245,6 +254,12 @@ export class ExecutiveReportsChartsService {
       }),
       this.prisma.read.onboardingPlan.count({ where: { user: scope } }),
       this.prisma.read.onboardingPlan.count({ where: { user: scope, status: 'COMPLETED' } }),
+      this.prisma.read.avatarTrainingAssignment.count({
+        where: { user: scope, mandatory: true, status: { not: 'CANCELLED' } },
+      }),
+      this.prisma.read.avatarTrainingAssignment.count({
+        where: { user: scope, mandatory: true, status: 'COMPLETED' },
+      }),
     ]);
 
     const exec = (label: string, done: number, total: number, source: string) => ({
@@ -261,6 +276,12 @@ export class ExecutiveReportsChartsService {
         exec('Acções de PDI concluídas', actionsDone, actionsTotal, 'development-plans'),
         exec('Formações obrigatórias concluídas', mandDone, mandTotal, 'enrollments'),
         exec('Planos de onboarding concluídos', onbDone, onbTotal, 'onboarding'),
+        exec(
+          'Formações com avatar obrigatórias concluídas',
+          avatarDone,
+          avatarTotal,
+          'avatar-training',
+        ),
       ],
     };
   }
@@ -426,6 +447,8 @@ export class ExecutiveReportsChartsService {
       'development-plans': () =>
         this.prisma.read.developmentPlanAction.count({ where: { plan: { user: scope } } }),
       onboarding: () => this.prisma.read.onboardingPlan.count({ where: { user: scope } }),
+      'avatar-training': () =>
+        this.prisma.read.avatarTrainingAttempt.count({ where: { user: scope } }),
     };
 
     const visible = SOURCE_MATRIX.filter(s => canSeeRestricted || !s.restricted);
