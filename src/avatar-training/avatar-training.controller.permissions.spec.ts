@@ -8,8 +8,7 @@ const proto = AvatarTrainingController.prototype as any;
 const routes = Object.getOwnPropertyNames(proto).filter(
   n => n !== 'constructor' && Reflect.getMetadata('path', proto[n]) !== undefined,
 );
-const rolesOf = (n: string): string[] =>
-  (Reflect.getMetadata('roles', proto[n]) ?? []).map(String);
+const rolesOf = (n: string): string[] => (Reflect.getMetadata('roles', proto[n]) ?? []).map(String);
 
 describe('AvatarTrainingController — permissões', () => {
   it('expõe as rotas do módulo', () => {
