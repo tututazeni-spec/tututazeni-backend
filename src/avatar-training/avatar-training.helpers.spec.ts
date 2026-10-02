@@ -66,3 +66,27 @@ describe('avatar-training.helpers', () => {
     expect(AVATAR_AUTHOR_ROLES).not.toContain(Role.AUDITOR);
   });
 });
+
+describe('personalização por nível', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const h = require('./avatar-training.helpers');
+
+  it('poucos resultados → iniciante', () => {
+    expect(h.learnerLevelIndex([])).toBe(0);
+    expect(h.learnerLevelIndex([99, 99])).toBe(0);
+  });
+
+  it('notas médias definem o nível', () => {
+    expect(h.learnerLevelIndex([60, 70, 80])).toBe(0);
+    expect(h.learnerLevelIndex([80, 80, 80])).toBe(1);
+    expect(h.learnerLevelIndex([95, 90, 92])).toBe(2);
+  });
+
+  it('adequação da dificuldade ao nível', () => {
+    expect(h.levelFit('BEGINNER', 1)).toBe('EASIER');
+    expect(h.levelFit('INTERMEDIATE', 1)).toBe('MATCH');
+    expect(h.levelFit('ADVANCED', 1)).toBe('MATCH');
+    expect(h.levelFit('EXPERT', 1)).toBe('HARDER');
+    expect(h.levelFit('ADVANCED', 0)).toBe('HARDER');
+  });
+});

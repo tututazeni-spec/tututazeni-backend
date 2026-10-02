@@ -16,7 +16,15 @@ import { DevelopmentPlansService } from '../development-plans/development-plans.
 import { OnboardingService } from '../onboarding/onboarding.service';
 import { AvatarTrainingIntegrationsService } from './avatar-training-integrations.service';
 import { AvatarTrainingProgramsService } from './avatar-training-programs.service';
-import { AVATAR_ADMIN_ROLES, AVATAR_PROGRESS_ROLES } from './avatar-training.helpers';
+import {
+  AVATAR_ADMIN_ROLES,
+  AVATAR_PROGRESS_ROLES,
+  DIFFICULTY_ORDER,
+  learnerLevelIndex,
+  levelFit,
+  levelFitRank,
+  LevelFit,
+} from './avatar-training.helpers';
 
 /** Abaixo desta nota a competência é sugerida para reforço (sem alterar nada formal). */
 const WEAK_SCORE = 70;
@@ -303,7 +311,7 @@ export class AvatarTrainingDevelopmentService {
     const target = userId ?? user.id;
     if (target !== user.id) await this.assertCanSeeUser(user, target);
 
-    const [gaps, weak, actions, tasks] = await Promise.all([
+    const [gaps, weak, actions, tasks, finished] = await Promise.all([
       this.prisma.userCompetency.findMany({
         where: { userId: target, targetLevel: { not: null } },
         select: { competencyId: true, currentLevel: true, targetLevel: true },
@@ -326,7 +334,15 @@ export class AvatarTrainingDevelopmentService {
         },
         select: { id: true, templateTask: { select: { title: true, courseId: true } } },
       }),
+      this.prisma.avatarTrainingAttempt.findMany({
+        where: { userId: target, status: { in: ['COMPLETED', 'FAILED'] }, score: { not: null } },
+        orderBy: { completedAt: 'desc' },
+        take: 10,
+        select: { score: true },
+      }),
     ]);
+
+    const levelIndex = learnerLevelIndex(finished.map(a => a.score as number));
 
     const gapIds = new Set<number>([
       ...gaps.filter(g => g.currentLevel < (g.targetLevel ?? 0)).map(g => g.competencyId),
@@ -356,6 +372,7 @@ export class AvatarTrainingDevelopmentService {
               title: true,
               courseId: true,
               competencyIds: true,
+              difficulty: true,
               targetDepartmentIds: true,
               targetRoleNames: true,
               sessions: {
@@ -376,6 +393,8 @@ export class AvatarTrainingDevelopmentService {
       programId: number;
       title: string;
       sessions: { id: number; title: string }[];
+      difficulty: string;
+      levelFit: LevelFit;
       reasons: { type: string; detail: string }[];
     }[] = [];
     for (const p of candidates) {
@@ -410,12 +429,19 @@ export class AvatarTrainingDevelopmentService {
         programId: p.id,
         title: p.title,
         sessions: open.map(s => ({ id: s.id, title: s.title })),
+        difficulty: p.difficulty,
+        levelFit: levelFit(p.difficulty, levelIndex),
         reasons,
       });
     }
-    result.sort((a, b) => b.reasons.length - a.reasons.length);
+    // Primeiro o que se adequa ao nível do formando; dentro de cada grupo, mais motivos primeiro.
+    result.sort(
+      (a, b) =>
+        levelFitRank(a.levelFit) - levelFitRank(b.levelFit) || b.reasons.length - a.reasons.length,
+    );
     return {
       userId: target,
+      learnerLevel: DIFFICULTY_ORDER[levelIndex],
       data: result.slice(0, 20),
       note: 'Recomendações automáticas: sugerem formação de reforço, não alteram notas formais nem atribuem sessões.',
     };
