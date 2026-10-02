@@ -91,7 +91,7 @@ export class ExecutiveReportsExportService {
       if (s.rows.length === 0) push(s.note ?? 'Sem dados');
       for (const r of s.rows) push(...s.columns.map(x => r[x.key]));
     }
-    return `﻿${lines.join('\r\n')}\r\n`;
+    return `\uFEFF${lines.join('\r\n')}\r\n`;
   }
 
   // ─── Excel ────────────────────────────────────────────────────────────────

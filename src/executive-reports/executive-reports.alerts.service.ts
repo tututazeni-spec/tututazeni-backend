@@ -198,13 +198,13 @@ interface Candidate {
   dueDate?: Date | null;
 }
 
-type RuleRow = {
+interface RuleRow {
   code: string;
   threshold: number | null;
   severity: Severity;
   ownerId: number | null;
   active: boolean;
-};
+}
 
 const FULL_ROLES = ['ADMIN', 'RH', 'DIRECTOR'];
 const APPROVER_ROLES = ['ADMIN', 'DIRECTOR'];

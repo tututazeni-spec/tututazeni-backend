@@ -161,9 +161,7 @@ describe('DepartmentsService', () => {
         { ...baseDept, id: 1, parentId: null },
         { ...baseDept, id: 2, parentId: 1 },
       ]);
-      mockPrisma.position.groupBy.mockResolvedValue([
-        { departmentId: 1, _count: { _all: 3 } },
-      ]);
+      mockPrisma.position.groupBy.mockResolvedValue([{ departmentId: 1, _count: { _all: 3 } }]);
 
       const result = await service.getTree();
 
@@ -181,7 +179,12 @@ describe('DepartmentsService', () => {
       mockPrisma.department.findMany.mockResolvedValue([
         {
           ...baseDept,
-          head: { id: 10, fullName: 'Ana', email: 'ana@innova.com', position: { name: 'Directora' } },
+          head: {
+            id: 10,
+            fullName: 'Ana',
+            email: 'ana@innova.com',
+            position: { name: 'Directora' },
+          },
           deputyHead: { id: 11, fullName: 'Bruno' },
           headHistory: [{ startedAt: new Date('2026-01-01') }],
         },

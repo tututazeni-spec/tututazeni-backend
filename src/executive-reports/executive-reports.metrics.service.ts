@@ -67,11 +67,11 @@ const PRESENT_STATUSES = [
 ] as const;
 const EXCLUDED_FROM_EXPECTED = ['ON_LEAVE', 'HOLIDAY', 'RECORDED'] as const;
 
-type KpiOverride = {
+interface KpiOverride {
   target: number | null;
   warningThreshold: number | null;
   criticalThreshold: number | null;
-};
+}
 const OVERRIDE_TTL_MS = 60_000;
 
 const round1 = (n: number) => Math.round(n * 10) / 10;

@@ -1287,7 +1287,10 @@ export class DepartmentsService {
         active: u.active,
         position: u.position,
         department: u.department
-          ? { id: u.department.parent?.id ?? u.department.id, name: u.department.parent?.name ?? u.department.name }
+          ? {
+              id: u.department.parent?.id ?? u.department.id,
+              name: u.department.parent?.name ?? u.department.name,
+            }
           : null,
         subdepartment: u.department?.parent ? u.department.name : null,
         manager: u.manager,
@@ -1551,7 +1554,10 @@ export class DepartmentsService {
       max: d.maxEmployees ?? null,
     }));
 
-    const unitMap = new Map<number, { id: number; name: string; actual: number; expected: number; max: number }>();
+    const unitMap = new Map<
+      number,
+      { id: number; name: string; actual: number; expected: number; max: number }
+    >();
     for (const d of departments) {
       if (!d.unit) continue;
       const entry = unitMap.get(d.unit.id) ?? {
@@ -1665,7 +1671,10 @@ export class DepartmentsService {
       employeeDistribution,
       admissions: {
         total: admissionsCount,
-        byMonth: Array.from(admissionsByMonth.entries()).map(([month, count]) => ({ month, count })),
+        byMonth: Array.from(admissionsByMonth.entries()).map(([month, count]) => ({
+          month,
+          count,
+        })),
       },
       exits: {
         total: exitsCount,

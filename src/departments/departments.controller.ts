@@ -131,7 +131,9 @@ export class DepartmentsController {
   // Rota literal — tem de vir antes de ':id' (ver [[project_innova_route_shadowing]]).
   @Get('hierarchy')
   @Roles(...DEPARTMENTS_VIEW_ROLES)
-  @ApiOperation({ summary: 'Relações de reporte — cadeia hierárquica (docs/modulo_departments.md Ponto 7)' })
+  @ApiOperation({
+    summary: 'Relações de reporte — cadeia hierárquica (docs/modulo_departments.md Ponto 7)',
+  })
   getHierarchy(@Query() filters: HierarchyFilterDto) {
     return this.svc.getHierarchy(filters);
   }
@@ -139,7 +141,9 @@ export class DepartmentsController {
   // Rota literal — tem de vir antes de ':id' (ver [[project_innova_route_shadowing]]).
   @Get('history')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Histórico de alterações estruturais (docs/modulo_departments.md Ponto 8)' })
+  @ApiOperation({
+    summary: 'Histórico de alterações estruturais (docs/modulo_departments.md Ponto 8)',
+  })
   getHistory(@Query() filters: HistoryFilterDto) {
     return this.svc.getHistory(filters);
   }

@@ -289,18 +289,16 @@ describe('ExecutiveReportsGenerationService — permissões, contexto e falhas',
     });
 
     it('listTemplates: modelos personalizados só aparecem a ADMIN/RH/DIRECTOR', async () => {
-      prisma.executiveReportTemplate.findMany = jest
-        .fn()
-        .mockResolvedValue([
-          {
-            id: 1,
-            name: 'Meu',
-            version: 2,
-            config: {},
-            createdBy: { id: 1 },
-            updatedAt: new Date(),
-          },
-        ]);
+      prisma.executiveReportTemplate.findMany = jest.fn().mockResolvedValue([
+        {
+          id: 1,
+          name: 'Meu',
+          version: 2,
+          config: {},
+          createdBy: { id: 1 },
+          updatedAt: new Date(),
+        },
+      ]);
       const gestor = await svc.listTemplates(user(3, 'GESTOR'));
       expect(gestor.some(t => !t.predefined)).toBe(false);
       const rh = await svc.listTemplates(user(4, 'RH'));
