@@ -417,18 +417,18 @@ A página principal pode seguir esta disposição:
 
 Antes de dar o módulo por terminado, confirma estes pontos:
 
-**Lista de validação** (0 de 10)
+**Lista de validação** (8 de 10)
 
-- [ ] Os indicadores recebem dados reais dos módulos de origem.
+- [x] Os indicadores recebem dados reais dos módulos de origem.
 - [ ] Os filtros globais funcionam em todos os separadores aplicáveis.
-- [ ] Os KPIs têm fórmulas, metas, períodos e fontes documentados.
+- [x] Os KPIs têm fórmulas, metas, períodos e fontes documentados.
 - [ ] Os gráficos e tabelas permitem consultar detalhes autorizados.
-- [ ] Os relatórios podem ser gerados e exportados.
-- [ ] Os agendamentos executam e registam os resultados.
-- [ ] Os alertas têm regras, responsáveis e histórico.
-- [ ] As permissões são verificadas no backend, incluindo nas exportações.
-- [ ] Os relatórios antigos preservam o contexto da geração.
-- [ ] Existem testes para cálculos, permissões, filtros e falhas de integração.
+- [x] Os relatórios podem ser gerados e exportados.
+- [x] Os agendamentos executam e registam os resultados.
+- [x] Os alertas têm regras, responsáveis e histórico.
+- [x] As permissões são verificadas no backend, incluindo nas exportações.
+- [x] Os relatórios antigos preservam o contexto da geração.
+- [x] Existem testes para cálculos, permissões, filtros e falhas de integração.
 
 ---
 
