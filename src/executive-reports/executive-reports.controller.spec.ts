@@ -52,10 +52,10 @@ describe('ExecutiveReportsController', () => {
     controller = module.get<ExecutiveReportsController>(ExecutiveReportsController);
   });
 
-  it('findAll → findAll(filters)', async () => {
+  it('findAll → findAll(filters, role)', async () => {
     const filters = {} as any;
-    await controller.findAll(filters);
-    expect(mockSvc.findAll).toHaveBeenCalledWith(filters);
+    await controller.findAll(mockUser as any, filters);
+    expect(mockSvc.findAll).toHaveBeenCalledWith(filters, 'ADMIN');
   });
 
   it('stats → getReportStats', async () => {
@@ -73,9 +73,9 @@ describe('ExecutiveReportsController', () => {
     expect(mockSvc.getExecutiveSnapshot).toHaveBeenCalledWith(3);
   });
 
-  it('findOne → findOne(id, userId)', async () => {
+  it('findOne → findOne(id, userId, role)', async () => {
     await controller.findOne(2, mockUser as any);
-    expect(mockSvc.findOne).toHaveBeenCalledWith(2, 1);
+    expect(mockSvc.findOne).toHaveBeenCalledWith(2, 1, 'ADMIN');
   });
 
   it('create → create(userId, dto)', async () => {
