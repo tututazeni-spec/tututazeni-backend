@@ -18,7 +18,7 @@ import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { ProcessStandardService } from './process-standard.service';
-import { syncStepActivation } from './process-activation';
+import { ProcessEngineService } from './process-engine.service';
 import { deriveInstanceMetrics, isActiveStatus } from './process-workflow';
 import {
   AssignInstanceDto,
@@ -67,7 +67,27 @@ export class ProcessInstancesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly processes: ProcessStandardService,
+    private readonly engine: ProcessEngineService,
   ) {}
+
+  /** Entrega um evento à instância (gestão ou solicitante); conclui as esperas por evento. */
+  async deliverEvent(instanceId: number, event: string, user: CurrentUserData) {
+    const inst = await this.prisma.processInstance.findUnique({
+      where: { id: instanceId },
+      select: { initiatedById: true, targetUserId: true, currentResponsibleId: true },
+    });
+    if (!inst) throw new NotFoundException('Processo não encontrado');
+    const uid = user.id;
+    const allowed =
+      isPrivileged(user, MANAGE_ROLES) ||
+      [inst.initiatedById, inst.targetUserId, inst.currentResponsibleId].includes(uid);
+    if (!allowed) throw new NotFoundException('Processo não encontrado');
+    const result = await this.engine.deliverEvent(instanceId, event, uid);
+    if (result.delivered === 0) {
+      throw new BadRequestException('Nenhuma etapa à espera deste evento');
+    }
+    return result;
+  }
 
   // ─── Mapeamento ───────────────────────────────────────────────────────────
 
@@ -520,7 +540,7 @@ export class ProcessInstancesService {
         returnReason: reason ?? 'Processo retomado após rejeição',
       },
     });
-    await syncStepActivation(this.prisma, id);
+    await this.engine.advance(id);
     await this.processes.writeAuditLog({
       instanceId: id,
       processId: inst.processId,

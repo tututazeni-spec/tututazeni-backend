@@ -870,18 +870,20 @@ model User {
   developmentPlans    DevelopmentPlan[]
 
   // ─── Processos ────────────────────────────────────────────────
-  processStandardsOwned ProcessStandard[]
-  processStepsOwned     ProcessStep[]
-  processStepsReviewed  ProcessStep[]        @relation("ProcessStepReviewer")
-  responsibleInstances  ProcessInstance[]    @relation("InstanceCurrentResponsible")
-  assignedStepProgress  StepProgress[]       @relation("StepAssignee")
-  reviewedStepProgress  StepProgress[]       @relation("StepReviewer")
-  processStepComments   ProcessStepComment[] @relation("ProcessStepCommentAuthor")
-  initiatedInstances    ProcessInstance[]    @relation("InstanceInitiator")
-  targetInstances       ProcessInstance[]    @relation("InstanceTarget")
-  completedSteps        StepProgress[]
-  processApprovalLogs   ProcessApprovalLog[]
-  processAuditLogs      ProcessAuditLog[]
+  processStandardsOwned     ProcessStandard[]
+  processStepsOwned         ProcessStep[]
+  processStepsReviewed      ProcessStep[]        @relation("ProcessStepReviewer")
+  responsibleInstances      ProcessInstance[]    @relation("InstanceCurrentResponsible")
+  assignedStepProgress      StepProgress[]       @relation("StepAssignee")
+  reviewedStepProgress      StepProgress[]       @relation("StepReviewer")
+  processStepComments       ProcessStepComment[] @relation("ProcessStepCommentAuthor")
+  processApprovalsRequested ProcessApproval[]    @relation("ProcessApprovalRequester")
+  processApprovalsAssigned  ProcessApproval[]    @relation("ProcessApprovalApprover")
+  initiatedInstances        ProcessInstance[]    @relation("InstanceInitiator")
+  targetInstances           ProcessInstance[]    @relation("InstanceTarget")
+  completedSteps            StepProgress[]
+  processApprovalLogs       ProcessApprovalLog[]
+  processAuditLogs          ProcessAuditLog[]
 
   // ─── Eventos & Presença ───────────────────────────────────────
   events                     Event[]                  @relation("EventOrganizer")
@@ -5654,6 +5656,15 @@ enum StepType {
   DECISION
   GATEWAY
   REVIEW
+  // docs/Modulo_Processes.md §8 — blocos do construtor de fluxos
+  FORM
+  PARALLEL
+  WAIT_EVENT
+  TIMER
+  INTEGRATION
+  AUTO_ACTION
+  NOTIFICATION
+  DOCUMENT
 }
 
 enum InstanceStatus {
@@ -5724,31 +5735,56 @@ model ProcessStandard {
 }
 
 model ProcessStep {
-  id               Int             @id @default(autoincrement())
-  processId        Int
-  type             StepType        @default(TASK)
-  title            String
-  description      String?
-  order            Int
-  responsibleId    Int?
-  responsibleRole  String?
-  slaHours         Float?
-  estimatedMinutes Float?
-  formSchema       String?
-  exitConditions   String?
-  requiresUpload   Boolean         @default(false)
-  checklist        String[]
+  id                   Int             @id @default(autoincrement())
+  processId            Int
+  type                 StepType        @default(TASK)
+  title                String
+  description          String?
+  order                Int
+  responsibleId        Int?
+  responsibleRole      String?
+  slaHours             Float?
+  estimatedMinutes     Float?
+  formSchema           String?
+  exitConditions       String?
+  requiresUpload       Boolean         @default(false)
+  checklist            String[]
   // docs/Modulo_Processes.md §6 — `dependsOnOrders` referencia o `order` de
   // outras etapas do mesmo modelo (sobrevive à substituição das etapas);
   // vazio + parallel=false → depende da etapa anterior; parallel=true →
   // arranca logo com a instância.
-  dependsOnOrders  Int[]
-  parallel         Boolean         @default(false)
-  reviewerId       Int?
-  process          ProcessStandard @relation(fields: [processId], references: [id], onDelete: Cascade)
-  responsible      User?           @relation(fields: [responsibleId], references: [id])
-  reviewer         User?           @relation("ProcessStepReviewer", fields: [reviewerId], references: [id])
-  stepProgress     StepProgress[]
+  dependsOnOrders      Int[]
+  parallel             Boolean         @default(false)
+  reviewerId           Int?
+  // docs/Modulo_Processes.md §7/§8 — propriedades configuráveis da etapa.
+  // `config` (JSON) guarda o que é específico do tipo: temporizador
+  // ({delayHours}), espera por evento ({eventName}), notificação
+  // ({recipients, message}), integração ({module, event}), documento, etc.
+  config               String?
+  // Condições de entrada (JSON {logic, rows}): se falsas, a etapa é ignorada.
+  entryConditions      String?
+  requiredData         String[]
+  approverIds          Int[]
+  // SEQUENTIAL | PARALLEL | ANY
+  approvalMode         String          @default("SEQUENTIAL")
+  allowDelegation      Boolean         @default(true)
+  // HOLD | CANCEL | RETURN | BRANCH — regra aplicada quando a aprovação é rejeitada
+  onReject             String          @default("HOLD")
+  maxReturns           Int?
+  // Acções (JSON array) em caso de sucesso / falha da etapa
+  successActions       String?
+  failureActions       String?
+  escalationAfterHours Float?
+  escalationToId       Int?
+  escalationToRole     String?
+  // CALENDAR | BUSINESS_DAYS
+  calendarMode         String          @default("CALENDAR")
+  posX                 Float?
+  posY                 Float?
+  process              ProcessStandard @relation(fields: [processId], references: [id], onDelete: Cascade)
+  responsible          User?           @relation(fields: [responsibleId], references: [id])
+  reviewer             User?           @relation("ProcessStepReviewer", fields: [reviewerId], references: [id])
+  stepProgress         StepProgress[]
 
   @@index([processId])
 }
@@ -5784,6 +5820,7 @@ model ProcessInstance {
   currentResponsible   User?                @relation("InstanceCurrentResponsible", fields: [currentResponsibleId], references: [id])
   stepProgress         StepProgress[]
   stepComments         ProcessStepComment[]
+  approvals            ProcessApproval[]
 
   @@index([status])
   @@index([processId])
@@ -5823,6 +5860,7 @@ model StepProgress {
   assignee    User?                @relation("StepAssignee", fields: [assigneeId], references: [id])
   reviewer    User?                @relation("StepReviewer", fields: [reviewerId], references: [id])
   comments    ProcessStepComment[]
+  approvals   ProcessApproval[]
 
   @@unique([instanceId, stepId])
   @@index([status])
@@ -5844,6 +5882,50 @@ model ProcessStepComment {
   author     User            @relation("ProcessStepCommentAuthor", fields: [authorId], references: [id])
 
   @@index([instanceId, stepId])
+}
+
+// docs/Modulo_Processes.md §7 — pedido de aprovação gerado quando uma etapa
+// de aprovação (REVIEW) fica activa. Um pedido por aprovador; `round` agrupa
+// as aprovações de cada activação da etapa (uma devolução abre nova ronda).
+model ProcessApproval {
+  id                 Int             @id @default(autoincrement())
+  code               String          @unique
+  instanceId         Int
+  stepId             Int
+  round              Int             @default(1)
+  sequence           Int             @default(1)
+  // SEQUENTIAL | PARALLEL | ANY
+  mode               String          @default("SEQUENTIAL")
+  // WAITING | PENDING | INFO_REQUESTED | ESCALATED | APPROVED | REJECTED | RETURNED | CANCELLED
+  status             String          @default("PENDING")
+  requesterId        Int
+  approverId         Int?
+  approverRole       String?
+  level              String?
+  escalationLevel    Int             @default(0)
+  previousApproverId Int?
+  submittedAt        DateTime        @default(now())
+  dueAt              DateTime?
+  requesterComment   String?
+  decision           String?
+  justification      String?
+  decidedAt          DateTime?
+  decidedById        Int?
+  // Dados (e hash) que o aprovador analisou — rastreabilidade da decisão.
+  dataSnapshot       String?
+  dataVersion        String?
+  decidedVersion     String?
+  documentIds        Int[]
+  nextStepOrders     Int[]
+  executorId         Int?
+  instance           ProcessInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  step               StepProgress    @relation(fields: [instanceId, stepId], references: [instanceId, stepId], onDelete: Cascade)
+  requester          User            @relation("ProcessApprovalRequester", fields: [requesterId], references: [id])
+  approver           User?           @relation("ProcessApprovalApprover", fields: [approverId], references: [id])
+
+  @@index([instanceId, stepId])
+  @@index([approverId, status])
+  @@index([status])
 }
 
 model ProcessVersion {
@@ -7205,9 +7287,18 @@ model AutomationRule {
   environment       String?               @default("production") // "development" | "staging" | "production"
   notifyOnError     Boolean               @default(true) // notificar o responsável quando uma execução falha
   notes             String? // observações livres — distinto de description
+  // docs/Modulo_Processes.md §9 — regras de processos reutilizam este motor.
+  code              String?               @unique
+  module            String? // módulo de origem ("PROCESSES", ...) — filtra a vista por módulo
+  activeFrom        DateTime?
+  activeUntil       DateTime?
+  retryPolicy       String? // NONE | FIXED | EXPONENTIAL
+  retryDelayMinutes Int?
+  errorHandling     String? // LOG | NOTIFY_OWNER | DISABLE_RULE
   tenant            TenantConfig          @relation(fields: [tenantId], references: [id])
   executions        AutomationExecution[]
 
+  @@index([module])
   @@map("automation_rules")
 }
 
@@ -7222,8 +7313,14 @@ model AutomationExecution {
   actionsLog   String? // JSON com resultado de cada ação
   errorMessage String?
   payload      String? // JSON do payload/evento que despoletou a execução
+  // Evita execuções duplicadas do mesmo evento (ex.: lembrete da mesma tarefa).
+  dedupeKey    String?
+  attempt      Int             @default(1)
+  nextRetryAt  DateTime?
   rule         AutomationRule  @relation(fields: [ruleId], references: [id])
 
+  @@index([ruleId, dedupeKey])
+  @@index([status, nextRetryAt])
   @@map("automation_executions")
 }
 

@@ -3,6 +3,16 @@
 // dependências entre etapas, validação/simulação de modelos, activação de
 // etapas e métricas derivadas de uma instância. Sem acesso à BD, para ser
 // testável e partilhada entre os serviços.
+import {
+  actionIssue,
+  buildConditionContext,
+  conditionsPass,
+  parseConditionSet,
+  parseStepActions,
+  parseStepConfig,
+  referencedOrders,
+  type ConditionContext,
+} from './process-conditions';
 
 export interface WorkflowStep {
   id?: number;
@@ -13,6 +23,54 @@ export interface WorkflowStep {
   dependsOnOrders?: number[] | null;
   responsibleId?: number | null;
   responsibleRole?: string | null;
+  // §7/§8
+  reviewerId?: number | null;
+  approverIds?: number[] | null;
+  approvalMode?: string | null;
+  onReject?: string | null;
+  config?: unknown;
+  entryConditions?: unknown;
+  exitConditions?: unknown;
+  successActions?: unknown;
+  failureActions?: unknown;
+}
+
+/** Etapas executadas por pessoas (precisam de responsável). */
+export const HUMAN_STEP_TYPES = ['TASK', 'DECISION', 'FORM', 'DOCUMENT'] as const;
+/** Etapas que o motor executa sozinho assim que ficam activas. */
+export const AUTOMATIC_STEP_TYPES = [
+  'START',
+  'END',
+  'GATEWAY',
+  'PARALLEL',
+  'NOTIFICATION',
+  'AUTO_ACTION',
+  'INTEGRATION',
+  'TIMER',
+] as const;
+export const isAutomaticType = (type: string | null | undefined) =>
+  (AUTOMATIC_STEP_TYPES as readonly string[]).includes(type ?? '');
+export const isApprovalType = (type: string | null | undefined) => type === 'REVIEW';
+
+/** Soma horas a uma data; em modo BUSINESS_DAYS salta sábados e domingos. */
+export function addHours(from: Date, hours: number, mode: string | null | undefined): Date {
+  if (mode !== 'BUSINESS_DAYS') return new Date(from.getTime() + hours * 3_600_000);
+  let remaining = hours * 3_600_000;
+  const cursor = new Date(from.getTime());
+  const isWeekend = (d: Date) => d.getDay() === 0 || d.getDay() === 6;
+  while (remaining > 0) {
+    if (isWeekend(cursor)) {
+      cursor.setHours(0, 0, 0, 0);
+      cursor.setDate(cursor.getDate() + 1);
+      continue;
+    }
+    const endOfDay = new Date(cursor);
+    endOfDay.setHours(24, 0, 0, 0);
+    const chunk = Math.min(remaining, endOfDay.getTime() - cursor.getTime());
+    cursor.setTime(cursor.getTime() + chunk);
+    remaining -= chunk;
+  }
+  return cursor;
 }
 
 const DONE_STATUSES = ['COMPLETED', 'SKIPPED', 'CANCELLED'];
@@ -81,12 +139,22 @@ export function validateWorkflow(steps: WorkflowStep[]): WorkflowValidation {
     }
     const type = s.type ?? 'TASK';
     if (
-      (type === 'TASK' || type === 'REVIEW' || type === 'DECISION') &&
+      (HUMAN_STEP_TYPES as readonly string[]).includes(type) &&
       !s.responsibleId &&
       !s.responsibleRole
     ) {
       errors.push(`A etapa "${s.title}" não tem responsável nem função atribuída.`);
     }
+    if (
+      isApprovalType(type) &&
+      !s.approverIds?.length &&
+      !s.reviewerId &&
+      !s.responsibleId &&
+      !s.responsibleRole
+    ) {
+      errors.push(`A etapa de aprovação "${s.title}" não tem aprovador nem função de aprovação.`);
+    }
+    errors.push(...stepConfigIssues(s));
   }
 
   const deps = effectiveDependencies(steps);
@@ -122,14 +190,242 @@ export function validateWorkflow(steps: WorkflowStep[]): WorkflowValidation {
     );
   }
 
+  const refs = conditionReferenceIssues(steps, deps);
+  structural.push(...refs.errors);
+  warnings.push(...refs.warnings);
+
+  // Ramificações: uma decisão/ramificação deve ter saídas; uma rejeição que segue o
+  // ramo (BRANCH) precisa de, pelo menos, uma etapa seguinte condicionada ao resultado.
+  const successors = new Map<number, WorkflowStep[]>();
+  for (const s of steps) {
+    for (const d of deps.get(s.order) ?? []) {
+      successors.set(d, [...(successors.get(d) ?? []), s]);
+    }
+  }
+  for (const s of steps) {
+    const next = successors.get(s.order) ?? [];
+    if ((s.type === 'DECISION' || s.type === 'GATEWAY') && next.length === 0) {
+      warnings.push(
+        `A etapa "${s.title}" (${s.type}) não tem nenhuma etapa seguinte — condição sem saída.`,
+      );
+    }
+    if (s.type === 'REVIEW' && s.onReject === 'BRANCH') {
+      const handled = next.some(n => {
+        const set = parseConditionSet(n.entryConditions);
+        return set && set !== 'invalid' && referencedOrders(set).includes(s.order);
+      });
+      if (!handled) {
+        warnings.push(
+          `A aprovação "${s.title}" segue o ramo em caso de rejeição, mas nenhuma etapa seguinte tem condição sobre o seu resultado.`,
+        );
+      }
+    }
+  }
+
   const types = steps.map(s => s.type ?? 'TASK');
   if (!types.includes('END')) warnings.push('O modelo não tem uma etapa de fim (END).');
+  else if (structural.length === 0) {
+    if (!simulateScenario(steps).reachedEnd) {
+      warnings.push('No cenário de aprovação, o fluxo não chega à etapa de fim.');
+    }
+    const branching = steps.filter(s => s.type === 'REVIEW' && s.onReject === 'BRANCH');
+    if (branching.length > 0) {
+      const results = Object.fromEntries(branching.map(s => [s.order, 'REJECTED']));
+      if (!simulateScenario(steps, { results }).reachedEnd) {
+        warnings.push('No cenário de rejeição, o fluxo não chega à etapa de fim.');
+      }
+    }
+  }
   if (new Set(steps.map(s => s.order)).size !== steps.length) {
     warnings.push('Existem etapas com a mesma ordem — serão tratadas como paralelas.');
   }
 
   errors.unshift(...structural);
   return { valid: errors.length === 0, errors, structural, warnings, simulation };
+}
+
+/** Problemas de configuração de uma etapa (condições, acções e dados do tipo). */
+function stepConfigIssues(s: WorkflowStep): string[] {
+  const issues: string[] = [];
+  const name = `"${s.title}"`;
+  if (parseConditionSet(s.entryConditions) === 'invalid') {
+    issues.push(`A etapa ${name} tem condições de entrada inválidas.`);
+  }
+  // exitConditions legadas em formato livre não são avaliáveis — não contam como erro.
+  for (const [label, raw] of [
+    ['acções de sucesso', s.successActions],
+    ['acções em caso de falha', s.failureActions],
+  ] as const) {
+    const parsed = parseStepActions(raw);
+    if (parsed === 'invalid') issues.push(`A etapa ${name} tem ${label} inválidas.`);
+    else {
+      for (const a of parsed) {
+        const issue = actionIssue(a);
+        if (issue) issues.push(`A etapa ${name} (${label}): ${issue}.`);
+      }
+    }
+  }
+  const cfg = parseStepConfig(s.config);
+  if (cfg === 'invalid') {
+    issues.push(`A etapa ${name} tem a configuração inválida.`);
+    return issues;
+  }
+  switch (s.type) {
+    case 'TIMER':
+      if (!(Number(cfg.delayHours) > 0)) {
+        issues.push(`O temporizador ${name} precisa de uma duração (horas) superior a zero.`);
+      }
+      break;
+    case 'WAIT_EVENT':
+      if (!cfg.eventName?.trim()) issues.push(`A espera por evento ${name} não indica o evento.`);
+      break;
+    case 'NOTIFICATION':
+      if (!cfg.recipients?.length || !cfg.message?.trim()) {
+        issues.push(`A notificação ${name} precisa de destinatários e mensagem.`);
+      }
+      break;
+    case 'INTEGRATION':
+      if (!cfg.module?.trim()) issues.push(`A integração ${name} não indica o módulo de destino.`);
+      break;
+    case 'AUTO_ACTION': {
+      const acts = cfg.actions ?? [];
+      if (acts.length === 0) issues.push(`A acção automática ${name} não tem acções configuradas.`);
+      for (const a of acts) {
+        const issue = actionIssue(a);
+        if (issue) issues.push(`A acção automática ${name}: ${issue}.`);
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  return issues;
+}
+
+/** Condições a apontar para etapas inexistentes (erro) ou que não a precedem (aviso). */
+function conditionReferenceIssues(
+  steps: WorkflowStep[],
+  deps: Map<number, number[]>,
+): { errors: string[]; warnings: string[] } {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const orders = new Set(steps.map(s => s.order));
+  const ancestors = (order: number) => {
+    const seen = new Set<number>();
+    const stack = [...(deps.get(order) ?? [])];
+    while (stack.length) {
+      const o = stack.pop() as number;
+      if (seen.has(o)) continue;
+      seen.add(o);
+      stack.push(...(deps.get(o) ?? []));
+    }
+    return seen;
+  };
+  for (const s of steps) {
+    for (const raw of [s.entryConditions, s.exitConditions]) {
+      const set = parseConditionSet(raw);
+      if (!set || set === 'invalid') continue;
+      for (const o of referencedOrders(set)) {
+        if (!orders.has(o)) {
+          errors.push(`A etapa "${s.title}" usa uma condição sobre a etapa ${o}, que não existe.`);
+        } else if (o !== s.order && !ancestors(s.order).has(o)) {
+          warnings.push(
+            `A condição da etapa "${s.title}" usa a etapa ${o}, que pode ainda não estar concluída nesse momento.`,
+          );
+        }
+      }
+    }
+  }
+  return { errors, warnings };
+}
+
+export interface SimulationScenario {
+  priority?: string;
+  sourceModule?: string;
+  /** Resultado por ordem de etapa (ex.: { 3: 'REJECTED' }). Aprovações assumem APPROVED. */
+  results?: Record<number, string>;
+  form?: Record<string, unknown>;
+}
+
+export interface SimulatedStep {
+  order: number;
+  title: string;
+  type: string;
+  outcome: 'EXECUTED' | 'AUTOMATIC' | 'SKIPPED';
+  result: string | null;
+}
+
+export interface WorkflowTrace {
+  wave: number;
+  steps: SimulatedStep[];
+}
+
+/** Percorre o fluxo com um cenário e mostra o caminho tomado (testar antes de publicar). */
+export function simulateScenario(
+  steps: WorkflowStep[],
+  scenario: SimulationScenario = {},
+): { trace: WorkflowTrace[]; reachedEnd: boolean; executed: number; skipped: number } {
+  const deps = effectiveDependencies(steps);
+  const byOrder = new Map<number, WorkflowStep>();
+  for (const s of steps) byOrder.set(s.order, s);
+  const remaining = new Set(byOrder.keys());
+  const done = new Set<number>();
+  const progress: Array<{ stepOrder: number; status: string; result: string | null }> = [];
+  const trace: WorkflowTrace[] = [];
+  let executed = 0;
+  let skipped = 0;
+  let reachedEnd = false;
+  let wave = 1;
+
+  while (remaining.size > 0) {
+    const ready = [...remaining]
+      .filter(o => (deps.get(o) ?? []).filter(d => byOrder.has(d)).every(d => done.has(d)))
+      .sort((a, b) => a - b);
+    if (ready.length === 0) break;
+    const ctx: ConditionContext = buildConditionContext({
+      priority: scenario.priority ?? 'NORMAL',
+      sourceModule: scenario.sourceModule,
+      status: 'IN_PROGRESS',
+      progress,
+      extraForm: scenario.form,
+    });
+    const row: SimulatedStep[] = [];
+    const finished: Array<{ stepOrder: number; status: string; result: string | null }> = [];
+    for (const o of ready) {
+      const s = byOrder.get(o) as WorkflowStep;
+      const type = s.type ?? 'TASK';
+      if (!conditionsPass(s.entryConditions, ctx)) {
+        row.push({ order: o, title: s.title, type, outcome: 'SKIPPED', result: null });
+        finished.push({ stepOrder: o, status: 'SKIPPED', result: null });
+        skipped++;
+      } else {
+        const defaultResult = isApprovalType(type)
+          ? 'APPROVED'
+          : isAutomaticType(type)
+            ? 'AUTO'
+            : 'DONE';
+        const result = scenario.results?.[o] ?? defaultResult;
+        row.push({
+          order: o,
+          title: s.title,
+          type,
+          outcome: isAutomaticType(type) ? 'AUTOMATIC' : 'EXECUTED',
+          result,
+        });
+        finished.push({ stepOrder: o, status: 'COMPLETED', result });
+        executed++;
+        if (type === 'END') reachedEnd = true;
+      }
+    }
+    trace.push({ wave, steps: row });
+    for (const f of finished) {
+      progress.push(f);
+      remaining.delete(f.stepOrder);
+      done.add(f.stepOrder);
+    }
+    wave++;
+  }
+  return { trace, reachedEnd, executed, skipped };
 }
 
 export interface ProgressRow {

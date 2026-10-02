@@ -19,6 +19,8 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { ProcessStandardService } from './process-standard.service';
 import { ProcessInstancesService } from './process-instances.service';
 import { ProcessTasksService } from './process-tasks.service';
+import { ProcessApprovalsService } from './process-approvals.service';
+import { ProcessAutomationsService } from './process-automations.service';
 import {
   CreateProcessDto,
   UpdateProcessDto,
@@ -40,6 +42,14 @@ import {
   ReassignStepDto,
   StepCommentDto,
   ChecklistDto,
+  ApprovalFilterDto,
+  DecideApprovalDto,
+  RespondApprovalDto,
+  SimulateFlowDto,
+  DeliverEventDto,
+  ProcessAutomationDto,
+  AutomationRuleFilterDto,
+  TestAutomationDto,
 } from './process-standard.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -55,6 +65,8 @@ export class ProcessStandardController {
     private readonly svc: ProcessStandardService,
     private readonly instances: ProcessInstancesService,
     private readonly tasks: ProcessTasksService,
+    private readonly approvals: ProcessApprovalsService,
+    private readonly automations: ProcessAutomationsService,
   ) {}
 
   // ── Biblioteca de Processos ────────────────────────────────────────────────
@@ -101,6 +113,142 @@ export class ProcessStandardController {
     return this.tasks.detail(instanceId, stepId, user);
   }
 
+  // ── §7 Aprovações ──────────────────────────────────────────────────────────
+
+  @Get('approvals')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Aprovações: as minhas, os meus pedidos, ou todas (gestão)' })
+  listApprovals(@Query() filters: ApprovalFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.approvals.list(filters, user);
+  }
+
+  @Get('approvals/:id')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({
+    summary: 'Detalhe de uma aprovação: dados analisados, grupo, comentários, histórico',
+  })
+  approvalDetail(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.approvals.detail(id, user);
+  }
+
+  @Post('approvals/:id/decide')
+  @Roles(...AUTHENTICATED_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Decidir: aprovar, rejeitar, devolver, pedir informação, delegar ou escalar',
+  })
+  decideApproval(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: DecideApprovalDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.approvals.decide(id, user, dto);
+  }
+
+  @Post('approvals/:id/respond')
+  @Roles(...AUTHENTICATED_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Responder a um pedido de informação adicional' })
+  respondApproval(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: RespondApprovalDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.approvals.respond(id, user, dto);
+  }
+
+  // ── §9 Automações (regras do módulo Automações, módulo de origem PROCESSES) ──
+
+  @Get('automations/catalog')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Eventos, acções, destinatários e modelos de regras' })
+  automationCatalog() {
+    return this.automations.catalog();
+  }
+
+  @Get('automations')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Regras de automação dos processos' })
+  listAutomations(@Query() filters: AutomationRuleFilterDto) {
+    return this.automations.list(filters);
+  }
+
+  @Post('automations')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Criar regra de automação de processos' })
+  createAutomation(@Body() dto: ProcessAutomationDto, @CurrentUser() user: CurrentUserData) {
+    return this.automations.create(dto, user);
+  }
+
+  @Post('automations/executions/:executionId/rerun')
+  @Roles(Role.ADMIN, Role.RH)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Repetir uma execução' })
+  rerunAutomation(@Param('executionId') executionId: string, @CurrentUser() user: CurrentUserData) {
+    return this.automations.rerun(executionId, user);
+  }
+
+  @Get('automations/:id')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Detalhe da regra com as últimas execuções' })
+  automationDetail(@Param('id', ParseIntPipe) id: number) {
+    return this.automations.detail(id);
+  }
+
+  @Put('automations/:id')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Actualizar regra' })
+  updateAutomation(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ProcessAutomationDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.automations.update(id, dto, user);
+  }
+
+  @Patch('automations/:id/toggle')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Activar/desactivar regra' })
+  toggleAutomation(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.automations.toggle(id, user);
+  }
+
+  @Post('automations/:id/clone')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Clonar regra (cópia inactiva)' })
+  cloneAutomation(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.automations.clone(id, user);
+  }
+
+  @Delete('automations/:id')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Remover regra sem histórico de execuções' })
+  removeAutomation(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.automations.remove(id, user);
+  }
+
+  @Get('automations/:id/executions')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Registo de execuções da regra' })
+  @ApiQuery({ name: 'page', required: false })
+  automationExecutions(@Param('id', ParseIntPipe) id: number, @Query('page') page?: string) {
+    return this.automations.executions(id, page ? parseInt(page) : 1);
+  }
+
+  @Post('automations/:id/test')
+  @Roles(Role.ADMIN, Role.RH)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Testar a regra: simular ou executar uma vez com um payload de exemplo',
+  })
+  testAutomation(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: TestAutomationDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.automations.test(id, dto, user);
+  }
+
   @Get('audit-logs')
   @Roles(Role.ADMIN, Role.AUDITOR)
   @ApiOperation({ summary: 'Logs de auditoria globais' })
@@ -140,6 +288,16 @@ export class ProcessStandardController {
   })
   validateTemplate(@Param('id', ParseIntPipe) id: number) {
     return this.svc.validateTemplate(id);
+  }
+
+  @Post(':id/simulate')
+  @Roles(Role.ADMIN, Role.RH)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Simular o fluxo com um cenário (prioridade, resultados das aprovações, dados)',
+  })
+  simulateTemplate(@Param('id', ParseIntPipe) id: number, @Body() dto: SimulateFlowDto) {
+    return this.svc.simulateTemplate(id, dto);
   }
 
   @Post(':id/duplicate')
@@ -413,6 +571,18 @@ export class ProcessStandardController {
     @Query('page') page?: string,
   ) {
     return this.instances.history(instanceId, user, page ? parseInt(page) : 1);
+  }
+
+  @Post('instances/:instanceId/events')
+  @Roles(...AUTHENTICATED_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Entregar um evento a uma instância (conclui esperas por evento)' })
+  deliverEvent(
+    @Param('instanceId', ParseIntPipe) instanceId: number,
+    @Body() dto: DeliverEventDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.instances.deliverEvent(instanceId, dto.event, user);
   }
 
   // ── §6 Acções sobre tarefas ────────────────────────────────────────────────

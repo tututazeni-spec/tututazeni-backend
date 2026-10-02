@@ -18,7 +18,7 @@ import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { ProcessStandardService } from './process-standard.service';
-import { syncStepActivation } from './process-activation';
+import { ProcessEngineService } from './process-engine.service';
 import { effectiveDependencies, formatTaskCode, isDoneStatus } from './process-workflow';
 import {
   ChecklistDto,
@@ -62,6 +62,7 @@ export class ProcessTasksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly processes: ProcessStandardService,
+    private readonly engine: ProcessEngineService,
   ) {}
 
   // ─── Permissões ───────────────────────────────────────────────────────────
@@ -351,7 +352,7 @@ export class ProcessTasksService {
         ...(t.assigneeId == null ? { assigneeId: user.id, assignedAt: new Date() } : {}),
       },
     });
-    await syncStepActivation(this.prisma, instanceId);
+    await this.engine.advance(instanceId);
     await this.audit(t, user.id, 'STEP_STARTED');
     return this.detail(instanceId, stepId, user);
   }
@@ -514,7 +515,7 @@ export class ProcessTasksService {
         ...(dto.reviewerId != null ? { reviewerId: dto.reviewerId } : {}),
       },
     });
-    await syncStepActivation(this.prisma, instanceId);
+    await this.engine.advance(instanceId);
     await this.audit(t, user.id, 'STEP_REASSIGNED', {
       from: t.assigneeId,
       to: dto.assigneeId,
@@ -566,7 +567,7 @@ export class ProcessTasksService {
       },
     });
     // Reabre a instância se estava concluída e recua as etapas dependentes.
-    await syncStepActivation(this.prisma, instanceId);
+    await this.engine.advance(instanceId);
     await this.prisma.processStepComment.create({
       data: {
         instanceId,
@@ -606,7 +607,7 @@ export class ProcessTasksService {
         startedAt: new Date(),
       },
     });
-    await syncStepActivation(this.prisma, instanceId);
+    await this.engine.advance(instanceId);
     await this.prisma.processStepComment.create({
       data: {
         instanceId,

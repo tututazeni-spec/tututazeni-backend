@@ -35,6 +35,16 @@ import {
 export { ProcessStatus, RiskLevel, StepType, InstanceStatus, ProcessPriority, TaskStatus };
 
 export const CONFIDENTIALITY_LEVELS = ['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED'] as const;
+export const APPROVAL_MODES = ['SEQUENTIAL', 'PARALLEL', 'ANY'] as const;
+export const REJECTION_RULES = ['HOLD', 'CANCEL', 'RETURN', 'BRANCH'] as const;
+export const APPROVAL_DECISIONS = [
+  'APPROVE',
+  'REJECT',
+  'RETURN',
+  'REQUEST_INFO',
+  'DELEGATE',
+  'ESCALATE',
+] as const;
 
 // ─── Step DTO ─────────────────────────────────────────────────────────────
 export class ProcessStepDto {
@@ -118,6 +128,96 @@ export class ProcessStepDto {
   @IsOptional()
   @IsInt()
   reviewerId?: number;
+
+  // ── §7/§8 — construtor de fluxos e aprovações ──
+  @ApiPropertyOptional({
+    description: 'Configuração específica do tipo (temporizador, evento, notificação…)',
+  })
+  @IsOptional()
+  config?: Record<string, unknown>;
+
+  @ApiPropertyOptional({
+    description: 'Condições de entrada {logic, rows}: se falsas, a etapa é ignorada',
+  })
+  @IsOptional()
+  entryConditions?: Record<string, unknown>;
+
+  @ApiPropertyOptional({ description: 'Dados obrigatórios (chaves do formulário) para concluir' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  requiredData?: string[];
+
+  @ApiPropertyOptional({ description: 'Aprovadores da etapa de aprovação' })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  approverIds?: number[];
+
+  @ApiPropertyOptional({ enum: APPROVAL_MODES })
+  @IsOptional()
+  @IsIn(APPROVAL_MODES)
+  approvalMode?: (typeof APPROVAL_MODES)[number];
+
+  @ApiPropertyOptional({ description: 'Os aprovadores podem delegar?' })
+  @IsOptional()
+  @IsBoolean()
+  allowDelegation?: boolean;
+
+  @ApiPropertyOptional({
+    enum: REJECTION_RULES,
+    description: 'Regra aplicada quando a aprovação é rejeitada',
+  })
+  @IsOptional()
+  @IsIn(REJECTION_RULES)
+  onReject?: (typeof REJECTION_RULES)[number];
+
+  @ApiPropertyOptional({ description: 'Nº máximo de devoluções para correcção' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  maxReturns?: number;
+
+  @ApiPropertyOptional({ description: 'Acções em caso de sucesso (JSON)' })
+  @IsOptional()
+  @IsArray()
+  successActions?: Array<Record<string, unknown>>;
+
+  @ApiPropertyOptional({ description: 'Acções em caso de falha (JSON)' })
+  @IsOptional()
+  @IsArray()
+  failureActions?: Array<Record<string, unknown>>;
+
+  @ApiPropertyOptional({ description: 'Escalar automaticamente X horas depois do prazo' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  escalationAfterHours?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  escalationToId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  escalationToRole?: string;
+
+  @ApiPropertyOptional({ enum: ['CALENDAR', 'BUSINESS_DAYS'] })
+  @IsOptional()
+  @IsIn(['CALENDAR', 'BUSINESS_DAYS'])
+  calendarMode?: 'CALENDAR' | 'BUSINESS_DAYS';
+
+  @ApiPropertyOptional({ description: 'Posição no canvas do construtor' })
+  @IsOptional()
+  @IsNumber()
+  posX?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  posY?: number;
 }
 
 // ─── Create Process ────────────────────────────────────────────────────────
@@ -723,4 +823,254 @@ export class ChecklistDto {
   @IsArray()
   @IsString({ each: true })
   done: string[];
+}
+
+// ─── §7 Aprovações ───────────────────────────────────────────────────────────
+export class ApprovalFilterDto {
+  @ApiPropertyOptional({
+    enum: ['mine', 'requested', 'all'],
+    description:
+      '`mine` = onde sou aprovador; `requested` = pedidos meus; `all` exige perfil de gestão',
+  })
+  @IsOptional()
+  @IsIn(['mine', 'requested', 'all'])
+  scope?: 'mine' | 'requested' | 'all';
+
+  @ApiPropertyOptional({ description: 'open | decided | um estado concreto' })
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sourceModule?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  processId?: number;
+
+  @ApiPropertyOptional({ description: 'Só pedidos com o prazo ultrapassado' })
+  @IsOptional()
+  @Transform(toBool)
+  @IsBoolean()
+  overdue?: boolean;
+
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  page?: number;
+
+  @ApiPropertyOptional({ default: 20 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  @Type(() => Number)
+  limit?: number;
+}
+
+export class DecideApprovalDto {
+  @ApiProperty({ enum: APPROVAL_DECISIONS })
+  @IsIn(APPROVAL_DECISIONS)
+  decision: (typeof APPROVAL_DECISIONS)[number];
+
+  @ApiPropertyOptional({ description: 'Obrigatória, excepto ao aprovar' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  justification?: string;
+
+  @ApiPropertyOptional({ description: 'DELEGATE: novo aprovador' })
+  @IsOptional()
+  @IsInt()
+  delegateToId?: number;
+
+  @ApiPropertyOptional({
+    description: 'ESCALATE: nível superior (por defeito, o gestor do aprovador)',
+  })
+  @IsOptional()
+  @IsInt()
+  escalateToId?: number;
+}
+
+export class RespondApprovalDto {
+  @ApiProperty({ description: 'Resposta ao pedido de informação adicional' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(2000)
+  message: string;
+}
+
+// ─── §8 Fluxos de Trabalho ───────────────────────────────────────────────────
+export class SimulateFlowDto {
+  @ApiPropertyOptional({ enum: ProcessPriority })
+  @IsOptional()
+  @IsEnum(ProcessPriority)
+  priority?: ProcessPriority;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sourceModule?: string;
+
+  @ApiPropertyOptional({ description: 'Resultado por ordem de etapa, ex.: {"3":"REJECTED"}' })
+  @IsOptional()
+  results?: Record<string, string>;
+
+  @ApiPropertyOptional({ description: 'Dados de formulário do cenário' })
+  @IsOptional()
+  form?: Record<string, unknown>;
+}
+
+export class DeliverEventDto {
+  @ApiProperty({ description: 'Nome do evento esperado pela etapa de espera' })
+  @IsString()
+  @IsNotEmpty()
+  event: string;
+}
+
+// ─── §9 Automações ───────────────────────────────────────────────────────────
+export class ProcessAutomationDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  name: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional({ description: 'Código único; gerado (AUT-PROC-NNN) se omitido' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  code?: string;
+
+  @ApiProperty({ description: 'Evento desencadeador (ver /processes/automations/catalog)' })
+  @IsString()
+  @IsNotEmpty()
+  trigger: string;
+
+  @ApiPropertyOptional({ description: 'Módulo de origem do evento (filtra o catálogo)' })
+  @IsOptional()
+  @IsString()
+  sourceModule?: string;
+
+  @ApiPropertyOptional({ description: 'Entidade de origem (Processo, Tarefa, Aprovação…)' })
+  @IsOptional()
+  @IsString()
+  entity?: string;
+
+  @ApiPropertyOptional({ description: 'Condições {logic, rows} sobre o payload do evento' })
+  @IsOptional()
+  conditions?: {
+    logic?: 'AND' | 'OR';
+    rows?: Array<{ field: string; operator: string; value?: string }>;
+  };
+
+  @ApiProperty({ description: 'Acção a executar (ver catálogo)' })
+  @IsString()
+  @IsNotEmpty()
+  action: string;
+
+  @ApiPropertyOptional({ description: 'Parâmetros da acção (processCode, priority, message…)' })
+  @IsOptional()
+  actionParams?: Record<string, unknown>;
+
+  @ApiPropertyOptional({
+    description: 'Destinatários: ids ou ASSIGNEE, TARGET, REQUESTER, MANAGER, OWNER, ROLE:<código>',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  recipients?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  priority?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  activeFrom?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  activeUntil?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
+
+  @ApiPropertyOptional({ description: 'Frequência, para eventos agendados' })
+  @IsOptional()
+  @IsString()
+  frequency?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  maxRetries?: number;
+
+  @ApiPropertyOptional({ enum: ['NONE', 'FIXED', 'EXPONENTIAL'] })
+  @IsOptional()
+  @IsIn(['NONE', 'FIXED', 'EXPONENTIAL'])
+  retryPolicy?: 'NONE' | 'FIXED' | 'EXPONENTIAL';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  retryDelayMinutes?: number;
+
+  @ApiPropertyOptional({ enum: ['LOG', 'NOTIFY_OWNER', 'DISABLE_RULE'] })
+  @IsOptional()
+  @IsIn(['LOG', 'NOTIFY_OWNER', 'DISABLE_RULE'])
+  errorHandling?: 'LOG' | 'NOTIFY_OWNER' | 'DISABLE_RULE';
+}
+
+export class AutomationRuleFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({ enum: ['active', 'inactive'] })
+  @IsOptional()
+  @IsIn(['active', 'inactive'])
+  state?: 'active' | 'inactive';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  trigger?: string;
+}
+
+export class TestAutomationDto {
+  @ApiPropertyOptional({ description: 'Payload de exemplo do evento' })
+  @IsOptional()
+  payload?: Record<string, unknown>;
+
+  @ApiPropertyOptional({ description: 'Executar mesmo (por defeito só simula)' })
+  @IsOptional()
+  @IsBoolean()
+  execute?: boolean;
 }

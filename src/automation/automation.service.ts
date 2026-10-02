@@ -33,7 +33,7 @@ import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 
 const helpersLogger = new Logger('AutomationHelpers');
 
-type AutomationRuleRecord = Prisma.AutomationRuleGetPayload<object>;
+export type AutomationRuleRecord = Prisma.AutomationRuleGetPayload<object>;
 
 // Condição/parâmetros de acção são JSON livre por regra (parseCondition()/
 // parseParams() acima devolvem Record<string, unknown>) — este shape
@@ -59,7 +59,7 @@ interface AutomationActionParams {
   deadlineMinutes?: number;
 }
 
-interface ActionResult {
+export interface ActionResult {
   affected: number;
   message?: string;
   points?: number;
@@ -67,6 +67,30 @@ interface ActionResult {
   httpStatus?: number;
   error?: string;
 }
+
+/** Contexto entregue às acções registadas por outros módulos (ex.: Processos). */
+export interface RegisteredActionContext {
+  rule: AutomationRuleRecord;
+  params: Record<string, unknown>;
+  payload: Record<string, unknown>;
+  userId?: number;
+}
+export type RegisteredActionHandler = (ctx: RegisteredActionContext) => Promise<ActionResult>;
+
+interface ExecutionMeta {
+  dedupeKey?: string;
+  attempt?: number;
+}
+
+const retryDelayMs = (rule: AutomationRuleRecord, attempt: number): number | null => {
+  const base = (rule.retryDelayMinutes ?? 5) * 60_000;
+  if (rule.retryPolicy === 'FIXED') return base;
+  if (rule.retryPolicy === 'EXPONENTIAL') return base * 2 ** Math.max(0, attempt - 1);
+  return null;
+};
+
+const inActiveWindow = (rule: AutomationRuleRecord, now: Date) =>
+  (!rule.activeFrom || rule.activeFrom <= now) && (!rule.activeUntil || rule.activeUntil >= now);
 
 // Condição/parâmetros de acção são JSON livre por regra — o shape varia
 // consoante o tipo de trigger/acção, sem um contrato único possível.
@@ -262,6 +286,14 @@ const DEFAULT_RULES: Omit<CreateRuleDto, never>[] = [
 export class AutomationService {
   private readonly logger = new Logger(AutomationService.name);
 
+  // Acções implementadas por outros módulos (sem dependência circular):
+  // o módulo regista aqui o handler no arranque (ver ProcessAutomationActions).
+  private readonly handlers = new Map<string, RegisteredActionHandler>();
+
+  registerActionHandler(action: string, handler: RegisteredActionHandler) {
+    this.handlers.set(action, handler);
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly enrollments: EnrollmentsService,
@@ -415,10 +447,8 @@ export class AutomationService {
     return (known.includes(upper) ? upper : 'MANUAL') as AutomationTrigger;
   }
 
-  async createRule(dto: CreateRuleDto, createdById = 0) {
-    // AutomationRule.tenantId é FK obrigatória (multi-tenant) nunca populada aqui.
-    const tenantId = await resolveDefaultTenantId(this.prisma);
-
+  // Colunas da regra a partir do DTO do form — partilhado por createRule e updateRuleFull.
+  private buildRuleData(dto: CreateRuleDto, createdById: number) {
     // actionParams é a única coluna que executeAction() de facto lê em tempo
     // de execução (ver AutomationActionParams) — os campos ricos do form
     // (destinatário/canal/modelo/assunto/dados dinâmicos/prazo) entram aqui,
@@ -436,50 +466,62 @@ export class AutomationService {
       ? JSON.stringify(mergedActionParams)
       : dto.actionParams;
 
+    return {
+      name: dto.name,
+      trigger: dto.trigger,
+      action: dto.action,
+      condition: dto.condition ?? '',
+      active: dto.active ?? true,
+      triggerType: this.mapTriggerType(dto.trigger),
+      // Frequência/horário/dias da semana/datas/nº máx. execuções ficam
+      // guardados aqui para o form os poder reler, mas NÃO há (ainda) um
+      // scheduler que os consuma — regras "cron.*" só correm via
+      // runAllActiveRules() (botão "Executar Todas" / POST /automation/run
+      // chamado externamente por um cron do SO), não por um timer interno.
+      triggerConfigJson: JSON.stringify({
+        cronExpression: dto.cronExpression ?? null,
+        frequency: dto.frequency ?? null,
+        executionTime: dto.executionTime ?? null,
+        daysOfWeek: dto.daysOfWeek ?? null,
+        startDate: dto.startDate ?? null,
+        endDate: dto.endDate ?? null,
+        maxExecutions: dto.maxExecutions ?? null,
+      }),
+      // Condições estruturadas do builder (field/operator/value + lógica
+      // E/OU) — lidas por evaluateRuleConditions() em triggerEvent().
+      conditionsJson: dto.conditions?.length
+        ? JSON.stringify({
+            logic: dto.conditionsLogic ?? ConditionsLogic.AND,
+            rows: dto.conditions,
+          })
+        : null,
+      actionsJson: JSON.stringify([{ type: dto.action, params: mergedActionParams }]),
+      createdBy: String(createdById),
+      description: dto.description,
+      category: dto.category,
+      priority: dto.priority,
+      actionParams: actionParamsJson,
+      maxRetries: dto.maxRetries,
+      entity: dto.entity,
+      ownerId: dto.ownerId ?? String(createdById),
+      environment: dto.environment,
+      notifyOnError: dto.notifyOnError ?? true,
+      notes: dto.notes,
+      code: dto.code,
+      module: dto.module,
+      activeFrom: dto.activeFrom ? new Date(dto.activeFrom) : undefined,
+      activeUntil: dto.activeUntil ? new Date(dto.activeUntil) : undefined,
+      retryPolicy: dto.retryPolicy,
+      retryDelayMinutes: dto.retryDelayMinutes,
+      errorHandling: dto.errorHandling,
+    };
+  }
+
+  async createRule(dto: CreateRuleDto, createdById = 0) {
+    // AutomationRule.tenantId é FK obrigatória (multi-tenant) nunca populada aqui.
+    const tenantId = await resolveDefaultTenantId(this.prisma);
     const rule = await this.prisma.automationRule.create({
-      data: {
-        name: dto.name,
-        trigger: dto.trigger,
-        action: dto.action,
-        condition: dto.condition ?? '',
-        active: dto.active ?? true,
-        tenantId,
-        triggerType: this.mapTriggerType(dto.trigger),
-        // Frequência/horário/dias da semana/datas/nº máx. execuções ficam
-        // guardados aqui para o form os poder reler, mas NÃO há (ainda) um
-        // scheduler que os consuma — regras "cron.*" só correm via
-        // runAllActiveRules() (botão "Executar Todas" / POST /automation/run
-        // chamado externamente por um cron do SO), não por um timer interno.
-        triggerConfigJson: JSON.stringify({
-          cronExpression: dto.cronExpression ?? null,
-          frequency: dto.frequency ?? null,
-          executionTime: dto.executionTime ?? null,
-          daysOfWeek: dto.daysOfWeek ?? null,
-          startDate: dto.startDate ?? null,
-          endDate: dto.endDate ?? null,
-          maxExecutions: dto.maxExecutions ?? null,
-        }),
-        // Condições estruturadas do builder (field/operator/value + lógica
-        // E/OU) — lidas por evaluateRuleConditions() em triggerEvent().
-        conditionsJson: dto.conditions?.length
-          ? JSON.stringify({
-              logic: dto.conditionsLogic ?? ConditionsLogic.AND,
-              rows: dto.conditions,
-            })
-          : null,
-        actionsJson: JSON.stringify([{ type: dto.action, params: mergedActionParams }]),
-        createdBy: String(createdById),
-        description: dto.description,
-        category: dto.category,
-        priority: dto.priority,
-        actionParams: actionParamsJson,
-        maxRetries: dto.maxRetries,
-        entity: dto.entity,
-        ownerId: dto.ownerId ?? String(createdById),
-        environment: dto.environment,
-        notifyOnError: dto.notifyOnError ?? true,
-        notes: dto.notes,
-      },
+      data: { ...this.buildRuleData(dto, createdById), tenantId },
     });
 
     await this.prisma.auditLog
@@ -504,6 +546,26 @@ export class AutomationService {
     return rule;
   }
 
+  /** Substitui a configuração completa de uma regra (usado pela aba Automações dos Processos). */
+  async updateRuleFull(id: number, dto: CreateRuleDto, userId: number) {
+    await this.getRule(id);
+    const { createdBy: _createdBy, ...data } = this.buildRuleData(dto, userId);
+    return this.prisma.automationRule.update({ where: { id }, data });
+  }
+
+  /** Executa uma regra concreta com um payload (teste manual / nova tentativa), sem disparar as restantes. */
+  async runRule(ruleId: number, payload: Record<string, unknown>, userId?: number) {
+    const rule = await this.getRule(ruleId);
+    return this.executeAction(rule, payload, userId, {
+      dedupeKey: typeof payload.dedupeKey === 'string' ? payload.dedupeKey : undefined,
+    });
+  }
+
+  /** Avalia as condições da regra contra um payload (simulação, sem efeitos). */
+  matchesConditions(rule: AutomationRuleRecord, payload: Record<string, unknown>) {
+    return this.evaluateRuleConditions(rule, payload);
+  }
+
   async updateRule(id: number, dto: UpdateRuleDto) {
     await this.getRule(id);
     return this.prisma.automationRule.update({ where: { id }, data: dto });
@@ -524,7 +586,13 @@ export class AutomationService {
   async cloneRule(id: number) {
     const source = await this.getRule(id);
     return this.prisma.automationRule.create({
-      data: { ...source, id: undefined, name: `Cópia de: ${source.name}`, active: false },
+      data: {
+        ...source,
+        id: undefined,
+        code: null,
+        name: `Cópia de: ${source.name}`,
+        active: false,
+      },
     });
   }
 
@@ -534,16 +602,21 @@ export class AutomationService {
 
   async triggerEvent(dto: TriggerEventDto) {
     // Find active rules matching this event trigger
-    const rules = await this.prisma.read.automationRule.findMany({
-      where: { active: true, trigger: dto.event },
-      orderBy: { priority: 'asc' },
-    });
+    const now = new Date();
+    const rules = (
+      await this.prisma.read.automationRule.findMany({
+        where: { active: true, trigger: dto.event },
+        orderBy: { priority: 'asc' },
+      })
+    ).filter(r => inActiveWindow(r, now));
 
     if (!rules.length) return { triggered: 0, message: 'Sem automações para este evento' };
 
+    const payload = dto.payload ?? {};
+    const dedupeKey = typeof payload.dedupeKey === 'string' ? payload.dedupeKey : undefined;
     const results = [];
     for (const rule of rules) {
-      if (!this.evaluateRuleConditions(rule, dto.payload ?? {})) {
+      if (!this.evaluateRuleConditions(rule, payload)) {
         results.push({
           ruleId: rule.id,
           name: rule.name,
@@ -552,7 +625,17 @@ export class AutomationService {
         });
         continue;
       }
-      const execResult = await this.executeAction(rule, dto.payload ?? {}, dto.userId);
+      // Evita execuções duplicadas: o mesmo evento (chave) já correu para esta regra.
+      if (dedupeKey && (await this.alreadyExecuted(rule.id, dedupeKey))) {
+        results.push({
+          ruleId: rule.id,
+          name: rule.name,
+          status: 'SKIPPED',
+          reason: 'Execução duplicada',
+        });
+        continue;
+      }
+      const execResult = await this.executeAction(rule, payload, dto.userId, { dedupeKey });
       results.push({ ruleId: rule.id, name: rule.name, ...execResult });
     }
 
@@ -561,6 +644,47 @@ export class AutomationService {
       total: rules.length,
       results,
     };
+  }
+
+  private async alreadyExecuted(ruleId: number, dedupeKey: string): Promise<boolean> {
+    const found = await this.prisma.automationExecution
+      .findFirst({
+        where: { ruleId, dedupeKey, status: { in: ['RUNNING', 'SUCCESS'] } },
+        select: { id: true },
+      })
+      .catch(() => null);
+    return !!found;
+  }
+
+  /**
+   * Repete as execuções falhadas cuja política de repetição agendou nova tentativa.
+   * Chamado periodicamente (cron do módulo de processos); idempotente — a marca
+   * `nextRetryAt` é limpa antes de reexecutar, por isso duas réplicas não repetem a mesma.
+   */
+  async retryDueExecutions(limit = 50) {
+    const now = new Date();
+    const due = await this.prisma.automationExecution.findMany({
+      where: { status: 'FAILED', nextRetryAt: { lte: now } },
+      orderBy: { nextRetryAt: 'asc' },
+      take: limit,
+    });
+    let retried = 0;
+    for (const exec of due) {
+      const claimed = await this.prisma.automationExecution.updateMany({
+        where: { id: exec.id, nextRetryAt: { not: null } },
+        data: { nextRetryAt: null },
+      });
+      if (claimed.count === 0) continue; // outra réplica ficou com ela
+      const rule = await this.prisma.automationRule.findUnique({ where: { id: exec.ruleId } });
+      if (!rule || !rule.active || !inActiveWindow(rule, now)) continue;
+      const payload = exec.payload ? (JSON.parse(exec.payload) as Record<string, unknown>) : {};
+      await this.executeAction(rule, payload, (payload.userId as number | undefined) ?? undefined, {
+        dedupeKey: exec.dedupeKey ?? undefined,
+        attempt: exec.attempt + 1,
+      });
+      retried++;
+    }
+    return { retried };
   }
 
   // ══════════════════════════════════════════════════════
@@ -617,6 +741,7 @@ export class AutomationService {
     rule: AutomationRuleRecord,
     payload: Record<string, unknown>,
     userId?: number,
+    meta: ExecutionMeta = {},
   ): Promise<{
     status: string;
     affected?: number;
@@ -624,6 +749,7 @@ export class AutomationService {
   }> {
     const params = parseParams(rule.actionParams) as AutomationActionParams;
     const targetUserId = userId ?? (payload.userId as number | undefined);
+    const attempt = meta.attempt ?? 1;
 
     const execId = await this.prisma.automationExecution
       .create({
@@ -632,6 +758,8 @@ export class AutomationService {
           status: 'RUNNING',
           payload: JSON.stringify(payload),
           startedAt: new Date(),
+          dedupeKey: meta.dedupeKey,
+          attempt,
         },
       })
       .then(e => e.id)
@@ -660,10 +788,11 @@ export class AutomationService {
           // `recipient` (do form: userId, ou string livre não resolvida —
           // roleCode/departmentId não são suportados aqui) tem prioridade
           // sobre o utilizador que despoletou o evento.
-          const recipientUserId =
-            params.recipient && /^\d+$/.test(params.recipient)
-              ? Number(params.recipient)
-              : targetUserId;
+          const recipientIds = await this.resolveRecipients(
+            params.recipient,
+            payload,
+            targetUserId,
+          );
           const message =
             interpolate(params.messageTemplate, params.dynamicData, payload) ??
             params.message ??
@@ -674,7 +803,7 @@ export class AutomationService {
           // registo oficial da execução. Email/SMS/WhatsApp são despachados
           // a seguir, a melhor esforço, via deliverViaChannel(); push/webhook
           // continuam sem integração real nesta app.
-          if (recipientUserId) {
+          for (const recipientUserId of recipientIds) {
             await createNotificationSafe(this.prisma, this.logger, {
               userId: recipientUserId,
               type: params.type ?? 'AUTOMATION',
@@ -694,7 +823,7 @@ export class AutomationService {
               ruleId: rule.id,
             });
           }
-          result = { affected: recipientUserId ? 1 : 0 };
+          result = { affected: recipientIds.length };
           break;
         }
 
@@ -894,7 +1023,23 @@ export class AutomationService {
         }
 
         default: {
-          result = { affected: 0, message: `Acção "${rule.action}" não implementada` };
+          const handler = this.handlers.get(rule.action);
+          if (handler) {
+            try {
+              result = await handler({
+                rule,
+                params: params as Record<string, unknown>,
+                payload,
+                userId: targetUserId,
+              });
+              if (result.error) actionError = result.error;
+            } catch (e: unknown) {
+              actionError = e instanceof Error ? e.message : String(e);
+              result = { affected: 0, error: actionError };
+            }
+          } else {
+            result = { affected: 0, message: `Acção "${rule.action}" não implementada` };
+          }
         }
       }
 
@@ -924,8 +1069,16 @@ export class AutomationService {
             });
           });
 
+      await this.recordRuleRun(rule, execStatus, execId, attempt, actionError);
       return { status: execStatus, ...result };
     } catch (err: unknown) {
+      await this.recordRuleRun(
+        rule,
+        'FAILED',
+        execId,
+        attempt,
+        err instanceof Error ? err.message : String(err),
+      );
       if (execId)
         await this.prisma.automationExecution
           .update({
@@ -946,6 +1099,89 @@ export class AutomationService {
             });
           });
       throw err;
+    }
+  }
+
+  // Destinatários: ids, ou marcadores resolvidos a partir do payload do evento
+  // (ASSIGNEE, TARGET, REQUESTER, MANAGER, OWNER, RESPONSIBLE) e ROLE:<código>.
+  private async resolveRecipients(
+    recipient: string | undefined,
+    payload: Record<string, unknown>,
+    fallbackUserId?: number,
+  ): Promise<number[]> {
+    const ids = new Set<number>();
+    const fromPayload = (key: string) => {
+      const v = Number(payload[key]);
+      if (Number.isInteger(v) && v > 0) ids.add(v);
+    };
+    for (const raw of (recipient ?? '').split(',')) {
+      const token = raw.trim();
+      if (!token) continue;
+      if (/^\d+$/.test(token)) ids.add(Number(token));
+      else if (token === 'ASSIGNEE') fromPayload('assigneeId');
+      else if (token === 'TARGET') fromPayload('targetUserId');
+      else if (token === 'REQUESTER') fromPayload('requesterId');
+      else if (token === 'MANAGER') fromPayload('managerId');
+      else if (token === 'OWNER') fromPayload('ownerId');
+      else if (token === 'RESPONSIBLE') fromPayload('responsibleId');
+      else if (token.startsWith('ROLE:')) {
+        const users = await this.prisma.read.user.findMany({
+          where: { active: true, role: { code: token.slice(5) } },
+          select: { id: true },
+          take: 20,
+        });
+        for (const u of users) ids.add(u.id);
+      }
+    }
+    if (ids.size === 0 && fallbackUserId) ids.add(fallbackUserId);
+    return [...ids];
+  }
+
+  // Resultado da última execução na regra + política de repetição e tratamento
+  // de erros (§9): nova tentativa agendada, notificar o responsável, desactivar.
+  private async recordRuleRun(
+    rule: AutomationRuleRecord,
+    status: 'SUCCESS' | 'FAILED',
+    execId: string | null,
+    attempt: number,
+    error?: string,
+  ) {
+    try {
+      await this.prisma.automationRule.update({
+        where: { id: rule.id },
+        data: { lastRunAt: new Date(), lastRunStatus: status, runCount: { increment: 1 } },
+      });
+      if (status !== 'FAILED') return;
+
+      const delay = attempt <= (rule.maxRetries ?? 0) ? retryDelayMs(rule, attempt) : null;
+      if (delay !== null && execId) {
+        await this.prisma.automationExecution.update({
+          where: { id: execId },
+          data: { nextRetryAt: new Date(Date.now() + delay) },
+        });
+        return;
+      }
+      // Sem mais tentativas: aplica o tratamento de erros da regra.
+      const handling = rule.errorHandling ?? (rule.notifyOnError ? 'NOTIFY_OWNER' : 'LOG');
+      if (handling === 'NOTIFY_OWNER' && rule.ownerId && /^\d+$/.test(rule.ownerId)) {
+        await createNotificationSafe(this.prisma, this.logger, {
+          userId: Number(rule.ownerId),
+          type: 'AUTOMATION_FAILED',
+          message: `A automação "${rule.name}" falhou${error ? `: ${error}` : ''}`,
+        });
+      } else if (handling === 'DISABLE_RULE') {
+        await this.prisma.automationRule.update({
+          where: { id: rule.id },
+          data: { active: false, isActive: false },
+        });
+      }
+    } catch (e: unknown) {
+      this.logger.warn({
+        ruleId: rule.id,
+        action: 'AUTOMATION_RECORD_RULE_RUN',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao registar o resultado da execução na regra',
+      });
     }
   }
 

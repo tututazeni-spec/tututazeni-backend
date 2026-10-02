@@ -6,18 +6,28 @@ import {
   ForbiddenException,
   BadRequestException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { buildOverview } from './process-overview';
 import {
+  addHours,
   effectiveDependencies,
   formatInstanceCode,
   sequenceFromCode,
+  simulateScenario,
   validateWorkflow,
 } from './process-workflow';
 import { syncStepActivation } from './process-activation';
-import { createHash } from 'crypto';
+import { writeProcessAuditLog } from './process-audit';
+import { ProcessEngineService, OPEN_APPROVAL_STATUSES } from './process-engine.service';
+import { TriggerType } from '../automation/automation.dto';
+import {
+  buildConditionContext,
+  evaluateConditionSet,
+  parseConditionSet,
+} from './process-conditions';
 import { isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
@@ -34,6 +44,7 @@ import {
   ProcessDashboardFilterDto,
   ProcessStepDto,
   DuplicateProcessDto,
+  SimulateFlowDto,
 } from './process-standard.dto';
 
 const PROCESS_PRIVILEGED_ROLES = [Role.ADMIN, Role.RH, Role.GESTOR];
@@ -47,7 +58,40 @@ const toDate = (v?: string | null) => (v ? new Date(v) : undefined);
 export class ProcessStandardService {
   private readonly logger = new Logger(ProcessStandardService.name);
 
-  constructor(private prisma: PrismaService) {}
+  // O motor é opcional para que os testes unitários do serviço continuem a
+  // funcionar só com o PrismaService; em produção é sempre injectado.
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private readonly engine?: ProcessEngineService,
+  ) {}
+
+  private advance(instanceId: number) {
+    return this.engine
+      ? this.engine.advance(instanceId)
+      : syncStepActivation(this.prisma, instanceId);
+  }
+
+  private async runStepActions(instanceId: number, stepId: number, raw: unknown) {
+    if (!this.engine || !raw) return;
+    const inst = await this.engine.loadInstance(instanceId);
+    const sp = inst?.stepProgress.find(p => p.stepId === stepId);
+    if (inst && sp) await this.engine.runActions(inst, sp, raw);
+  }
+
+  /** Emite um evento do processo para as automações (`stepId` acrescenta os dados da etapa). */
+  private async emitEvent(
+    event: TriggerType,
+    instanceId: number,
+    stepId: number | undefined,
+    dedupeKey: string,
+    extra: Record<string, unknown> = {},
+  ) {
+    if (!this.engine) return;
+    const inst = await this.engine.loadInstance(instanceId);
+    if (!inst) return;
+    const sp = stepId ? inst.stepProgress.find(p => p.stepId === stepId) : undefined;
+    await this.engine.emit(event, { ...this.engine.eventPayload(inst, sp), ...extra }, dedupeKey);
+  }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -74,6 +118,22 @@ export class ProcessStandardService {
       dependsOnOrders: s.dependsOnOrders ?? [],
       parallel: s.parallel ?? false,
       reviewerId: s.reviewerId,
+      config: s.config ? JSON.stringify(s.config) : null,
+      entryConditions: s.entryConditions ? JSON.stringify(s.entryConditions) : null,
+      requiredData: s.requiredData ?? [],
+      approverIds: s.approverIds ?? [],
+      approvalMode: s.approvalMode ?? 'SEQUENTIAL',
+      allowDelegation: s.allowDelegation ?? true,
+      onReject: s.onReject ?? 'HOLD',
+      maxReturns: s.maxReturns,
+      successActions: s.successActions?.length ? JSON.stringify(s.successActions) : null,
+      failureActions: s.failureActions?.length ? JSON.stringify(s.failureActions) : null,
+      escalationAfterHours: s.escalationAfterHours,
+      escalationToId: s.escalationToId,
+      escalationToRole: s.escalationToRole,
+      calendarMode: s.calendarMode ?? 'CALENDAR',
+      posX: s.posX,
+      posY: s.posY,
     };
   }
 
@@ -83,10 +143,6 @@ export class ProcessStandardService {
     if (structural.length) throw new BadRequestException(structural.join(' '));
   }
 
-  private hashPayload(payload: object): string {
-    return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
-  }
-
   async writeAuditLog(opts: {
     processId?: number;
     instanceId?: number;
@@ -94,29 +150,7 @@ export class ProcessStandardService {
     action: string;
     meta?: object;
   }) {
-    const payload = { ...opts, ts: new Date().toISOString() };
-    try {
-      await this.prisma.processAuditLog.create({
-        data: {
-          processId: opts.processId,
-          instanceId: opts.instanceId,
-          userId: opts.userId,
-          action: opts.action,
-          meta: opts.meta ? JSON.stringify(opts.meta) : null,
-          hash: this.hashPayload(payload),
-          createdAt: new Date(),
-        },
-      });
-    } catch (e: unknown) {
-      this.logger.warn({
-        userId: opts.userId,
-        action: opts.action,
-        processId: opts.processId,
-        instanceId: opts.instanceId,
-        err: { message: e instanceof Error ? e.message : String(e) },
-        msg: 'Falha ao escrever audit log de processo',
-      });
-    }
+    await writeProcessAuditLog(this.prisma, this.logger, opts);
   }
 
   // ─── LISTAGEM ─────────────────────────────────────────────────────────────
@@ -435,6 +469,30 @@ export class ProcessStandardService {
     return { processId: id, code: p.code, version: p.version, ...validateWorkflow(p.steps) };
   }
 
+  /** "Testar o fluxo" com um cenário: mostra o caminho tomado (ramos, etapas ignoradas, fim). */
+  async simulateTemplate(id: number, dto: SimulateFlowDto) {
+    const p = await this.findOne(id);
+    const results: Record<number, string> = {};
+    for (const [order, result] of Object.entries(dto.results ?? {})) {
+      if (Number.isInteger(Number(order))) results[Number(order)] = String(result);
+    }
+    const validation = validateWorkflow(p.steps);
+    return {
+      processId: id,
+      code: p.code,
+      version: p.version,
+      valid: validation.valid,
+      errors: validation.errors,
+      warnings: validation.warnings,
+      ...simulateScenario(p.steps, {
+        priority: dto.priority,
+        sourceModule: dto.sourceModule,
+        results,
+        form: dto.form,
+      }),
+    };
+  }
+
   async duplicate(id: number, userId: number, dto: DuplicateProcessDto) {
     const src = await this.findOne(id);
 
@@ -491,6 +549,22 @@ export class ProcessStandardService {
             dependsOnOrders: s.dependsOnOrders,
             parallel: s.parallel,
             reviewerId: s.reviewerId,
+            config: s.config,
+            entryConditions: s.entryConditions,
+            requiredData: s.requiredData,
+            approverIds: s.approverIds,
+            approvalMode: s.approvalMode,
+            allowDelegation: s.allowDelegation,
+            onReject: s.onReject,
+            maxReturns: s.maxReturns,
+            successActions: s.successActions,
+            failureActions: s.failureActions,
+            escalationAfterHours: s.escalationAfterHours,
+            escalationToId: s.escalationToId,
+            escalationToRole: s.escalationToRole,
+            calendarMode: s.calendarMode,
+            posX: s.posX,
+            posY: s.posY,
           })),
         },
       },
@@ -716,6 +790,27 @@ export class ProcessStandardService {
       meta: { targetUserId, version: process.version, code: instance.code },
     });
 
+    // Eventos para as automações (processo criado / tarefas iniciais atribuídas) e
+    // execução do que é automático (início, notificações, ramificações, aprovações…).
+    await this.emitEvent(
+      TriggerType.PROCESS_CREATED,
+      instance.id,
+      undefined,
+      `process.created:${instance.id}`,
+    );
+    for (const sp of instance.stepProgress) {
+      if (sp.status === 'PENDING' && sp.assigneeId) {
+        await this.emitEvent(
+          TriggerType.TASK_ASSIGNED,
+          instance.id,
+          sp.stepId,
+          `task.assigned:${instance.id}:${sp.stepId}:${sp.assignedAt?.getTime() ?? 0}`,
+        );
+      }
+    }
+    await this.advance(instance.id);
+    instance = await this.refreshInstance(instance.id);
+
     // Notificar o colaborador alvo e os responsáveis das etapas já activas
     if (targetUserId !== initiatedById) {
       await createNotificationSafe(this.prisma, this.logger, {
@@ -737,6 +832,18 @@ export class ProcessStandardService {
     }
 
     return instance;
+  }
+
+  private refreshInstance(id: number) {
+    return this.prisma.processInstance.findUniqueOrThrow({
+      where: { id },
+      include: {
+        stepProgress: { orderBy: { stepOrder: 'asc' } },
+        initiatedBy: { select: { id: true, fullName: true } },
+        targetUser: { select: { id: true, fullName: true } },
+        process: { select: { id: true, title: true, code: true } },
+      },
+    });
   }
 
   private createInstanceRow(a: {
@@ -782,7 +889,7 @@ export class ProcessStandardService {
               stepOrder: s.order,
               status: isReady ? ('PENDING' as const) : ('WAITING' as const),
               startedAt: isReady ? now : null,
-              slaDeadline: s.slaHours ? new Date(now.getTime() + s.slaHours * 3600 * 1000) : null,
+              slaDeadline: s.slaHours ? addHours(now, s.slaHours, s.calendarMode) : null,
               assigneeId,
               assignedAt: assigneeId ? now : null,
               reviewerId: s.reviewerId,
@@ -889,7 +996,15 @@ export class ProcessStandardService {
 
     const instance = await this.prisma.read.processInstance.findUnique({
       where: { id: instanceId },
-      select: { targetUserId: true, status: true, code: true, initiatedById: true },
+      select: {
+        targetUserId: true,
+        status: true,
+        code: true,
+        initiatedById: true,
+        priority: true,
+        sourceModule: true,
+        targetUser: { select: { departmentId: true } },
+      },
     });
     if (!instance) throw new NotFoundException('Instância não encontrada');
 
@@ -919,6 +1034,18 @@ export class ProcessStandardService {
       );
     }
 
+    // §7: as etapas de aprovação decidem-se na aba Aprovações (não se "concluem" à mão).
+    if (step?.type === 'REVIEW') {
+      const open = await this.prisma.read.processApproval.count({
+        where: { instanceId, stepId, status: { in: [...OPEN_APPROVAL_STATUSES] } },
+      });
+      if (open > 0) {
+        throw new BadRequestException(
+          'Esta etapa de aprovação é decidida na aba Aprovações pelo aprovador designado',
+        );
+      }
+    }
+
     // Requisitos obrigatórios (§6): evidência e checklist completa.
     const evidenceIds = dto.evidenceIds?.length ? dto.evidenceIds : (sp.evidenceIds ?? []);
     if (step?.requiresUpload && evidenceIds.length === 0) {
@@ -928,6 +1055,46 @@ export class ProcessStandardService {
     const missing = (step?.checklist ?? []).filter(item => !checklistDone.includes(item));
     if (missing.length > 0) {
       throw new BadRequestException(`Checklist incompleta: falta ${missing.join('; ')}`);
+    }
+
+    // §8: dados obrigatórios e condições para avançar.
+    let previousForm: Record<string, unknown> = {};
+    try {
+      previousForm = sp.formData ? (JSON.parse(sp.formData) as Record<string, unknown>) : {};
+    } catch {
+      previousForm = {};
+    }
+    const mergedForm = { ...previousForm, ...(dto.formData ?? {}) };
+    const missingData = (step?.requiredData ?? []).filter(k => {
+      const v = mergedForm[k];
+      return v === undefined || v === null || v === '';
+    });
+    if (missingData.length > 0) {
+      throw new BadRequestException(`Dados obrigatórios em falta: ${missingData.join(', ')}`);
+    }
+    const exit = parseConditionSet(step?.exitConditions);
+    if (exit && exit !== 'invalid') {
+      const all = await this.prisma.read.stepProgress.findMany({
+        where: { instanceId },
+        select: { stepOrder: true, status: true, result: true, action: true, formData: true },
+      });
+      const ctx = buildConditionContext({
+        priority: instance.priority,
+        sourceModule: instance.sourceModule,
+        status: instance.status,
+        targetDepartmentId: instance.targetUser.departmentId,
+        progress: all.map(p =>
+          p.stepOrder === sp.stepOrder
+            ? { ...p, result: dto.result ?? p.result, action: dto.action ?? p.action }
+            : p,
+        ),
+        extraForm: mergedForm,
+      });
+      if (!evaluateConditionSet(exit, ctx)) {
+        throw new BadRequestException(
+          'As condições para avançar desta etapa não estão satisfeitas',
+        );
+      }
     }
 
     const updated = await this.prisma.stepProgress.update({
@@ -950,7 +1117,8 @@ export class ProcessStandardService {
     });
 
     // Activa as etapas cujas dependências ficaram satisfeitas e fecha a instância.
-    const activation = await syncStepActivation(this.prisma, instanceId);
+    await this.runStepActions(instanceId, stepId, step?.successActions);
+    const activation = await this.advance(instanceId);
 
     await this.writeAuditLog({
       instanceId,
@@ -958,6 +1126,13 @@ export class ProcessStandardService {
       action: 'STEP_COMPLETED',
       meta: { stepId, action: dto.action, hasEvidence: evidenceIds.length > 0 },
     });
+    await this.emitEvent(
+      TriggerType.TASK_COMPLETED,
+      instanceId,
+      stepId,
+      `task.completed:${instanceId}:${stepId}:${updated.returnCount}`,
+      { completedById: userId },
+    );
 
     // Revisor (§6) e responsáveis das etapas desbloqueadas.
     const label = instance.code ?? `#${instanceId}`;
@@ -1035,6 +1210,11 @@ export class ProcessStandardService {
       where: { id: instanceId },
       data: { status: 'ON_HOLD', suspendedAt: new Date() },
     });
+    await this.prisma.processApproval.updateMany({
+      where: { instanceId, stepId, status: { in: [...OPEN_APPROVAL_STATUSES] } },
+      data: { status: 'CANCELLED' },
+    });
+    await this.runStepActions(instanceId, stepId, step?.failureActions);
 
     await this.writeAuditLog({
       instanceId,
@@ -1069,6 +1249,10 @@ export class ProcessStandardService {
       where: { instanceId, status: { notIn: ['COMPLETED', 'SKIPPED', 'CANCELLED'] } },
       data: { status: 'CANCELLED' },
     });
+    await this.prisma.processApproval.updateMany({
+      where: { instanceId, status: { in: [...OPEN_APPROVAL_STATUSES] } },
+      data: { status: 'CANCELLED' },
+    });
 
     await this.writeAuditLog({
       instanceId,
@@ -1076,6 +1260,12 @@ export class ProcessStandardService {
       action: 'INSTANCE_CANCELLED',
       meta: { reason: reason.trim() },
     });
+    await this.emitEvent(
+      TriggerType.PROCESS_CANCELLED,
+      instanceId,
+      undefined,
+      `process.cancelled:${instanceId}`,
+    );
     return { message: 'Instância cancelada com sucesso' };
   }
 
