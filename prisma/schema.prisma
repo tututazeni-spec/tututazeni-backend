@@ -5821,6 +5821,7 @@ model ProcessInstance {
   stepProgress         StepProgress[]
   stepComments         ProcessStepComment[]
   approvals            ProcessApproval[]
+  documents            ProcessDocument[]
 
   @@index([status])
   @@index([processId])
@@ -5926,6 +5927,84 @@ model ProcessApproval {
   @@index([instanceId, stepId])
   @@index([approverId, status])
   @@index([status])
+}
+
+// docs/Modulo_Processes.md §11 — referência (não cópia) a um documento do
+// repositório central, ligada a um processo e, opcionalmente, a uma etapa.
+// O ficheiro continua a viver em `Document`; aqui guarda-se o contexto do
+// processo: validação, validade, confidencialidade, assinatura e versões.
+model ProcessDocument {
+  id                Int                      @id @default(autoincrement())
+  instanceId        Int
+  // ProcessStep.id da etapa a que o documento pertence (opcional)
+  stepId            Int?
+  name              String
+  docType           String
+  // ATTACHED | GENERATED | REQUESTED
+  origin            String                   @default("ATTACHED")
+  documentId        Int?
+  libraryItemId     String?
+  // Conteúdo gerado a partir de um modelo (texto); o ficheiro não é duplicado
+  generatedContent  String?
+  templateId        Int?
+  relatedEntityType String?
+  relatedEntityId   String?
+  version           String                   @default("1.0")
+  authorId          Int?
+  authorName        String?
+  issuedAt          DateTime?
+  validUntil        DateTime?
+  // REQUESTED | PENDING | APPROVED | REJECTED
+  validationStatus  String                   @default("PENDING")
+  required          Boolean                  @default(false)
+  approverId        Int?
+  decidedAt         DateTime?
+  decidedById       Int?
+  decisionNote      String?
+  // PUBLIC | INTERNAL | CONFIDENTIAL | RESTRICTED
+  confidentiality   String                   @default("INTERNAL")
+  viewRoles         String[]
+  viewerIds         Int[]
+  signatureRequired Boolean                  @default(false)
+  // PENDING | SIGNED
+  signatureStatus   String?
+  signedAt          DateTime?
+  signedById        Int?
+  requestedById     Int?
+  requestedFromId   Int?
+  requestedAt       DateTime?
+  requestNote       String?
+  addedById         Int
+  retentionUntil    DateTime?
+  archivedAt        DateTime?
+  archiveReason     String?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  instance          ProcessInstance          @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  document          Document?                @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  versions          ProcessDocumentVersion[]
+
+  @@index([instanceId, stepId])
+  @@index([validationStatus])
+  @@index([validUntil])
+  @@index([documentId])
+  @@index([requestedFromId])
+}
+
+model ProcessDocumentVersion {
+  id                Int             @id @default(autoincrement())
+  processDocumentId Int
+  version           String
+  documentId        Int?
+  fileUrl           String?
+  fileName          String?
+  note              String?
+  validUntil        DateTime?
+  createdById       Int
+  createdAt         DateTime        @default(now())
+  processDocument   ProcessDocument @relation(fields: [processDocumentId], references: [id], onDelete: Cascade)
+
+  @@index([processDocumentId])
 }
 
 model ProcessVersion {
@@ -6476,6 +6555,7 @@ model Document {
   updatedAt   DateTime        @updatedAt
 
   leadershipProgramDocuments LeadershipProgramDocument[]
+  processDocuments           ProcessDocument[]
 
   @@index([category, status])
   @@index([ownerId])

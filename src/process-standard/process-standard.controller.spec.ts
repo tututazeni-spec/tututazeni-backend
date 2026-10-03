@@ -3,6 +3,11 @@ import { ProcessStandardController } from './process-standard.controller';
 import { ProcessStandardService } from './process-standard.service';
 import { ProcessInstancesService } from './process-instances.service';
 import { ProcessTasksService } from './process-tasks.service';
+import { ProcessApprovalsService } from './process-approvals.service';
+import { ProcessAutomationsService } from './process-automations.service';
+import { ProcessCalendarService } from './process-calendar.service';
+import { ProcessDocumentsService } from './process-documents.service';
+import { ProcessReportsService } from './process-reports.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -71,6 +76,11 @@ describe('ProcessStandardController', () => {
         { provide: ProcessStandardService, useValue: mockSvc },
         { provide: ProcessInstancesService, useValue: mockInstances },
         { provide: ProcessTasksService, useValue: mockTasks },
+        { provide: ProcessApprovalsService, useValue: {} },
+        { provide: ProcessAutomationsService, useValue: {} },
+        { provide: ProcessCalendarService, useValue: {} },
+        { provide: ProcessDocumentsService, useValue: {} },
+        { provide: ProcessReportsService, useValue: {} },
       ],
     })
       .overrideGuard(JwtAuthGuard)

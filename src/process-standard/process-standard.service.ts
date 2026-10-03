@@ -1057,6 +1057,23 @@ export class ProcessStandardService {
       throw new BadRequestException(`Checklist incompleta: falta ${missing.join('; ')}`);
     }
 
+    // §11: documentos obrigatórios desta etapa têm de estar validados.
+    const pendingDocs = await this.prisma.read.processDocument.findMany({
+      where: {
+        instanceId,
+        stepId,
+        required: true,
+        archivedAt: null,
+        validationStatus: { not: 'APPROVED' },
+      },
+      select: { name: true, validationStatus: true },
+    });
+    if (pendingDocs.length > 0) {
+      throw new BadRequestException(
+        `Documentos obrigatórios por validar: ${pendingDocs.map(d => d.name).join('; ')}`,
+      );
+    }
+
     // §8: dados obrigatórios e condições para avançar.
     let previousForm: Record<string, unknown> = {};
     try {

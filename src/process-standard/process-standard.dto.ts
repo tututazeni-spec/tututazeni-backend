@@ -1074,3 +1074,458 @@ export class TestAutomationDto {
   @IsBoolean()
   execute?: boolean;
 }
+
+// ─── §10 Calendário e Prazos ─────────────────────────────────────────────────
+export class CalendarFilterDto {
+  @ApiPropertyOptional({ description: 'Início do intervalo (por defeito, o mês corrente − 1)' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'Fim do intervalo (inclusivo)' })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+
+  @ApiPropertyOptional({ enum: ['mine', 'all'], description: '`all` exige perfil de gestão' })
+  @IsOptional()
+  @IsIn(['mine', 'all'])
+  scope?: 'mine' | 'all';
+
+  @ApiPropertyOptional({ enum: ['ALL', 'TASK', 'PROCESS'] })
+  @IsOptional()
+  @IsIn(['ALL', 'TASK', 'PROCESS'])
+  kind?: 'ALL' | 'TASK' | 'PROCESS';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  unitId?: number;
+
+  @ApiPropertyOptional({ description: 'Responsável pela tarefa / do processo' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  responsibleId?: number;
+
+  @ApiPropertyOptional({ description: 'Estado da tarefa ou do processo' })
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional({ enum: ProcessPriority })
+  @IsOptional()
+  @IsEnum(ProcessPriority)
+  priority?: ProcessPriority;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  instanceId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({ description: 'Só itens em atraso' })
+  @IsOptional()
+  @Transform(toBool)
+  @IsBoolean()
+  overdue?: boolean;
+}
+
+export class RescheduleDto {
+  @ApiProperty({ description: 'Novo prazo (ISO 8601)' })
+  @IsDateString()
+  dueAt: string;
+
+  @ApiProperty({ description: 'Justificação (obrigatória)' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(1000)
+  reason: string;
+}
+
+// ─── §11 Documentos ──────────────────────────────────────────────────────────
+export const DOC_VALIDATION_FILTERS = [
+  'REQUESTED',
+  'PENDING',
+  'APPROVED',
+  'REJECTED',
+  'EXPIRED',
+  'EXPIRING',
+] as const;
+
+export class ProcessDocumentFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  instanceId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  stepId?: number;
+
+  @ApiPropertyOptional({ description: 'Modelo de processo' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  processId?: number;
+
+  @ApiPropertyOptional({ enum: DOC_VALIDATION_FILTERS })
+  @IsOptional()
+  @IsIn(DOC_VALIDATION_FILTERS)
+  status?: (typeof DOC_VALIDATION_FILTERS)[number];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  docType?: string;
+
+  @ApiPropertyOptional({ enum: CONFIDENTIALITY_LEVELS })
+  @IsOptional()
+  @IsIn(CONFIDENTIALITY_LEVELS)
+  confidentiality?: (typeof CONFIDENTIALITY_LEVELS)[number];
+
+  @ApiPropertyOptional({ enum: ['approver', 'requested', 'mine'] })
+  @IsOptional()
+  @IsIn(['approver', 'requested', 'mine'])
+  assigned?: 'approver' | 'requested' | 'mine';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({ description: 'Só obrigatórios' })
+  @IsOptional()
+  @Transform(toBool)
+  @IsBoolean()
+  required?: boolean;
+
+  @ApiPropertyOptional({ description: 'Mostrar arquivados' })
+  @IsOptional()
+  @Transform(toBool)
+  @IsBoolean()
+  archived?: boolean;
+
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  page?: number;
+
+  @ApiPropertyOptional({ default: 20 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  @Type(() => Number)
+  limit?: number;
+}
+
+class ProcessDocumentCommonDto {
+  @ApiPropertyOptional({ description: 'Etapa (ProcessStep.id) a que o documento pertence' })
+  @IsOptional()
+  @IsInt()
+  stepId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  required?: boolean;
+
+  @ApiPropertyOptional({ description: 'Data de emissão' })
+  @IsOptional()
+  @IsDateString()
+  issuedAt?: string;
+
+  @ApiPropertyOptional({ description: 'Data de validade' })
+  @IsOptional()
+  @IsDateString()
+  validUntil?: string;
+
+  @ApiPropertyOptional({ enum: CONFIDENTIALITY_LEVELS })
+  @IsOptional()
+  @IsIn(CONFIDENTIALITY_LEVELS)
+  confidentiality?: (typeof CONFIDENTIALITY_LEVELS)[number];
+
+  @ApiPropertyOptional({ type: [String], description: 'Perfis com acesso (CONFIDENTIAL)' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  viewRoles?: string[];
+
+  @ApiPropertyOptional({ type: [Number], description: 'Utilizadores com acesso explícito' })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  viewerIds?: number[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  relatedEntityType?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  relatedEntityId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  signatureRequired?: boolean;
+
+  @ApiPropertyOptional({ description: 'Aprovador (por defeito, o dono do modelo)' })
+  @IsOptional()
+  @IsInt()
+  approverId?: number;
+}
+
+export class AttachProcessDocumentDto extends ProcessDocumentCommonDto {
+  @ApiPropertyOptional({ description: 'Documento do repositório central' })
+  @IsOptional()
+  @IsInt()
+  documentId?: number;
+
+  @ApiPropertyOptional({ description: 'Conteúdo da Biblioteca' })
+  @IsOptional()
+  @IsString()
+  libraryItemId?: string;
+
+  @ApiPropertyOptional({ description: 'Pedido de documento (REQUESTED) que este anexo cumpre' })
+  @IsOptional()
+  @IsInt()
+  requestId?: number;
+
+  @ApiPropertyOptional({ description: 'Nome (por defeito, o título do documento)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  name?: string;
+
+  @ApiPropertyOptional({ description: 'Tipo documental' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  docType?: string;
+
+  @ApiPropertyOptional({ description: 'Autor/emissor externo, se não for um utilizador' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  authorName?: string;
+}
+
+export class RequestProcessDocumentDto extends ProcessDocumentCommonDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  name: string;
+
+  @ApiProperty({ description: 'Tipo documental' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(80)
+  docType: string;
+
+  @ApiProperty({ description: 'Quem deve entregar o documento' })
+  @IsInt()
+  requestedFromId: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  note?: string;
+}
+
+export class GenerateProcessDocumentDto extends ProcessDocumentCommonDto {
+  @ApiProperty({ description: 'Modelo de documento (DeclarationTemplate)' })
+  @IsInt()
+  templateId: number;
+
+  @ApiPropertyOptional({ description: 'Nome (por defeito, o do modelo)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  name?: string;
+}
+
+export class SubmitDocumentDto {
+  @ApiPropertyOptional({ description: 'Novo aprovador' })
+  @IsOptional()
+  @IsInt()
+  approverId?: number;
+}
+
+export class DecideDocumentDto {
+  @ApiProperty({ enum: ['APPROVE', 'REJECT'] })
+  @IsIn(['APPROVE', 'REJECT'])
+  decision: 'APPROVE' | 'REJECT';
+
+  @ApiPropertyOptional({ description: 'Obrigatória ao rejeitar' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  note?: string;
+}
+
+export class NewDocumentVersionDto {
+  @ApiPropertyOptional({ description: 'Novo ficheiro no repositório (por defeito, o mesmo)' })
+  @IsOptional()
+  @IsInt()
+  documentId?: number;
+
+  @ApiPropertyOptional({ description: 'Nova validade (renovação)' })
+  @IsOptional()
+  @IsDateString()
+  validUntil?: string;
+
+  @ApiProperty({ description: 'O que mudou / motivo da renovação' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(1000)
+  note: string;
+}
+
+export class ArchiveDocumentDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(1000)
+  reason: string;
+}
+
+// ─── §12 Indicadores e Relatórios ────────────────────────────────────────────
+export const REPORT_GROUP_BY = [
+  'department',
+  'template',
+  'category',
+  'sourceModule',
+  'responsible',
+  'priority',
+  'month',
+] as const;
+
+export const REPORT_RECORD_INDICATORS = [
+  'total',
+  'completed',
+  'onTime',
+  'late',
+  'returned',
+  'rejected',
+  'reopened',
+  'overdue',
+  'backlogInstances',
+  'backlogTasks',
+  'pendingApprovals',
+  'workload',
+  'automationFailures',
+] as const;
+
+export class ProcessReportFilterDto {
+  @ApiPropertyOptional({ description: 'Início do período (data de início do processo)' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'Fim do período (inclusivo)' })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  unitId?: number;
+
+  @ApiPropertyOptional({ description: 'Modelo de processo' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  templateId?: number;
+
+  @ApiPropertyOptional({ description: 'Tipo de processo (categoria do modelo)' })
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sourceModule?: string;
+
+  @ApiPropertyOptional({ enum: ProcessPriority })
+  @IsOptional()
+  @IsEnum(ProcessPriority)
+  priority?: ProcessPriority;
+
+  @ApiPropertyOptional({ description: 'Responsável actual do processo' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  responsibleId?: number;
+
+  @ApiPropertyOptional({ enum: REPORT_GROUP_BY, default: 'department' })
+  @IsOptional()
+  @IsIn(REPORT_GROUP_BY)
+  groupBy?: (typeof REPORT_GROUP_BY)[number];
+}
+
+export class ProcessReportRecordsDto extends ProcessReportFilterDto {
+  @ApiProperty({ enum: REPORT_RECORD_INDICATORS })
+  @IsIn(REPORT_RECORD_INDICATORS)
+  indicator: (typeof REPORT_RECORD_INDICATORS)[number];
+
+  @ApiPropertyOptional({ description: 'Responsável (indicador `workload`)' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  assigneeId?: number;
+
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  page?: number;
+
+  @ApiPropertyOptional({ default: 20 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  @Type(() => Number)
+  limit?: number;
+}
+
+export class ProcessReportExportDto extends ProcessReportFilterDto {
+  @ApiProperty({ enum: ['csv', 'xlsx', 'pdf'] })
+  @IsIn(['csv', 'xlsx', 'pdf'])
+  format: 'csv' | 'xlsx' | 'pdf';
+}

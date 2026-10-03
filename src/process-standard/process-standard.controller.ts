@@ -14,13 +14,19 @@ import {
   HttpCode,
   HttpStatus,
   Header,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ProcessStandardService } from './process-standard.service';
 import { ProcessInstancesService } from './process-instances.service';
 import { ProcessTasksService } from './process-tasks.service';
 import { ProcessApprovalsService } from './process-approvals.service';
 import { ProcessAutomationsService } from './process-automations.service';
+import { ProcessCalendarService } from './process-calendar.service';
+import { ProcessDocumentsService } from './process-documents.service';
+import { ProcessReportsService } from './process-reports.service';
 import {
   CreateProcessDto,
   UpdateProcessDto,
@@ -50,6 +56,19 @@ import {
   ProcessAutomationDto,
   AutomationRuleFilterDto,
   TestAutomationDto,
+  CalendarFilterDto,
+  RescheduleDto,
+  ProcessDocumentFilterDto,
+  AttachProcessDocumentDto,
+  RequestProcessDocumentDto,
+  GenerateProcessDocumentDto,
+  SubmitDocumentDto,
+  DecideDocumentDto,
+  NewDocumentVersionDto,
+  ArchiveDocumentDto,
+  ProcessReportFilterDto,
+  ProcessReportRecordsDto,
+  ProcessReportExportDto,
 } from './process-standard.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -67,6 +86,9 @@ export class ProcessStandardController {
     private readonly tasks: ProcessTasksService,
     private readonly approvals: ProcessApprovalsService,
     private readonly automations: ProcessAutomationsService,
+    private readonly calendar: ProcessCalendarService,
+    private readonly documents: ProcessDocumentsService,
+    private readonly reports: ProcessReportsService,
   ) {}
 
   // ── Biblioteca de Processos ────────────────────────────────────────────────
@@ -155,6 +177,243 @@ export class ProcessStandardController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.approvals.respond(id, user, dto);
+  }
+
+  // ── §10 Calendário e Prazos ────────────────────────────────────────────────
+
+  @Get('calendar')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({
+    summary: 'Calendário: tarefas e processos com datas, dependências, atrasos e conflitos',
+  })
+  getCalendar(@Query() filters: CalendarFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.calendar.calendar(filters, user);
+  }
+
+  @Get('calendar/ics')
+  @Roles(...AUTHENTICATED_ROLES)
+  @Header('Content-Type', 'text/calendar; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="prazos-processos.ics"')
+  @ApiOperation({ summary: 'Exportar os prazos (iCalendar) com os mesmos filtros do calendário' })
+  calendarIcs(@Query() filters: CalendarFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.calendar.exportIcs(filters, user);
+  }
+
+  @Get('instances/:instanceId/deadline-history')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Histórico de alterações do prazo do processo' })
+  instanceDeadlineHistory(
+    @Param('instanceId', ParseIntPipe) instanceId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.calendar.deadlineHistory(instanceId, null, user);
+  }
+
+  @Get('instances/:instanceId/steps/:stepId/deadline-history')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Histórico de alterações do prazo da tarefa' })
+  stepDeadlineHistory(
+    @Param('instanceId', ParseIntPipe) instanceId: number,
+    @Param('stepId', ParseIntPipe) stepId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.calendar.deadlineHistory(instanceId, stepId, user);
+  }
+
+  @Patch('instances/:instanceId/steps/:stepId/deadline')
+  @Roles(...AUTHENTICATED_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Reagendar o prazo da tarefa (guarda prazo anterior, novo, autor e justificação)',
+  })
+  rescheduleTask(
+    @Param('instanceId', ParseIntPipe) instanceId: number,
+    @Param('stepId', ParseIntPipe) stepId: number,
+    @CurrentUser() user: CurrentUserData,
+    @Body() dto: RescheduleDto,
+  ) {
+    return this.calendar.reschedule(instanceId, stepId, user, dto);
+  }
+
+  // ── §11 Documentos ─────────────────────────────────────────────────────────
+
+  @Get('documents')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Documentos dos processos (referências ao repositório e à Biblioteca)' })
+  listDocuments(@Query() filters: ProcessDocumentFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.documents.list(filters, user);
+  }
+
+  @Get('documents/templates')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Modelos a partir dos quais se podem gerar documentos' })
+  documentTemplates() {
+    return this.documents.templates();
+  }
+
+  @Get('documents/sources')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Pesquisar no repositório central e na Biblioteca (respeita o acesso)' })
+  @ApiQuery({ name: 'search', required: false })
+  documentSources(
+    @Query('search') search: string | undefined,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.documents.searchSources(search, user);
+  }
+
+  @Get('documents/:id/versions')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Histórico de versões do documento' })
+  documentVersions(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.documents.versions(id, user);
+  }
+
+  @Get('documents/:id/pdf')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'PDF de um documento gerado a partir de um modelo' })
+  async documentPdf(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: CurrentUserData,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { buffer, filename } = await this.documents.generatedPdf(id, user);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    });
+    return new StreamableFile(buffer);
+  }
+
+  @Post('documents/:id/submit')
+  @Roles(...AUTHENTICATED_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Submeter (ou resubmeter) o documento para aprovação' })
+  submitDocument(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SubmitDocumentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.documents.submit(id, dto, user);
+  }
+
+  @Post('documents/:id/decide')
+  @Roles(...AUTHENTICATED_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Validar o documento: aprovar ou rejeitar (com justificação)' })
+  decideDocument(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: DecideDocumentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.documents.decide(id, dto, user);
+  }
+
+  @Post('documents/:id/sign')
+  @Roles(...AUTHENTICATED_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Assinar um documento aprovado que exige assinatura' })
+  signDocument(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.documents.sign(id, user);
+  }
+
+  @Post('documents/:id/versions')
+  @Roles(...AUTHENTICATED_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Nova versão / renovação da validade (volta a exigir validação)' })
+  newDocumentVersion(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: NewDocumentVersionDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.documents.newVersion(id, dto, user);
+  }
+
+  @Post('documents/:id/archive')
+  @Roles(...AUTHENTICATED_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Arquivar (nunca apagar) respeitando as regras de retenção' })
+  archiveDocument(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ArchiveDocumentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.documents.archive(id, dto, user);
+  }
+
+  @Get('instances/:instanceId/documents')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Documentos do processo e estado dos documentos obrigatórios' })
+  instanceDocuments(
+    @Param('instanceId', ParseIntPipe) instanceId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.documents.forInstance(instanceId, user);
+  }
+
+  @Post('instances/:instanceId/documents')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Anexar documento existente (referência ao repositório / Biblioteca)' })
+  attachDocument(
+    @Param('instanceId', ParseIntPipe) instanceId: number,
+    @Body() dto: AttachProcessDocumentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.documents.attach(instanceId, dto, user);
+  }
+
+  @Post('instances/:instanceId/documents/request')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Solicitar um documento em falta a um utilizador' })
+  requestDocument(
+    @Param('instanceId', ParseIntPipe) instanceId: number,
+    @Body() dto: RequestProcessDocumentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.documents.request(instanceId, dto, user);
+  }
+
+  @Post('instances/:instanceId/documents/generate')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Gerar documento a partir de um modelo' })
+  generateDocument(
+    @Param('instanceId', ParseIntPipe) instanceId: number,
+    @Body() dto: GenerateProcessDocumentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.documents.generate(instanceId, dto, user);
+  }
+
+  // ── §12 Indicadores e Relatórios ───────────────────────────────────────────
+
+  @Get('reports')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR, Role.AUDITOR)
+  @ApiOperation({ summary: 'Indicadores operacionais (com definições) e agrupamento' })
+  reportOverview(@Query() filters: ProcessReportFilterDto) {
+    return this.reports.overview(filters);
+  }
+
+  @Get('reports/records')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR, Role.AUDITOR)
+  @ApiOperation({ summary: 'Registos que originaram um indicador' })
+  reportRecords(@Query() filters: ProcessReportRecordsDto) {
+    return this.reports.records(filters);
+  }
+
+  @Get('reports/export')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Exportar o relatório (CSV, Excel ou PDF)' })
+  async reportExport(
+    @Query() filters: ProcessReportExportDto,
+    @CurrentUser() user: CurrentUserData,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { buffer, contentType, filename } = await this.reports.export(filters, user);
+    res.set({
+      'Content-Type': contentType,
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    });
+    return new StreamableFile(buffer);
   }
 
   // ── §9 Automações (regras do módulo Automações, módulo de origem PROCESSES) ──
