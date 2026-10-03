@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AutomationController } from './automation.controller';
 import { AutomationService } from './automation.service';
+import { AutomationScheduleService } from './automation-schedule.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -21,6 +22,11 @@ const mockSvc = {
   initDefaultRules: jest.fn().mockResolvedValue({}),
 };
 
+const mockSchedules = {
+  list: jest.fn().mockResolvedValue({ data: [] }),
+  create: jest.fn().mockResolvedValue({ id: 's1' }),
+};
+
 describe('AutomationController', () => {
   let controller: AutomationController;
 
@@ -28,7 +34,10 @@ describe('AutomationController', () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AutomationController],
-      providers: [{ provide: AutomationService, useValue: mockSvc }],
+      providers: [
+        { provide: AutomationService, useValue: mockSvc },
+        { provide: AutomationScheduleService, useValue: mockSchedules },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })

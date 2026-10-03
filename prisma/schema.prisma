@@ -7484,33 +7484,120 @@ model AutomationRule {
   retryPolicy       String? // NONE | FIXED | EXPONENTIAL
   retryDelayMinutes Int?
   errorHandling     String? // LOG | NOTIFY_OWNER | DISABLE_RULE
+  // docs/modulo_automation.md §4 — Construtor de Fluxos.
+  flowJson          String? // JSON { steps: [...] } — acções/condições (sim/não)/atrasos encadeados
+  tags              String? // JSON array de etiquetas
+  departmentIds     String? // JSON array de departamentos abrangidos (âmbito organizacional)
+  draft             Boolean               @default(false) // rascunho: nunca dispara
+  version           Int                   @default(0) // última versão publicada (0 = nunca publicada)
+  publishedAt       DateTime?
+  publishedBy       String?
   tenant            TenantConfig          @relation(fields: [tenantId], references: [id])
   executions        AutomationExecution[]
+  versions          AutomationVersion[]
+  schedules         AutomationSchedule[]
 
   @@index([module])
   @@map("automation_rules")
 }
 
 model AutomationExecution {
-  id           String          @id @default(cuid())
-  ruleId       Int
-  triggeredBy  String? // userId ou "SYSTEM"
-  targetUserId String?
-  status       ExecutionStatus
-  startedAt    DateTime        @default(now())
-  finishedAt   DateTime?
-  actionsLog   String? // JSON com resultado de cada ação
-  errorMessage String?
-  payload      String? // JSON do payload/evento que despoletou a execução
+  id            String          @id @default(cuid())
+  ruleId        Int
+  triggeredBy   String? // userId ou "SYSTEM"
+  targetUserId  String?
+  status        ExecutionStatus
+  startedAt     DateTime        @default(now())
+  finishedAt    DateTime?
+  actionsLog    String? // JSON com resultado de cada ação
+  errorMessage  String?
+  payload       String? // JSON do payload/evento que despoletou a execução
   // Evita execuções duplicadas do mesmo evento (ex.: lembrete da mesma tarefa).
-  dedupeKey    String?
-  attempt      Int             @default(1)
-  nextRetryAt  DateTime?
-  rule         AutomationRule  @relation(fields: [ruleId], references: [id])
+  dedupeKey     String?
+  attempt       Int             @default(1)
+  nextRetryAt   DateTime?
+  // §4/§5/§6 — fluxos com atrasos, rastreio de eventos e agendamentos.
+  eventId       String? // AutomationEvent que originou a execução
+  scheduleId    String? // AutomationSchedule que a iniciou
+  correlationId String? // liga eventos/execuções encadeadas entre módulos
+  ruleVersion   Int? // versão publicada da regra no momento da execução
+  resumeAt      DateTime? // fluxo em espera (atraso): retoma a partir daqui
+  resumePc      Int? // instrução do fluxo compilado onde retomar
+  rule          AutomationRule  @relation(fields: [ruleId], references: [id])
 
   @@index([ruleId, dedupeKey])
   @@index([status, nextRetryAt])
+  @@index([status, resumeAt])
+  @@index([eventId])
   @@map("automation_executions")
+}
+
+model AutomationVersion {
+  id          String         @id @default(cuid())
+  ruleId      Int
+  version     Int
+  snapshot    String // JSON da definição publicada (gatilho, condições, fluxo)
+  note        String?
+  publishedBy String?
+  publishedAt DateTime       @default(now())
+  rule        AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, version])
+  @@map("automation_versions")
+}
+
+// Envelope de cada evento publicado por um módulo (§5): identificador único,
+// módulo de origem, tipo, instante e registo afectado.
+model AutomationEvent {
+  id            String   @id // eventId — fornecido pelo emissor ou gerado; garante idempotência
+  module        String
+  type          String
+  recordType    String?
+  recordId      String?
+  correlationId String
+  depth         Int      @default(0)
+  occurredAt    DateTime @default(now())
+  matchedRules  Int      @default(0)
+  executed      Int      @default(0)
+  skipped       Int      @default(0)
+  status        String   @default("PROCESSED") // PROCESSED | NO_RULES | REJECTED
+  note          String?
+
+  @@index([module, type])
+  @@index([occurredAt])
+  @@index([correlationId])
+  @@map("automation_events")
+}
+
+// §6 — execuções programadas de uma regra.
+model AutomationSchedule {
+  id             String         @id @default(cuid())
+  ruleId         Int
+  name           String
+  type           String // ONCE | DAILY | WEEKLY | MONTHLY | CUSTOM
+  startDate      DateTime
+  endDate        DateTime?
+  time           String // HH:mm no fuso configurado
+  timezone       String         @default("Africa/Luanda")
+  daysOfWeek     String? // JSON number[] (0=Domingo)
+  dayOfMonth     Int?
+  cronExpression String?
+  nextRunAt      DateTime?
+  lastRunAt      DateTime?
+  lastRunStatus  String?
+  lastError      String?
+  runCount       Int            @default(0)
+  status         String         @default("ACTIVE") // ACTIVE | PAUSED | COMPLETED | ERROR
+  missedPolicy   String         @default("RUN_ONCE") // RUN_ONCE | RUN_ALL | SKIP
+  ownerId        String?
+  createdBy      String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  rule           AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextRunAt])
+  @@index([ruleId])
+  @@map("automation_schedules")
 }
 
 model SlaConfig {

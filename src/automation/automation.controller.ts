@@ -26,7 +26,14 @@ import {
   ExecutionFilterDto,
   RuleFilterDto,
   OverviewFilterDto,
+  FlowTestDto,
+  PublishRuleDto,
+  EventFilterDto,
+  CreateScheduleDto,
+  UpdateScheduleDto,
+  ScheduleFilterDto,
 } from './automation.dto';
+import { AutomationScheduleService } from './automation-schedule.service';
 import { Role } from '../auth/enums/role.enum';
 
 const ADMIN = ['ADMIN', 'RH'] as const;
@@ -37,7 +44,10 @@ const ADMIN = ['ADMIN', 'RH'] as const;
 @Roles(...ADMIN)
 @Controller('automation')
 export class AutomationController {
-  constructor(private readonly svc: AutomationService) {}
+  constructor(
+    private readonly svc: AutomationService,
+    private readonly schedules: AutomationScheduleService,
+  ) {}
 
   // ─── Rules ────────────────────────────────────────────────────
 
@@ -76,6 +86,49 @@ export class AutomationController {
   @ApiOperation({ summary: 'Criar regra de automação (trigger → condition → action)' })
   create(@Body() dto: CreateRuleDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.createRule(dto, user.id);
+  }
+
+  // ─── Construtor de Fluxos (§4) ────────────────────────────────
+
+  @Post('rules/validate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Validar a definição (campos, fluxo, limites) sem gravar' })
+  validate(@Body() dto: Partial<CreateRuleDto>) {
+    return this.svc.validateRuleDefinition(dto);
+  }
+
+  @Put('rules/:id/full')
+  @ApiOperation({ summary: 'Substituir a configuração completa da regra (editor de fluxos)' })
+  updateFull(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateRuleDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.updateRuleFull(id, dto, user.id);
+  }
+
+  @Post('rules/:id/test')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Executar teste com dados de exemplo (simulação, sem efeitos)' })
+  test(@Param('id', ParseIntPipe) id: number, @Body() dto: FlowTestDto) {
+    return this.svc.testRule(id, dto.payload ?? {});
+  }
+
+  @Post('rules/:id/publish')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Publicar: regista versão e autor e activa a regra' })
+  publish(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: PublishRuleDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.publishRule(id, user.id, dto.note);
+  }
+
+  @Get('rules/:id/versions')
+  @ApiOperation({ summary: 'Versões publicadas da regra' })
+  versions(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.listVersions(id);
   }
 
   @Put('rules/:id')
@@ -130,6 +183,79 @@ export class AutomationController {
   @ApiOperation({ summary: 'Re-executar uma execução falhada' })
   rerun(@Param('id') id: string) {
     return this.svc.rerunExecution(id);
+  }
+
+  // ─── Eventos entre módulos (§5) ───────────────────────────────
+
+  @Get('events/catalog')
+  @ApiOperation({ summary: 'Catálogo de eventos por módulo (implementados vs. propostos)' })
+  eventCatalog() {
+    return this.svc.getEventCatalog();
+  }
+
+  @Get('events')
+  @ApiOperation({ summary: 'Eventos recebidos (envelope, correlação e regras accionadas)' })
+  events(@Query() filters: EventFilterDto) {
+    return this.svc.getEvents(filters);
+  }
+
+  // ─── Agendamentos (§6) ────────────────────────────────────────
+
+  @Get('schedules')
+  @ApiOperation({ summary: 'Listar agendamentos' })
+  listSchedules(@Query() filters: ScheduleFilterDto) {
+    return this.schedules.list(filters);
+  }
+
+  @Post('schedules/preview')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Próximas ocorrências de uma configuração (sem gravar)' })
+  previewSchedule(@Body() dto: CreateScheduleDto) {
+    return this.schedules.preview(dto);
+  }
+
+  @Post('schedules')
+  @ApiOperation({ summary: 'Criar agendamento' })
+  createSchedule(@Body() dto: CreateScheduleDto, @CurrentUser() user: CurrentUserData) {
+    return this.schedules.create(dto, user.id);
+  }
+
+  @Get('schedules/:id')
+  @ApiOperation({ summary: 'Detalhe do agendamento, com as próximas ocorrências' })
+  getSchedule(@Param('id') id: string) {
+    return this.schedules.get(id);
+  }
+
+  @Put('schedules/:id')
+  @ApiOperation({ summary: 'Editar agendamento' })
+  updateSchedule(@Param('id') id: string, @Body() dto: UpdateScheduleDto) {
+    return this.schedules.update(id, dto);
+  }
+
+  @Patch('schedules/:id/pause')
+  @ApiOperation({ summary: 'Pausar agendamento' })
+  pauseSchedule(@Param('id') id: string) {
+    return this.schedules.pause(id);
+  }
+
+  @Patch('schedules/:id/resume')
+  @ApiOperation({ summary: 'Retomar agendamento' })
+  resumeSchedule(@Param('id') id: string) {
+    return this.schedules.resume(id);
+  }
+
+  @Post('schedules/:id/run')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Executar agora (não altera a próxima ocorrência)' })
+  runSchedule(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.schedules.runNow(id, user.id);
+  }
+
+  @Delete('schedules/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Remover agendamento' })
+  removeSchedule(@Param('id') id: string) {
+    return this.schedules.remove(id);
   }
 
   // ─── Stats ────────────────────────────────────────────────────

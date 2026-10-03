@@ -1,5 +1,6 @@
 ﻿// src/automation/automation.service.ts
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import {
   EnrollmentStatus,
   EnrollmentOrigin,
@@ -28,8 +29,19 @@ import {
   RuleListStatus,
   OverviewFilterDto,
   OverviewGranularity,
+  EventFilterDto,
 } from './automation.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import {
+  FlowInstruction,
+  FlowActionStep,
+  FlowDefinition,
+  compileFlow,
+  firstActionOf,
+  parseFlow,
+  validateFlow,
+} from './automation-flow';
+import { EVENT_CATALOG, moduleOfTrigger } from './automation-events.catalog';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 
@@ -84,6 +96,52 @@ export type RegisteredActionHandler = (ctx: RegisteredActionContext) => Promise<
 interface ExecutionMeta {
   dedupeKey?: string;
   attempt?: number;
+  /** §5 — envelope do evento que originou a execução. */
+  eventId?: string;
+  correlationId?: string;
+  depth?: number;
+  /** Regras já percorridas na cadeia (prevenção de ciclos). */
+  chain?: number[];
+  scheduleId?: string;
+  /** §4 — retoma o fluxo desta instrução (nova tentativa / depois de um atraso). */
+  startPc?: number;
+  priorSteps?: FlowStepLog[];
+  /** Execução existente a continuar (retoma depois de um atraso). */
+  resumeExecId?: string;
+}
+
+/** Resultado de uma etapa de um fluxo — gravado em AutomationExecution.actionsLog. */
+export interface FlowStepLog {
+  ref: string;
+  type: 'action' | 'condition' | 'delay';
+  label?: string;
+  action?: string;
+  status: 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'WAITING';
+  decision?: 'yes' | 'no';
+  result?: ActionResult;
+  error?: string;
+  durationMs?: number;
+  at: string;
+}
+
+/** Limite de profundidade de uma cadeia evento → regra → evento (prevenção de ciclos). */
+export const MAX_EVENT_DEPTH = 5;
+/** Execuções por minuto e por regra acima das quais novos eventos são ignorados. */
+export const MAX_RULE_EXECUTIONS_PER_MINUTE = 120;
+
+export interface AutomationChainMeta {
+  correlationId: string;
+  depth: number;
+  chain: number[];
+}
+
+function readChainMeta(payload: Record<string, unknown>): AutomationChainMeta {
+  const raw = payload._automation as Partial<AutomationChainMeta> | undefined;
+  return {
+    correlationId: typeof raw?.correlationId === 'string' ? raw.correlationId : randomUUID(),
+    depth: typeof raw?.depth === 'number' ? raw.depth : 0,
+    chain: Array.isArray(raw?.chain) ? raw.chain.filter(n => typeof n === 'number') : [],
+  };
 }
 
 const retryDelayMs = (rule: AutomationRuleRecord, attempt: number): number | null => {
@@ -177,6 +235,16 @@ function interpolate(
     const value = dynamicData?.[key] ?? payload[key];
     return value === undefined || value === null ? '' : String(value);
   });
+}
+
+function parseJsonArray(json?: string | null): string[] {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json) as unknown;
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
 }
 
 function parseParams(params?: string | null): Record<string, unknown> {
@@ -287,7 +355,12 @@ const DEFAULT_RULES: Omit<CreateRuleDto, never>[] = [
 // ─────────────────────────────────────────────────────────────────
 
 /** Estado derivado para a listagem (não há coluna): pausada > erro > activa. */
-function deriveRuleStatus(r: { active: boolean; lastRunStatus: string | null }): RuleListStatus {
+function deriveRuleStatus(r: {
+  active: boolean;
+  draft?: boolean;
+  lastRunStatus: string | null;
+}): RuleListStatus {
+  if (r.draft) return RuleListStatus.DRAFT;
   if (!r.active) return RuleListStatus.PAUSED;
   return r.lastRunStatus === 'FAILED' ? RuleListStatus.ERROR : RuleListStatus.ACTIVE;
 }
@@ -432,7 +505,11 @@ export class AutomationService {
         ],
       });
     }
-    if (f.status === RuleListStatus.PAUSED) where.active = false;
+    if (f.status === RuleListStatus.DRAFT) where.draft = true;
+    if (f.status === RuleListStatus.PAUSED) {
+      where.active = false;
+      where.draft = false;
+    }
     if (f.status === RuleListStatus.ACTIVE) {
       where.active = true;
       and.push({ OR: [{ lastRunStatus: null }, { lastRunStatus: { not: 'FAILED' } }] });
@@ -497,6 +574,9 @@ export class AutomationService {
         ...r,
         condition: parseCondition(r.condition),
         actionParams: parseParams(r.actionParams),
+        flow: parseFlow(r.flowJson),
+        tags: parseJsonArray(r.tags),
+        departmentIds: parseJsonArray(r.departmentIds),
         status: deriveRuleStatus(r),
         ownerName: ownerName.get(ownerKey) ?? null,
         stats: {
@@ -733,12 +813,25 @@ export class AutomationService {
       ? JSON.stringify(mergedActionParams)
       : dto.actionParams;
 
+    // Fluxo (§4): uma regra com `flow` tem as acções no fluxo; a coluna `action`
+    // (legada, obrigatória) guarda a primeira só para a listagem e os filtros.
+    const flow = dto.flow ?? null;
+    if (flow && !dto.draft) {
+      const check = validateFlow(flow);
+      if (!check.valid) throw new BadRequestException(check.errors.join(' '));
+    }
+    const action = flow ? (firstActionOf(flow) ?? dto.action ?? ActionType.OTHER) : dto.action;
+
     return {
       name: dto.name,
       trigger: dto.trigger,
-      action: dto.action,
+      action,
+      flowJson: flow ? JSON.stringify(flow) : null,
+      tags: dto.tags ? JSON.stringify(dto.tags) : undefined,
+      departmentIds: dto.departmentIds ? JSON.stringify(dto.departmentIds) : undefined,
+      draft: dto.draft ?? false,
       condition: dto.condition ?? '',
-      active: dto.active ?? true,
+      active: dto.draft ? false : (dto.active ?? true),
       triggerType: this.mapTriggerType(dto.trigger),
       // Frequência/horário/dias da semana/datas/nº máx. execuções ficam
       // guardados aqui para o form os poder reler, mas NÃO há (ainda) um
@@ -762,7 +855,7 @@ export class AutomationService {
             rows: dto.conditions,
           })
         : null,
-      actionsJson: JSON.stringify([{ type: dto.action, params: mergedActionParams }]),
+      actionsJson: JSON.stringify([{ type: action, params: mergedActionParams }]),
       createdBy: String(createdById),
       description: dto.description,
       category: dto.category,
@@ -817,13 +910,24 @@ export class AutomationService {
   async updateRuleFull(id: number, dto: CreateRuleDto, userId: number) {
     await this.getRule(id);
     const { createdBy: _createdBy, ...data } = this.buildRuleData(dto, userId);
-    return this.prisma.automationRule.update({ where: { id }, data });
+    const updated = await this.prisma.automationRule.update({ where: { id }, data });
+    await this.auditRule('AUTOMATION_RULE_UPDATED', id, { name: dto.name, userId });
+    return updated;
   }
 
   /** Executa uma regra concreta com um payload (teste manual / nova tentativa), sem disparar as restantes. */
-  async runRule(ruleId: number, payload: Record<string, unknown>, userId?: number) {
+  async runRule(
+    ruleId: number,
+    payload: Record<string, unknown>,
+    userId?: number,
+    meta: ExecutionMeta = {},
+  ) {
     const rule = await this.getRule(ruleId);
+    if (rule.draft) {
+      throw new BadRequestException('Rascunho: publique a automação antes de a executar');
+    }
     return this.executeAction(rule, payload, userId, {
+      ...meta,
       dedupeKey: typeof payload.dedupeKey === 'string' ? payload.dedupeKey : undefined,
     });
   }
@@ -841,7 +945,15 @@ export class AutomationService {
   async toggleRule(id: number) {
     const r = await this.prisma.read.automationRule.findUnique({ where: { id } });
     if (!r) throw new NotFoundException('Regra não encontrada');
-    return this.prisma.automationRule.update({ where: { id }, data: { active: !r.active } });
+    if (r.draft) {
+      throw new BadRequestException('Rascunho: publique a automação em vez de a activar');
+    }
+    const updated = await this.prisma.automationRule.update({
+      where: { id },
+      data: { active: !r.active },
+    });
+    await this.auditRule(r.active ? 'AUTOMATION_RULE_PAUSED' : 'AUTOMATION_RULE_ACTIVATED', id, {});
+    return updated;
   }
 
   async deleteRule(id: number) {
@@ -859,6 +971,13 @@ export class AutomationService {
         code: null,
         name: `Cópia de: ${source.name}`,
         active: false,
+        draft: true,
+        version: 0,
+        publishedAt: null,
+        publishedBy: null,
+        lastRunAt: null,
+        lastRunStatus: null,
+        runCount: 0,
       },
     });
   }
@@ -870,19 +989,66 @@ export class AutomationService {
   async triggerEvent(dto: TriggerEventDto) {
     // Find active rules matching this event trigger
     const now = new Date();
+    const payload = dto.payload ?? {};
+    const incoming = readChainMeta(payload);
+    const correlationId = dto.correlationId ?? incoming.correlationId;
+    const eventId = dto.eventId ?? randomUUID();
+    const envelope = {
+      id: eventId,
+      module: dto.module ?? moduleOfTrigger(dto.event),
+      type: dto.event,
+      recordType: dto.recordType,
+      recordId: dto.recordId,
+      correlationId,
+      depth: incoming.depth,
+    };
+
+    // §5 — profundidade máxima (cadeias evento → regra → evento) e idempotência.
+    if (incoming.depth > MAX_EVENT_DEPTH) {
+      await this.registerEvent(envelope);
+      await this.finishEvent(eventId, {
+        matchedRules: 0,
+        executed: 0,
+        skipped: 0,
+        status: 'REJECTED',
+        note: `Profundidade máxima (${MAX_EVENT_DEPTH}) excedida — possível ciclo`,
+      });
+      return { triggered: 0, message: 'Cadeia de eventos demasiado profunda — evento ignorado' };
+    }
+    const registered = await this.registerEvent(envelope);
+    if (registered === 'duplicate') {
+      return { triggered: 0, message: 'Evento já processado', duplicate: true };
+    }
+
     const rules = (
       await this.prisma.read.automationRule.findMany({
         where: { active: true, trigger: dto.event },
         orderBy: { priority: 'asc' },
       })
-    ).filter(r => inActiveWindow(r, now));
+    ).filter(r => !r.draft && inActiveWindow(r, now));
 
-    if (!rules.length) return { triggered: 0, message: 'Sem automações para este evento' };
+    if (!rules.length) {
+      await this.finishEvent(eventId, {
+        matchedRules: 0,
+        executed: 0,
+        skipped: 0,
+        status: 'NO_RULES',
+      });
+      return { triggered: 0, message: 'Sem automações para este evento' };
+    }
 
-    const payload = dto.payload ?? {};
     const dedupeKey = typeof payload.dedupeKey === 'string' ? payload.dedupeKey : undefined;
     const results = [];
     for (const rule of rules) {
+      if (incoming.chain.includes(rule.id)) {
+        results.push({
+          ruleId: rule.id,
+          name: rule.name,
+          status: 'SKIPPED',
+          reason: 'Ciclo evitado: a regra já faz parte desta cadeia',
+        });
+        continue;
+      }
       if (!this.evaluateRuleConditions(rule, payload)) {
         results.push({
           ruleId: rule.id,
@@ -902,12 +1068,34 @@ export class AutomationService {
         });
         continue;
       }
-      const execResult = await this.executeAction(rule, payload, dto.userId, { dedupeKey });
+      if ((await this.recentExecutionCount(rule.id)) >= MAX_RULE_EXECUTIONS_PER_MINUTE) {
+        results.push({
+          ruleId: rule.id,
+          name: rule.name,
+          status: 'SKIPPED',
+          reason: 'Limite de frequência da regra atingido',
+        });
+        continue;
+      }
+      const execResult = await this.executeAction(rule, payload, dto.userId, {
+        dedupeKey,
+        eventId,
+        correlationId,
+        depth: incoming.depth,
+        chain: incoming.chain,
+      });
       results.push({ ruleId: rule.id, name: rule.name, ...execResult });
     }
 
+    const executed = results.filter(r => r.status !== 'SKIPPED').length;
+    await this.finishEvent(eventId, {
+      matchedRules: rules.length,
+      executed,
+      skipped: results.length - executed,
+      status: 'PROCESSED',
+    });
     return {
-      triggered: results.filter(r => r.status !== 'SKIPPED').length,
+      triggered: executed,
       total: rules.length,
       results,
     };
@@ -945,9 +1133,23 @@ export class AutomationService {
       const rule = await this.prisma.automationRule.findUnique({ where: { id: exec.ruleId } });
       if (!rule || !rule.active || !inActiveWindow(rule, now)) continue;
       const payload = exec.payload ? (JSON.parse(exec.payload) as Record<string, unknown>) : {};
+      // Fluxo: continua da etapa que falhou, sem repetir as acções já concluídas (§13).
+      let prior: FlowStepLog[] | undefined;
+      if (exec.resumePc !== null && exec.resumePc !== undefined && exec.actionsLog) {
+        try {
+          const log = JSON.parse(exec.actionsLog) as { steps?: FlowStepLog[] };
+          prior = (log.steps ?? []).filter(s => s.status === 'SUCCESS');
+        } catch {
+          prior = undefined;
+        }
+      }
       await this.executeAction(rule, payload, (payload.userId as number | undefined) ?? undefined, {
         dedupeKey: exec.dedupeKey ?? undefined,
         attempt: exec.attempt + 1,
+        ...(prior ? { startPc: exec.resumePc ?? 0, priorSteps: prior } : {}),
+        ...(exec.eventId ? { eventId: exec.eventId } : {}),
+        ...(exec.correlationId ? { correlationId: exec.correlationId } : {}),
+        ...(exec.scheduleId ? { scheduleId: exec.scheduleId } : {}),
       });
       retried++;
     }
@@ -1001,6 +1203,574 @@ export class AutomationService {
   }
 
   // ══════════════════════════════════════════════════════
+  // CONSTRUTOR DE FLUXOS (§4) — validar, testar, publicar, executar
+  // ══════════════════════════════════════════════════════
+
+  /** Valida a definição (sem gravar): campos, limites do fluxo, tipos de acção/operador. */
+  validateRuleDefinition(dto: Partial<CreateRuleDto>) {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    if (!dto.name?.trim()) errors.push('O nome da automação é obrigatório.');
+    if (!dto.trigger) errors.push('Indique o gatilho (quando deve começar).');
+    let stats: ReturnType<typeof validateFlow>['stats'] | null = null;
+    if (dto.flow) {
+      const check = validateFlow(dto.flow);
+      errors.push(...check.errors);
+      warnings.push(...check.warnings);
+      stats = check.stats;
+    } else if (!dto.action) {
+      errors.push('Defina pelo menos uma acção.');
+    }
+    if (dto.conditions?.length) {
+      dto.conditions.forEach((row, i) => {
+        if (!row.field?.trim()) errors.push(`Condição ${i + 1}: falta o campo.`);
+      });
+    }
+    return { valid: errors.length === 0, errors, warnings, stats };
+  }
+
+  /**
+   * Execução de teste: percorre o fluxo com dados de exemplo e diz o que
+   * aconteceria — sem enviar nada, criar tarefas nem registar execuções.
+   */
+  async testRule(id: number, payload: Record<string, unknown> = {}) {
+    const rule = await this.getRule(id);
+    const conditionsMatched = this.evaluateRuleConditions(rule, payload);
+    const flow = parseFlow(rule.flowJson);
+    const steps: Array<Record<string, unknown>> = [];
+
+    if (!conditionsMatched) {
+      return {
+        dryRun: true,
+        ruleId: id,
+        conditionsMatched,
+        wouldRun: false,
+        steps,
+        message: 'As condições do gatilho não são satisfeitas por estes dados.',
+      };
+    }
+
+    const preview = (params: Record<string, unknown>) =>
+      interpolate(
+        (params.messageTemplate as string | undefined) ?? (params.message as string | undefined),
+        params.dynamicData as Record<string, unknown> | undefined,
+        payload,
+      );
+
+    if (!flow) {
+      const params = parseParams(rule.actionParams);
+      steps.push({
+        ref: '1',
+        type: 'action',
+        action: rule.action,
+        wouldRun: true,
+        message: preview(params),
+      });
+    } else {
+      const program = compileFlow(flow);
+      let pc = 0;
+      let elapsed = 0;
+      while (pc < program.length) {
+        const ins = program[pc];
+        if (ins.kind === 'jump') {
+          pc = ins.to;
+        } else if (ins.kind === 'branch') {
+          const results = (ins.step.rows ?? []).map(r =>
+            evaluateConditionRow(r as ConditionRuleDto, payload),
+          );
+          const yes =
+            ins.step.logic === ConditionsLogic.OR ? results.some(Boolean) : results.every(Boolean);
+          steps.push({
+            ref: ins.ref,
+            type: 'condition',
+            label: ins.step.label,
+            decision: yes ? 'yes' : 'no',
+          });
+          pc = yes ? pc + 1 : ins.elsePc;
+        } else if (ins.kind === 'delay') {
+          elapsed += ins.step.minutes;
+          steps.push({
+            ref: ins.ref,
+            type: 'delay',
+            label: ins.step.label,
+            minutes: ins.step.minutes,
+            atMinute: elapsed,
+          });
+          pc++;
+        } else {
+          steps.push({
+            ref: ins.ref,
+            type: 'action',
+            label: ins.step.label,
+            action: ins.step.action,
+            wouldRun: true,
+            atMinute: elapsed,
+            message: preview(ins.step.params ?? {}),
+          });
+          pc++;
+        }
+      }
+    }
+    return { dryRun: true, ruleId: id, conditionsMatched, wouldRun: true, steps };
+  }
+
+  /** Publica: valida, regista a versão (snapshot + autor) e activa a regra. */
+  async publishRule(id: number, userId: number, note?: string) {
+    const rule = await this.getRule(id);
+    const flow = parseFlow(rule.flowJson);
+    if (flow) {
+      const check = validateFlow(flow);
+      if (!check.valid) throw new BadRequestException(check.errors.join(' '));
+    }
+    const version = (rule.version ?? 0) + 1;
+    const snapshot = {
+      name: rule.name,
+      description: rule.description,
+      trigger: rule.trigger,
+      category: rule.category,
+      module: rule.module,
+      action: rule.action,
+      actionParams: parseParams(rule.actionParams),
+      condition: parseCondition(rule.condition),
+      conditions: parseConditionsList(rule.conditionsJson),
+      flow,
+      priority: rule.priority,
+      retryPolicy: rule.retryPolicy,
+      maxRetries: rule.maxRetries,
+      errorHandling: rule.errorHandling,
+    };
+    await this.prisma.automationVersion.create({
+      data: {
+        ruleId: id,
+        version,
+        snapshot: JSON.stringify(snapshot),
+        note,
+        publishedBy: String(userId),
+      },
+    });
+    const updated = await this.prisma.automationRule.update({
+      where: { id },
+      data: {
+        draft: false,
+        active: true,
+        isActive: true,
+        version,
+        publishedAt: new Date(),
+        publishedBy: String(userId),
+      },
+    });
+    await this.auditRule('AUTOMATION_RULE_PUBLISHED', id, { version, note, userId });
+    return updated;
+  }
+
+  async listVersions(id: number) {
+    await this.getRule(id);
+    const rows = await this.prisma.read.automationVersion.findMany({
+      where: { ruleId: id },
+      orderBy: { version: 'desc' },
+    });
+    const authorIds = [...new Set(rows.map(r => r.publishedBy))]
+      .filter((v): v is string => !!v && /^\d+$/.test(v))
+      .map(Number);
+    const authors = authorIds.length
+      ? await this.prisma.read.user.findMany({
+          where: { id: { in: authorIds } },
+          select: { id: true, fullName: true },
+        })
+      : [];
+    const name = new Map(authors.map(u => [String(u.id), u.fullName]));
+    return rows.map(r => ({
+      ...r,
+      snapshot: JSON.parse(r.snapshot) as unknown,
+      publishedByName: (r.publishedBy && name.get(r.publishedBy)) || null,
+    }));
+  }
+
+  /** Auditoria das operações sobre regras (best-effort — nunca bloqueia a operação). */
+  private async auditRule(action: string, ruleId: number, changes: Record<string, unknown>) {
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          userId: 0,
+          action,
+          entity: 'AutomationRule',
+          entityId: ruleId,
+          changes: JSON.stringify(changes),
+        },
+      });
+    } catch (e: unknown) {
+      this.logger.warn({
+        ruleId,
+        action,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao registar auditoria da automação',
+      });
+    }
+  }
+
+  /** Auditoria de cada execução, identificando a automação responsável (§5, regra 4). */
+  private async auditExecution(
+    rule: AutomationRuleRecord,
+    execId: string | null,
+    status: string,
+    meta: ExecutionMeta,
+  ) {
+    await this.auditRule('AUTOMATION_EXECUTED', rule.id, {
+      executionId: execId,
+      status,
+      ruleName: rule.name,
+      ruleVersion: rule.version || null,
+      eventId: meta.eventId ?? null,
+      scheduleId: meta.scheduleId ?? null,
+      correlationId: meta.correlationId ?? null,
+    });
+  }
+
+  /**
+   * Percorre o fluxo compilado. Cada etapa fica registada em `actionsLog`; um
+   * atraso suspende a execução (PENDING + resumeAt) e `resumeDueFlows()` retoma-a;
+   * uma falha guarda a instrução (`resumePc`) para a nova tentativa continuar
+   * dali, sem repetir as acções já concluídas.
+   */
+  private async runFlow(
+    rule: AutomationRuleRecord,
+    flow: FlowDefinition,
+    payload: Record<string, unknown>,
+    targetUserId: number | undefined,
+    execId: string | null,
+    attempt: number,
+    meta: ExecutionMeta,
+    auto: AutomationChainMeta,
+  ): Promise<{ status: string; affected?: number; message?: string }> {
+    const program: FlowInstruction[] = compileFlow(flow);
+    const steps: FlowStepLog[] = [...(meta.priorSteps ?? [])];
+    let pc = meta.startPc ?? 0;
+    let affected = 0;
+    let failure: string | undefined;
+    let failedPc: number | undefined;
+
+    const updateExec = (data: Prisma.AutomationExecutionUpdateInput) =>
+      execId
+        ? this.prisma.automationExecution.update({ where: { id: execId }, data }).catch(e =>
+            this.logger.warn({
+              execId,
+              ruleId: rule.id,
+              action: 'UPDATE_AUTOMATION_FLOW_EXECUTION',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao actualizar a execução do fluxo',
+            }),
+          )
+        : Promise.resolve();
+
+    while (pc < program.length) {
+      const ins = program[pc];
+      const at = new Date().toISOString();
+
+      if (ins.kind === 'jump') {
+        pc = ins.to;
+        continue;
+      }
+
+      if (ins.kind === 'branch') {
+        const results = (ins.step.rows ?? []).map(r =>
+          evaluateConditionRow(r as ConditionRuleDto, payload),
+        );
+        const yes =
+          ins.step.logic === ConditionsLogic.OR ? results.some(Boolean) : results.every(Boolean);
+        steps.push({
+          ref: ins.ref,
+          type: 'condition',
+          label: ins.step.label,
+          status: 'SUCCESS',
+          decision: yes ? 'yes' : 'no',
+          at,
+        });
+        pc = yes ? pc + 1 : ins.elsePc;
+        continue;
+      }
+
+      if (ins.kind === 'delay') {
+        steps.push({
+          ref: ins.ref,
+          type: 'delay',
+          label: ins.step.label,
+          status: 'WAITING',
+          at,
+        });
+        await updateExec({
+          status: 'PENDING',
+          resumeAt: new Date(Date.now() + ins.step.minutes * 60_000),
+          resumePc: pc + 1,
+          actionsLog: JSON.stringify({ steps, affected }),
+        });
+        return {
+          status: 'PENDING',
+          affected,
+          message: `A aguardar ${ins.step.minutes} min antes da etapa seguinte`,
+        };
+      }
+
+      const step: FlowActionStep = ins.step;
+      const started = Date.now();
+      const stepRule = {
+        ...rule,
+        action: step.action,
+        actionParams: JSON.stringify(step.params ?? {}),
+      } as AutomationRuleRecord;
+      let stepError: string | undefined;
+      let stepResult: ActionResult | undefined;
+      try {
+        const out = await this.performAction(
+          stepRule,
+          (step.params ?? {}) as AutomationActionParams,
+          payload,
+          targetUserId,
+        );
+        stepResult = out.result;
+        stepError = out.actionError;
+        affected += out.result.affected ?? 0;
+      } catch (e: unknown) {
+        stepError = e instanceof Error ? e.message : String(e);
+      }
+      steps.push({
+        ref: ins.ref,
+        type: 'action',
+        label: step.label,
+        action: step.action,
+        status: stepError ? 'FAILED' : 'SUCCESS',
+        result: stepResult,
+        error: stepError,
+        durationMs: Date.now() - started,
+        at,
+      });
+      if (stepError && step.onError !== 'continue') {
+        failure = stepError;
+        failedPc = pc;
+        break;
+      }
+      pc++;
+    }
+
+    // Etapas que ficaram por correr depois de uma falha.
+    if (failure !== undefined && failedPc !== undefined) {
+      for (let i = failedPc + 1; i < program.length; i++) {
+        const rest = program[i];
+        if (rest.kind === 'action' || rest.kind === 'delay') {
+          steps.push({
+            ref: rest.ref,
+            type: rest.kind,
+            label: rest.step.label,
+            status: 'SKIPPED',
+            at: new Date().toISOString(),
+          });
+        }
+      }
+    }
+
+    const status = failure !== undefined ? 'FAILED' : 'SUCCESS';
+    await updateExec({
+      status,
+      actionsLog: JSON.stringify({ steps, affected }),
+      errorMessage: failure,
+      finishedAt: new Date(),
+      resumeAt: null,
+      resumePc: failedPc ?? null,
+    });
+    await this.recordRuleRun(rule, status, execId, attempt, failure);
+    await this.auditExecution(rule, execId, status, { ...meta, correlationId: auto.correlationId });
+    return { status, affected, ...(failure ? { message: failure } : {}) };
+  }
+
+  /** Retoma os fluxos cujo atraso já terminou. Idempotente entre réplicas (claim atómico). */
+  async resumeDueFlows(limit = 50) {
+    const now = new Date();
+    const due = await this.prisma.automationExecution.findMany({
+      where: { status: 'PENDING', resumeAt: { lte: now } },
+      orderBy: { resumeAt: 'asc' },
+      take: limit,
+    });
+    let resumed = 0;
+    for (const exec of due) {
+      const claimed = await this.prisma.automationExecution.updateMany({
+        where: { id: exec.id, status: 'PENDING', resumeAt: { not: null } },
+        data: { resumeAt: null, status: 'RUNNING' },
+      });
+      if (claimed.count === 0) continue;
+      const rule = await this.prisma.automationRule.findUnique({ where: { id: exec.ruleId } });
+      if (!rule || rule.draft || !rule.active || !inActiveWindow(rule, now)) {
+        await this.prisma.automationExecution.update({
+          where: { id: exec.id },
+          data: {
+            status: 'SKIPPED',
+            finishedAt: new Date(),
+            errorMessage: 'A automação foi pausada ou removida durante o atraso',
+          },
+        });
+        continue;
+      }
+      let prior: FlowStepLog[] = [];
+      try {
+        const log = JSON.parse(exec.actionsLog ?? '{}') as { steps?: FlowStepLog[] };
+        prior = (log.steps ?? []).map(s =>
+          s.status === 'WAITING' ? { ...s, status: 'SUCCESS' } : s,
+        );
+      } catch {
+        prior = [];
+      }
+      const payload = exec.payload ? (JSON.parse(exec.payload) as Record<string, unknown>) : {};
+      await this.executeAction(rule, payload, undefined, {
+        resumeExecId: exec.id,
+        startPc: exec.resumePc ?? 0,
+        priorSteps: prior,
+        attempt: exec.attempt,
+        eventId: exec.eventId ?? undefined,
+        correlationId: exec.correlationId ?? undefined,
+        dedupeKey: exec.dedupeKey ?? undefined,
+      });
+      resumed++;
+    }
+    return { resumed };
+  }
+
+  // ══════════════════════════════════════════════════════
+  // EVENTOS ENTRE MÓDULOS (§5)
+  // ══════════════════════════════════════════════════════
+
+  /** Regista o envelope do evento. 'duplicate' quando o mesmo eventId já foi processado. */
+  private async registerEvent(data: {
+    id: string;
+    module: string;
+    type: string;
+    recordType?: string;
+    recordId?: string;
+    correlationId: string;
+    depth: number;
+  }): Promise<'created' | 'duplicate' | 'failed'> {
+    try {
+      await this.prisma.automationEvent.create({ data });
+      return 'created';
+    } catch (e: unknown) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        return 'duplicate';
+      }
+      this.logger.warn({
+        eventId: data.id,
+        action: 'REGISTER_AUTOMATION_EVENT',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao registar o evento — o processamento prossegue',
+      });
+      return 'failed';
+    }
+  }
+
+  private async finishEvent(
+    id: string,
+    data: {
+      matchedRules: number;
+      executed: number;
+      skipped: number;
+      status: string;
+      note?: string;
+    },
+  ) {
+    try {
+      await this.prisma.automationEvent.update({ where: { id }, data });
+    } catch (e: unknown) {
+      this.logger.warn({
+        eventId: id,
+        action: 'FINISH_AUTOMATION_EVENT',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao actualizar o resumo do evento',
+      });
+    }
+  }
+
+  /** Protecção contra tempestades: execuções recentes da mesma regra. */
+  private async recentExecutionCount(ruleId: number): Promise<number> {
+    try {
+      return await this.prisma.automationExecution.count({
+        where: { ruleId, startedAt: { gte: new Date(Date.now() - 60_000) } },
+      });
+    } catch {
+      return 0;
+    }
+  }
+
+  /** Catálogo de eventos por módulo, com regras activas e volume dos últimos 30 dias. */
+  async getEventCatalog() {
+    const since = new Date(Date.now() - 30 * 86_400_000);
+    const ruleGroups = await this.prisma.read.automationRule.groupBy({
+      by: ['trigger'],
+      where: { active: true, draft: false },
+      _count: { _all: true },
+    });
+    const eventGroups = await this.prisma.read.automationEvent.groupBy({
+      by: ['type'],
+      where: { occurredAt: { gte: since } },
+      _count: { _all: true },
+    });
+    const rules = new Map<string, number>(ruleGroups.map(g => [g.trigger, g._count._all]));
+    const events = new Map<string, number>(eventGroups.map(g => [g.type, g._count._all]));
+
+    const modules = EVENT_CATALOG.map(m => ({
+      module: m.module,
+      label: m.label,
+      actions: m.actions,
+      events: m.events.map(e => {
+        const key = e.trigger ?? e.key;
+        return {
+          key: e.key,
+          label: e.label,
+          trigger: e.trigger ?? null,
+          implemented: !!e.trigger,
+          activeRules: rules.get(key) ?? 0,
+          events30d: events.get(key) ?? 0,
+        };
+      }),
+    }));
+    const all = modules.flatMap(m => m.events);
+    return {
+      modules,
+      summary: {
+        modules: modules.length,
+        events: all.length,
+        implemented: all.filter(e => e.implemented).length,
+        proposed: all.filter(e => !e.implemented).length,
+        listened: all.filter(e => e.activeRules > 0).length,
+      },
+    };
+  }
+
+  /** Registo dos eventos recebidos (filtrável por módulo, tipo, correlação e período). */
+  async getEvents(filters: EventFilterDto = {}) {
+    const { page = 1, limit = 30, module, type, correlationId, from, to } = filters;
+    const where: Prisma.AutomationEventWhereInput = {
+      ...(module ? { module } : {}),
+      ...(type ? { type } : {}),
+      ...(correlationId ? { correlationId } : {}),
+      ...(from || to
+        ? {
+            occurredAt: {
+              ...(from ? { gte: new Date(from) } : {}),
+              ...(to ? { lte: new Date(to) } : {}),
+            },
+          }
+        : {}),
+    };
+    const { skip, take } = calculatePagination(page, limit);
+    const [data, total] = await Promise.all([
+      this.prisma.read.automationEvent.findMany({
+        where,
+        orderBy: { occurredAt: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.read.automationEvent.count({ where }),
+    ]);
+    return buildPaginatedResponse(data, total, page, limit);
+  }
+
+  // ══════════════════════════════════════════════════════
   // ACTION EXECUTOR
   // ══════════════════════════════════════════════════════
 
@@ -1018,297 +1788,56 @@ export class AutomationService {
     const targetUserId = userId ?? (payload.userId as number | undefined);
     const attempt = meta.attempt ?? 1;
 
-    const execId = await this.prisma.automationExecution
-      .create({
-        data: {
-          ruleId: rule.id,
-          status: 'RUNNING',
-          payload: JSON.stringify(payload),
-          startedAt: new Date(),
-          dedupeKey: meta.dedupeKey,
-          attempt,
-        },
-      })
-      .then(e => e.id)
-      .catch(e => {
-        this.logger.warn({
-          ruleId: rule.id,
-          action: 'CREATE_AUTOMATION_EXECUTION_RECORD',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao registar execução da automação — a acção prossegue sem tracking',
-        });
-        return null;
-      });
+    // §5 — o contexto de cadeia só é anexado ao payload das acções quando a
+    // execução vem de um evento/agendamento/cadeia (nunca nas execuções manuais simples).
+    const chained = !!(meta.correlationId || meta.chain || meta.eventId || meta.scheduleId);
+    const auto: AutomationChainMeta = {
+      correlationId: meta.correlationId ?? randomUUID(),
+      depth: meta.depth ?? 0,
+      chain: [...(meta.chain ?? []), rule.id],
+    };
+    const handlerPayload = chained ? { ...payload, _automation: auto } : payload;
+    const flow = parseFlow(rule.flowJson);
+
+    const execId =
+      meta.resumeExecId ??
+      (await this.prisma.automationExecution
+        .create({
+          data: {
+            ruleId: rule.id,
+            status: 'RUNNING',
+            payload: JSON.stringify(payload),
+            startedAt: new Date(),
+            dedupeKey: meta.dedupeKey,
+            attempt,
+            eventId: meta.eventId,
+            scheduleId: meta.scheduleId,
+            correlationId: chained ? auto.correlationId : undefined,
+            ruleVersion: rule.version || undefined,
+          },
+        })
+        .then(e => e.id)
+        .catch(e => {
+          this.logger.warn({
+            ruleId: rule.id,
+            action: 'CREATE_AUTOMATION_EXECUTION_RECORD',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao registar execução da automação — a acção prossegue sem tracking',
+          });
+          return null;
+        }));
+
+    if (flow) {
+      return this.runFlow(rule, flow, handlerPayload, targetUserId, execId, attempt, meta, auto);
+    }
 
     try {
-      let result: ActionResult;
-      // Erro de domínio de uma acção delegada (matrícula duplicada, curso não
-      // publicado, ...): a execução fica FAILED mas NÃO se propaga como 500.
-      let actionError: string | undefined;
-
-      switch (rule.action) {
-        // CREATE_ALERT partilha a mesma mecânica de SEND_NOTIFICATION — é
-        // "criar um alerta" no sentido em que o único canal com entrega real
-        // nesta app é a notificação interna.
-        case ActionType.CREATE_ALERT:
-        case ActionType.SEND_NOTIFICATION: {
-          // `recipient` (do form: userId, ou string livre não resolvida —
-          // roleCode/departmentId não são suportados aqui) tem prioridade
-          // sobre o utilizador que despoletou o evento.
-          const recipientIds = await this.resolveRecipients(
-            params.recipient,
-            payload,
-            targetUserId,
-          );
-          const message =
-            interpolate(params.messageTemplate, params.dynamicData, payload) ??
-            params.message ??
-            `Automação: ${rule.name}`;
-          const subject =
-            interpolate(params.subject, params.dynamicData, payload) ?? `Automação: ${rule.name}`;
-          // A notificação interna (NotificationLog) é sempre criada — é o
-          // registo oficial da execução. Email/SMS/WhatsApp são despachados
-          // a seguir, a melhor esforço, via deliverViaChannel(); push/webhook
-          // continuam sem integração real nesta app.
-          for (const recipientUserId of recipientIds) {
-            await createNotificationSafe(this.prisma, this.logger, {
-              userId: recipientUserId,
-              type: params.type ?? 'AUTOMATION',
-              message,
-              metadata: {
-                ruleId: rule.id,
-                ...params,
-                channel: params.channel ?? CommunicationChannel.INTERNAL,
-                subject,
-              },
-            });
-            await this.deliverViaChannel({
-              channel: params.channel,
-              userId: recipientUserId,
-              subject,
-              message,
-              ruleId: rule.id,
-            });
-          }
-          result = { affected: recipientIds.length };
-          break;
-        }
-
-        // Ao contrário de SEND_NOTIFICATION (que cria sempre o registo
-        // interno e despacha o canal como efeito secundário best-effort),
-        // aqui o email/SMS/WhatsApp É a acção — uma falha real de entrega
-        // marca a execução como FAILED (actionError), como as outras acções
-        // delegadas abaixo (ASSIGN_COURSE, CREATE_PDI).
-        case ActionType.SEND_EMAIL: {
-          const contact = targetUserId ? await this.resolveRecipientContact(targetUserId) : null;
-          if (contact?.email) {
-            try {
-              await this.mail.sendNotification(
-                contact.email,
-                interpolate(params.subject, params.dynamicData, payload) ??
-                  `Automação: ${rule.name}`,
-                interpolate(params.messageTemplate, params.dynamicData, payload) ??
-                  params.message ??
-                  `Automação: ${rule.name}`,
-              );
-              result = { affected: 1 };
-            } catch (e: unknown) {
-              actionError = e instanceof Error ? e.message : String(e);
-              result = { affected: 0, error: actionError };
-            }
-          } else result = { affected: 0, message: 'Email do destinatário indisponível' };
-          break;
-        }
-
-        case ActionType.SEND_SMS:
-        case ActionType.SEND_WHATSAPP: {
-          const contact = targetUserId ? await this.resolveRecipientContact(targetUserId) : null;
-          const message =
-            interpolate(params.messageTemplate, params.dynamicData, payload) ??
-            params.message ??
-            `Automação: ${rule.name}`;
-          if (contact?.phone) {
-            try {
-              if (rule.action === ActionType.SEND_WHATSAPP) {
-                await this.sms.sendWhatsApp(contact.phone, message);
-              } else {
-                await this.sms.sendSms(contact.phone, message);
-              }
-              result = { affected: 1 };
-            } catch (e: unknown) {
-              actionError = e instanceof Error ? e.message : String(e);
-              result = { affected: 0, error: actionError };
-            }
-          } else result = { affected: 0, message: 'Telemóvel do destinatário indisponível' };
-          break;
-        }
-
-        // ENROLL_TRAINING é o mesmo fluxo de negócio que ASSIGN_COURSE
-        // (inscrição via EnrollmentsService) — só o rótulo no form difere.
-        case ActionType.ENROLL_TRAINING:
-        case ActionType.ASSIGN_COURSE: {
-          if (targetUserId && params.courseId) {
-            try {
-              // Delega no dono do domínio: recupera as guardas de matrícula
-              // duplicada / curso PUBLISHED + analytics + notificação que a
-              // escrita directa saltava.
-              await this.enrollments.enroll({
-                userId: targetUserId,
-                courseId: params.courseId,
-                origin: EnrollmentOrigin.RULE_ENGINE,
-              });
-              result = { affected: 1 };
-            } catch (e: unknown) {
-              actionError = e instanceof Error ? e.message : String(e);
-              this.logger.warn({
-                userId: targetUserId,
-                courseId: params.courseId,
-                ruleId: rule.id,
-                action: 'AUTOMATION_ASSIGN_COURSE',
-                err: { message: actionError },
-                msg: 'Acção de automação ASSIGN_COURSE falhou (erro de domínio) — registada como falha',
-              });
-              result = { affected: 0, error: actionError };
-            }
-          } else result = { affected: 0, message: 'courseId ou userId em falta' };
-          break;
-        }
-
-        case ActionType.CREATE_PDI: {
-          if (targetUserId) {
-            try {
-              // Delega no dono do domínio: o PDI entra no fluxo de aprovação
-              // (DevelopmentPlansService.create força status DRAFT) + notificação.
-              await this.developmentPlans.create({
-                userId: targetUserId,
-                name: params.name ?? `PDI Automático — ${rule.name}`,
-                goal: params.goal ?? 'Gerado automaticamente por automação',
-              });
-              result = { affected: 1 };
-            } catch (e: unknown) {
-              actionError = e instanceof Error ? e.message : String(e);
-              this.logger.warn({
-                userId: targetUserId,
-                ruleId: rule.id,
-                action: 'AUTOMATION_CREATE_PDI',
-                err: { message: actionError },
-                msg: 'Acção de automação CREATE_PDI falhou (erro de domínio) — registada como falha',
-              });
-              result = { affected: 0, error: actionError };
-            }
-          } else result = { affected: 0 };
-          break;
-        }
-
-        case ActionType.AWARD_POINTS: {
-          if (targetUserId && params.points) {
-            await this.gamification.awardPoints(targetUserId, params.points, 'automation');
-            result = { affected: 1, points: params.points };
-          } else result = { affected: 0 };
-          break;
-        }
-
-        case ActionType.AWARD_BADGE: {
-          if (targetUserId && params.badgeCode) {
-            await this.gamification.awardBadge(targetUserId, params.badgeCode);
-            result = { affected: 1 };
-          } else result = { affected: 0 };
-          break;
-        }
-
-        case ActionType.LOG: {
-          this.logger.log(
-            `[AutomationLog] Rule ${rule.id}: ${params.message ?? JSON.stringify(payload)}`,
-          );
-          result = { affected: 0, logged: true };
-          break;
-        }
-
-        // INTEGRATE_EXTERNAL é o mesmo mecanismo de pedido HTTP — só o
-        // rótulo no form é mais genérico ("integrar com sistema externo").
-        case ActionType.INTEGRATE_EXTERNAL:
-        case ActionType.WEBHOOK:
-        case ActionType.HTTP_REQUEST: {
-          if (params.url) {
-            const res = await fetch(params.url, {
-              method: params.method ?? 'POST',
-              headers: { 'Content-Type': 'application/json', ...(params.headers ?? {}) },
-              body: JSON.stringify({ event: rule.trigger, payload, ruleId: rule.id }),
-              signal: AbortSignal.timeout(10000),
-            }).catch(e => {
-              this.logger.warn({
-                url: params.url,
-                ruleId: rule.id,
-                action: 'AUTOMATION_WEBHOOK_REQUEST',
-                err: { message: e instanceof Error ? e.message : String(e) },
-                msg: 'Falha ao chamar webhook/HTTP request da automação',
-              });
-              return null;
-            });
-            result = { affected: 0, httpStatus: res?.status };
-          } else result = { affected: 0, error: 'URL em falta nos actionParams' };
-          break;
-        }
-
-        case ActionType.NOTIFY_MANAGER:
-        case ActionType.NOTIFY_HR: {
-          const roleCode = rule.action === ActionType.NOTIFY_HR ? 'RH' : undefined;
-          const managers: { id: number | null }[] = roleCode
-            ? await this.prisma.read.user.findMany({
-                where: { role: { code: roleCode } },
-                select: { id: true },
-                take: 20,
-              })
-            : targetUserId
-              ? await this.prisma.user
-                  .findMany({ where: { id: targetUserId }, select: { managerId: true } })
-                  .then(us => us.map(u => ({ id: u.managerId })).filter(u => u.id))
-              : [];
-          for (const m of managers) {
-            if (m.id)
-              await this.prisma.notificationLog
-                .create({
-                  data: {
-                    userId: m.id,
-                    type: 'AUTOMATION_ALERT',
-                    message: params.message ?? rule.name,
-                    metadata: JSON.stringify({}),
-                  },
-                })
-                .catch(e => {
-                  this.logger.warn({
-                    userId: m.id,
-                    ruleId: rule.id,
-                    action: 'AUTOMATION_NOTIFY_MANAGER_HR',
-                    err: { message: e instanceof Error ? e.message : String(e) },
-                    msg: 'Falha ao notificar gestor/RH via automação',
-                  });
-                });
-          }
-          result = { affected: managers.length };
-          break;
-        }
-
-        default: {
-          const handler = this.handlers.get(rule.action);
-          if (handler) {
-            try {
-              result = await handler({
-                rule,
-                params: params as Record<string, unknown>,
-                payload,
-                userId: targetUserId,
-              });
-              if (result.error) actionError = result.error;
-            } catch (e: unknown) {
-              actionError = e instanceof Error ? e.message : String(e);
-              result = { affected: 0, error: actionError };
-            }
-          } else {
-            result = { affected: 0, message: `Acção "${rule.action}" não implementada` };
-          }
-        }
-      }
+      const { result, actionError } = await this.performAction(
+        rule,
+        params,
+        handlerPayload,
+        targetUserId,
+      );
 
       // Um erro de domínio numa acção delegada marca a execução como FAILED
       // (com a mensagem), mas nunca se propaga como 500 — a regra "correu",
@@ -1337,6 +1866,10 @@ export class AutomationService {
           });
 
       await this.recordRuleRun(rule, execStatus, execId, attempt, actionError);
+      await this.auditExecution(rule, execId, execStatus, {
+        ...meta,
+        correlationId: chained ? auto.correlationId : undefined,
+      });
       return { status: execStatus, ...result };
     } catch (err: unknown) {
       await this.recordRuleRun(
@@ -1367,6 +1900,313 @@ export class AutomationService {
           });
       throw err;
     }
+  }
+
+  /**
+   * Executa UMA acção (o switch por tipo) e devolve o resultado — partilhado pelo
+   * modo de acção única e pelas etapas de um fluxo (Construtor de Fluxos, §4).
+   * Um erro de domínio vem em `actionError`; só falhas inesperadas são lançadas.
+   */
+  private async performAction(
+    rule: AutomationRuleRecord,
+    params: AutomationActionParams,
+    payload: Record<string, unknown>,
+    targetUserId: number | undefined,
+  ): Promise<{ result: ActionResult; actionError: string | undefined }> {
+    let result: ActionResult;
+    // Erro de domínio de uma acção delegada (matrícula duplicada, curso não
+    // publicado, ...): a execução fica FAILED mas NÃO se propaga como 500.
+    let actionError: string | undefined;
+
+    switch (rule.action) {
+      // CREATE_ALERT partilha a mesma mecânica de SEND_NOTIFICATION — é
+      // "criar um alerta" no sentido em que o único canal com entrega real
+      // nesta app é a notificação interna.
+      case ActionType.CREATE_ALERT:
+      case ActionType.SEND_NOTIFICATION: {
+        // `recipient` (do form: userId, ou string livre não resolvida —
+        // roleCode/departmentId não são suportados aqui) tem prioridade
+        // sobre o utilizador que despoletou o evento.
+        const recipientIds = await this.resolveRecipients(params.recipient, payload, targetUserId);
+        const message =
+          interpolate(params.messageTemplate, params.dynamicData, payload) ??
+          params.message ??
+          `Automação: ${rule.name}`;
+        const subject =
+          interpolate(params.subject, params.dynamicData, payload) ?? `Automação: ${rule.name}`;
+        // A notificação interna (NotificationLog) é sempre criada — é o
+        // registo oficial da execução. Email/SMS/WhatsApp são despachados
+        // a seguir, a melhor esforço, via deliverViaChannel(); push/webhook
+        // continuam sem integração real nesta app.
+        for (const recipientUserId of recipientIds) {
+          await createNotificationSafe(this.prisma, this.logger, {
+            userId: recipientUserId,
+            type: params.type ?? 'AUTOMATION',
+            message,
+            metadata: {
+              ruleId: rule.id,
+              ...params,
+              channel: params.channel ?? CommunicationChannel.INTERNAL,
+              subject,
+            },
+          });
+          await this.deliverViaChannel({
+            channel: params.channel,
+            userId: recipientUserId,
+            subject,
+            message,
+            ruleId: rule.id,
+          });
+        }
+        result = { affected: recipientIds.length };
+        break;
+      }
+
+      // Ao contrário de SEND_NOTIFICATION (que cria sempre o registo
+      // interno e despacha o canal como efeito secundário best-effort),
+      // aqui o email/SMS/WhatsApp É a acção — uma falha real de entrega
+      // marca a execução como FAILED (actionError), como as outras acções
+      // delegadas abaixo (ASSIGN_COURSE, CREATE_PDI).
+      case ActionType.SEND_EMAIL: {
+        const contact = targetUserId ? await this.resolveRecipientContact(targetUserId) : null;
+        if (contact?.email) {
+          try {
+            await this.mail.sendNotification(
+              contact.email,
+              interpolate(params.subject, params.dynamicData, payload) ?? `Automação: ${rule.name}`,
+              interpolate(params.messageTemplate, params.dynamicData, payload) ??
+                params.message ??
+                `Automação: ${rule.name}`,
+            );
+            result = { affected: 1 };
+          } catch (e: unknown) {
+            actionError = e instanceof Error ? e.message : String(e);
+            result = { affected: 0, error: actionError };
+          }
+        } else result = { affected: 0, message: 'Email do destinatário indisponível' };
+        break;
+      }
+
+      case ActionType.SEND_SMS:
+      case ActionType.SEND_WHATSAPP: {
+        const contact = targetUserId ? await this.resolveRecipientContact(targetUserId) : null;
+        const message =
+          interpolate(params.messageTemplate, params.dynamicData, payload) ??
+          params.message ??
+          `Automação: ${rule.name}`;
+        if (contact?.phone) {
+          try {
+            if (rule.action === ActionType.SEND_WHATSAPP) {
+              await this.sms.sendWhatsApp(contact.phone, message);
+            } else {
+              await this.sms.sendSms(contact.phone, message);
+            }
+            result = { affected: 1 };
+          } catch (e: unknown) {
+            actionError = e instanceof Error ? e.message : String(e);
+            result = { affected: 0, error: actionError };
+          }
+        } else result = { affected: 0, message: 'Telemóvel do destinatário indisponível' };
+        break;
+      }
+
+      // ENROLL_TRAINING é o mesmo fluxo de negócio que ASSIGN_COURSE
+      // (inscrição via EnrollmentsService) — só o rótulo no form difere.
+      case ActionType.ENROLL_TRAINING:
+      case ActionType.ASSIGN_COURSE: {
+        if (targetUserId && params.courseId) {
+          try {
+            // Delega no dono do domínio: recupera as guardas de matrícula
+            // duplicada / curso PUBLISHED + analytics + notificação que a
+            // escrita directa saltava.
+            await this.enrollments.enroll({
+              userId: targetUserId,
+              courseId: params.courseId,
+              origin: EnrollmentOrigin.RULE_ENGINE,
+            });
+            result = { affected: 1 };
+          } catch (e: unknown) {
+            actionError = e instanceof Error ? e.message : String(e);
+            this.logger.warn({
+              userId: targetUserId,
+              courseId: params.courseId,
+              ruleId: rule.id,
+              action: 'AUTOMATION_ASSIGN_COURSE',
+              err: { message: actionError },
+              msg: 'Acção de automação ASSIGN_COURSE falhou (erro de domínio) — registada como falha',
+            });
+            result = { affected: 0, error: actionError };
+          }
+        } else result = { affected: 0, message: 'courseId ou userId em falta' };
+        break;
+      }
+
+      case ActionType.CREATE_PDI: {
+        if (targetUserId) {
+          try {
+            // Delega no dono do domínio: o PDI entra no fluxo de aprovação
+            // (DevelopmentPlansService.create força status DRAFT) + notificação.
+            await this.developmentPlans.create({
+              userId: targetUserId,
+              name: params.name ?? `PDI Automático — ${rule.name}`,
+              goal: params.goal ?? 'Gerado automaticamente por automação',
+            });
+            result = { affected: 1 };
+          } catch (e: unknown) {
+            actionError = e instanceof Error ? e.message : String(e);
+            this.logger.warn({
+              userId: targetUserId,
+              ruleId: rule.id,
+              action: 'AUTOMATION_CREATE_PDI',
+              err: { message: actionError },
+              msg: 'Acção de automação CREATE_PDI falhou (erro de domínio) — registada como falha',
+            });
+            result = { affected: 0, error: actionError };
+          }
+        } else result = { affected: 0 };
+        break;
+      }
+
+      case ActionType.AWARD_POINTS: {
+        if (targetUserId && params.points) {
+          await this.gamification.awardPoints(targetUserId, params.points, 'automation');
+          result = { affected: 1, points: params.points };
+        } else result = { affected: 0 };
+        break;
+      }
+
+      case ActionType.AWARD_BADGE: {
+        if (targetUserId && params.badgeCode) {
+          await this.gamification.awardBadge(targetUserId, params.badgeCode);
+          result = { affected: 1 };
+        } else result = { affected: 0 };
+        break;
+      }
+
+      case ActionType.LOG: {
+        this.logger.log(
+          `[AutomationLog] Rule ${rule.id}: ${params.message ?? JSON.stringify(payload)}`,
+        );
+        result = { affected: 0, logged: true };
+        break;
+      }
+
+      // INTEGRATE_EXTERNAL é o mesmo mecanismo de pedido HTTP — só o
+      // rótulo no form é mais genérico ("integrar com sistema externo").
+      case ActionType.INTEGRATE_EXTERNAL:
+      case ActionType.WEBHOOK:
+      case ActionType.HTTP_REQUEST: {
+        if (params.url) {
+          const res = await fetch(params.url, {
+            method: params.method ?? 'POST',
+            headers: { 'Content-Type': 'application/json', ...(params.headers ?? {}) },
+            body: JSON.stringify({ event: rule.trigger, payload, ruleId: rule.id }),
+            signal: AbortSignal.timeout(10000),
+          }).catch(e => {
+            this.logger.warn({
+              url: params.url,
+              ruleId: rule.id,
+              action: 'AUTOMATION_WEBHOOK_REQUEST',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao chamar webhook/HTTP request da automação',
+            });
+            return null;
+          });
+          result = { affected: 0, httpStatus: res?.status };
+        } else result = { affected: 0, error: 'URL em falta nos actionParams' };
+        break;
+      }
+
+      case ActionType.NOTIFY_MANAGER:
+      case ActionType.NOTIFY_HR: {
+        const roleCode = rule.action === ActionType.NOTIFY_HR ? 'RH' : undefined;
+        const managers: { id: number | null }[] = roleCode
+          ? await this.prisma.read.user.findMany({
+              where: { role: { code: roleCode } },
+              select: { id: true },
+              take: 20,
+            })
+          : targetUserId
+            ? await this.prisma.user
+                .findMany({ where: { id: targetUserId }, select: { managerId: true } })
+                .then(us => us.map(u => ({ id: u.managerId })).filter(u => u.id))
+            : [];
+        for (const m of managers) {
+          if (m.id)
+            await this.prisma.notificationLog
+              .create({
+                data: {
+                  userId: m.id,
+                  type: 'AUTOMATION_ALERT',
+                  message: params.message ?? rule.name,
+                  metadata: JSON.stringify({}),
+                },
+              })
+              .catch(e => {
+                this.logger.warn({
+                  userId: m.id,
+                  ruleId: rule.id,
+                  action: 'AUTOMATION_NOTIFY_MANAGER_HR',
+                  err: { message: e instanceof Error ? e.message : String(e) },
+                  msg: 'Falha ao notificar gestor/RH via automação',
+                });
+              });
+        }
+        result = { affected: managers.length };
+        break;
+      }
+
+      case ActionType.RUN_AUTOMATION: {
+        const targetId = Number((params as { ruleId?: unknown }).ruleId);
+        const link = readChainMeta(payload);
+        if (!Number.isInteger(targetId) || targetId < 1) {
+          actionError = 'Automação a executar não indicada';
+        } else if (targetId === rule.id || link.chain.includes(targetId)) {
+          actionError = 'Ciclo detectado: a automação já faz parte desta cadeia';
+        } else if (link.depth + 1 > MAX_EVENT_DEPTH) {
+          actionError = `Profundidade máxima de encadeamento (${MAX_EVENT_DEPTH}) excedida`;
+        }
+        if (actionError) {
+          result = { affected: 0, error: actionError };
+          break;
+        }
+        const clean = { ...payload };
+        delete clean._automation;
+        const out = await this.runRule(targetId, clean, targetUserId, {
+          correlationId: link.correlationId,
+          depth: link.depth + 1,
+          chain: link.chain,
+        });
+        if (out.status === 'FAILED') actionError = `A automação #${targetId} falhou`;
+        result = {
+          affected: out.status === 'SUCCESS' ? 1 : 0,
+          message: `Automação #${targetId}: ${out.status}`,
+          ...(actionError ? { error: actionError } : {}),
+        };
+        break;
+      }
+
+      default: {
+        const handler = this.handlers.get(rule.action);
+        if (handler) {
+          try {
+            result = await handler({
+              rule,
+              params: params as Record<string, unknown>,
+              payload,
+              userId: targetUserId,
+            });
+            if (result.error) actionError = result.error;
+          } catch (e: unknown) {
+            actionError = e instanceof Error ? e.message : String(e);
+            result = { affected: 0, error: actionError };
+          }
+        } else {
+          result = { affected: 0, message: `Acção "${rule.action}" não implementada` };
+        }
+      }
+    }
+    return { result, actionError };
   }
 
   // Destinatários: ids, ou marcadores resolvidos a partir do payload do evento
