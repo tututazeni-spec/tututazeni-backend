@@ -863,6 +863,12 @@ export class ApprovalFilterDto {
   @Type(() => Number)
   processId?: number;
 
+  @ApiPropertyOptional({ description: 'Só aprovações desta instância de processo' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  instanceId?: number;
+
   @ApiPropertyOptional({ description: 'Só pedidos com o prazo ultrapassado' })
   @IsOptional()
   @Transform(toBool)

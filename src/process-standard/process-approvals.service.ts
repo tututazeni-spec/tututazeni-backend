@@ -242,6 +242,7 @@ export class ProcessApprovalsService {
 
     if (filters.sourceModule) and.push({ instance: { sourceModule: filters.sourceModule } });
     if (filters.processId) and.push({ instance: { processId: filters.processId } });
+    if (filters.instanceId) and.push({ instanceId: filters.instanceId });
     if (filters.overdue) {
       and.push({ dueAt: { lt: new Date() }, status: { in: [...OPEN_APPROVAL_STATUSES] } });
     }

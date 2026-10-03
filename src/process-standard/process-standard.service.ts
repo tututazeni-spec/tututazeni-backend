@@ -714,10 +714,7 @@ export class ProcessStandardService {
     targetDepartment: { id: number; parentId: number | null } | null,
   ) {
     if (isPrivileged(user, PROCESS_PRIVILEGED_ROLES)) {
-      if (
-        targetUserId !== user.id &&
-        !inDepartmentScope(user, targetDepartment)
-      ) {
+      if (targetUserId !== user.id && !inDepartmentScope(user, targetDepartment)) {
         throw new ForbiddenException('O colaborador está fora do seu âmbito departamental');
       }
       return;

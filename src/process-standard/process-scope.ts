@@ -50,10 +50,7 @@ export function instanceScopeWhere(user: CurrentUserData): Prisma.ProcessInstanc
   if (scope.fullAccess) return {};
   const or = participantWhere(user.id);
   if (scope.departmentId != null) {
-    or.push(
-      { departmentId: scope.departmentId },
-      { department: { parentId: scope.departmentId } },
-    );
+    or.push({ departmentId: scope.departmentId }, { department: { parentId: scope.departmentId } });
   }
   return { OR: or };
 }
