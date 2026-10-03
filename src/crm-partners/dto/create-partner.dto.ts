@@ -18,6 +18,7 @@ import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   PartnerType,
+  PartnerRelationshipStatus,
   PartnerTier,
   PartnerStatus,
   PartnershipLevel,
@@ -164,6 +165,26 @@ export class CreatePartnerDto {
   @Type(() => Number)
   @IsInt()
   assignedToId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  internalUnit?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  internalDepartment?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  internalTeam?: string;
+
+  @ApiPropertyOptional({ enum: PartnerRelationshipStatus })
+  @IsOptional()
+  @IsEnum(PartnerRelationshipStatus)
+  relationshipStatus?: PartnerRelationshipStatus;
 
   @ApiPropertyOptional()
   @IsOptional()

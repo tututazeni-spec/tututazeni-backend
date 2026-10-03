@@ -1640,6 +1640,33 @@ const PartnerDocumentType = {
   OTHER: 'OTHER',
 };
 
+const PartnerLocationType = {
+  HEADQUARTERS: 'HEADQUARTERS',
+  BRANCH: 'BRANCH',
+  DELEGATION: 'DELEGATION',
+  OFFICE: 'OFFICE',
+  WAREHOUSE: 'WAREHOUSE',
+  OTHER: 'OTHER',
+};
+
+const PartnerRelationshipStatus = {
+  PROSPECTING: 'PROSPECTING',
+  DEVELOPING: 'DEVELOPING',
+  CONSOLIDATED: 'CONSOLIDATED',
+  AT_RISK: 'AT_RISK',
+  PAUSED: 'PAUSED',
+  ENDED: 'ENDED',
+};
+
+const PartnerCustomFieldType = {
+  TEXT: 'TEXT',
+  NUMBER: 'NUMBER',
+  DATE: 'DATE',
+  BOOLEAN: 'BOOLEAN',
+  SELECT: 'SELECT',
+  MULTI_SELECT: 'MULTI_SELECT',
+};
+
 const PartnerDocumentStatus = {
   DRAFT: 'DRAFT',
   VALID: 'VALID',
@@ -2920,6 +2947,9 @@ module.exports = {
   PartnerOpportunityStatus,
   PartnerDocumentType,
   PartnerDocumentStatus,
+  PartnerLocationType,
+  PartnerRelationshipStatus,
+  PartnerCustomFieldType,
   PartnerStatus,
   PartnerInteractionType,
   MilestoneStatus,

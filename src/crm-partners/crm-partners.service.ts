@@ -25,6 +25,12 @@ import {
   CreatePartnerDocumentDto,
   UpdatePartnerDocumentDto,
   CreatePartnerDocumentVersionDto,
+  CreatePartnerLocationDto,
+  UpdatePartnerLocationDto,
+  UpdatePartnerResponsibleDto,
+  UpsertPartnerConsentDto,
+  CreatePartnerCustomFieldDto,
+  UpdatePartnerCustomFieldDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
@@ -57,6 +63,7 @@ export class CrmPartnersService {
       data: {
         ...rest,
         ...(registeredAt && { registeredAt: new Date(registeredAt) }),
+        ...(rest.assignedToId && { assignedAt: new Date() }),
         ...(contacts?.length && {
           contacts: { create: this.normalizeContacts(contacts) },
         }),
@@ -161,6 +168,8 @@ export class CrmPartnersService {
           orderBy: { createdAt: 'desc' },
           include: { program: { select: { id: true, program: true } } },
         },
+        locations: { where: { deletedAt: null }, orderBy: { name: 'asc' } },
+        consent: true,
         funderLinks: {
           where: { deletedAt: null },
           orderBy: { createdAt: 'desc' },
@@ -1455,6 +1464,311 @@ export class CrmPartnersService {
       interactions,
       milestonesCompleted: milestones,
     };
+  }
+
+  // ─── LOCALIZAÇÕES (⑭) ────────────────────────────────
+
+  private async findLocation(partnerId: string, locationId: string) {
+    const location = await this.prisma.partnerLocation.findFirst({
+      where: { id: locationId, partnerId, deletedAt: null },
+    });
+    if (!location) throw new NotFoundException('Localização não encontrada');
+    return location;
+  }
+
+  private assertNotHeadquarters(type?: string) {
+    if (type === 'HEADQUARTERS') {
+      throw new BadRequestException(
+        'A sede é definida nos dados do parceiro; registe aqui apenas filiais e delegações',
+      );
+    }
+  }
+
+  /** Sede (campos de morada do parceiro) + filiais/delegações registadas. */
+  async getLocations(partnerId: string) {
+    const partner = await this.findOne(partnerId);
+    const branches = await this.prisma.read.partnerLocation.findMany({
+      where: { partnerId, deletedAt: null },
+      orderBy: [{ province: 'asc' }, { name: 'asc' }],
+    });
+    return {
+      headquarters: {
+        country: partner.country,
+        province: partner.province,
+        municipality: partner.municipality,
+        address: partner.address,
+      },
+      branches,
+      provincesCovered: [
+        ...new Set(
+          [partner.province, ...branches.map(b => b.province)].filter(
+            (p): p is NonNullable<typeof p> => !!p,
+          ),
+        ),
+      ],
+    };
+  }
+
+  async addLocation(partnerId: string, dto: CreatePartnerLocationDto, userId: number) {
+    await this.findOne(partnerId);
+    this.assertNotHeadquarters(dto.type);
+    const location = await this.prisma.partnerLocation.create({ data: { ...dto, partnerId } });
+    await this.audit.logEntity(userId, 'CREATE', 'PartnerLocation', location.id, { partnerId });
+    return location;
+  }
+
+  async updateLocation(
+    partnerId: string,
+    locationId: string,
+    dto: UpdatePartnerLocationDto,
+    userId: number,
+  ) {
+    await this.findLocation(partnerId, locationId);
+    this.assertNotHeadquarters(dto.type);
+    const updated = await this.prisma.partnerLocation.update({
+      where: { id: locationId },
+      data: dto,
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'PartnerLocation', locationId, dto);
+    return updated;
+  }
+
+  async removeLocation(partnerId: string, locationId: string, userId: number) {
+    await this.findLocation(partnerId, locationId);
+    await this.prisma.partnerLocation.update({
+      where: { id: locationId },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.logEntity(userId, 'DELETE', 'PartnerLocation', locationId, { partnerId });
+    return { message: 'Localização removida com sucesso' };
+  }
+
+  // ─── RESPONSÁVEL INTERNO (⑮) ─────────────────────────
+
+  private static readonly RESPONSIBLE_SELECT = {
+    assignedToId: true,
+    assignedTo: { select: { id: true, fullName: true, email: true } },
+    internalUnit: true,
+    internalDepartment: true,
+    internalTeam: true,
+    assignedAt: true,
+    relationshipStatus: true,
+  } as const;
+
+  async getResponsible(partnerId: string) {
+    const partner = await this.prisma.read.partner.findUnique({
+      where: { id: partnerId },
+      select: { deletedAt: true, ...CrmPartnersService.RESPONSIBLE_SELECT },
+    });
+    if (!partner || partner.deletedAt) throw new NotFoundException('Parceiro não encontrado');
+    const { deletedAt: _deletedAt, ...responsible } = partner;
+    return responsible;
+  }
+
+  async updateResponsible(partnerId: string, dto: UpdatePartnerResponsibleDto, userId: number) {
+    const current = await this.getResponsible(partnerId);
+    await this.assertUserExists(dto.assignedToId);
+    const { assignedAt, ...rest } = dto;
+    const managerChanged =
+      dto.assignedToId !== undefined && dto.assignedToId !== current.assignedToId;
+    const updated = await this.prisma.partner.update({
+      where: { id: partnerId },
+      data: {
+        ...rest,
+        ...(assignedAt
+          ? { assignedAt: new Date(assignedAt) }
+          : managerChanged && { assignedAt: new Date() }),
+      },
+      select: CrmPartnersService.RESPONSIBLE_SELECT,
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'PartnerResponsible', partnerId, {
+      previousAssignedToId: current.assignedToId,
+      ...dto,
+    });
+    return updated;
+  }
+
+  // ─── COMUNICAÇÃO E CONSENTIMENTOS (⑯) ────────────────
+
+  async getConsent(partnerId: string) {
+    await this.findOne(partnerId);
+    const consent = await this.prisma.read.partnerConsent.findUnique({ where: { partnerId } });
+    // Sem registo = nenhum consentimento concedido (opt-in explícito)
+    return (
+      consent ?? {
+        partnerId,
+        emailAllowed: false,
+        whatsappAllowed: false,
+        smsAllowed: false,
+        phoneAllowed: false,
+        institutionalComms: false,
+        eventInvites: false,
+        programComms: false,
+        contactPreferences: null,
+        consentDate: null,
+        notes: null,
+      }
+    );
+  }
+
+  async upsertConsent(partnerId: string, dto: UpsertPartnerConsentDto, userId: number) {
+    await this.findOne(partnerId);
+    const { consentDate, contactPreferences, notes, ...flags } = dto;
+    const grants = Object.values(flags).some(v => v === true);
+    const date = consentDate ? new Date(consentDate) : grants ? new Date() : undefined;
+    const data = {
+      ...flags,
+      ...(contactPreferences !== undefined && { contactPreferences }),
+      ...(notes !== undefined && { notes }),
+      ...(date && { consentDate: date }),
+      updatedById: userId,
+    };
+    const consent = await this.prisma.partnerConsent.upsert({
+      where: { partnerId },
+      create: { ...data, partnerId },
+      update: data,
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'PartnerConsent', consent.id, {
+      partnerId,
+      ...flags,
+    });
+    return consent;
+  }
+
+  // ─── CAMPOS PERSONALIZADOS (⑰) ───────────────────────
+
+  async getCustomFieldDefinitions(includeInactive = false) {
+    return this.prisma.read.partnerCustomFieldDefinition.findMany({
+      where: { deletedAt: null, ...(!includeInactive && { active: true }) },
+      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+    });
+  }
+
+  private assertOptionsMatchType(type: string, options?: string[]) {
+    const needsOptions = type === 'SELECT' || type === 'MULTI_SELECT';
+    if (needsOptions && !options?.length) {
+      throw new BadRequestException('Campos de selecção requerem pelo menos uma opção');
+    }
+    if (!needsOptions && options?.length) {
+      throw new BadRequestException('Só campos de selecção aceitam opções');
+    }
+  }
+
+  private async findCustomFieldDefinition(id: string) {
+    const current = await this.prisma.partnerCustomFieldDefinition.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!current) throw new NotFoundException('Campo personalizado não encontrado');
+    return current;
+  }
+
+  async createCustomFieldDefinition(dto: CreatePartnerCustomFieldDto, userId: number) {
+    this.assertOptionsMatchType(dto.type ?? 'TEXT', dto.options);
+    // O @unique da BD cobre também as chaves soft-deleted, por isso procuramos sem filtrar deletedAt
+    const existing = await this.prisma.partnerCustomFieldDefinition.findUnique({
+      where: { key: dto.key },
+    });
+    if (existing) throw new BadRequestException(`Já existe um campo com a chave "${dto.key}"`);
+    const definition = await this.prisma.partnerCustomFieldDefinition.create({ data: dto });
+    await this.audit.logEntity(userId, 'CREATE', 'PartnerCustomFieldDefinition', definition.id, {
+      key: dto.key,
+    });
+    return definition;
+  }
+
+  async updateCustomFieldDefinition(id: string, dto: UpdatePartnerCustomFieldDto, userId: number) {
+    const current = await this.findCustomFieldDefinition(id);
+    this.assertOptionsMatchType(current.type, dto.options ?? current.options);
+    const updated = await this.prisma.partnerCustomFieldDefinition.update({
+      where: { id },
+      data: dto,
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'PartnerCustomFieldDefinition', id, dto);
+    return updated;
+  }
+
+  async removeCustomFieldDefinition(id: string, userId: number) {
+    const current = await this.findCustomFieldDefinition(id);
+    // Os valores já guardados nos parceiros ficam intactos mas deixam de ser expostos/validados
+    await this.prisma.partnerCustomFieldDefinition.update({
+      where: { id },
+      data: { deletedAt: new Date(), active: false },
+    });
+    await this.audit.logEntity(userId, 'DELETE', 'PartnerCustomFieldDefinition', id, {
+      key: current.key,
+    });
+    return { message: 'Campo personalizado removido com sucesso' };
+  }
+
+  private coerceCustomValue(
+    def: { key: string; type: string; options: string[] },
+    value: unknown,
+  ): string | number | boolean | string[] {
+    const fail = (expected: string): never => {
+      throw new BadRequestException(`Campo "${def.key}": esperado ${expected}`);
+    };
+    switch (def.type) {
+      case 'TEXT':
+        return typeof value === 'string' ? value : fail('texto');
+      case 'NUMBER':
+        return typeof value === 'number' && Number.isFinite(value) ? value : fail('número');
+      case 'BOOLEAN':
+        return typeof value === 'boolean' ? value : fail('booleano');
+      case 'DATE':
+        return typeof value === 'string' && !Number.isNaN(Date.parse(value))
+          ? value
+          : fail('data ISO');
+      case 'SELECT':
+        return typeof value === 'string' && def.options.includes(value)
+          ? value
+          : fail(`uma de [${def.options.join(', ')}]`);
+      case 'MULTI_SELECT':
+        return Array.isArray(value) &&
+          value.every(v => typeof v === 'string' && def.options.includes(v))
+          ? (value as string[])
+          : fail(`lista com valores de [${def.options.join(', ')}]`);
+      default:
+        return fail('tipo suportado');
+    }
+  }
+
+  async getCustomFieldValues(partnerId: string) {
+    const partner = await this.findOne(partnerId);
+    const definitions = await this.getCustomFieldDefinitions();
+    const stored = (partner.customFields ?? {}) as Record<string, unknown>;
+    return {
+      fields: definitions.map(d => ({ ...d, value: stored[d.key] ?? null })),
+      missingRequired: definitions
+        .filter(d => d.required && (stored[d.key] ?? null) === null)
+        .map(d => d.key),
+    };
+  }
+
+  async setCustomFieldValues(partnerId: string, values: Record<string, unknown>, userId: number) {
+    const partner = await this.findOne(partnerId);
+    const definitions = await this.getCustomFieldDefinitions();
+    const byKey = new Map(definitions.map(d => [d.key, d]));
+    const merged = { ...((partner.customFields ?? {}) as Record<string, unknown>) };
+    for (const [key, raw] of Object.entries(values)) {
+      const def = byKey.get(key);
+      if (!def) throw new BadRequestException(`Campo personalizado desconhecido: "${key}"`);
+      if (raw === null) {
+        if (def.required) {
+          throw new BadRequestException(`Campo "${key}" é obrigatório e não pode ser removido`);
+        }
+        delete merged[key];
+      } else {
+        merged[key] = this.coerceCustomValue(def, raw);
+      }
+    }
+    await this.prisma.partner.update({
+      where: { id: partnerId },
+      data: { customFields: merged as Prisma.InputJsonObject },
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'PartnerCustomFields', partnerId, {
+      keys: Object.keys(values),
+    });
+    return this.getCustomFieldValues(partnerId);
   }
 
   // ─── HELPER ──────────────────────────────────────────

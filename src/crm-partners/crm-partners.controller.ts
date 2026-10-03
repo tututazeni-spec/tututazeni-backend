@@ -42,6 +42,13 @@ import {
   CreatePartnerDocumentDto,
   UpdatePartnerDocumentDto,
   CreatePartnerDocumentVersionDto,
+  CreatePartnerLocationDto,
+  UpdatePartnerLocationDto,
+  UpdatePartnerResponsibleDto,
+  UpsertPartnerConsentDto,
+  CreatePartnerCustomFieldDto,
+  UpdatePartnerCustomFieldDto,
+  SetPartnerCustomFieldValuesDto,
 } from './dto';
 import { Role } from '../auth/enums/role.enum';
 
@@ -592,5 +599,152 @@ export class CrmPartnersController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.service.completeMilestone(milestoneId, user.id);
+  }
+
+  // ─── LOCALIZAÇÕES ────────────────────────────────────
+
+  @Get(':id/locations')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Sede e filiais/delegações do parceiro' })
+  getLocations(@Param('id') id: string) {
+    return this.service.getLocations(id);
+  }
+
+  @Post(':id/locations')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Adicionar filial/delegação' })
+  addLocation(
+    @Param('id') id: string,
+    @Body() dto: CreatePartnerLocationDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addLocation(id, dto, user.id);
+  }
+
+  @Put(':id/locations/:locationId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar filial/delegação' })
+  updateLocation(
+    @Param('id') id: string,
+    @Param('locationId') locationId: string,
+    @Body() dto: UpdatePartnerLocationDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateLocation(id, locationId, dto, user.id);
+  }
+
+  @Delete(':id/locations/:locationId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover filial/delegação' })
+  removeLocation(
+    @Param('id') id: string,
+    @Param('locationId') locationId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeLocation(id, locationId, user.id);
+  }
+
+  // ─── RESPONSÁVEL INTERNO ─────────────────────────────
+
+  @Get(':id/responsible')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Responsável interno do parceiro' })
+  getResponsible(@Param('id') id: string) {
+    return this.service.getResponsible(id);
+  }
+
+  @Put(':id/responsible')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Atribuir/actualizar responsável interno' })
+  updateResponsible(
+    @Param('id') id: string,
+    @Body() dto: UpdatePartnerResponsibleDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateResponsible(id, dto, user.id);
+  }
+
+  // ─── COMUNICAÇÃO E CONSENTIMENTOS ────────────────────
+
+  @Get(':id/consent')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Consentimentos de comunicação do parceiro' })
+  getConsent(@Param('id') id: string) {
+    return this.service.getConsent(id);
+  }
+
+  @Put(':id/consent')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Registar/actualizar consentimentos de comunicação' })
+  upsertConsent(
+    @Param('id') id: string,
+    @Body() dto: UpsertPartnerConsentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.upsertConsent(id, dto, user.id);
+  }
+
+  // ─── CAMPOS PERSONALIZADOS ───────────────────────────
+
+  @Get('custom-fields/definitions')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar definições de campos personalizados' })
+  getCustomFieldDefinitions(
+    @Query('includeInactive', new DefaultValuePipe(false)) includeInactive: string | boolean,
+  ) {
+    return this.service.getCustomFieldDefinitions(
+      includeInactive === true || includeInactive === 'true',
+    );
+  }
+
+  @Post('custom-fields/definitions')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Criar campo personalizado (admin)' })
+  createCustomFieldDefinition(
+    @Body() dto: CreatePartnerCustomFieldDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.createCustomFieldDefinition(dto, user.id);
+  }
+
+  @Put('custom-fields/definitions/:fieldId')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Actualizar campo personalizado (admin)' })
+  updateCustomFieldDefinition(
+    @Param('fieldId') fieldId: string,
+    @Body() dto: UpdatePartnerCustomFieldDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateCustomFieldDefinition(fieldId, dto, user.id);
+  }
+
+  @Delete('custom-fields/definitions/:fieldId')
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover campo personalizado (admin)' })
+  removeCustomFieldDefinition(
+    @Param('fieldId') fieldId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeCustomFieldDefinition(fieldId, user.id);
+  }
+
+  @Get(':id/custom-fields')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Valores dos campos personalizados do parceiro' })
+  getCustomFieldValues(@Param('id') id: string) {
+    return this.service.getCustomFieldValues(id);
+  }
+
+  @Put(':id/custom-fields')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Definir valores dos campos personalizados' })
+  setCustomFieldValues(
+    @Param('id') id: string,
+    @Body() dto: SetPartnerCustomFieldValuesDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.setCustomFieldValues(id, dto.values, user.id);
   }
 }

@@ -11209,6 +11209,16 @@ model Partner {
   // ⑧ Financiamento
   isFunder Boolean @default(false)
 
+  // ⑮ Responsável interno (o gestor é assignedToId)
+  internalUnit       String?
+  internalDepartment String?
+  internalTeam       String?
+  assignedAt         DateTime?
+  relationshipStatus PartnerRelationshipStatus @default(DEVELOPING)
+
+  // ⑰ Valores dos campos personalizados, indexados por PartnerCustomFieldDefinition.key
+  customFields Json?
+
   createdById Int
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -11226,6 +11236,8 @@ model Partner {
   opportunities    PartnerOpportunity[]
   impactIndicators PartnerImpactIndicator[]
   documents        PartnerDocument[]
+  locations        PartnerLocation[]
+  consent          PartnerConsent?
 
   @@index([type])
   @@index([tier])
@@ -11518,6 +11530,92 @@ model PartnerDocument {
   @@index([partnerId])
   @@index([validUntil])
   @@index([deletedAt])
+}
+
+// ⑭ Filiais / delegações (a sede vive nos campos de morada do próprio Partner)
+model PartnerLocation {
+  id           String              @id @default(cuid())
+  partnerId    String
+  name         String
+  type         PartnerLocationType @default(DELEGATION)
+  country      String              @default("Angola")
+  province     AngolaProvince?
+  municipality String?
+  address      String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  deletedAt    DateTime?
+
+  partner Partner @relation(fields: [partnerId], references: [id])
+
+  @@index([partnerId])
+  @@index([province])
+  @@index([deletedAt])
+}
+
+// ⑯ Consentimentos de comunicação (um registo por parceiro)
+model PartnerConsent {
+  id                 String    @id @default(cuid())
+  partnerId          String    @unique
+  emailAllowed       Boolean   @default(false)
+  whatsappAllowed    Boolean   @default(false)
+  smsAllowed         Boolean   @default(false)
+  phoneAllowed       Boolean   @default(false)
+  institutionalComms Boolean   @default(false)
+  eventInvites       Boolean   @default(false)
+  programComms       Boolean   @default(false)
+  contactPreferences String?
+  consentDate        DateTime?
+  notes              String?
+  updatedById        Int?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  partner Partner @relation(fields: [partnerId], references: [id])
+}
+
+// ⑰ Definição de campos personalizados criados pelo administrador
+model PartnerCustomFieldDefinition {
+  id        String                 @id @default(cuid())
+  key       String                 @unique
+  label     String
+  type      PartnerCustomFieldType @default(TEXT)
+  options   String[]
+  required  Boolean                @default(false)
+  active    Boolean                @default(true)
+  sortOrder Int                    @default(0)
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+  deletedAt DateTime?
+
+  @@index([deletedAt])
+}
+
+enum PartnerLocationType {
+  HEADQUARTERS
+  BRANCH
+  DELEGATION
+  OFFICE
+  WAREHOUSE
+  OTHER
+}
+
+enum PartnerRelationshipStatus {
+  PROSPECTING
+  DEVELOPING
+  CONSOLIDATED
+  AT_RISK
+  PAUSED
+  ENDED
+}
+
+enum PartnerCustomFieldType {
+  TEXT
+  NUMBER
+  DATE
+  BOOLEAN
+  SELECT
+  MULTI_SELECT
 }
 
 enum PartnerOpportunityStatus {

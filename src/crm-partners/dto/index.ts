@@ -11,3 +11,7 @@ export * from './create-partner-funder-link.dto';
 export * from './create-partner-opportunity.dto';
 export * from './create-partner-impact-indicator.dto';
 export * from './create-partner-document.dto';
+export * from './create-partner-location.dto';
+export * from './update-partner-responsible.dto';
+export * from './upsert-partner-consent.dto';
+export * from './create-partner-custom-field.dto';
