@@ -50,6 +50,10 @@ const mockPrisma: any = new Proxy(
       findMany: makeFindMany([]),
       updateMany: makeFind({ count: 0 }),
     },
+    processApproval: {
+      updateMany: makeFind({ count: 0 }),
+      findMany: makeFindMany([]),
+    },
     processParticipant: {
       create: makeFind({}),
       findMany: makeFindMany([]),

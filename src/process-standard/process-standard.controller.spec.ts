@@ -8,6 +8,9 @@ import { ProcessAutomationsService } from './process-automations.service';
 import { ProcessCalendarService } from './process-calendar.service';
 import { ProcessDocumentsService } from './process-documents.service';
 import { ProcessReportsService } from './process-reports.service';
+import { ProcessAuditTrailService } from './process-audit-trail.service';
+import { ProcessSettingsService } from './process-settings.service';
+import { ProcessIntegrationsService } from './process-integrations.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -81,6 +84,9 @@ describe('ProcessStandardController', () => {
         { provide: ProcessCalendarService, useValue: {} },
         { provide: ProcessDocumentsService, useValue: {} },
         { provide: ProcessReportsService, useValue: {} },
+        { provide: ProcessAuditTrailService, useValue: {} },
+        { provide: ProcessSettingsService, useValue: {} },
+        { provide: ProcessIntegrationsService, useValue: {} },
       ],
     })
       .overrideGuard(JwtAuthGuard)

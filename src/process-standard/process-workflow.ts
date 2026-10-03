@@ -89,6 +89,15 @@ export function addHours(
     cursor.setTime(cursor.getTime() + chunk);
     remaining -= chunk;
   }
+  // Um prazo que acaba exactamente à meia-noite não pode cair num dia não útil:
+  // passa para o início do próximo dia útil.
+  if (hours > 0) {
+    const atMidnight = () =>
+      cursor.getHours() === 0 && cursor.getMinutes() === 0 && cursor.getSeconds() === 0;
+    for (let guard = 0; guard < 4000 && atMidnight() && isOff(cursor); guard++) {
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  }
   return cursor;
 }
 
