@@ -234,6 +234,7 @@ export class ProcessIntegrationsService {
           sourceModule: dto.module,
           sourceEntityType: dto.sourceEntityType,
           sourceEntityId: dto.sourceEntityId,
+          correlationId: dto.correlationId,
           notes: `Iniciado por evento "${dto.event}" do módulo ${dto.module}`,
         },
         user,

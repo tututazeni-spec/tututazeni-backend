@@ -4,6 +4,8 @@
 // situação do prazo), filtros completos e as acções de gestão (editar,
 // reatribuir, prioridade, suspender/retomar, duplicar, arquivar, histórico,
 // exportar). Nunca altera etapas já concluídas nem apaga histórico.
+import { recordAssignment } from './process-assignments';
+import { processState } from './process-states';
 import {
   BadRequestException,
   ForbiddenException,
@@ -53,6 +55,7 @@ const LIST_INCLUDE = {
     select: {
       status: true,
       stepOrder: true,
+      blockedReason: true,
       step: { select: { title: true, type: true } },
     },
   },
@@ -117,6 +120,8 @@ export class ProcessInstancesService {
       currentStep: current ? { title: current.step.title, type: current.step.type } : null,
       priority: inst.priority,
       status: inst.status,
+      // §18: vocabulário padronizado (DRAFT/ACTIVE/SUSPENDED/COMPLETED/CANCELLED/FAILED)
+      standardStatus: processState(inst),
       archived: inst.archivedAt != null,
       progress: metrics.progress,
       createdAt: inst.startedAt,
@@ -456,6 +461,14 @@ export class ProcessInstancesService {
     await this.prisma.processInstance.update({
       where: { id },
       data: { currentResponsibleId: dto.responsibleId },
+    });
+    await recordAssignment(this.prisma, {
+      instanceId: id,
+      kind: 'RESPONSIBLE',
+      assigneeId: dto.responsibleId,
+      delegatedFromId: previous,
+      assignedById: user.id,
+      reason: dto.reason,
     });
     await this.processes.writeAuditLog({
       instanceId: id,

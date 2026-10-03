@@ -4,6 +4,7 @@
 import { Logger } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { actorTypeFor } from './process-states';
 
 export type AuditSource = 'INTERFACE' | 'API' | 'AUTOMATION' | 'SYSTEM';
 
@@ -22,6 +23,8 @@ export interface ProcessAuditEntry {
   result?: 'SUCCESS' | 'FAILED';
   errorMessage?: string;
   correlationId?: string;
+  stepId?: number;
+  details?: string;
 }
 
 const str = (v: unknown, max = 500): string | undefined =>
@@ -36,8 +39,13 @@ export function inferAuditSource(action: string): AuditSource {
 
 export function resolveAuditFields(opts: ProcessAuditEntry) {
   const m = (opts.meta ?? {}) as Record<string, unknown>;
+  const source = opts.source ?? inferAuditSource(opts.action);
+  const metaStep = Number(m.stepId);
   return {
-    source: opts.source ?? inferAuditSource(opts.action),
+    source,
+    actorType: actorTypeFor(source),
+    stepId: opts.stepId ?? (Number.isInteger(metaStep) && metaStep > 0 ? metaStep : undefined),
+    details: opts.details ?? str(m.details ?? m.message, 1000),
     previousStatus: opts.previousStatus ?? str(m.previousStatus ?? m.from ?? m.fromStatus, 60),
     newStatus: opts.newStatus ?? str(m.newStatus ?? m.to ?? m.toStatus ?? m.status, 60),
     reason: opts.reason ?? str(m.reason ?? m.justification ?? m.comment ?? m.notes),
@@ -54,6 +62,17 @@ export async function writeProcessAuditLog(
 ) {
   const payload = { ...opts, ts: new Date().toISOString() };
   try {
+    // §16 regra 10: sem correlação própria, herda a da instância (definida quando
+    // o processo nasceu de um evento de outro módulo) — o percurso fica rastreável.
+    let correlationId =
+      opts.correlationId ?? str((opts.meta as Record<string, unknown>)?.correlationId, 80);
+    if (!correlationId && opts.instanceId) {
+      const inst = await prisma.processInstance.findUnique({
+        where: { id: opts.instanceId },
+        select: { correlationId: true },
+      });
+      correlationId = inst?.correlationId ?? undefined;
+    }
     await prisma.processAuditLog.create({
       data: {
         processId: opts.processId,
@@ -64,6 +83,7 @@ export async function writeProcessAuditLog(
         hash: createHash('sha256').update(JSON.stringify(payload)).digest('hex'),
         createdAt: new Date(),
         ...resolveAuditFields(opts),
+        ...(correlationId ? { correlationId } : {}),
       },
     });
   } catch (e: unknown) {

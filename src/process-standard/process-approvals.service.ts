@@ -8,6 +8,8 @@
 //
 // A decisão (aprovar) conclui a etapa de aprovação e desbloqueia as seguintes;
 // NÃO conclui a execução operacional posterior (regra 4 do §7).
+import { recordAssignment } from './process-assignments';
+import { approvalState } from './process-states';
 import {
   BadRequestException,
   ForbiddenException,
@@ -172,6 +174,9 @@ export class ProcessApprovalsService {
       sequence: a.sequence,
       mode: a.mode,
       status: a.status,
+      // §18: estado canónico; a delegação é informação à parte, não um estado.
+      standardStatus: approvalState(a).state,
+      delegated: approvalState(a).delegated,
       submittedAt: a.submittedAt,
       dueAt: a.dueAt,
       isOverdue: this.isOverdue(a),
@@ -817,6 +822,15 @@ export class ProcessApprovalsService {
         approverRole: null,
         previousApproverId: a.approverId,
       },
+    });
+    await recordAssignment(this.prisma, {
+      instanceId: a.instanceId,
+      stepId: a.stepId,
+      kind: 'DELEGATE',
+      assigneeId: dto.delegateToId,
+      delegatedFromId: a.approverId,
+      assignedById: user.id,
+      reason: justification,
     });
     await this.audit(a, user.id, 'APPROVAL_DELEGATED', {
       from: a.approverId,

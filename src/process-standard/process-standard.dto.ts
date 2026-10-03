@@ -495,6 +495,12 @@ export class StartInstanceDto {
   @IsString()
   @MaxLength(60)
   sourceModule?: string;
+
+  @ApiPropertyOptional({ description: 'Identificador de correlação da operação de origem' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  correlationId?: string;
 }
 
 // ─── Complete Step ──────────────────────────────────────────────────────────

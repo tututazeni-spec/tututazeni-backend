@@ -17,6 +17,8 @@ import {
   simulateScenario,
   validateWorkflow,
 } from './process-workflow';
+import { recordAssignment } from './process-assignments';
+import { isOverdue, processState, taskState } from './process-states';
 import { syncStepActivation } from './process-activation';
 import { loadSetting } from './process-settings.loader';
 import {
@@ -724,6 +726,12 @@ export class ProcessStandardService {
     }
 
     const targetUserId = dto.targetUserId ?? initiatedById;
+    // §17: âmbito organizacional do processo — departamento/unidade do modelo ou,
+    // na falta, do colaborador alvo.
+    const targetOrg = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { departmentId: true, unitId: true },
+    });
     const sourceEntityType = dto.sourceEntityType?.trim() || null;
     const sourceEntityId = dto.sourceEntityId?.trim() || null;
 
@@ -771,6 +779,10 @@ export class ProcessStandardService {
       .sort((a, b) => a.order - b.order)
       .find(s => ready(s.order) && assignments.get(s.id));
 
+    const firstReady = [...process.steps]
+      .sort((a, b) => a.order - b.order)
+      .find(s => ready(s.order));
+
     let instance: Awaited<ReturnType<typeof this.createInstanceRow>> | null = null;
     for (let attempt = 0; attempt < 5 && !instance; attempt++) {
       const code = await this.nextInstanceCode(now.getFullYear(), numbering);
@@ -790,6 +802,9 @@ export class ProcessStandardService {
           ready,
           calendar,
           currentResponsibleId: firstActive ? (assignments.get(firstActive.id) ?? null) : null,
+          currentStepId: firstReady?.id ?? null,
+          departmentId: process.departmentId ?? targetOrg?.departmentId ?? null,
+          unitId: targetOrg?.unitId ?? null,
         });
       } catch (e: unknown) {
         const isCodeClash =
@@ -824,6 +839,15 @@ export class ProcessStandardService {
           `task.assigned:${instance.id}:${sp.stepId}:${sp.assignedAt?.getTime() ?? 0}`,
         );
       }
+    }
+    if (instance.currentResponsibleId) {
+      await recordAssignment(this.prisma, {
+        instanceId: instance.id,
+        kind: 'RESPONSIBLE',
+        assigneeId: instance.currentResponsibleId,
+        assignedById: initiatedById,
+        reason: 'Atribuição inicial',
+      });
     }
     await this.advance(instance.id);
     instance = await this.refreshInstance(instance.id);
@@ -878,6 +902,9 @@ export class ProcessStandardService {
     ready: (order: number) => boolean;
     calendar: WorkCalendarConfig;
     currentResponsibleId: number | null;
+    currentStepId: number | null;
+    departmentId: number | null;
+    unitId: number | null;
   }) {
     const { process, now } = a;
     return this.prisma.processInstance.create({
@@ -896,6 +923,10 @@ export class ProcessStandardService {
         sourceEntityType: a.sourceEntityType,
         sourceEntityId: a.sourceEntityId,
         currentResponsibleId: a.currentResponsibleId,
+        currentStepId: a.currentStepId,
+        departmentId: a.departmentId,
+        unitId: a.unitId,
+        correlationId: a.dto.correlationId?.trim() || null,
         startedAt: now,
         slaDeadline: a.dueAt,
         stepProgress: {
@@ -998,7 +1029,16 @@ export class ProcessStandardService {
     if (!isParticipant && !isPrivileged(user, PROCESS_PRIVILEGED_ROLES)) {
       throw new NotFoundException('Instância não encontrada');
     }
-    return inst;
+    const now = new Date();
+    return {
+      ...inst,
+      standardStatus: processState(inst),
+      stepProgress: inst.stepProgress.map(sp => ({
+        ...sp,
+        standardStatus: taskState(sp, now),
+        overdue: isOverdue(sp, now),
+      })),
+    };
   }
 
   async completeStep(

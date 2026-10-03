@@ -1304,6 +1304,7 @@ model Department {
   processOwnerDepartment   Department?             @relation("DeptProcessOwner", fields: [processOwnerDepartmentId], references: [id])
   processOwnerFor          Department[]            @relation("DeptProcessOwner")
   users                    User[]                  @relation("DeptMembers")
+  processInstances         ProcessInstance[]       @relation("ProcessInstanceDepartment")
   positions                Position[]
   headHistory              DepartmentHeadHistory[]
   transfersIn              DepartmentTransferLog[] @relation("TransferTo")
@@ -1383,6 +1384,7 @@ model Unit {
   email                String?
   users                User[]
   departments          Department[]
+  processInstances     ProcessInstance[]            @relation("ProcessInstanceUnit")
   operationalMetrics   OperationalMetric[]
   leadershipTargetings LeadershipProgramTargeting[]
   internalVacancies    InternalVacancy[]
@@ -5814,7 +5816,16 @@ model ProcessInstance {
   currentResponsibleId Int?
   suspendedAt          DateTime?
   archivedAt           DateTime?
+  // docs/Modulo_Processes.md §17 — âmbito organizacional, etapa actual e
+  // correlação (§16 regra 10: rastrear a operação entre módulos).
+  departmentId         Int?
+  unitId               Int?
+  currentStepId        Int?
+  correlationId        String?
   updatedAt            DateTime             @default(now()) @updatedAt
+  department           Department?          @relation("ProcessInstanceDepartment", fields: [departmentId], references: [id])
+  unit                 Unit?                @relation("ProcessInstanceUnit", fields: [unitId], references: [id])
+  assignments          ProcessAssignment[]
   process              ProcessStandard      @relation(fields: [processId], references: [id])
   initiatedBy          User                 @relation("InstanceInitiator", fields: [initiatedById], references: [id])
   targetUser           User                 @relation("InstanceTarget", fields: [targetUserId], references: [id])
@@ -5829,6 +5840,8 @@ model ProcessInstance {
   @@index([sourceModule])
   @@index([priority])
   @@index([currentResponsibleId])
+  @@index([departmentId])
+  @@index([correlationId])
 }
 
 model StepProgress {
@@ -6048,10 +6061,17 @@ model ProcessAuditLog {
   result         String?
   errorMessage   String?
   correlationId  String?
+  // docs/Modulo_Processes.md §17 — etapa (ProcessStep.id; com `instanceId`
+  // identifica a instância da etapa), tipo de agente e texto do evento.
+  stepId         Int?
+  // USER | SYSTEM | AUTOMATION | INTEGRATION
+  actorType      String?
+  details        String?
   user           User     @relation(fields: [userId], references: [id])
 
   @@index([processId])
   @@index([instanceId])
+  @@index([correlationId])
   @@index([action])
   @@index([createdAt])
   @@index([userId])
@@ -6079,6 +6099,32 @@ model ProcessSettingVersion {
   changedBy   User     @relation(fields: [changedById], references: [id])
 
   @@unique([key, version])
+}
+
+// docs/Modulo_Processes.md §17 — histórico de responsáveis, equipas e delegações.
+// A atribuição vigente continua em StepProgress/ProcessApproval/ProcessInstance;
+// aqui fica o registo de quem passou a ser responsável, por que via e até quando.
+model ProcessAssignment {
+  id               Int             @id @default(autoincrement())
+  instanceId       Int
+  // ProcessStep.id (opcional — atribuições ao processo inteiro não têm etapa)
+  stepId           Int?
+  // RESPONSIBLE | APPROVER | DELEGATE | TEAM
+  kind             String
+  assigneeId       Int?
+  teamDepartmentId Int?
+  // Quem delegou / reatribuiu
+  delegatedFromId  Int?
+  assignedById     Int
+  reason           String?
+  startsAt         DateTime        @default(now())
+  // Preenchido quando a atribuição é substituída
+  endsAt           DateTime?
+  active           Boolean         @default(true)
+  instance         ProcessInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([instanceId, stepId])
+  @@index([assigneeId, active])
 }
 
 // docs/Modulo_Processes.md §15/§16 — eventos recebidos de outros módulos / sistemas

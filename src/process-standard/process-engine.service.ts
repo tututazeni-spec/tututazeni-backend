@@ -156,6 +156,7 @@ export class ProcessEngineService {
       },
       data: { status: 'CANCELLED' },
     });
+    await this.syncCurrentStep(instanceId);
     // Eventos de atribuição das etapas que ficaram activas.
     if (total.activatedStepIds.length > 0) {
       const inst = await this.loadInstance(instanceId);
@@ -172,6 +173,19 @@ export class ProcessEngineService {
       }
     }
     return total;
+  }
+
+  /** §17 `currentStepId`: primeira etapa por concluir (por ordem); null quando não há. */
+  async syncCurrentStep(instanceId: number) {
+    const current = await this.prisma.stepProgress.findFirst({
+      where: { instanceId, status: { in: ['PENDING', 'IN_PROGRESS', 'BLOCKED', 'ESCALATED'] } },
+      orderBy: { stepOrder: 'asc' },
+      select: { stepId: true },
+    });
+    await this.prisma.processInstance.updateMany({
+      where: { id: instanceId, NOT: { currentStepId: current?.stepId ?? null } },
+      data: { currentStepId: current?.stepId ?? null },
+    });
   }
 
   private contextFor(inst: EngineInstance, progress: EngineProgress[]): ConditionContext {
