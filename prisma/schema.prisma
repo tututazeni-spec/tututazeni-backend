@@ -994,6 +994,7 @@ model User {
   createdPartners           Partner[]                 @relation("PartnerCreator")
   assignedPartners          Partner[]                 @relation("PartnerOwner")
   partnerProgramsOwned      PartnerProgram[]          @relation("PartnerProgramResponsible")
+  funderProgramsOwned       FunderProgram[]           @relation("FunderProgramResponsible")
   partnerAgreementsOwned    PartnerAgreement[]        @relation("PartnerAgreementResponsible")
   partnerAgreementUploads   PartnerAgreementVersion[] @relation("PartnerAgreementVersionUploader")
   partnerOpportunitiesOwned PartnerOpportunity[]      @relation("PartnerOpportunityOwner")
@@ -11857,9 +11858,37 @@ model Funder {
   fundingCountries String[]
   thematicAreas    FunderThematicArea[]
 
+  // ④ Perfil de financiamento (currency já existe acima)
+  fundingTypes           FunderFundingType[]
+  typicalMinAmount       Float?
+  typicalMaxAmount       Float?
+  typicalDurationMonths  Int?
+  fundsProjects          Boolean             @default(false)
+  fundsPrograms          Boolean             @default(false)
+  fundsOrganizations     Boolean             @default(false)
+  fundsIndividuals       Boolean             @default(false)
+  requiresCofinancing    Boolean             @default(false)
+  maxFundingPercentage   Float?
+  counterpartRequirement String?
+
+  // ⑤ Áreas e critérios de elegibilidade
+  eligibleTargetGroups      FunderTargetGroup[]
+  eligibleLocations         String[]
+  eligibleMinAge            Int?
+  eligibleMaxAge            Int?
+  eligibleMinProjectSize    Float?
+  eligibleMaxProjectSize    Float?
+  eligibleSectors           String[]
+  eligibleOrganizationTypes String[]
+  eligibleMinDurationMonths Int?
+  eligibleMaxDurationMonths Int?
+  cofinancingCriteria       String?
+  otherEligibilityCriteria  String?
+
   createdBy    User                @relation("FunderCreator", fields: [createdById], references: [id])
   assignedTo   User?               @relation("FunderOwner", fields: [assignedToId], references: [id])
   contacts     FunderContact[]
+  programs     FunderProgram[]
   grants       FundingGrant[]
   interactions FunderInteraction[]
   reports      FunderReport[]
@@ -11894,6 +11923,32 @@ model FunderContact {
 
   @@index([funderId])
   @@index([isPrimary])
+  @@index([deletedAt])
+}
+
+// ⑥ Programas e projectos financiados
+model FunderProgram {
+  id                    String               @id @default(cuid())
+  funderId              String
+  program               String
+  project               String?
+  thematicArea          FunderThematicArea?
+  expectedBeneficiaries Int?
+  reachedBeneficiaries  Int                  @default(0)
+  startDate             DateTime?
+  endDate               DateTime?
+  status                PartnerProgramStatus @default(PLANNED)
+  responsibleId         Int?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  deletedAt             DateTime?
+
+  funder      Funder @relation(fields: [funderId], references: [id])
+  responsible User?  @relation("FunderProgramResponsible", fields: [responsibleId], references: [id])
+
+  @@index([funderId])
+  @@index([program])
+  @@index([status])
   @@index([deletedAt])
 }
 
@@ -12046,6 +12101,33 @@ enum FunderContactRole {
   LEGAL
   COMMUNICATION
   MONITORING
+  OTHER
+}
+
+enum FunderFundingType {
+  GRANT
+  DONATION
+  LOAN
+  INVESTMENT
+  SCHOLARSHIP
+  INSTITUTIONAL_FUNDING
+  PROJECT_FUNDING
+  RESULTS_BASED
+  CO_FINANCING
+  OTHER
+}
+
+enum FunderTargetGroup {
+  YOUTH
+  WOMEN
+  STUDENTS
+  WORKERS
+  ENTREPRENEURS
+  FARMERS
+  COMMUNITIES
+  COMPANIES
+  INSTITUTIONS
+  SOCIAL_ORGANIZATIONS
   OTHER
 }
 

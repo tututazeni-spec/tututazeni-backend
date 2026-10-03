@@ -5,6 +5,8 @@ import {
   CreateFunderDto,
   CreateFunderContactDto,
   UpdateFunderContactDto,
+  CreateFunderProgramDto,
+  UpdateFunderProgramDto,
   UpdateFunderDto,
   FilterFunderDto,
   CreateGrantDto,
@@ -55,9 +57,10 @@ export class CrmFundersService {
   // ─── CRUD FINANCIADORES ──────────────────────────────
 
   async create(dto: CreateFunderDto, userId: number) {
-    const code = await this.generateCode('FIN', 'funder');
     const { relationshipStart, nextReportDue, registeredAt, contacts, ...rest } = dto;
     this.assertSinglePrimary(contacts);
+    this.assertRanges(dto);
+    const code = await this.generateCode('FIN', 'funder');
     const funder = await this.prisma.funder.create({
       data: {
         ...rest,
@@ -94,6 +97,7 @@ export class CrmFundersService {
       assignedToId,
       sector,
       thematicArea,
+      fundingType,
       page = 1,
       limit = 20,
     } = filters;
@@ -105,6 +109,7 @@ export class CrmFundersService {
       ...(assignedToId && { assignedToId }),
       ...(sector && { sector: { contains: sector, mode: 'insensitive' } }),
       ...(thematicArea && { thematicAreas: { has: thematicArea } }),
+      ...(fundingType && { fundingTypes: { has: fundingType } }),
       ...(search && {
         OR: [
           { name: { contains: search, mode: 'insensitive' } },
@@ -144,6 +149,11 @@ export class CrmFundersService {
           where: { deletedAt: null },
           orderBy: [{ isPrimary: 'desc' }, { firstName: 'asc' }],
         },
+        programs: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+          include: { responsible: { select: { fullName: true } } },
+        },
         grants: {
           where: { deletedAt: null },
           orderBy: { createdAt: 'desc' },
@@ -169,7 +179,8 @@ export class CrmFundersService {
   }
 
   async update(id: string, dto: UpdateFunderDto, userId: number) {
-    await this.findOne(id);
+    const current = await this.findOne(id);
+    this.assertRanges({ ...current, ...dto });
     const { relationshipStart, nextReportDue, registeredAt, ...rest } = dto;
     const updated = await this.prisma.funder.update({
       where: { id },
@@ -289,6 +300,116 @@ export class CrmFundersService {
     });
     await this.audit.logEntity(userId, 'DELETE', 'FunderContact', contactId, { funderId });
     return { message: 'Contacto removido com sucesso' };
+  }
+
+  // ─── PERFIL DE FINANCIAMENTO (④) E ELEGIBILIDADE (⑤) ──
+
+  /** Coerência dos intervalos mínimo/máximo dos blocos ④ e ⑤. */
+  private assertRanges(f: {
+    typicalMinAmount?: number | null;
+    typicalMaxAmount?: number | null;
+    eligibleMinAge?: number | null;
+    eligibleMaxAge?: number | null;
+    eligibleMinProjectSize?: number | null;
+    eligibleMaxProjectSize?: number | null;
+    eligibleMinDurationMonths?: number | null;
+    eligibleMaxDurationMonths?: number | null;
+  }) {
+    const pairs: [number | null | undefined, number | null | undefined, string][] = [
+      [f.typicalMinAmount, f.typicalMaxAmount, 'valor habitual'],
+      [f.eligibleMinAge, f.eligibleMaxAge, 'idade'],
+      [f.eligibleMinProjectSize, f.eligibleMaxProjectSize, 'dimensão do projecto'],
+      [f.eligibleMinDurationMonths, f.eligibleMaxDurationMonths, 'prazo'],
+    ];
+    for (const [min, max, label] of pairs) {
+      if (min != null && max != null && max < min) {
+        throw new BadRequestException(`O máximo de ${label} não pode ser inferior ao mínimo`);
+      }
+    }
+  }
+
+  // ─── PROGRAMAS E PROJECTOS FINANCIADOS (⑥) ───────────
+
+  private assertDateRange(start?: string | Date | null, end?: string | Date | null) {
+    if (start && end && new Date(end) < new Date(start)) {
+      throw new BadRequestException('A data de término não pode ser anterior à data de início');
+    }
+  }
+
+  private async assertUserExists(id?: number) {
+    if (id === undefined || id === null) return;
+    const user = await this.prisma.user.findUnique({ where: { id }, select: { id: true } });
+    if (!user) throw new BadRequestException('Responsável interno não encontrado');
+  }
+
+  async getPrograms(funderId: string) {
+    await this.findOne(funderId);
+    return this.prisma.read.funderProgram.findMany({
+      where: { funderId, deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      include: { responsible: { select: { fullName: true } } },
+    });
+  }
+
+  private async findProgram(funderId: string, programId: string) {
+    const program = await this.prisma.funderProgram.findFirst({
+      where: { id: programId, funderId, deletedAt: null },
+    });
+    if (!program) throw new NotFoundException('Programa do financiador não encontrado');
+    return program;
+  }
+
+  async addProgram(funderId: string, dto: CreateFunderProgramDto, userId: number) {
+    await this.findOne(funderId);
+    this.assertDateRange(dto.startDate, dto.endDate);
+    await this.assertUserExists(dto.responsibleId);
+    const { startDate, endDate, ...rest } = dto;
+    const program = await this.prisma.funderProgram.create({
+      data: {
+        ...rest,
+        ...(startDate && { startDate: new Date(startDate) }),
+        ...(endDate && { endDate: new Date(endDate) }),
+        funderId,
+      },
+      include: { responsible: { select: { fullName: true } } },
+    });
+    await this.audit.logEntity(userId, 'CREATE', 'FunderProgram', program.id, {
+      funderId,
+      program: dto.program,
+    });
+    return program;
+  }
+
+  async updateProgram(
+    funderId: string,
+    programId: string,
+    dto: UpdateFunderProgramDto,
+    userId: number,
+  ) {
+    const current = await this.findProgram(funderId, programId);
+    this.assertDateRange(dto.startDate ?? current.startDate, dto.endDate ?? current.endDate);
+    await this.assertUserExists(dto.responsibleId);
+    const { startDate, endDate, ...rest } = dto;
+    const updated = await this.prisma.funderProgram.update({
+      where: { id: programId },
+      data: {
+        ...rest,
+        ...(startDate && { startDate: new Date(startDate) }),
+        ...(endDate && { endDate: new Date(endDate) }),
+      },
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'FunderProgram', programId, dto);
+    return updated;
+  }
+
+  async removeProgram(funderId: string, programId: string, userId: number) {
+    await this.findProgram(funderId, programId);
+    await this.prisma.funderProgram.update({
+      where: { id: programId },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.logEntity(userId, 'DELETE', 'FunderProgram', programId, { funderId });
+    return { message: 'Programa removido com sucesso' };
   }
 
   // ─── GRANTS (FINANCIAMENTOS) ─────────────────────────

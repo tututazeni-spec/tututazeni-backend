@@ -1763,6 +1763,33 @@ const FunderThematicArea = {
   OTHER: 'OTHER',
 };
 
+const FunderFundingType = {
+  GRANT: 'GRANT',
+  DONATION: 'DONATION',
+  LOAN: 'LOAN',
+  INVESTMENT: 'INVESTMENT',
+  SCHOLARSHIP: 'SCHOLARSHIP',
+  INSTITUTIONAL_FUNDING: 'INSTITUTIONAL_FUNDING',
+  PROJECT_FUNDING: 'PROJECT_FUNDING',
+  RESULTS_BASED: 'RESULTS_BASED',
+  CO_FINANCING: 'CO_FINANCING',
+  OTHER: 'OTHER',
+};
+
+const FunderTargetGroup = {
+  YOUTH: 'YOUTH',
+  WOMEN: 'WOMEN',
+  STUDENTS: 'STUDENTS',
+  WORKERS: 'WORKERS',
+  ENTREPRENEURS: 'ENTREPRENEURS',
+  FARMERS: 'FARMERS',
+  COMMUNITIES: 'COMMUNITIES',
+  COMPANIES: 'COMPANIES',
+  INSTITUTIONS: 'INSTITUTIONS',
+  SOCIAL_ORGANIZATIONS: 'SOCIAL_ORGANIZATIONS',
+  OTHER: 'OTHER',
+};
+
 const GrantStatus = {
   ACTIVE: 'ACTIVE',
   COMPLETED: 'COMPLETED',
@@ -3000,6 +3027,8 @@ module.exports = {
   FunderStatus,
   FunderContactRole,
   FunderThematicArea,
+  FunderFundingType,
+  FunderTargetGroup,
   GrantStatus,
   FunderInteractionType,
   ReportStatus,

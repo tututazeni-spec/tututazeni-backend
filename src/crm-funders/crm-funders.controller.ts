@@ -20,6 +20,8 @@ import {
   CreateFunderDto,
   CreateFunderContactDto,
   UpdateFunderContactDto,
+  CreateFunderProgramDto,
+  UpdateFunderProgramDto,
   UpdateFunderDto,
   FilterFunderDto,
   CreateGrantDto,
@@ -136,6 +138,50 @@ export class CrmFundersController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.service.removeContact(id, contactId, user.id);
+  }
+
+  // ─── PROGRAMAS E PROJECTOS FINANCIADOS ───────────────
+
+  @Get(':id/programs')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar programas e projectos financiados' })
+  getPrograms(@Param('id') id: string) {
+    return this.service.getPrograms(id);
+  }
+
+  @Post(':id/programs')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Associar financiador a programa/projecto' })
+  addProgram(
+    @Param('id') id: string,
+    @Body() dto: CreateFunderProgramDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addProgram(id, dto, user.id);
+  }
+
+  @Put(':id/programs/:programId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar programa/projecto financiado' })
+  updateProgram(
+    @Param('id') id: string,
+    @Param('programId') programId: string,
+    @Body() dto: UpdateFunderProgramDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateProgram(id, programId, dto, user.id);
+  }
+
+  @Delete(':id/programs/:programId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover programa/projecto financiado' })
+  removeProgram(
+    @Param('id') id: string,
+    @Param('programId') programId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeProgram(id, programId, user.id);
   }
 
   // ─── GRANTS ──────────────────────────────────────────
