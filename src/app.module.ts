@@ -38,6 +38,7 @@ import { ExecutiveReportsModule } from './executive-reports/executive-reports.mo
 import { NotificationsModule } from './notifications/notifications.module';
 import { AuditModule } from './audit/audit.module';
 import { AiTutorModule } from './ai-tutor/ai-tutor.module';
+import { AvatarTrainingModule } from './avatar-training/avatar-training.module';
 import { EventsModule } from './events/events.module';
 // UsersModule único junta UsersController (/users), EmployeesController
 // (/employees) e RolesPermissionsController (/roles-permissions) — ex-
@@ -166,6 +167,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     NotificationsModule,
     AuditModule,
     AiTutorModule,
+    AvatarTrainingModule,
     EventsModule,
     AttendanceModule,
     LeaveManagementModule,

@@ -28,6 +28,8 @@ export enum TriggerType {
   COURSE_COMPLETED = 'course.completed',
   COURSE_NOT_COMPLETED = 'course.not_completed',
   COURSE_ENROLLED = 'course.enrolled',
+  AVATAR_SESSION_COMPLETED = 'avatar_training.session_completed',
+  AVATAR_SESSION_FAILED = 'avatar_training.session_failed',
   PDI_CREATED = 'pdi.created',
   PDI_APPROVED = 'pdi.approved',
   PDI_AT_RISK = 'pdi.at_risk',
@@ -41,6 +43,19 @@ export enum TriggerType {
   DEADLINE_REACHED = 'deadline.reached',
   COMPETENCY_BELOW_EXPECTED = 'competency.below_expected',
   OBJECTIVE_OVERDUE = 'objective.overdue',
+  // Processos (docs/Modulo_Processes.md §9) — emitidos pelo motor de processos
+  PROCESS_CREATED = 'process.created',
+  PROCESS_COMPLETED = 'process.completed',
+  PROCESS_CANCELLED = 'process.cancelled',
+  PROCESS_OVERDUE = 'process.overdue',
+  TASK_ASSIGNED = 'task.assigned',
+  TASK_COMPLETED = 'task.completed',
+  TASK_NEAR_DEADLINE = 'task.near_deadline',
+  TASK_OVERDUE = 'task.overdue',
+  APPROVAL_REQUESTED = 'approval.requested',
+  APPROVAL_DECIDED = 'approval.decided',
+  PROCESS_INTEGRATION_REQUESTED = 'process.integration_requested',
+  PROCESS_INTEGRATION_FAILED = 'process.integration_failed',
   // Scheduled
   CRON_DAILY = 'cron.daily',
   CRON_WEEKLY = 'cron.weekly',
@@ -79,6 +94,12 @@ export enum ActionType {
   LOG = 'log',
   WAIT = 'wait',
   OTHER = 'other',
+  // Processos (docs/Modulo_Processes.md §9) — registadas pelo módulo de processos
+  PROCESS_START = 'process_start',
+  PROCESS_ASSIGN_RESPONSIBLE = 'process_assign_responsible',
+  PROCESS_SET_PRIORITY = 'process_set_priority',
+  PROCESS_ESCALATE_TASK = 'process_escalate_task',
+  PROCESS_RETRY_STEP = 'process_retry_step',
   // Legacy
   SEND_BIRTHDAY_NOTIFICATION = 'SEND_BIRTHDAY_NOTIFICATION',
   NOTIFY_MANAGER = 'NOTIFY_MANAGER',
@@ -329,6 +350,45 @@ export class CreateRuleDto {
   @IsString()
   @MaxLength(2000)
   notes?: string;
+
+  // ── Módulo de origem, vigência e tratamento de erros (§9 Processos) ──
+  @ApiPropertyOptional({ description: 'Código da regra (único) — gerado se omitido nos Processos' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  code?: string;
+
+  @ApiPropertyOptional({ description: 'Módulo de origem — ex: PROCESSES' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  module?: string;
+
+  @ApiPropertyOptional({ description: 'A regra só dispara a partir desta data' })
+  @IsOptional()
+  @IsDateString()
+  activeFrom?: string;
+
+  @ApiPropertyOptional({ description: 'A regra expira nesta data' })
+  @IsOptional()
+  @IsDateString()
+  activeUntil?: string;
+
+  @ApiPropertyOptional({ enum: ['NONE', 'FIXED', 'EXPONENTIAL'] })
+  @IsOptional()
+  @IsEnum(['NONE', 'FIXED', 'EXPONENTIAL'])
+  retryPolicy?: 'NONE' | 'FIXED' | 'EXPONENTIAL';
+
+  @ApiPropertyOptional({ description: 'Intervalo base entre tentativas, em minutos' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  retryDelayMinutes?: number;
+
+  @ApiPropertyOptional({ enum: ['LOG', 'NOTIFY_OWNER', 'DISABLE_RULE'] })
+  @IsOptional()
+  @IsEnum(['LOG', 'NOTIFY_OWNER', 'DISABLE_RULE'])
+  errorHandling?: 'LOG' | 'NOTIFY_OWNER' | 'DISABLE_RULE';
 }
 
 export class UpdateRuleDto {

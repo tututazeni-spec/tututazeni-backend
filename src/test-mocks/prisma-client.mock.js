@@ -1927,6 +1927,14 @@ const StepType = {
   DECISION: 'DECISION',
   GATEWAY: 'GATEWAY',
   REVIEW: 'REVIEW',
+  FORM: 'FORM',
+  PARALLEL: 'PARALLEL',
+  WAIT_EVENT: 'WAIT_EVENT',
+  TIMER: 'TIMER',
+  INTEGRATION: 'INTEGRATION',
+  AUTO_ACTION: 'AUTO_ACTION',
+  NOTIFICATION: 'NOTIFICATION',
+  DOCUMENT: 'DOCUMENT',
 };
 
 const InstanceStatus = {
@@ -1939,11 +1947,16 @@ const InstanceStatus = {
 const StepProgressStatus = {
   WAITING: 'WAITING',
   PENDING: 'PENDING',
+  IN_PROGRESS: 'IN_PROGRESS',
+  BLOCKED: 'BLOCKED',
   COMPLETED: 'COMPLETED',
   REJECTED: 'REJECTED',
   ESCALATED: 'ESCALATED',
   SKIPPED: 'SKIPPED',
+  CANCELLED: 'CANCELLED',
 };
+
+const ProcessPriority = { LOW: 'LOW', NORMAL: 'NORMAL', HIGH: 'HIGH', URGENT: 'URGENT' };
 
 const NotificationPriority = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', CRITICAL: 'CRITICAL' };
 
@@ -2408,6 +2421,78 @@ const BenchmarkType = {
   EXTERNO: 'EXTERNO',
 };
 
+const AvatarTrainingAvatarType = {
+  IMAGE: 'IMAGE',
+  AVATAR_2D: 'AVATAR_2D',
+  AVATAR_3D: 'AVATAR_3D',
+  VIDEO: 'VIDEO',
+};
+
+const AvatarTrainingAvatarStatus = {
+  ACTIVE: 'ACTIVE',
+  TESTING: 'TESTING',
+  INACTIVE: 'INACTIVE',
+  ARCHIVED: 'ARCHIVED',
+};
+
+const AvatarTrainingStatus = {
+  DRAFT: 'DRAFT',
+  IN_REVIEW: 'IN_REVIEW',
+  PUBLISHED: 'PUBLISHED',
+  ARCHIVED: 'ARCHIVED',
+};
+
+const AvatarTrainingExperienceType = {
+  GUIDED_LESSON: 'GUIDED_LESSON',
+  Q_AND_A: 'Q_AND_A',
+  ROLE_PLAY: 'ROLE_PLAY',
+  PROCEDURE_DEMO: 'PROCEDURE_DEMO',
+  PRACTICAL_ASSESSMENT: 'PRACTICAL_ASSESSMENT',
+  PERSONALIZED_REVIEW: 'PERSONALIZED_REVIEW',
+};
+
+const AvatarTrainingAssignmentStatus = {
+  ASSIGNED: 'ASSIGNED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  OVERDUE: 'OVERDUE',
+  CANCELLED: 'CANCELLED',
+};
+
+const AvatarTrainingAttemptStatus = {
+  IN_PROGRESS: 'IN_PROGRESS',
+  PAUSED: 'PAUSED',
+  SUBMITTED: 'SUBMITTED',
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+  ABANDONED: 'ABANDONED',
+};
+
+const AvatarTrainingInteractionType = {
+  AVATAR_MESSAGE: 'AVATAR_MESSAGE',
+  USER_MESSAGE: 'USER_MESSAGE',
+  USER_ANSWER: 'USER_ANSWER',
+  STEP_ADVANCE: 'STEP_ADVANCE',
+  FEEDBACK: 'FEEDBACK',
+  PAUSE: 'PAUSE',
+  RESUME: 'RESUME',
+  HELP_REQUEST: 'HELP_REQUEST',
+  SYSTEM: 'SYSTEM',
+};
+
+const AvatarTrainingSourceType = {
+  COURSE: 'COURSE',
+  LESSON: 'LESSON',
+  DOCUMENT: 'DOCUMENT',
+  LIBRARY_ITEM: 'LIBRARY_ITEM',
+};
+
+const AvatarTrainingProviderService = {
+  TTS: 'TTS',
+  STT: 'STT',
+  VIDEO: 'VIDEO',
+};
+
 module.exports = {
   PrismaClient,
   Prisma,
@@ -2688,6 +2773,7 @@ module.exports = {
   StepType,
   InstanceStatus,
   StepProgressStatus,
+  ProcessPriority,
   NotificationPriority,
   NotificationCategory,
   DigestFrequency,
@@ -2740,4 +2826,13 @@ module.exports = {
   CohortStatus,
   CohortParticipantStatus,
   CourseCohortStatus,
+  AvatarTrainingAvatarType,
+  AvatarTrainingAvatarStatus,
+  AvatarTrainingStatus,
+  AvatarTrainingExperienceType,
+  AvatarTrainingAssignmentStatus,
+  AvatarTrainingAttemptStatus,
+  AvatarTrainingInteractionType,
+  AvatarTrainingSourceType,
+  AvatarTrainingProviderService,
 };
