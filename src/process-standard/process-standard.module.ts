@@ -12,6 +12,9 @@ import { ProcessSchedulerService } from './process-scheduler.service';
 import { ProcessCalendarService } from './process-calendar.service';
 import { ProcessDocumentsService } from './process-documents.service';
 import { ProcessReportsService } from './process-reports.service';
+import { ProcessAuditTrailService } from './process-audit-trail.service';
+import { ProcessSettingsService } from './process-settings.service';
+import { ProcessIntegrationsService } from './process-integrations.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AutomationModule } from '../automation/automation.module';
 
@@ -32,6 +35,9 @@ import { AutomationModule } from '../automation/automation.module';
     ProcessCalendarService,
     ProcessDocumentsService,
     ProcessReportsService,
+    ProcessAuditTrailService,
+    ProcessSettingsService,
+    ProcessIntegrationsService,
   ],
   exports: [ProcessStandardService],
 })

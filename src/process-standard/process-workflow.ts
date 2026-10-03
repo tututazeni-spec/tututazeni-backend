@@ -52,14 +52,33 @@ export const isAutomaticType = (type: string | null | undefined) =>
   (AUTOMATIC_STEP_TYPES as readonly string[]).includes(type ?? '');
 export const isApprovalType = (type: string | null | undefined) => type === 'REVIEW';
 
-/** Soma horas a uma data; em modo BUSINESS_DAYS salta sábados e domingos. */
-export function addHours(from: Date, hours: number, mode: string | null | undefined): Date {
+/** Dias úteis e feriados (configuração §14); por omissão, segunda a sexta sem feriados. */
+export interface BusinessCalendar {
+  workDays: number[];
+  holidays: Array<{ date: string }>;
+}
+
+/**
+ * Soma horas a uma data; em modo BUSINESS_DAYS salta os dias não úteis
+ * (por omissão sábados e domingos; com `calendar`, também feriados).
+ */
+export function addHours(
+  from: Date,
+  hours: number,
+  mode: string | null | undefined,
+  calendar?: BusinessCalendar,
+): Date {
   if (mode !== 'BUSINESS_DAYS') return new Date(from.getTime() + hours * 3_600_000);
   let remaining = hours * 3_600_000;
   const cursor = new Date(from.getTime());
-  const isWeekend = (d: Date) => d.getDay() === 0 || d.getDay() === 6;
-  while (remaining > 0) {
-    if (isWeekend(cursor)) {
+  const workDays = calendar?.workDays ?? [1, 2, 3, 4, 5];
+  const holidays = new Set(calendar?.holidays.map(h => h.date) ?? []);
+  const isoDay = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const isOff = (d: Date) => !workDays.includes(d.getDay()) || holidays.has(isoDay(d));
+  // Salvaguarda: um calendário sem dias úteis não pode prender o ciclo.
+  for (let guard = 0; remaining > 0 && guard < 4000; guard++) {
+    if (isOff(cursor)) {
       cursor.setHours(0, 0, 0, 0);
       cursor.setDate(cursor.getDate() + 1);
       continue;

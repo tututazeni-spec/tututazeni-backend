@@ -872,18 +872,19 @@ model User {
   // ─── Processos ────────────────────────────────────────────────
   processStandardsOwned     ProcessStandard[]
   processStepsOwned         ProcessStep[]
-  processStepsReviewed      ProcessStep[]        @relation("ProcessStepReviewer")
-  responsibleInstances      ProcessInstance[]    @relation("InstanceCurrentResponsible")
-  assignedStepProgress      StepProgress[]       @relation("StepAssignee")
-  reviewedStepProgress      StepProgress[]       @relation("StepReviewer")
-  processStepComments       ProcessStepComment[] @relation("ProcessStepCommentAuthor")
-  processApprovalsRequested ProcessApproval[]    @relation("ProcessApprovalRequester")
-  processApprovalsAssigned  ProcessApproval[]    @relation("ProcessApprovalApprover")
-  initiatedInstances        ProcessInstance[]    @relation("InstanceInitiator")
-  targetInstances           ProcessInstance[]    @relation("InstanceTarget")
+  processStepsReviewed      ProcessStep[]           @relation("ProcessStepReviewer")
+  responsibleInstances      ProcessInstance[]       @relation("InstanceCurrentResponsible")
+  assignedStepProgress      StepProgress[]          @relation("StepAssignee")
+  reviewedStepProgress      StepProgress[]          @relation("StepReviewer")
+  processStepComments       ProcessStepComment[]    @relation("ProcessStepCommentAuthor")
+  processApprovalsRequested ProcessApproval[]       @relation("ProcessApprovalRequester")
+  processApprovalsAssigned  ProcessApproval[]       @relation("ProcessApprovalApprover")
+  initiatedInstances        ProcessInstance[]       @relation("InstanceInitiator")
+  targetInstances           ProcessInstance[]       @relation("InstanceTarget")
   completedSteps            StepProgress[]
   processApprovalLogs       ProcessApprovalLog[]
   processAuditLogs          ProcessAuditLog[]
+  processSettingVersions    ProcessSettingVersion[]
 
   // ─── Eventos & Presença ───────────────────────────────────────
   events                     Event[]                  @relation("EventOrganizer")
@@ -6030,18 +6031,80 @@ model ProcessApprovalLog {
 }
 
 model ProcessAuditLog {
-  id         Int      @id @default(autoincrement())
-  processId  Int?
-  instanceId Int?
-  userId     Int
-  action     String
-  meta       String?
-  hash       String
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id])
+  id             Int      @id @default(autoincrement())
+  processId      Int?
+  instanceId     Int?
+  userId         Int
+  action         String
+  meta           String?
+  hash           String
+  createdAt      DateTime @default(now())
+  // docs/Modulo_Processes.md §13 — INTERFACE | API | AUTOMATION | SYSTEM
+  source         String?
+  previousStatus String?
+  newStatus      String?
+  reason         String?
+  // SUCCESS | FAILED
+  result         String?
+  errorMessage   String?
+  correlationId  String?
+  user           User     @relation(fields: [userId], references: [id])
 
   @@index([processId])
   @@index([instanceId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([userId])
+}
+
+// docs/Modulo_Processes.md §14 — configuração do módulo, uma linha por secção
+// (valor JSON), versionada: cada alteração gera uma ProcessSettingVersion.
+model ProcessSetting {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  value       String
+  version     Int      @default(1)
+  updatedById Int?
+  updatedAt   DateTime @default(now()) @updatedAt
+}
+
+model ProcessSettingVersion {
+  id          Int      @id @default(autoincrement())
+  key         String
+  version     Int
+  value       String
+  reason      String?
+  changedById Int
+  createdAt   DateTime @default(now())
+  changedBy   User     @relation(fields: [changedById], references: [id])
+
+  @@unique([key, version])
+}
+
+// docs/Modulo_Processes.md §15/§16 — eventos recebidos de outros módulos / sistemas
+// externos. `idempotencyKey` único impede processos duplicados (regra 5); falhas
+// ficam registadas e podem ser repetidas de forma controlada (regra 6).
+model ProcessIntegrationLog {
+  id             Int      @id @default(autoincrement())
+  module         String
+  event          String
+  direction      String   @default("INBOUND")
+  idempotencyKey String?  @unique
+  correlationId  String?
+  // SUCCESS | FAILED | DUPLICATE | REJECTED
+  status         String
+  attempts       Int      @default(1)
+  processCode    String?
+  instanceId     Int?
+  payload        String?
+  errorMessage   String?
+  actorId        Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  @@index([module])
+  @@index([status])
+  @@index([createdAt])
 }
 
 // ══════════════════════════════════════════════════════════════════

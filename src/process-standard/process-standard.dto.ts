@@ -1529,3 +1529,230 @@ export class ProcessReportExportDto extends ProcessReportFilterDto {
   @IsIn(['csv', 'xlsx', 'pdf'])
   format: 'csv' | 'xlsx' | 'pdf';
 }
+
+// ─── §13 Histórico e Auditoria ───────────────────────────────────────────────
+export const AUDIT_SOURCES = ['INTERFACE', 'API', 'AUTOMATION', 'SYSTEM'] as const;
+
+export class ProcessAuditFilterDto {
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  page?: number;
+
+  @ApiPropertyOptional({ default: 25 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  @Type(() => Number)
+  limit?: number;
+
+  @ApiPropertyOptional({ description: 'Utilizador que executou a acção' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  userId?: number;
+
+  @ApiPropertyOptional({ description: 'Tipo de evento (acção)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  action?: string;
+
+  @ApiPropertyOptional({ enum: AUDIT_SOURCES })
+  @IsOptional()
+  @IsIn(AUDIT_SOURCES)
+  source?: (typeof AUDIT_SOURCES)[number];
+
+  @ApiPropertyOptional({ enum: ['SUCCESS', 'FAILED'] })
+  @IsOptional()
+  @IsIn(['SUCCESS', 'FAILED'])
+  result?: 'SUCCESS' | 'FAILED';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  processId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  instanceId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+
+  @ApiPropertyOptional({ description: 'Procura no código/nome do processo, justificação e erro' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+}
+
+export class ProcessAuditAttemptsDto {
+  @ApiPropertyOptional({ enum: ['ALL', 'INTEGRATION', 'AUTOMATION'] })
+  @IsOptional()
+  @IsIn(['ALL', 'INTEGRATION', 'AUTOMATION'])
+  kind?: 'ALL' | 'INTEGRATION' | 'AUTOMATION';
+
+  @ApiPropertyOptional({ enum: ['SUCCESS', 'FAILED'] })
+  @IsOptional()
+  @IsIn(['SUCCESS', 'FAILED'])
+  status?: 'SUCCESS' | 'FAILED';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  page?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  @Type(() => Number)
+  limit?: number;
+}
+
+export class ProcessAuditExportDto extends ProcessAuditFilterDto {
+  @ApiProperty({ description: 'Justificação da exportação (fica registada na auditoria)' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(300)
+  reason: string;
+}
+
+// ─── §14 Configurações ───────────────────────────────────────────────────────
+export class UpdateProcessSettingDto {
+  @ApiProperty({ description: 'Novo valor completo da secção (JSON)' })
+  @IsNotEmpty()
+  value: unknown;
+
+  @ApiPropertyOptional({
+    description: 'Versão que o utilizador viu (detecta edições concorrentes)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  expectedVersion?: number;
+
+  @ApiPropertyOptional({ description: 'Motivo da alteração' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  reason?: string;
+}
+
+export class RestoreProcessSettingDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  reason?: string;
+}
+
+// ─── §15 Integração com os módulos ───────────────────────────────────────────
+export class IntegrationEventDto {
+  @ApiProperty({ description: 'Módulo emissor (ex.: Onboarding, Leave, Trainings)' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(60)
+  module: string;
+
+  @ApiProperty({ description: 'Evento que originou o pedido (ex.: employee.hired)' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(80)
+  event: string;
+
+  @ApiProperty({ description: 'Código do modelo de processo a iniciar' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(60)
+  processCode: string;
+
+  @ApiProperty({ description: 'Chave de idempotência: o mesmo evento nunca cria dois processos' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(120)
+  idempotencyKey: string;
+
+  @ApiProperty({ description: 'Tipo do registo de origem (ex.: LeaveRequest)' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(60)
+  sourceEntityType: string;
+
+  @ApiProperty({ description: 'ID do registo de origem' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(60)
+  sourceEntityId: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  targetUserId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  title?: string;
+
+  @ApiPropertyOptional({ enum: ProcessPriority })
+  @IsOptional()
+  @IsEnum(ProcessPriority)
+  priority?: ProcessPriority;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  correlationId?: string;
+
+  @ApiPropertyOptional({ description: 'Dados adicionais (limitados, guardados no registo)' })
+  @IsOptional()
+  data?: Record<string, unknown>;
+}
+
+export class IntegrationLogFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  module?: string;
+
+  @ApiPropertyOptional({ enum: ['SUCCESS', 'FAILED', 'DUPLICATE', 'REJECTED'] })
+  @IsOptional()
+  @IsIn(['SUCCESS', 'FAILED', 'DUPLICATE', 'REJECTED'])
+  status?: 'SUCCESS' | 'FAILED' | 'DUPLICATE' | 'REJECTED';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  page?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  @Type(() => Number)
+  limit?: number;
+}

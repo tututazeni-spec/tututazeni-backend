@@ -1,5 +1,6 @@
 // src/process-standard/process-standard.controller.ts
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -27,6 +28,10 @@ import { ProcessAutomationsService } from './process-automations.service';
 import { ProcessCalendarService } from './process-calendar.service';
 import { ProcessDocumentsService } from './process-documents.service';
 import { ProcessReportsService } from './process-reports.service';
+import { ProcessAuditTrailService } from './process-audit-trail.service';
+import { ProcessSettingsService } from './process-settings.service';
+import { ProcessIntegrationsService } from './process-integrations.service';
+import { isSettingKey, SettingKey } from './process-settings';
 import {
   CreateProcessDto,
   UpdateProcessDto,
@@ -69,6 +74,13 @@ import {
   ProcessReportFilterDto,
   ProcessReportRecordsDto,
   ProcessReportExportDto,
+  ProcessAuditFilterDto,
+  ProcessAuditAttemptsDto,
+  ProcessAuditExportDto,
+  UpdateProcessSettingDto,
+  RestoreProcessSettingDto,
+  IntegrationEventDto,
+  IntegrationLogFilterDto,
 } from './process-standard.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -89,7 +101,17 @@ export class ProcessStandardController {
     private readonly calendar: ProcessCalendarService,
     private readonly documents: ProcessDocumentsService,
     private readonly reports: ProcessReportsService,
+    private readonly auditTrail: ProcessAuditTrailService,
+    private readonly settings: ProcessSettingsService,
+    private readonly integrations: ProcessIntegrationsService,
   ) {}
+
+  private settingKey(key: string): SettingKey {
+    if (!isSettingKey(key)) {
+      throw new BadRequestException(`Secção de configuração desconhecida: ${key}`);
+    }
+    return key;
+  }
 
   // ── Biblioteca de Processos ────────────────────────────────────────────────
 
@@ -414,6 +436,144 @@ export class ProcessStandardController {
       'Content-Disposition': `attachment; filename="${filename}"`,
     });
     return new StreamableFile(buffer);
+  }
+
+  // ── §13 Histórico e Auditoria ──────────────────────────────────────────────
+  // Só leitura/exportação: não existe rota para eliminar ou editar o histórico.
+
+  @Get('audit/events')
+  @Roles(Role.ADMIN, Role.RH, Role.AUDITOR)
+  @ApiOperation({ summary: 'Linha temporal de auditoria (filtros por utilizador, evento, data…)' })
+  auditEvents(@Query() filters: ProcessAuditFilterDto) {
+    return this.auditTrail.events(filters);
+  }
+
+  @Get('audit/filter-options')
+  @Roles(Role.ADMIN, Role.RH, Role.AUDITOR)
+  @ApiOperation({ summary: 'Tipos de evento e utilizadores disponíveis para filtrar' })
+  auditFilterOptions() {
+    return this.auditTrail.filterOptions();
+  }
+
+  @Get('audit/attempts')
+  @Roles(Role.ADMIN, Role.RH, Role.AUDITOR)
+  @ApiOperation({ summary: 'Tentativas de integração e de automação' })
+  auditAttempts(@Query() filters: ProcessAuditAttemptsDto) {
+    return this.auditTrail.attempts(filters);
+  }
+
+  @Get('audit/export')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: 'Exportar auditoria em CSV (exige justificação; fica registado)' })
+  async auditExport(
+    @Query() filters: ProcessAuditExportDto,
+    @CurrentUser() user: CurrentUserData,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { buffer, contentType, filename } = await this.auditTrail.export(filters, user);
+    res.set({
+      'Content-Type': contentType,
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    });
+    return new StreamableFile(buffer);
+  }
+
+  @Get('audit/events/:id')
+  @Roles(Role.ADMIN, Role.RH, Role.AUDITOR)
+  @ApiOperation({ summary: 'Detalhe de um evento (decisão, documentos, evento seguinte)' })
+  auditEvent(@Param('id', ParseIntPipe) id: number) {
+    return this.auditTrail.event(id);
+  }
+
+  @Get('audit/instances/:instanceId/timeline')
+  @Roles(Role.ADMIN, Role.RH, Role.AUDITOR)
+  @ApiOperation({ summary: 'Percurso completo de um processo, por ordem cronológica' })
+  auditTimeline(@Param('instanceId', ParseIntPipe) instanceId: number) {
+    return this.auditTrail.instanceTimeline(instanceId);
+  }
+
+  // ── §14 Configurações ──────────────────────────────────────────────────────
+
+  @Get('settings')
+  @Roles(Role.ADMIN, Role.RH, Role.AUDITOR)
+  @ApiOperation({ summary: 'Todas as secções de configuração do módulo' })
+  settingsAll() {
+    return this.settings.all();
+  }
+
+  @Get('settings/:key/history')
+  @Roles(Role.ADMIN, Role.RH, Role.AUDITOR)
+  @ApiOperation({ summary: 'Versões de uma secção de configuração' })
+  settingHistory(@Param('key') key: string) {
+    return this.settings.history(this.settingKey(key));
+  }
+
+  @Put('settings/:key')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Guardar uma secção (valida, versiona e audita)' })
+  settingUpdate(
+    @Param('key') key: string,
+    @Body() dto: UpdateProcessSettingDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.settings.update(this.settingKey(key), dto, user);
+  }
+
+  @Post('settings/:key/restore/:version')
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Restaurar uma versão anterior como nova versão' })
+  settingRestore(
+    @Param('key') key: string,
+    @Param('version', ParseIntPipe) version: number,
+    @Body() dto: RestoreProcessSettingDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.settings.restore(this.settingKey(key), version, user, dto.reason);
+  }
+
+  @Post('settings/:key/reset')
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Repor os valores por omissão (nova versão)' })
+  settingReset(
+    @Param('key') key: string,
+    @Body() dto: RestoreProcessSettingDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.settings.reset(this.settingKey(key), user, dto.reason);
+  }
+
+  // ── §15 Integração com os módulos ──────────────────────────────────────────
+
+  @Get('integrations')
+  @Roles(Role.ADMIN, Role.RH, Role.AUDITOR)
+  @ApiOperation({ summary: 'Matriz de integração com os módulos e respectivo estado' })
+  integrationsOverview() {
+    return this.integrations.overview();
+  }
+
+  @Get('integrations/logs')
+  @Roles(Role.ADMIN, Role.RH, Role.AUDITOR)
+  @ApiOperation({ summary: 'Eventos de integração recebidos, falhas e tentativas' })
+  integrationLogs(@Query() filters: IntegrationLogFilterDto) {
+    return this.integrations.logs(filters);
+  }
+
+  @Post('integrations/events')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Receber um evento de outro módulo e iniciar o processo (idempotente)' })
+  integrationEvent(@Body() dto: IntegrationEventDto, @CurrentUser() user: CurrentUserData) {
+    return this.integrations.receive(dto, user);
+  }
+
+  @Post('integrations/logs/:id/retry')
+  @Roles(Role.ADMIN, Role.RH)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Repetir um evento de integração que falhou' })
+  integrationRetry(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.integrations.retry(id, user);
   }
 
   // ── §9 Automações (regras do módulo Automações, módulo de origem PROCESSES) ──

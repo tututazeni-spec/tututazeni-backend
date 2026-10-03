@@ -14,13 +14,20 @@ import { buildOverview } from './process-overview';
 import {
   addHours,
   effectiveDependencies,
-  formatInstanceCode,
-  sequenceFromCode,
   simulateScenario,
   validateWorkflow,
 } from './process-workflow';
 import { syncStepActivation } from './process-activation';
-import { writeProcessAuditLog } from './process-audit';
+import { loadSetting } from './process-settings.loader';
+import {
+  codePrefix,
+  formatCode,
+  NumberingConfig,
+  resolveSlaHours,
+  sequenceOf,
+  WorkCalendarConfig,
+} from './process-settings';
+import { ProcessAuditEntry, writeProcessAuditLog } from './process-audit';
 import { ProcessEngineService, OPEN_APPROVAL_STATUSES } from './process-engine.service';
 import { TriggerType } from '../automation/automation.dto';
 import {
@@ -143,13 +150,7 @@ export class ProcessStandardService {
     if (structural.length) throw new BadRequestException(structural.join(' '));
   }
 
-  async writeAuditLog(opts: {
-    processId?: number;
-    instanceId?: number;
-    userId: number;
-    action: string;
-    meta?: object;
-  }) {
+  async writeAuditLog(opts: ProcessAuditEntry) {
     await writeProcessAuditLog(this.prisma, this.logger, opts);
   }
 
@@ -686,13 +687,14 @@ export class ProcessStandardService {
   }
 
   // Código legível PROC-AAAA-NNNN; repete em caso de colisão concorrente.
-  private async nextInstanceCode(year: number): Promise<string> {
+  // O prefixo, o ano e o preenchimento vêm da configuração (§14 Numeração).
+  private async nextInstanceCode(year: number, cfg: NumberingConfig): Promise<string> {
     const last = await this.prisma.processInstance.findFirst({
-      where: { code: { startsWith: `PROC-${year}-` } },
+      where: { code: { startsWith: codePrefix(cfg, year) } },
       orderBy: { code: 'desc' },
       select: { code: true },
     });
-    return formatInstanceCode(year, sequenceFromCode(last?.code) + 1);
+    return formatCode(cfg, year, sequenceOf(cfg, year, last?.code) + 1);
   }
 
   async startInstance(
@@ -745,10 +747,24 @@ export class ProcessStandardService {
 
     const deps = effectiveDependencies(process.steps);
     const assignments = await this.resolveAssignments(process.steps);
+    // Configurações do módulo (§14): numeração, prazos padrão, prioridades, calendário.
+    const [numbering, deadlines, priorities, calendar] = await Promise.all([
+      loadSetting<NumberingConfig>(this.prisma, 'numbering'),
+      loadSetting<Array<{ category: string; hours: number }>>(this.prisma, 'defaultDeadlines'),
+      loadSetting<Array<{ code: string; slaFactor: number }>>(this.prisma, 'priorities'),
+      loadSetting<WorkCalendarConfig>(this.prisma, 'workCalendar'),
+    ]);
+    const slaHours = resolveSlaHours({
+      templateHours: process.defaultSlaHours,
+      category: process.category,
+      priority: dto.priority ?? 'NORMAL',
+      deadlines,
+      priorities,
+    });
     const dueAt = dto.dueAt
       ? new Date(dto.dueAt)
-      : process.defaultSlaHours
-        ? new Date(now.getTime() + process.defaultSlaHours * 3600 * 1000)
+      : slaHours
+        ? new Date(now.getTime() + slaHours * 3600 * 1000)
         : null;
     const ready = (order: number) => (deps.get(order) ?? []).length === 0;
     const firstActive = [...process.steps]
@@ -757,7 +773,7 @@ export class ProcessStandardService {
 
     let instance: Awaited<ReturnType<typeof this.createInstanceRow>> | null = null;
     for (let attempt = 0; attempt < 5 && !instance; attempt++) {
-      const code = await this.nextInstanceCode(now.getFullYear());
+      const code = await this.nextInstanceCode(now.getFullYear(), numbering);
       try {
         instance = await this.createInstanceRow({
           code,
@@ -772,6 +788,7 @@ export class ProcessStandardService {
           sourceEntityId,
           assignments,
           ready,
+          calendar,
           currentResponsibleId: firstActive ? (assignments.get(firstActive.id) ?? null) : null,
         });
       } catch (e: unknown) {
@@ -859,6 +876,7 @@ export class ProcessStandardService {
     sourceEntityId: string | null;
     assignments: Map<number, number | null>;
     ready: (order: number) => boolean;
+    calendar: WorkCalendarConfig;
     currentResponsibleId: number | null;
   }) {
     const { process, now } = a;
@@ -889,7 +907,9 @@ export class ProcessStandardService {
               stepOrder: s.order,
               status: isReady ? ('PENDING' as const) : ('WAITING' as const),
               startedAt: isReady ? now : null,
-              slaDeadline: s.slaHours ? addHours(now, s.slaHours, s.calendarMode) : null,
+              slaDeadline: s.slaHours
+                ? addHours(now, s.slaHours, s.calendarMode, a.calendar)
+                : null,
               assigneeId,
               assignedAt: assigneeId ? now : null,
               reviewerId: s.reviewerId,

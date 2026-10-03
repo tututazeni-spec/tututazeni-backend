@@ -30,6 +30,8 @@ import {
   type StepAction,
 } from './process-conditions';
 import { addHours, effectiveDependencies, isAutomaticType } from './process-workflow';
+import { loadSetting } from './process-settings.loader';
+import type { WorkCalendarConfig } from './process-settings';
 
 const MAX_PASSES = 30;
 export const OPEN_APPROVAL_STATUSES = [
@@ -315,7 +317,8 @@ export class ProcessEngineService {
     }
     const now = new Date();
     if (sp.result !== 'TIMER_SET') {
-      const due = addHours(now, Number(cfg.delayHours), sp.step.calendarMode);
+      const calendar = await loadSetting<WorkCalendarConfig>(this.prisma, 'workCalendar');
+      const due = addHours(now, Number(cfg.delayHours), sp.step.calendarMode, calendar);
       await this.prisma.stepProgress.update({
         where: { id: sp.id },
         data: { result: 'TIMER_SET', slaDeadline: due, startedAt: now },
