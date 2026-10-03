@@ -29,6 +29,7 @@ import { AutomationConnectionsService } from './automation-connections.service';
 import { AutomationFailuresService } from './automation-failures.service';
 import { AutomationRetentionService } from './automation-retention.service';
 import { AutomationTemplatesService } from './automation-templates.service';
+import { AutomationHealthService } from './automation-health.service';
 import { AutomationPerm } from './automation-permission.guard';
 import {
   AuditFilterDto,
@@ -59,7 +60,18 @@ export class AutomationGovernanceController {
     private readonly failures: AutomationFailuresService,
     private readonly retention: AutomationRetentionService,
     private readonly templates: AutomationTemplatesService,
+    private readonly health: AutomationHealthService,
   ) {}
+
+  // ─── Monitorização (§13) ──────────────────────────────────────
+  @Get('health')
+  @Roles(Role.ADMIN)
+  @ApiOperation({
+    summary: 'Saúde do motor: execuções presas, retries, agendamentos, dead letters',
+  })
+  getHealth() {
+    return this.health.getHealth();
+  }
 
   // ─── Limites, alertas e retenção (§10) ────────────────────────
 
@@ -158,7 +170,10 @@ export class AutomationGovernanceController {
   @ApiOperation({ summary: 'Exportar a auditoria filtrada (CSV)' })
   async auditExport(@Query() filters: AuditFilterDto) {
     const content = await this.audit.exportCsv(filters);
-    return { filename: `auditoria-automacoes-${new Date().toISOString().slice(0, 10)}.csv`, content };
+    return {
+      filename: `auditoria-automacoes-${new Date().toISOString().slice(0, 10)}.csv`,
+      content,
+    };
   }
 
   @Get('rules/:id/audit')

@@ -15,6 +15,7 @@ import { AutomationConnectionsService } from './automation-connections.service';
 import { AutomationFailuresService } from './automation-failures.service';
 import { AutomationRetentionService } from './automation-retention.service';
 import { AutomationTemplatesService } from './automation-templates.service';
+import { AutomationHealthService } from './automation-health.service';
 import { AutomationPermissionGuard } from './automation-permission.guard';
 import { EnrollmentsModule } from '../enrollments/enrollments.module';
 import { DevelopmentPlansModule } from '../development-plans/development-plans.module';
@@ -44,6 +45,7 @@ import { SmsModule } from '../sms/sms.module';
     AutomationFailuresService,
     AutomationRetentionService,
     AutomationTemplatesService,
+    AutomationHealthService,
     AutomationPermissionGuard,
   ],
   controllers: [AutomationController, AutomationGovernanceController],

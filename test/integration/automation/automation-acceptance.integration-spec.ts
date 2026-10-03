@@ -176,6 +176,22 @@ describe('Automation Acceptance (§13) Integration', () => {
     expect(JSON.stringify(res.body)).not.toMatch(/Bearer\s+[A-Za-z0-9._~+/=-]{8,}/);
   });
 
+  it('GET /automation/health — ADMIN vê o estado do motor', async () => {
+    const res = await http()
+      .get('/automation/health')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(['OK', 'DEGRADED']).toContain(res.body.status);
+    expect(res.body.database).toBe('UP');
+    expect(res.body.executions).toEqual(
+      expect.objectContaining({
+        stuckRunning: expect.any(Number),
+        failureRate: expect.any(Number),
+      }),
+    );
+    expect(res.body.deadLetters.open).toEqual(expect.any(Number));
+  });
+
   describe('permissões', () => {
     it.each([
       ['/automation/rules'],
@@ -194,6 +210,10 @@ describe('Automation Acceptance (§13) Integration', () => {
         await http().get(url).set('Authorization', `Bearer ${rhToken}`).expect(403);
       },
     );
+
+    it('RH não acede a /automation/health → 403', async () => {
+      await http().get('/automation/health').set('Authorization', `Bearer ${rhToken}`).expect(403);
+    });
 
     it('RH não executa em massa (POST /automation/run) → 403', async () => {
       await http().post('/automation/run').set('Authorization', `Bearer ${rhToken}`).expect(403);
