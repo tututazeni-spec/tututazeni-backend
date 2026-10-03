@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { Prisma, GrantStatus, DisbursementStatus } from '@prisma/client';
+import { Prisma, GrantStatus, DisbursementStatus, FunderIndicatorKey } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateFunderDto,
@@ -18,6 +18,13 @@ import {
   CreateOpportunityDocumentDto,
   CreateFunderInteractionDto,
   CreateFunderReportDto,
+  UpdateFunderReportDto,
+  FilterFunderReportDto,
+  CreateFunderContractDto,
+  UpdateFunderContractDto,
+  CreateFunderIndicatorDto,
+  UpdateFunderIndicatorDto,
+  FilterFunderIndicatorDto,
   PaginationFilterDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
@@ -177,6 +184,14 @@ export class CrmFundersService {
           orderBy: { date: 'desc' },
           take: 20,
           include: { user: { select: { fullName: true } } },
+        },
+        contracts: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+        },
+        indicators: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'asc' },
         },
         reports: {
           where: { deletedAt: null },
@@ -886,6 +901,376 @@ export class CrmFundersService {
     return { message: 'Documento removido com sucesso' };
   }
 
+  // ─── CONTRATOS E ACORDOS (⑩) ─────────────────────────
+
+  private async assertGrantOfFunder(funderId: string, grantId?: string | null) {
+    if (!grantId) return;
+    const grant = await this.prisma.fundingGrant.findFirst({
+      where: { id: grantId, funderId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!grant) throw new BadRequestException('Financiamento não pertence a este financiador');
+  }
+
+  private async assertContactOfFunder(funderId: string, contactId?: string | null) {
+    if (!contactId) return;
+    const contact = await this.prisma.funderContact.findFirst({
+      where: { id: contactId, funderId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!contact) throw new BadRequestException('Contacto não pertence a este financiador');
+  }
+
+  /** Dias até ao termo (negativo = já terminou); null sem data de término. */
+  private withContractExpiry<T extends { endDate: Date | null }>(contract: T) {
+    const daysToExpiry = contract.endDate
+      ? Math.ceil((contract.endDate.getTime() - Date.now()) / MS_PER_DAY)
+      : null;
+    return { ...contract, daysToExpiry };
+  }
+
+  private async findContract(funderId: string, contractId: string) {
+    const contract = await this.prisma.funderContract.findFirst({
+      where: { id: contractId, funderId, deletedAt: null },
+    });
+    if (!contract) throw new NotFoundException('Contrato não encontrado');
+    return contract;
+  }
+
+  async getContracts(funderId: string) {
+    await this.findOne(funderId);
+    const contracts = await this.prisma.read.funderContract.findMany({
+      where: { funderId, deletedAt: null },
+      orderBy: [{ endDate: 'asc' }, { createdAt: 'desc' }],
+      include: {
+        grant: { select: { code: true, title: true } },
+        responsible: { select: { fullName: true } },
+        funderContact: { select: { firstName: true, lastName: true } },
+      },
+    });
+    return contracts.map(c => this.withContractExpiry(c));
+  }
+
+  async addContract(funderId: string, dto: CreateFunderContractDto, userId: number) {
+    await this.findOne(funderId);
+    this.assertDateRange(dto.startDate, dto.endDate);
+    this.assertDateRange(dto.signedAt, dto.endDate);
+    await this.assertGrantOfFunder(funderId, dto.grantId);
+    await this.assertContactOfFunder(funderId, dto.funderContactId);
+    await this.assertUserExists(dto.responsibleId);
+    const { signedAt, startDate, endDate, ...rest } = dto;
+    const contract = await this.prisma.funderContract.create({
+      data: {
+        ...rest,
+        ...(signedAt && { signedAt: new Date(signedAt) }),
+        ...(startDate && { startDate: new Date(startDate) }),
+        ...(endDate && { endDate: new Date(endDate) }),
+        funderId,
+      },
+    });
+    await this.audit.logEntity(userId, 'CREATE', 'FunderContract', contract.id, {
+      funderId,
+      type: dto.type,
+    });
+    return this.withContractExpiry(contract);
+  }
+
+  async updateContract(
+    funderId: string,
+    contractId: string,
+    dto: UpdateFunderContractDto,
+    userId: number,
+  ) {
+    const current = await this.findContract(funderId, contractId);
+    const endDate = dto.endDate ?? current.endDate;
+    this.assertDateRange(dto.startDate ?? current.startDate, endDate);
+    this.assertDateRange(dto.signedAt ?? current.signedAt, endDate);
+    await this.assertGrantOfFunder(funderId, dto.grantId);
+    await this.assertContactOfFunder(funderId, dto.funderContactId);
+    await this.assertUserExists(dto.responsibleId);
+    const { signedAt, startDate, endDate: end, ...rest } = dto;
+    const updated = await this.prisma.funderContract.update({
+      where: { id: contractId },
+      data: {
+        ...rest,
+        ...(signedAt && { signedAt: new Date(signedAt) }),
+        ...(startDate && { startDate: new Date(startDate) }),
+        ...(end && { endDate: new Date(end) }),
+      },
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'FunderContract', contractId, dto);
+    return this.withContractExpiry(updated);
+  }
+
+  async removeContract(funderId: string, contractId: string, userId: number) {
+    await this.findContract(funderId, contractId);
+    await this.prisma.funderContract.update({
+      where: { id: contractId },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.logEntity(userId, 'DELETE', 'FunderContract', contractId, { funderId });
+    return { message: 'Contrato removido com sucesso' };
+  }
+
+  // ─── REQUISITOS DE REPORTE (⑪) ───────────────────────
+
+  /** Um relatório por submeter cujo prazo passou está em atraso. */
+  private withOverdue<T extends { status: string; dueDate: Date }>(report: T) {
+    const isOverdue =
+      (report.status === 'PENDING' || report.status === 'REJECTED') &&
+      report.dueDate.getTime() < Date.now();
+    return { ...report, isOverdue };
+  }
+
+  /** O próximo prazo do financiador é sempre o do relatório pendente mais próximo. */
+  private async syncNextReportDue(funderId: string) {
+    const next = await this.prisma.funderReport.findFirst({
+      where: { funderId, deletedAt: null, status: { in: ['PENDING', 'REJECTED'] } },
+      orderBy: { dueDate: 'asc' },
+      select: { dueDate: true },
+    });
+    await this.prisma.funder.update({
+      where: { id: funderId },
+      data: { nextReportDue: next?.dueDate ?? null },
+    });
+  }
+
+  private async findReport(funderId: string, reportId: string) {
+    const report = await this.prisma.funderReport.findFirst({
+      where: { id: reportId, funderId, deletedAt: null },
+    });
+    if (!report) throw new NotFoundException('Relatório não encontrado');
+    return report;
+  }
+
+  async getReports(funderId: string, filters: FilterFunderReportDto) {
+    await this.findOne(funderId);
+    const { type, status, grantId } = filters;
+    const reports = await this.prisma.read.funderReport.findMany({
+      where: {
+        funderId,
+        deletedAt: null,
+        ...(type && { type }),
+        ...(status && { status }),
+        ...(grantId && { grantId }),
+      },
+      orderBy: { dueDate: 'asc' },
+      include: {
+        grant: { select: { code: true, title: true } },
+        responsible: { select: { fullName: true } },
+      },
+    });
+    return reports.map(r => this.withOverdue(r));
+  }
+
+  async createReport(funderId: string, dto: CreateFunderReportDto, userId: number) {
+    await this.findOne(funderId);
+    await this.assertGrantOfFunder(funderId, dto.grantId);
+    await this.assertUserExists(dto.responsibleId);
+    const { dueDate, ...rest } = dto;
+    const report = await this.prisma.funderReport.create({
+      data: {
+        ...rest,
+        dueDate: new Date(dueDate),
+        funderId,
+        createdById: userId,
+      },
+    });
+    await this.syncNextReportDue(funderId);
+    await this.audit.logEntity(userId, 'CREATE', 'FunderReport', report.id, {
+      funderId,
+      period: dto.period,
+      type: report.type,
+    });
+    return this.withOverdue(report);
+  }
+
+  async updateReport(
+    funderId: string,
+    reportId: string,
+    dto: UpdateFunderReportDto,
+    userId: number,
+  ) {
+    const current = await this.findReport(funderId, reportId);
+    await this.assertGrantOfFunder(funderId, dto.grantId);
+    await this.assertUserExists(dto.responsibleId);
+    const { dueDate, submittedAt, ...rest } = dto;
+    // Marcar como submetido/aprovado sem data de submissão assume agora
+    const reachedSubmission = dto.status === 'SUBMITTED' || dto.status === 'APPROVED';
+    const resolvedSubmittedAt =
+      submittedAt ?? (reachedSubmission && !current.submittedAt ? new Date() : undefined);
+    const updated = await this.prisma.funderReport.update({
+      where: { id: reportId },
+      data: {
+        ...rest,
+        ...(dueDate && { dueDate: new Date(dueDate) }),
+        ...(resolvedSubmittedAt && { submittedAt: new Date(resolvedSubmittedAt) }),
+      },
+    });
+    await this.syncNextReportDue(funderId);
+    await this.audit.logEntity(userId, 'UPDATE', 'FunderReport', reportId, dto);
+    return this.withOverdue(updated);
+  }
+
+  async removeReport(funderId: string, reportId: string, userId: number) {
+    await this.findReport(funderId, reportId);
+    await this.prisma.funderReport.update({
+      where: { id: reportId },
+      data: { deletedAt: new Date() },
+    });
+    await this.syncNextReportDue(funderId);
+    await this.audit.logEntity(userId, 'DELETE', 'FunderReport', reportId, { funderId });
+    return { message: 'Relatório removido com sucesso' };
+  }
+
+  async submitReport(reportId: string, fileUrl: string, userId: number) {
+    const report = await this.prisma.funderReport.findUnique({
+      where: { id: reportId },
+    });
+    if (!report || report.deletedAt) throw new NotFoundException('Relatório não encontrado');
+    const updated = await this.prisma.funderReport.update({
+      where: { id: reportId },
+      data: { status: 'SUBMITTED', submittedAt: new Date(), fileUrl },
+    });
+    await this.syncNextReportDue(report.funderId);
+    await this.audit.logEntity(userId, 'UPDATE', 'FunderReport', reportId, {
+      status: 'SUBMITTED',
+    });
+    return updated;
+  }
+
+  // ─── INDICADORES E IMPACTO (⑫) ───────────────────────
+
+  private async findIndicator(funderId: string, indicatorId: string) {
+    const indicator = await this.prisma.funderIndicator.findFirst({
+      where: { id: indicatorId, funderId, deletedAt: null },
+    });
+    if (!indicator) throw new NotFoundException('Indicador não encontrado');
+    return indicator;
+  }
+
+  /** Cada indicador padrão só existe uma vez por âmbito (financiador/programa/financiamento). */
+  private async assertIndicatorUnique(
+    funderId: string,
+    scope: { key: FunderIndicatorKey; programId?: string | null; grantId?: string | null },
+    excludeId?: string,
+  ) {
+    if (scope.key === 'CUSTOM') return;
+    const clash = await this.prisma.funderIndicator.findFirst({
+      where: {
+        funderId,
+        key: scope.key,
+        programId: scope.programId ?? null,
+        grantId: scope.grantId ?? null,
+        deletedAt: null,
+        ...(excludeId && { id: { not: excludeId } }),
+      },
+      select: { id: true },
+    });
+    if (clash) throw new BadRequestException('Este indicador já está configurado para o âmbito');
+  }
+
+  /** Percentagem de cumprimento da meta (null sem meta definida). */
+  private withProgress<T extends { target: number | null; achieved: number }>(indicator: T) {
+    const progress =
+      indicator.target && indicator.target > 0
+        ? (indicator.achieved / indicator.target) * 100
+        : null;
+    return { ...indicator, progress };
+  }
+
+  async getIndicators(funderId: string, filters: FilterFunderIndicatorDto) {
+    await this.findOne(funderId);
+    const { programId, grantId } = filters;
+    const indicators = await this.prisma.read.funderIndicator.findMany({
+      where: {
+        funderId,
+        deletedAt: null,
+        ...(programId && { programId }),
+        ...(grantId && { grantId }),
+      },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        program: { select: { program: true, project: true } },
+        grant: { select: { code: true, title: true } },
+      },
+    });
+    return indicators.map(i => this.withProgress(i));
+  }
+
+  async addIndicator(funderId: string, dto: CreateFunderIndicatorDto, userId: number) {
+    await this.findOne(funderId);
+    await this.assertProgramOfFunder(funderId, dto.programId);
+    await this.assertGrantOfFunder(funderId, dto.grantId);
+    await this.assertIndicatorUnique(funderId, dto);
+    const indicator = await this.prisma.funderIndicator.create({
+      data: { ...dto, funderId },
+    });
+    await this.audit.logEntity(userId, 'CREATE', 'FunderIndicator', indicator.id, {
+      funderId,
+      key: dto.key,
+    });
+    return this.withProgress(indicator);
+  }
+
+  async updateIndicator(
+    funderId: string,
+    indicatorId: string,
+    dto: UpdateFunderIndicatorDto,
+    userId: number,
+  ) {
+    const current = await this.findIndicator(funderId, indicatorId);
+    await this.assertProgramOfFunder(funderId, dto.programId);
+    await this.assertGrantOfFunder(funderId, dto.grantId);
+    await this.assertIndicatorUnique(
+      funderId,
+      {
+        key: dto.key ?? current.key,
+        programId: dto.programId ?? current.programId,
+        grantId: dto.grantId ?? current.grantId,
+      },
+      indicatorId,
+    );
+    const updated = await this.prisma.funderIndicator.update({
+      where: { id: indicatorId },
+      data: dto,
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'FunderIndicator', indicatorId, dto);
+    return this.withProgress(updated);
+  }
+
+  async removeIndicator(funderId: string, indicatorId: string, userId: number) {
+    await this.findIndicator(funderId, indicatorId);
+    await this.prisma.funderIndicator.update({
+      where: { id: indicatorId },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.logEntity(userId, 'DELETE', 'FunderIndicator', indicatorId, { funderId });
+    return { message: 'Indicador removido com sucesso' };
+  }
+
+  /** Impacto consolidado: soma de metas e resultados por tipo de indicador. */
+  async getImpactSummary(funderId: string) {
+    await this.findOne(funderId);
+    const rows = await this.prisma.read.funderIndicator.groupBy({
+      by: ['key'],
+      where: { funderId, deletedAt: null },
+      _sum: { target: true, achieved: true },
+      _count: { id: true },
+    });
+    return rows.map(r => {
+      const target = r._sum.target ?? 0;
+      const achieved = r._sum.achieved ?? 0;
+      return {
+        key: r.key,
+        indicators: r._count.id,
+        target,
+        achieved,
+        progress: target > 0 ? (achieved / target) * 100 : null,
+      };
+    });
+  }
+
   // ─── INTERACÇÕES ─────────────────────────────────────
 
   async addInteraction(funderId: string, dto: CreateFunderInteractionDto, userId: number) {
@@ -923,41 +1308,6 @@ export class CrmFundersService {
       funderId,
     });
     return interaction;
-  }
-
-  // ─── RELATÓRIOS ──────────────────────────────────────
-
-  async createReport(funderId: string, dto: CreateFunderReportDto, userId: number) {
-    await this.findOne(funderId);
-    const { dueDate, ...rest } = dto;
-    const report = await this.prisma.funderReport.create({
-      data: {
-        ...rest,
-        dueDate: new Date(dueDate),
-        funderId,
-        createdById: userId,
-      },
-    });
-    await this.audit.logEntity(userId, 'CREATE', 'FunderReport', report.id, {
-      funderId,
-      period: dto.period,
-    });
-    return report;
-  }
-
-  async submitReport(reportId: string, fileUrl: string, userId: number) {
-    const report = await this.prisma.funderReport.findUnique({
-      where: { id: reportId },
-    });
-    if (!report || report.deletedAt) throw new NotFoundException('Relatório não encontrado');
-    const updated = await this.prisma.funderReport.update({
-      where: { id: reportId },
-      data: { status: 'SUBMITTED', submittedAt: new Date(), fileUrl },
-    });
-    await this.audit.logEntity(userId, 'UPDATE', 'FunderReport', reportId, {
-      status: 'SUBMITTED',
-    });
-    return updated;
   }
 
   // ─── DASHBOARD ───────────────────────────────────────

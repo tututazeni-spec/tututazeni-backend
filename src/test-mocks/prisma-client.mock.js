@@ -1832,6 +1832,63 @@ const FunderOpportunityDocumentType = {
   OTHER: 'OTHER',
 };
 
+const FunderReportType = {
+  FINANCIAL: 'FINANCIAL',
+  TECHNICAL: 'TECHNICAL',
+  PROGRESS: 'PROGRESS',
+  IMPACT: 'IMPACT',
+  AUDIT: 'AUDIT',
+  EXTERNAL_EVALUATION: 'EXTERNAL_EVALUATION',
+  OTHER: 'OTHER',
+};
+
+const FunderReportPeriodicity = {
+  ONE_TIME: 'ONE_TIME',
+  MONTHLY: 'MONTHLY',
+  QUARTERLY: 'QUARTERLY',
+  SEMIANNUAL: 'SEMIANNUAL',
+  ANNUAL: 'ANNUAL',
+  OTHER: 'OTHER',
+};
+
+const FunderContractType = {
+  FUNDING_CONTRACT: 'FUNDING_CONTRACT',
+  GRANT_AGREEMENT: 'GRANT_AGREEMENT',
+  COOPERATION_AGREEMENT: 'COOPERATION_AGREEMENT',
+  MEMORANDUM: 'MEMORANDUM',
+  OTHER: 'OTHER',
+};
+
+const FunderContractStatus = {
+  DRAFT: 'DRAFT',
+  ACTIVE: 'ACTIVE',
+  EXPIRED: 'EXPIRED',
+  TERMINATED: 'TERMINATED',
+  RENEWED: 'RENEWED',
+};
+
+const FunderContractRenewal = {
+  NONE: 'NONE',
+  MANUAL: 'MANUAL',
+  AUTOMATIC: 'AUTOMATIC',
+};
+
+const FunderIndicatorKey = {
+  EXPECTED_BENEFICIARIES: 'EXPECTED_BENEFICIARIES',
+  REACHED_BENEFICIARIES: 'REACHED_BENEFICIARIES',
+  WOMEN: 'WOMEN',
+  MEN: 'MEN',
+  YOUTH: 'YOUTH',
+  TRAININGS: 'TRAININGS',
+  PARTICIPANTS: 'PARTICIPANTS',
+  TRAINING_HOURS: 'TRAINING_HOURS',
+  JOBS_CREATED: 'JOBS_CREATED',
+  ENTREPRENEURS_SUPPORTED: 'ENTREPRENEURS_SUPPORTED',
+  COMMUNITIES_REACHED: 'COMMUNITIES_REACHED',
+  PROVINCES_COVERED: 'PROVINCES_COVERED',
+  CUSTOM: 'CUSTOM',
+};
+
 const FunderInteractionType = {
   EMAIL: 'EMAIL',
   CALL: 'CALL',
@@ -3067,6 +3124,12 @@ module.exports = {
   DisbursementStatus,
   FunderOpportunityStatus,
   FunderOpportunityDocumentType,
+  FunderReportType,
+  FunderReportPeriodicity,
+  FunderContractType,
+  FunderContractStatus,
+  FunderContractRenewal,
+  FunderIndicatorKey,
   FunderInteractionType,
   ReportStatus,
   LibraryItemType,

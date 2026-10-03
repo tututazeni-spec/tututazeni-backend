@@ -33,7 +33,14 @@ import {
   CreateOpportunityDocumentDto,
   CreateFunderInteractionDto,
   CreateFunderReportDto,
+  UpdateFunderReportDto,
+  FilterFunderReportDto,
   SubmitFunderReportDto,
+  CreateFunderContractDto,
+  UpdateFunderContractDto,
+  CreateFunderIndicatorDto,
+  UpdateFunderIndicatorDto,
+  FilterFunderIndicatorDto,
   PaginationFilterDto,
 } from './dto';
 import { Role } from '../auth/enums/role.enum';
@@ -351,6 +358,101 @@ export class CrmFundersController {
     return this.service.removeOpportunityDocument(id, opportunityId, documentId, user.id);
   }
 
+  // ─── CONTRATOS E ACORDOS ─────────────────────────────
+
+  @Get(':id/contracts')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar contratos e acordos do financiador' })
+  getContracts(@Param('id') id: string) {
+    return this.service.getContracts(id);
+  }
+
+  @Post(':id/contracts')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Registar contrato/acordo' })
+  addContract(
+    @Param('id') id: string,
+    @Body() dto: CreateFunderContractDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addContract(id, dto, user.id);
+  }
+
+  @Put(':id/contracts/:contractId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar contrato/acordo' })
+  updateContract(
+    @Param('id') id: string,
+    @Param('contractId') contractId: string,
+    @Body() dto: UpdateFunderContractDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateContract(id, contractId, dto, user.id);
+  }
+
+  @Delete(':id/contracts/:contractId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover contrato/acordo' })
+  removeContract(
+    @Param('id') id: string,
+    @Param('contractId') contractId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeContract(id, contractId, user.id);
+  }
+
+  // ─── INDICADORES E IMPACTO ───────────────────────────
+
+  @Get(':id/indicators')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar indicadores (filtrável por programa/financiamento)' })
+  getIndicators(@Param('id') id: string, @Query() filters: FilterFunderIndicatorDto) {
+    return this.service.getIndicators(id, filters);
+  }
+
+  @Get(':id/impact')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Impacto consolidado por tipo de indicador' })
+  getImpactSummary(@Param('id') id: string) {
+    return this.service.getImpactSummary(id);
+  }
+
+  @Post(':id/indicators')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Configurar indicador' })
+  addIndicator(
+    @Param('id') id: string,
+    @Body() dto: CreateFunderIndicatorDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addIndicator(id, dto, user.id);
+  }
+
+  @Put(':id/indicators/:indicatorId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar indicador (meta/alcançado)' })
+  updateIndicator(
+    @Param('id') id: string,
+    @Param('indicatorId') indicatorId: string,
+    @Body() dto: UpdateFunderIndicatorDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateIndicator(id, indicatorId, dto, user.id);
+  }
+
+  @Delete(':id/indicators/:indicatorId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover indicador' })
+  removeIndicator(
+    @Param('id') id: string,
+    @Param('indicatorId') indicatorId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeIndicator(id, indicatorId, user.id);
+  }
+
   // ─── INTERACÇÕES ─────────────────────────────────────
 
   @Post(':id/interactions')
@@ -365,6 +467,13 @@ export class CrmFundersController {
   }
 
   // ─── RELATÓRIOS ──────────────────────────────────────
+
+  @Get(':id/reports')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar requisitos de reporte do financiador' })
+  getReports(@Param('id') id: string, @Query() filters: FilterFunderReportDto) {
+    return this.service.getReports(id, filters);
+  }
 
   @Post(':id/reports')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
@@ -386,5 +495,29 @@ export class CrmFundersController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.service.submitReport(reportId, dto.fileUrl, user.id);
+  }
+
+  @Put(':id/reports/:reportId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar relatório exigido' })
+  updateReport(
+    @Param('id') id: string,
+    @Param('reportId') reportId: string,
+    @Body() dto: UpdateFunderReportDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateReport(id, reportId, dto, user.id);
+  }
+
+  @Delete(':id/reports/:reportId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover relatório exigido' })
+  removeReport(
+    @Param('id') id: string,
+    @Param('reportId') reportId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeReport(id, reportId, user.id);
   }
 }

@@ -68,6 +68,7 @@ const mockPrisma = {
   funderReport: {
     create: jest.fn(),
     findUnique: jest.fn(),
+    findFirst: jest.fn().mockResolvedValue(null),
     update: jest.fn(),
     count: jest.fn(),
     findMany: jest.fn(),
