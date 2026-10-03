@@ -95,8 +95,16 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
         required: true,
         help: 'ID do curso (publicado) em que o novo colaborador é inscrito',
       },
-      msg('welcomeMessage', 'Mensagem de boas-vindas', 'Bem-vindo(a) à INNOVA! A tua integração já começou.'),
-      msg('managerMessage', 'Mensagem para o gestor', 'Um novo colaborador da tua equipa iniciou a integração.'),
+      msg(
+        'welcomeMessage',
+        'Mensagem de boas-vindas',
+        'Bem-vindo(a) à INNOVA! A tua integração já começou.',
+      ),
+      msg(
+        'managerMessage',
+        'Mensagem para o gestor',
+        'Um novo colaborador da tua equipa iniciou a integração.',
+      ),
     ],
     limitations: [
       'O gestor só é avisado se o colaborador tiver gestor atribuído.',
@@ -201,9 +209,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
       ],
     },
     modules: ['Evaluation', 'Notifications'],
-    fields: [
-      msg('message', 'Mensagem', 'Tens uma avaliação submetida à espera da tua revisão.'),
-    ],
+    fields: [msg('message', 'Mensagem', 'Tens uma avaliação submetida à espera da tua revisão.')],
     limitations: ['O destinatário resolve-se de managerId/responsibleId do evento.'],
     manualMinutesSaved: 5,
     tags: ['desempenho'],
@@ -236,7 +242,11 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     },
     modules: ['Development Plans', 'Users'],
     fields: [
-      msg('employeeMessage', 'Mensagem para o colaborador', 'O teu PDI tem acções em atraso. Actualiza o progresso.'),
+      msg(
+        'employeeMessage',
+        'Mensagem para o colaborador',
+        'O teu PDI tem acções em atraso. Actualiza o progresso.',
+      ),
       msg('managerMessage', 'Mensagem para o gestor', 'Um PDI da tua equipa está em risco.'),
     ],
     limitations: [],
@@ -271,11 +281,25 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     fields: [
       { key: 'approverId', label: 'Aprovador', type: 'userId', required: true },
       { key: 'escalateToId', label: 'Escalar para', type: 'userId', required: false },
-      { key: 'escalateAfterHours', label: 'Escalar após (horas)', type: 'number', required: false, default: 48 },
-      { key: 'dueHours', label: 'Prazo da decisão (horas)', type: 'number', required: false, default: 72 },
+      {
+        key: 'escalateAfterHours',
+        label: 'Escalar após (horas)',
+        type: 'number',
+        required: false,
+        default: 48,
+      },
+      {
+        key: 'dueHours',
+        label: 'Prazo da decisão (horas)',
+        type: 'number',
+        required: false,
+        default: 72,
+      },
       msg('title', 'Título da aprovação', 'Pedido de férias pendente de aprovação'),
     ],
-    limitations: ['A decisão fica registada na aprovação; a actualização do pedido continua no módulo Férias.'],
+    limitations: [
+      'A decisão fica registada na aprovação; a actualização do pedido continua no módulo Férias.',
+    ],
     manualMinutesSaved: 10,
     tags: ['ferias', 'aprovacao'],
   },
@@ -307,8 +331,16 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     },
     modules: ['Certification', 'Documents'],
     fields: [
-      msg('message', 'Mensagem para o titular', 'Um documento teu está perto de expirar. Renova-o a tempo.'),
-      msg('managerMessage', 'Mensagem para o gestor', 'Um documento de um colaborador da tua equipa está a expirar.'),
+      msg(
+        'message',
+        'Mensagem para o titular',
+        'Um documento teu está perto de expirar. Renova-o a tempo.',
+      ),
+      msg(
+        'managerMessage',
+        'Mensagem para o gestor',
+        'Um documento de um colaborador da tua equipa está a expirar.',
+      ),
     ],
     limitations: [
       'O evento document.expiring (Biblioteca) ainda não é emitido; usa certification.expiring, que cobre certificações.',
@@ -337,7 +369,9 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     },
     modules: ['Payroll', 'Notifications'],
     fields: [msg('message', 'Mensagem', 'O teu recibo de vencimento já está disponível.')],
-    limitations: ['A notificação não leva valores do recibo — só o aviso (dados sensíveis ficam no Payroll).'],
+    limitations: [
+      'A notificação não leva valores do recibo — só o aviso (dados sensíveis ficam no Payroll).',
+    ],
     manualMinutesSaved: 4,
     tags: ['payroll'],
   },
@@ -357,9 +391,17 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
           type: 'action',
           label: 'Avisar o responsável',
           action: A.SEND_NOTIFICATION,
-          params: { type: 'PROCESS_OVERDUE', recipient: 'RESPONSIBLE', messageTemplate: '${message}' },
+          params: {
+            type: 'PROCESS_OVERDUE',
+            recipient: 'RESPONSIBLE',
+            messageTemplate: '${message}',
+          },
         },
-        { type: 'delay', label: 'Aguardar resposta', minutes: '${escalationDelayMinutes}' as unknown as number },
+        {
+          type: 'delay',
+          label: 'Aguardar resposta',
+          minutes: '${escalationDelayMinutes}' as unknown as number,
+        },
         {
           type: 'action',
           label: 'Escalar',
@@ -375,9 +417,25 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     modules: ['Processes', 'Notifications'],
     fields: [
       msg('message', 'Mensagem ao responsável', 'Uma etapa do teu processo está fora do prazo.'),
-      { key: 'escalationDelayMinutes', label: 'Escalar após (minutos)', type: 'number', required: true, default: 1440 },
-      { key: 'escalationRole', label: 'Perfil a escalar', type: 'roleCode', required: true, default: 'RH' },
-      msg('escalationMessage', 'Mensagem de escalonamento', 'Uma etapa de processo continua fora do prazo e foi escalada.'),
+      {
+        key: 'escalationDelayMinutes',
+        label: 'Escalar após (minutos)',
+        type: 'number',
+        required: true,
+        default: 1440,
+      },
+      {
+        key: 'escalationRole',
+        label: 'Perfil a escalar',
+        type: 'roleCode',
+        required: true,
+        default: 'RH',
+      },
+      msg(
+        'escalationMessage',
+        'Mensagem de escalonamento',
+        'Uma etapa de processo continua fora do prazo e foi escalada.',
+      ),
     ],
     limitations: ['O escalonamento avisa; a reatribuição da etapa faz-se no módulo Processos.'],
     manualMinutesSaved: 10,
@@ -408,8 +466,18 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     },
     modules: ['Processes', 'Integrations'],
     fields: [
-      { key: 'supportRole', label: 'Perfil de suporte', type: 'roleCode', required: true, default: 'ADMIN' },
-      msg('message', 'Mensagem do alerta', 'Uma integração falhou. Verifica o histórico e repete a sincronização.'),
+      {
+        key: 'supportRole',
+        label: 'Perfil de suporte',
+        type: 'roleCode',
+        required: true,
+        default: 'ADMIN',
+      },
+      msg(
+        'message',
+        'Mensagem do alerta',
+        'Uma integração falhou. Verifica o histórico e repete a sincronização.',
+      ),
     ],
     limitations: [
       'integration.sync_failed (módulo Integrações) ainda não é emitido; usa process.integration_failed.',
@@ -443,7 +511,13 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     },
     modules: ['Automation', 'Notifications'],
     fields: [
-      { key: 'adminRole', label: 'Perfil a alertar', type: 'roleCode', required: true, default: 'ADMIN' },
+      {
+        key: 'adminRole',
+        label: 'Perfil a alertar',
+        type: 'roleCode',
+        required: true,
+        default: 'ADMIN',
+      },
       msg('message', 'Mensagem', 'A automação "{{ruleName}}" está a falhar repetidamente.'),
     ],
     limitations: [
@@ -504,7 +578,8 @@ export function coerceTemplateValues(
     } else if (f.type === 'boolean') {
       values[f.key] = raw === true || raw === 'true';
     } else if (f.type === 'roleCode') {
-      if (!/^[A-Z_]{2,30}$/.test(String(raw))) errors.push(`"${f.label}" tem de ser um código de perfil (ex.: RH).`);
+      if (!/^[A-Z_]{2,30}$/.test(String(raw)))
+        errors.push(`"${f.label}" tem de ser um código de perfil (ex.: RH).`);
       else values[f.key] = String(raw);
     } else {
       values[f.key] = String(raw).slice(0, 500);

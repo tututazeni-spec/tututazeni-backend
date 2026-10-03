@@ -131,7 +131,17 @@ export class AutomationAuditService {
       }),
     );
     return toCsv(
-      ['Data', 'Entidade', 'Acção', 'Registo', 'Automação', 'Utilizador', 'Antes', 'Depois', 'Nota'],
+      [
+        'Data',
+        'Entidade',
+        'Acção',
+        'Registo',
+        'Automação',
+        'Utilizador',
+        'Antes',
+        'Depois',
+        'Nota',
+      ],
       rows.map(r => [
         r.createdAt,
         r.entity,

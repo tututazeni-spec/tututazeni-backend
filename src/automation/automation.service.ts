@@ -52,7 +52,11 @@ import {
 import { EVENT_CATALOG, moduleOfTrigger } from './automation-events.catalog';
 import { appendHistory } from './automation-tasks.util';
 import { failureCode, classifyFailure } from './automation-failure.util';
-import { AutomationSettingsService, AutomationLimits, DEFAULT_LIMITS } from './automation-settings.service';
+import {
+  AutomationSettingsService,
+  AutomationLimits,
+  DEFAULT_LIMITS,
+} from './automation-settings.service';
 import { AutomationAuditService, diffFields } from './automation-audit.service';
 import { AutomationFailuresService } from './automation-failures.service';
 import { AutomationConnectionsService } from './automation-connections.service';
@@ -1479,8 +1483,16 @@ export class AutomationService {
       note ?? rule.publishDecisionNote ?? undefined,
       { requestedBy: requester },
     );
-    await this.auditRule('AUTOMATION_PUBLISH_APPROVED', id, { userId: approverId, note, requestedBy: requester });
-    await this.notifyPublicationDecision(rule, requester, `A publicação de "${rule.name}" foi aprovada`);
+    await this.auditRule('AUTOMATION_PUBLISH_APPROVED', id, {
+      userId: approverId,
+      note,
+      requestedBy: requester,
+    });
+    await this.notifyPublicationDecision(
+      rule,
+      requester,
+      `A publicação de "${rule.name}" foi aprovada`,
+    );
     return published;
   }
 
@@ -2594,7 +2606,8 @@ export class AutomationService {
           try {
             const conn = await this.connections.authHeaders(params.connectionId);
             authHeaders = conn.headers;
-            if (!url && conn.baseUrl) url = `${conn.baseUrl.replace(/\/$/, '')}${params.path ?? ''}`;
+            if (!url && conn.baseUrl)
+              url = `${conn.baseUrl.replace(/\/$/, '')}${params.path ?? ''}`;
           } catch (e: unknown) {
             actionError = e instanceof Error ? e.message : String(e);
             result = { affected: 0, error: actionError };
@@ -3083,7 +3096,9 @@ export class AutomationService {
 
     if (!exec) return { message: 'Execução não encontrada' };
     if (exec.archivedAt) {
-      return { message: 'Execução arquivada: os dados originais já não existem — não pode ser repetida' };
+      return {
+        message: 'Execução arquivada: os dados originais já não existem — não pode ser repetida',
+      };
     }
 
     const rule = await this.prisma.automationRule

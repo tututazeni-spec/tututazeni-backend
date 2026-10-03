@@ -238,7 +238,9 @@ export class InstantiateTemplateDto {
   @MaxLength(200)
   name?: string;
 
-  @ApiPropertyOptional({ description: 'Valores dos campos (ver GET /automation/template-library/:key)' })
+  @ApiPropertyOptional({
+    description: 'Valores dos campos (ver GET /automation/template-library/:key)',
+  })
   @IsOptional()
   @IsObject()
   values?: Record<string, unknown>;

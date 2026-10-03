@@ -129,7 +129,12 @@ export class AutomationFailuresService {
     const where: Prisma.AutomationDeadLetterWhereInput = {};
     if (f.status) where.status = f.status;
     if (f.ruleId) where.ruleId = f.ruleId;
-    if (scopeRuleIds) where.ruleId = f.ruleId ? (scopeRuleIds.includes(f.ruleId) ? f.ruleId : -1) : { in: scopeRuleIds };
+    if (scopeRuleIds)
+      where.ruleId = f.ruleId
+        ? scopeRuleIds.includes(f.ruleId)
+          ? f.ruleId
+          : -1
+        : { in: scopeRuleIds };
     if (f.from || f.to) {
       where.createdAt = {
         ...(f.from ? { gte: new Date(f.from) } : {}),
@@ -175,7 +180,11 @@ export class AutomationFailuresService {
       _count: { _all: true },
     });
     const count = (s: string) => grouped.find(g => g.status === s)?._count._all ?? 0;
-    return { open: count('OPEN'), reprocessed: count('REPROCESSED'), discarded: count('DISCARDED') };
+    return {
+      open: count('OPEN'),
+      reprocessed: count('REPROCESSED'),
+      discarded: count('DISCARDED'),
+    };
   }
 
   async exportCsv(f: DeadLetterFilterDto = {}, scopeRuleIds?: number[] | null) {
@@ -186,7 +195,15 @@ export class AutomationFailuresService {
     });
     return toCsv(
       ['Data', 'Automação', 'Execução', 'Tentativas', 'Código', 'Erro', 'Estado'],
-      rows.map(r => [r.createdAt, r.ruleId, r.executionId, r.attempts, r.errorCode, r.errorMessage, r.status]),
+      rows.map(r => [
+        r.createdAt,
+        r.ruleId,
+        r.executionId,
+        r.attempts,
+        r.errorCode,
+        r.errorMessage,
+        r.status,
+      ]),
     );
   }
 
@@ -228,7 +245,12 @@ export class AutomationFailuresService {
     const row = await this.findOpen(id);
     const updated = await this.prisma.automationDeadLetter.update({
       where: { id },
-      data: { status: 'DISCARDED', resolvedAt: new Date(), resolvedBy: userId, resolutionNote: note },
+      data: {
+        status: 'DISCARDED',
+        resolvedAt: new Date(),
+        resolvedBy: userId,
+        resolutionNote: note,
+      },
     });
     await this.audit.record({
       entity: 'DEAD_LETTER',

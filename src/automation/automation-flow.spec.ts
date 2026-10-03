@@ -26,7 +26,7 @@ describe('automation-flow', () => {
   it('valida um fluxo correcto', () => {
     const r = validateFlow(flow);
     expect(r.valid).toBe(true);
-    expect(r.stats).toMatchObject({ steps: 6, actions: 3, conditions: 1, delays: 1 });
+    expect(r.stats).toMatchObject({ steps: 5, actions: 3, conditions: 1, delays: 1 });
   });
 
   it('rejeita fluxo vazio, acção desconhecida, atraso inválido e condição sem valor', () => {

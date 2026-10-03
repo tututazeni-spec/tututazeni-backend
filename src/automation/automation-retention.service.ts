@@ -90,7 +90,14 @@ export class AutomationRetentionService {
           this.prisma.automationDeadLetter.count({ where: oldDeadLetters }),
           this.prisma.automationAuditLog.count({ where: oldAudit }),
         ]);
-      result = { dryRun, archived, executionsDeleted, eventsDeleted, deadLettersDeleted, auditLogsDeleted };
+      result = {
+        dryRun,
+        archived,
+        executionsDeleted,
+        eventsDeleted,
+        deadLettersDeleted,
+        auditLogsDeleted,
+      };
     } else {
       // Arquivo primeiro (remove dados pessoais), depois a eliminação do que expirou.
       const archived = await this.prisma.automationExecution.updateMany({

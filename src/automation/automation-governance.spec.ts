@@ -55,7 +55,10 @@ describe('modelos de automação (§11)', () => {
 
 describe('auditoria e âmbito (§10)', () => {
   it('diffFields devolve só os campos que mudaram', () => {
-    expect(diffFields({ a: 1, b: 2 }, { a: 1, b: 3 })).toEqual({ before: { b: 2 }, after: { b: 3 } });
+    expect(diffFields({ a: 1, b: 2 }, { a: 1, b: 3 })).toEqual({
+      before: { b: 2 },
+      after: { b: 3 },
+    });
   });
 
   it('ruleInDepartment compara por departamento e rejeita regras sem âmbito', () => {
@@ -88,7 +91,9 @@ describe('segredos (§10)', () => {
   });
 
   it('o redactor oculta segredos de ligações nos registos', () => {
-    expect(redactSensitive({ secret: 'x', headers: { Authorization: 'Bearer abcdefgh12345' } })).toEqual({
+    expect(
+      redactSensitive({ secret: 'x', headers: { Authorization: 'Bearer abcdefgh12345' } }),
+    ).toEqual({
       secret: '***',
       headers: { Authorization: '***' },
     });

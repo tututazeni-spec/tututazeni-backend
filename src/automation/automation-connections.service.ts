@@ -6,7 +6,11 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
-import { ConnectionFilterDto, CreateConnectionDto, UpdateConnectionDto } from './automation-governance.dto';
+import {
+  ConnectionFilterDto,
+  CreateConnectionDto,
+  UpdateConnectionDto,
+} from './automation-governance.dto';
 import { AutomationAuditService, diffFields } from './automation-audit.service';
 
 type ConnectionRow = NonNullable<
@@ -66,7 +70,9 @@ export class AutomationConnectionsService {
       throw new BadRequestException('Autenticação por chave exige o nome do cabeçalho');
     }
     if (authType !== 'NONE' && !dto.secret && !current?.secretEnc) {
-      throw new BadRequestException('Esta autenticação exige o segredo (token, palavra-passe ou chave)');
+      throw new BadRequestException(
+        'Esta autenticação exige o segredo (token, palavra-passe ou chave)',
+      );
     }
   }
 
@@ -176,7 +182,9 @@ export class AutomationConnectionsService {
   }
 
   /** Cabeçalhos de autenticação em claro — só para o motor, nunca expostos por API. */
-  async authHeaders(id: string): Promise<{ baseUrl: string | null; headers: Record<string, string> }> {
+  async authHeaders(
+    id: string,
+  ): Promise<{ baseUrl: string | null; headers: Record<string, string> }> {
     const c = await this.find(id);
     if (c.status !== 'ACTIVE') throw new BadRequestException('A ligação está desactivada');
     const headers: Record<string, string> = {};

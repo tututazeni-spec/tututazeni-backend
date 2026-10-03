@@ -47,7 +47,7 @@ export const DEFAULT_GRANTS: Record<string, RoleGrant> = {
   RH: { roleCode: 'RH', actions: { ...ALL_TRUE, delete: false }, scope: 'ALL' },
 };
 
-type PermRow = {
+interface PermRow {
   roleCode: string;
   canView: boolean;
   canCreate: boolean;
@@ -58,7 +58,7 @@ type PermRow = {
   canCancel: boolean;
   canDelete: boolean;
   scope: string;
-};
+}
 
 const COLUMN: Record<AutomationAction, keyof PermRow> = {
   view: 'canView',
