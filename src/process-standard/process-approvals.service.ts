@@ -20,6 +20,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { isPrivileged } from '../common/authz/ownership';
+import { inDepartmentScope, instanceScopeWhere } from './process-scope';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
@@ -54,6 +55,7 @@ const APPROVAL_INCLUDE = {
       sourceEntityId: true,
       initiatedById: true,
       targetUserId: true,
+      department: { select: { id: true, parentId: true } },
       processVersion: true,
       process: { select: { id: true, code: true, title: true } },
       targetUser: user2,
@@ -86,7 +88,8 @@ export class ProcessApprovalsService {
   private canView(user: CurrentUserData, a: ApprovalRow) {
     const uid = user.id;
     return (
-      this.canViewAll(user) ||
+      // §20: o GESTOR vê as aprovações do seu departamento; ADMIN/RH/AUDITOR todas.
+      (this.canViewAll(user) && inDepartmentScope(user, a.instance.department)) ||
       a.approverId === uid ||
       a.requesterId === uid ||
       a.previousApproverId === uid ||
@@ -226,8 +229,9 @@ export class ProcessApprovalsService {
       and.push({ requesterId: user.id });
     } else if (!wantsAll) {
       and.push({ approverId: user.id });
-    } else if (!this.canViewAll(user)) {
-      and.push({ OR: [{ approverId: user.id }, { requesterId: user.id }] });
+    } else {
+      const scoped = instanceScopeWhere(user);
+      if (Object.keys(scoped).length) and.push({ instance: scoped });
     }
 
     const status = filters.status;

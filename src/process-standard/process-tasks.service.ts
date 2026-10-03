@@ -14,6 +14,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { isPrivileged } from '../common/authz/ownership';
+import { inDepartmentScope, instanceScopeWhere } from './process-scope';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
@@ -47,6 +48,7 @@ const TASK_INCLUDE = {
       targetUserId: true,
       initiatedById: true,
       currentResponsibleId: true,
+      department: { select: { id: true, parentId: true } },
       process: { select: { id: true, code: true, title: true, ownerId: true } },
       targetUser: user3,
     },
@@ -82,6 +84,18 @@ export class ProcessTasksService {
     );
   }
 
+  private isParticipant(user: CurrentUserData, t: TaskRow) {
+    const uid = String(user.id);
+    return [
+      t.assigneeId,
+      t.reviewerId,
+      t.step.responsibleId,
+      t.instance.targetUserId,
+      t.instance.initiatedById,
+      t.instance.currentResponsibleId,
+    ].some(v => v != null && String(v) === uid);
+  }
+
   private isReviewer(user: CurrentUserData, t: TaskRow) {
     return t.reviewerId != null && String(t.reviewerId) === String(user.id);
   }
@@ -115,6 +129,12 @@ export class ProcessTasksService {
     const t = await this.load(instanceId, stepId);
     // 404 (e não 403) para não revelar a existência de tarefas alheias.
     if (!this.canView(user, t)) throw new NotFoundException('Tarefa não encontrada');
+    // §20: o GESTOR só actua sobre tarefas do seu departamento (ou em que participa).
+    if (this.isManager(user) && !this.isParticipant(user, t)) {
+      if (!inDepartmentScope(user, t.instance.department)) {
+        throw new NotFoundException('Tarefa não encontrada');
+      }
+    }
     if (!allow(t)) throw new ForbiddenException('Sem permissão para esta acção na tarefa');
     return t;
   }
@@ -263,6 +283,10 @@ export class ProcessTasksService {
           { assigneeId: null, instance: { targetUserId: user.id } },
         ],
       });
+    }
+    if (scope === 'all') {
+      const scoped = instanceScopeWhere(user);
+      if (Object.keys(scoped).length) and.push({ instance: scoped });
     }
     if (filters.status) where.status = filters.status;
     if (filters.instanceId) where.instanceId = filters.instanceId;

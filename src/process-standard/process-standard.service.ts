@@ -39,6 +39,8 @@ import {
 } from './process-conditions';
 import { isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
+import { inDepartmentScope } from './process-scope';
+import { missingStartData, startRequirements } from './process-start-requirements';
 import { CurrentUserData } from '../common/decorators';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { ApprovalDecision, InstanceStatus } from '@prisma/client';
@@ -699,11 +701,51 @@ export class ProcessStandardService {
     return formatCode(cfg, year, sequenceOf(cfg, year, last?.code) + 1);
   }
 
+  /**
+   * §19/§20: quem pode iniciar um processo e para quem. Perfis de gestão iniciam
+   * para qualquer colaborador do seu âmbito (o GESTOR, do seu departamento); os
+   * restantes só criam pedidos para si, em modelos que lhes estão explicitamente
+   * abertos (função listada em `accessRoles`).
+   */
+  private assertCanStartFor(
+    user: CurrentUserData,
+    process: { accessRoles: string[] },
+    targetUserId: number,
+    targetDepartment: { id: number; parentId: number | null } | null,
+  ) {
+    if (isPrivileged(user, PROCESS_PRIVILEGED_ROLES)) {
+      if (
+        targetUserId !== user.id &&
+        !inDepartmentScope(user, targetDepartment)
+      ) {
+        throw new ForbiddenException('O colaborador está fora do seu âmbito departamental');
+      }
+      return;
+    }
+    if (targetUserId !== user.id) {
+      throw new ForbiddenException('Só pode iniciar pedidos em seu próprio nome');
+    }
+    if (!process.accessRoles.includes(user.role?.name ?? '')) {
+      throw new ForbiddenException('Este modelo não está aberto a pedidos da sua função');
+    }
+  }
+
+  /** §19: dados específicos que o modelo exige no arranque, conforme o módulo de origem. */
+  async getStartRequirements(processId: number, sourceModule?: string) {
+    const process = await this.findOne(processId);
+    return {
+      ...startRequirements(sourceModule ?? process.involvedModules[0]),
+      templateId: process.id,
+      involvedModules: process.involvedModules,
+    };
+  }
+
   async startInstance(
     processId: number,
     initiatedById: number,
     dto: StartInstanceDto,
     user?: CurrentUserData,
+    opts: { validateRequirements?: boolean } = {},
   ) {
     const process = await this.findOne(processId);
 
@@ -730,8 +772,23 @@ export class ProcessStandardService {
     // na falta, do colaborador alvo.
     const targetOrg = await this.prisma.user.findUnique({
       where: { id: targetUserId },
-      select: { departmentId: true, unitId: true },
+      select: {
+        departmentId: true,
+        unitId: true,
+        department: { select: { id: true, parentId: true } },
+      },
     });
+    if (user) this.assertCanStartFor(user, process, targetUserId, targetOrg?.department ?? null);
+    if (user && opts.validateRequirements) {
+      const missing = missingStartData(startRequirements(dto.sourceModule), {
+        targetUserId: dto.targetUserId,
+        sourceEntityId: dto.sourceEntityId,
+        actorIsManager: isPrivileged(user, PROCESS_PRIVILEGED_ROLES),
+      });
+      if (missing.length) {
+        throw new BadRequestException(`Dados obrigatórios em falta: ${missing.join(', ')}`);
+      }
+    }
     const sourceEntityType = dto.sourceEntityType?.trim() || null;
     const sourceEntityId = dto.sourceEntityId?.trim() || null;
 
@@ -1026,8 +1083,17 @@ export class ProcessStandardService {
     const isParticipant =
       String(user.id) === String(inst.targetUserId) ||
       String(user.id) === String(inst.initiatedById);
-    if (!isParticipant && !isPrivileged(user, PROCESS_PRIVILEGED_ROLES)) {
-      throw new NotFoundException('Instância não encontrada');
+    // §20: ADMIN/RH/AUDITOR vêem tudo; o GESTOR o seu departamento.
+    if (!isParticipant) {
+      const department = inst.departmentId
+        ? await this.prisma.read.department.findUnique({
+            where: { id: inst.departmentId },
+            select: { id: true, parentId: true },
+          })
+        : null;
+      if (!inDepartmentScope(user, department)) {
+        throw new NotFoundException('Instância não encontrada');
+      }
     }
     const now = new Date();
     return {

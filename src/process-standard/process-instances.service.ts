@@ -21,6 +21,7 @@ import { CurrentUserData } from '../common/decorators';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { ProcessStandardService } from './process-standard.service';
 import { ProcessEngineService } from './process-engine.service';
+import { inDepartmentScope, instanceScopeWhere } from './process-scope';
 import { deriveInstanceMetrics, isActiveStatus } from './process-workflow';
 import {
   AssignInstanceDto,
@@ -154,6 +155,7 @@ export class ProcessInstancesService {
         suspendedAt: true,
         archivedAt: true,
         processId: true,
+        department: { select: { id: true, parentId: true } },
         stepProgress: { select: { assigneeId: true, reviewerId: true } },
       },
     });
@@ -177,6 +179,16 @@ export class ProcessInstancesService {
   private assertManager(user: CurrentUserData) {
     if (!this.isManager(user)) {
       throw new ForbiddenException('Sem permissão para gerir processos');
+    }
+  }
+
+  /** §20: o GESTOR só gere processos do seu departamento (ou em que participa). */
+  private assertInScope(
+    user: CurrentUserData,
+    inst: Awaited<ReturnType<ProcessInstancesService['findForAccess']>>,
+  ) {
+    if (!inDepartmentScope(user, inst.department) && !this.isParticipant(user, inst)) {
+      throw new NotFoundException('Instância não encontrada');
     }
   }
 
@@ -255,17 +267,10 @@ export class ProcessInstancesService {
       });
     }
 
-    // Âmbito (§20): quem não gere processos só vê os seus.
-    if (!this.isManager(user)) {
-      and.push({
-        OR: [
-          { initiatedById: user.id },
-          { targetUserId: user.id },
-          { currentResponsibleId: user.id },
-          { stepProgress: { some: { OR: [{ assigneeId: user.id }, { reviewerId: user.id }] } } },
-        ],
-      });
-    }
+    // Âmbito (§20): ADMIN/RH/AUDITOR vêem tudo; GESTOR o seu departamento e
+    // participações; os restantes apenas os seus processos.
+    const scoped = instanceScopeWhere(user);
+    if (Object.keys(scoped).length) and.push(scoped);
     return where;
   }
 
@@ -407,6 +412,7 @@ export class ProcessInstancesService {
     if (!this.isManager(user) && String(user.id) !== String(inst.initiatedById)) {
       throw new NotFoundException('Instância não encontrada');
     }
+    if (this.isManager(user)) this.assertInScope(user, inst);
     if (!['IN_PROGRESS', 'ON_HOLD'].includes(inst.status)) {
       throw new BadRequestException('Só processos em execução ou suspensos podem ser editados');
     }
@@ -444,6 +450,7 @@ export class ProcessInstancesService {
   async assign(id: number, dto: AssignInstanceDto, user: CurrentUserData) {
     this.assertManager(user);
     const inst = await this.findForAccess(id);
+    this.assertInScope(user, inst);
     if (!['IN_PROGRESS', 'ON_HOLD'].includes(inst.status)) {
       throw new BadRequestException('Só processos em execução ou suspensos podem ser reatribuídos');
     }
@@ -490,6 +497,7 @@ export class ProcessInstancesService {
   async changePriority(id: number, dto: ChangePriorityDto, user: CurrentUserData) {
     this.assertManager(user);
     const inst = await this.findForAccess(id);
+    this.assertInScope(user, inst);
     const before = await this.prisma.processInstance.findUnique({
       where: { id },
       select: { priority: true },
@@ -508,6 +516,7 @@ export class ProcessInstancesService {
   async suspend(id: number, user: CurrentUserData, reason?: string) {
     this.assertManager(user);
     const inst = await this.findForAccess(id);
+    this.assertInScope(user, inst);
     if (inst.status !== 'IN_PROGRESS') {
       throw new BadRequestException('Só processos em execução podem ser suspensos');
     }
@@ -528,6 +537,7 @@ export class ProcessInstancesService {
   async resume(id: number, user: CurrentUserData, reason?: string) {
     this.assertManager(user);
     const inst = await this.findForAccess(id);
+    this.assertInScope(user, inst);
     if (inst.status !== 'ON_HOLD') {
       throw new BadRequestException('Só processos suspensos podem ser retomados');
     }
@@ -569,6 +579,7 @@ export class ProcessInstancesService {
     this.assertManager(user);
     const src = await this.prisma.read.processInstance.findUnique({ where: { id } });
     if (!src) throw new NotFoundException('Instância não encontrada');
+    this.assertInScope(user, await this.findForAccess(id));
 
     // Sem a referência de origem: seria bloqueado pela regra anti-duplicados.
     const created = await this.processes.startInstance(
@@ -597,6 +608,7 @@ export class ProcessInstancesService {
   async archive(id: number, user: CurrentUserData) {
     this.assertManager(user);
     const inst = await this.findForAccess(id);
+    this.assertInScope(user, inst);
     if (!['COMPLETED', 'CANCELLED'].includes(inst.status)) {
       throw new BadRequestException('Só processos concluídos ou cancelados podem ser arquivados');
     }
@@ -613,7 +625,7 @@ export class ProcessInstancesService {
 
   async history(id: number, user: CurrentUserData, page = 1, limit = 50) {
     const inst = await this.findForAccess(id);
-    if (!this.isManager(user) && !this.isParticipant(user, inst)) {
+    if (!inDepartmentScope(user, inst.department) && !this.isParticipant(user, inst)) {
       throw new NotFoundException('Instância não encontrada');
     }
     const where: Prisma.ProcessAuditLogWhereInput = { instanceId: id };

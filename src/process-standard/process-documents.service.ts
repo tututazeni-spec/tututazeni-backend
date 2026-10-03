@@ -16,6 +16,7 @@ import { Prisma } from '@prisma/client';
 import PDFDocument from 'pdfkit';
 import { PrismaService } from '../prisma/prisma.service';
 import { isPrivileged } from '../common/authz/ownership';
+import { instanceScopeWhere } from './process-scope';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
@@ -95,15 +96,7 @@ export class ProcessDocumentsService {
 
   /** Instâncias que o utilizador pode ver (espelha «Todos os Processos»). */
   private instanceScope(user: CurrentUserData): Prisma.ProcessInstanceWhereInput {
-    if (this.isManager(user) || isPrivileged(user, FULL_VIEW_ROLES)) return {};
-    return {
-      OR: [
-        { initiatedById: user.id },
-        { targetUserId: user.id },
-        { currentResponsibleId: user.id },
-        { stepProgress: { some: { OR: [{ assigneeId: user.id }, { reviewerId: user.id }] } } },
-      ],
-    };
+    return instanceScopeWhere(user);
   }
 
   /**

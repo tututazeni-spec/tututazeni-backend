@@ -217,7 +217,9 @@ describe('ProcessStandardController', () => {
   it('startInstance → startInstance(id, userId, dto)', async () => {
     const dto = {} as any;
     await controller.startInstance(2, mockUser as any, dto);
-    expect(mockSvc.startInstance).toHaveBeenCalledWith(2, 1, dto, mockUser);
+    expect(mockSvc.startInstance).toHaveBeenCalledWith(2, 1, dto, mockUser, {
+      validateRequirements: true,
+    });
   });
 
   it('cancelInstance → cancelInstance(instanceId, userId, reason)', async () => {

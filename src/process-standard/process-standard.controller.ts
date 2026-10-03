@@ -848,15 +848,28 @@ export class ProcessStandardController {
     return this.svc.getInstanceDetail(id, user);
   }
 
+  @Get(':id/start-requirements')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Dados específicos exigidos ao iniciar o modelo (§19)' })
+  @ApiQuery({ name: 'sourceModule', required: false })
+  startRequirements(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('sourceModule') sourceModule?: string,
+  ) {
+    return this.svc.getStartRequirements(id, sourceModule);
+  }
+
   @Post(':id/start')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Iniciar instância de processo para um colaborador' })
+  @Roles(...AUTHENTICATED_ROLES.filter(r => r !== Role.AUDITOR && r !== Role.INSTRUCTOR))
+  @ApiOperation({
+    summary: 'Iniciar instância de processo (gestão; ou pedido próprio em modelos autorizados)',
+  })
   startInstance(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: CurrentUserData,
     @Body() dto: StartInstanceDto,
   ) {
-    return this.svc.startInstance(id, user.id, dto, user);
+    return this.svc.startInstance(id, user.id, dto, user, { validateRequirements: true });
   }
 
   @Patch('instances/:instanceId/cancel')
