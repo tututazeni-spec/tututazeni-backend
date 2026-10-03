@@ -2,6 +2,7 @@ import { IsString, IsOptional, IsDateString, IsEnum, IsInt, Min } from 'class-va
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { DocumentValidationStatus } from '@prisma/client';
+import { IsAllowedFileUrl } from '../../common/validators/is-allowed-file-url.validator';
 
 export class CreateBeneficiaryDocumentDto {
   @ApiProperty({ example: 'Bilhete de Identidade' })
@@ -14,6 +15,7 @@ export class CreateBeneficiaryDocumentDto {
 
   @ApiProperty()
   @IsString()
+  @IsAllowedFileUrl()
   fileUrl: string;
 
   @ApiPropertyOptional()

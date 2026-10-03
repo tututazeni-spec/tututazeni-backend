@@ -232,7 +232,7 @@ export class CrmBeneficiariesService {
       where: { id: beneficiaryId },
       data: {
         lastContactAt: new Date(),
-        ...(nextActionDate && { nextFollowUpAt: new Date(nextActionDate) }),
+        ...(dto.nextActionDate && { nextFollowUpAt: new Date(dto.nextActionDate) }),
         satisfactionAvg: avgSatisfaction,
       },
     });
