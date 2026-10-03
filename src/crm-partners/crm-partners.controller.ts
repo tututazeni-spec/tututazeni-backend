@@ -24,6 +24,13 @@ import {
   FilterPartnerDto,
   CreatePartnerInteractionDto,
   CreateMilestoneDto,
+  CreatePartnerContactDto,
+  UpdatePartnerContactDto,
+  CreatePartnerProgramDto,
+  UpdatePartnerProgramDto,
+  CreatePartnerAgreementDto,
+  UpdatePartnerAgreementDto,
+  CreateAgreementVersionDto,
 } from './dto';
 import { Role } from '../auth/enums/role.enum';
 
@@ -102,6 +109,157 @@ export class CrmPartnersController {
   @ApiOperation({ summary: 'Remover parceiro (soft delete)' })
   remove(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.service.softDelete(id, user.id);
+  }
+
+  // ─── CONTACTOS ───────────────────────────────────────
+
+  @Get(':id/contacts')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar contactos do parceiro' })
+  getContacts(@Param('id') id: string) {
+    return this.service.getContacts(id);
+  }
+
+  @Post(':id/contacts')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Adicionar contacto ao parceiro' })
+  addContact(
+    @Param('id') id: string,
+    @Body() dto: CreatePartnerContactDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addContact(id, dto, user.id);
+  }
+
+  @Put(':id/contacts/:contactId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar contacto do parceiro' })
+  updateContact(
+    @Param('id') id: string,
+    @Param('contactId') contactId: string,
+    @Body() dto: UpdatePartnerContactDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateContact(id, contactId, dto, user.id);
+  }
+
+  @Delete(':id/contacts/:contactId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover contacto do parceiro' })
+  removeContact(
+    @Param('id') id: string,
+    @Param('contactId') contactId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeContact(id, contactId, user.id);
+  }
+
+  // ─── PROGRAMAS E PROJECTOS ───────────────────────────
+
+  @Get(':id/programs')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar programas e projectos do parceiro' })
+  getPrograms(@Param('id') id: string) {
+    return this.service.getPrograms(id);
+  }
+
+  @Post(':id/programs')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Associar parceiro a programa/projecto' })
+  addProgram(
+    @Param('id') id: string,
+    @Body() dto: CreatePartnerProgramDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addProgram(id, dto, user.id);
+  }
+
+  @Put(':id/programs/:programId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar associação a programa' })
+  updateProgram(
+    @Param('id') id: string,
+    @Param('programId') programId: string,
+    @Body() dto: UpdatePartnerProgramDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateProgram(id, programId, dto, user.id);
+  }
+
+  @Delete(':id/programs/:programId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover associação a programa' })
+  removeProgram(
+    @Param('id') id: string,
+    @Param('programId') programId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeProgram(id, programId, user.id);
+  }
+
+  // ─── ACORDOS E CONTRATOS ─────────────────────────────
+
+  @Get(':id/agreements')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar acordos do parceiro' })
+  getAgreements(@Param('id') id: string) {
+    return this.service.getAgreements(id);
+  }
+
+  @Get(':id/agreements/:agreementId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Detalhe de acordo com histórico de versões' })
+  getAgreement(@Param('id') id: string, @Param('agreementId') agreementId: string) {
+    return this.service.getAgreement(id, agreementId);
+  }
+
+  @Post(':id/agreements')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Registar novo acordo' })
+  addAgreement(
+    @Param('id') id: string,
+    @Body() dto: CreatePartnerAgreementDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addAgreement(id, dto, user.id);
+  }
+
+  @Put(':id/agreements/:agreementId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar acordo' })
+  updateAgreement(
+    @Param('id') id: string,
+    @Param('agreementId') agreementId: string,
+    @Body() dto: UpdatePartnerAgreementDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateAgreement(id, agreementId, dto, user.id);
+  }
+
+  @Delete(':id/agreements/:agreementId')
+  @Roles(Role.ADMIN, Role.RH)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover acordo (soft delete)' })
+  removeAgreement(
+    @Param('id') id: string,
+    @Param('agreementId') agreementId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeAgreement(id, agreementId, user.id);
+  }
+
+  @Post(':id/agreements/:agreementId/versions')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Anexar nova versão do documento do acordo' })
+  addAgreementVersion(
+    @Param('id') id: string,
+    @Param('agreementId') agreementId: string,
+    @Body() dto: CreateAgreementVersionDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addAgreementVersion(id, agreementId, dto, user.id);
   }
 
   // ─── INTERACÇÕES ─────────────────────────────────────

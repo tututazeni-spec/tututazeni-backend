@@ -991,10 +991,13 @@ model User {
   beneficiaryBenefitsCreated   BeneficiaryBenefit[]     @relation("BenefitCreator")
 
   // ─── CRM Parceiros ────────────────────────────────────────────
-  createdPartners          Partner[]            @relation("PartnerCreator")
-  assignedPartners         Partner[]            @relation("PartnerOwner")
-  partnerInteractions      PartnerInteraction[] @relation("PartnerInteractionUser")
-  createdPartnerMilestones PartnerMilestone[]   @relation("MilestoneCreator")
+  createdPartners          Partner[]                 @relation("PartnerCreator")
+  assignedPartners         Partner[]                 @relation("PartnerOwner")
+  partnerProgramsOwned     PartnerProgram[]          @relation("PartnerProgramResponsible")
+  partnerAgreementsOwned   PartnerAgreement[]        @relation("PartnerAgreementResponsible")
+  partnerAgreementUploads  PartnerAgreementVersion[] @relation("PartnerAgreementVersionUploader")
+  partnerInteractions      PartnerInteraction[]      @relation("PartnerInteractionUser")
+  createdPartnerMilestones PartnerMilestone[]        @relation("MilestoneCreator")
 
   // ─── CRM Financiadores ────────────────────────────────────────
   createdFunders            Funder[]            @relation("FunderCreator")
@@ -11173,15 +11176,45 @@ model Partner {
   lastContactAt   DateTime?
   nextReviewAt    DateTime?
   satisfactionAvg Float           @default(0)
-  createdById     Int
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  deletedAt       DateTime?
+
+  // ① Identificação
+  commercialName String?
+  logoUrl        String?
+  registeredAt   DateTime @default(now())
+  origin         String?
+
+  // ② Dados institucionais
+  municipality       String?
+  postalCode         String?
+  sector             String?
+  organizationSize   PartnerOrganizationSize?
+  employeeCount      Int?
+  foundedYear        Int?
+  organizationType   String?
+  registrationNumber String?
+  description        String?
+  mission            String?
+  areasOfActivity    String[]
+  category           String?
+  segment            String?
+  specializationArea String?
+  partnershipLevel   PartnershipLevel?
+
+  // ④ Tipo de parceria (multi-selecção)
+  partnershipTypes PartnershipKind[]
+
+  createdById Int
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
 
   createdBy    User                 @relation("PartnerCreator", fields: [createdById], references: [id])
   assignedTo   User?                @relation("PartnerOwner", fields: [assignedToId], references: [id])
   interactions PartnerInteraction[]
   milestones   PartnerMilestone[]
+  contacts     PartnerContact[]
+  programs     PartnerProgram[]
+  agreements   PartnerAgreement[]
 
   @@index([type])
   @@index([tier])
@@ -11190,6 +11223,104 @@ model Partner {
   @@index([contractEnd])
   @@index([nextReviewAt])
   @@index([deletedAt])
+}
+
+model PartnerContact {
+  id               String    @id @default(cuid())
+  partnerId        String
+  firstName        String
+  lastName         String?
+  jobTitle         String?
+  department       String?
+  email            String?
+  phone            String?
+  whatsapp         String?
+  preferredChannel String?
+  isPrimary        Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  partner Partner @relation(fields: [partnerId], references: [id])
+
+  @@index([partnerId])
+  @@index([isPrimary])
+  @@index([deletedAt])
+}
+
+// ⑤ Programas e projectos (program/project como texto livre, tal como em
+// BeneficiaryParticipation — não existe modelo genérico de Programa no CRM)
+model PartnerProgram {
+  id               String               @id @default(cuid())
+  partnerId        String
+  program          String
+  project          String?
+  interventionArea String?
+  role             String?
+  startDate        DateTime?
+  endDate          DateTime?
+  status           PartnerProgramStatus @default(PLANNED)
+  responsibleId    Int?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  deletedAt        DateTime?
+
+  partner     Partner @relation(fields: [partnerId], references: [id])
+  responsible User?   @relation("PartnerProgramResponsible", fields: [responsibleId], references: [id])
+
+  @@index([partnerId])
+  @@index([program])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+// ⑥ Acordos e contratos
+model PartnerAgreement {
+  id                    String                 @id @default(cuid())
+  partnerId             String
+  type                  PartnerAgreementType
+  documentNumber        String?
+  signedAt              DateTime?
+  startDate             DateTime?
+  endDate               DateTime?
+  autoRenew             Boolean                @default(false)
+  responsibleId         Int?
+  partnerRepresentative String?
+  status                PartnerAgreementStatus @default(DRAFTING)
+  value                 Float?
+  currency              String                 @default("AOA")
+  mainConditions        String?
+  notes                 String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  deletedAt             DateTime?
+
+  partner     Partner                   @relation(fields: [partnerId], references: [id])
+  responsible User?                     @relation("PartnerAgreementResponsible", fields: [responsibleId], references: [id])
+  versions    PartnerAgreementVersion[]
+
+  @@index([partnerId])
+  @@index([status])
+  @@index([endDate])
+  @@index([deletedAt])
+}
+
+model PartnerAgreementVersion {
+  id           String   @id @default(cuid())
+  agreementId  String
+  version      Int
+  fileName     String
+  fileUrl      String
+  fileSize     Int?
+  notes        String?
+  uploadedById Int
+  createdAt    DateTime @default(now())
+
+  agreement  PartnerAgreement @relation(fields: [agreementId], references: [id])
+  uploadedBy User             @relation("PartnerAgreementVersionUploader", fields: [uploadedById], references: [id])
+
+  @@unique([agreementId, version])
+  @@index([agreementId])
 }
 
 model PartnerInteraction {
@@ -11260,6 +11391,82 @@ enum PartnerType {
   MEDIA
   GOVERNMENT
   OTHER
+  COMPANY
+  NGO
+  PUBLIC_INSTITUTION
+  EDUCATION_INSTITUTION
+  INTERNATIONAL_ORGANIZATION
+  ASSOCIATION
+  FOUNDATION
+  FINANCIAL_INSTITUTION
+  SUPPLIER
+  TECHNOLOGY_PARTNER
+  TRAINING_PARTNER
+}
+
+enum PartnershipKind {
+  TRAINING
+  EDUCATION
+  EMPLOYMENT
+  INTERNSHIPS
+  RECRUITMENT
+  FUNDING
+  PROJECT_IMPLEMENTATION
+  TECHNICAL_SUPPORT
+  SUPPLY
+  TECHNOLOGY
+  CONTENT
+  EVENTS
+  MENTORING
+  RESEARCH
+  CERTIFICATION
+  LOGISTICS
+  COMMUNICATION
+  SOCIAL_RESPONSIBILITY
+  COMMUNITY_DEVELOPMENT
+  OTHER
+}
+
+enum PartnerProgramStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
+  SUSPENDED
+  CANCELLED
+}
+
+enum PartnerAgreementType {
+  MOU
+  CONTRACT
+  PROTOCOL
+  PARTNERSHIP_AGREEMENT
+  COLLABORATION_TERMS
+  OTHER
+}
+
+enum PartnerAgreementStatus {
+  DRAFTING
+  NEGOTIATION
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+enum PartnershipLevel {
+  STRATEGIC
+  INSTITUTIONAL
+  OPERATIONAL
+  TECHNICAL
+  COMMERCIAL
+  TRAINING
+  COMMUNITY
+}
+
+enum PartnerOrganizationSize {
+  MICRO
+  SMALL
+  MEDIUM
+  LARGE
 }
 
 enum PartnerTier {
@@ -11275,6 +11482,8 @@ enum PartnerStatus {
   NEGOTIATION
   SUSPENDED
   FORMER
+  POTENTIAL
+  CLOSED
 }
 
 enum PartnerInteractionType {
