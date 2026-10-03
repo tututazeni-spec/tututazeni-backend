@@ -6,11 +6,23 @@ import {
   IsDateString,
   IsArray,
   IsInt,
+  IsBoolean,
+  IsNumber,
+  Min,
   Length,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { BeneficiaryType, Gender, AngolaProvince } from '@prisma/client';
+import {
+  BeneficiaryType,
+  BeneficiaryStatus,
+  Gender,
+  AngolaProvince,
+  MaritalStatus,
+  NeedPriority,
+  FollowUpStatus,
+  ConsentStatus,
+} from '@prisma/client';
 
 export class CreateBeneficiaryDto {
   @ApiProperty({ enum: BeneficiaryType })
@@ -113,4 +125,257 @@ export class CreateBeneficiaryDto {
   @IsOptional()
   @IsDateString()
   nextFollowUpAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  beneficiaryNumber?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  idDocumentType?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  idDocumentNumber?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  idDocumentCountry?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  photoUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  alternativePhone?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  municipality?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  commune?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  neighborhood?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  postalCode?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  emergencyContactName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  emergencyContactPhone?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  emergencyContactRelation?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  profile?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  programName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  originInstitution?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  responsibleUnit?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  householdHeadName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  householdHeadRelation?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  employmentStatus?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  employer?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  jobTitle?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  incomeSource?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  housingSituation?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  eligibilityCriteria?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  goals?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  followUpPlan?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  followUpResult?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  nextActions?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  communicationPreferences?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  idDocumentIssuedAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  idDocumentExpiresAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  registeredAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  consentAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  consentRevokedAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isEligible?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  consentDataProcessing?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  consentCommunications?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  consentDataSharing?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  householdSize?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  dependentsCount?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  monthlyIncome?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  accountManagerId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsEnum(MaritalStatus)
+  maritalStatus?: MaritalStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsEnum(NeedPriority)
+  priority?: NeedPriority;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsEnum(FollowUpStatus)
+  followUpStatus?: FollowUpStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsEnum(ConsentStatus)
+  consentStatus?: ConsentStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  authorizedChannels?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsEnum(BeneficiaryStatus)
+  status?: BeneficiaryStatus;
 }

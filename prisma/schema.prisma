@@ -985,6 +985,10 @@ model User {
   assignedBeneficiaries        Beneficiary[]            @relation("BeneficiaryOwner")
   beneficiaryInteractions      BeneficiaryInteraction[] @relation("InteractionUser")
   uploadedBeneficiaryDocuments BeneficiaryDocument[]    @relation("DocumentUploader")
+  managedBeneficiaries         Beneficiary[]            @relation("BeneficiaryAccountManager")
+  updatedBeneficiaries         Beneficiary[]            @relation("BeneficiaryUpdater")
+  validatedBeneficiaryDocs     BeneficiaryDocument[]    @relation("DocumentValidator")
+  beneficiaryBenefitsCreated   BeneficiaryBenefit[]     @relation("BenefitCreator")
 
   // ─── CRM Parceiros ────────────────────────────────────────────
   createdPartners          Partner[]            @relation("PartnerCreator")
@@ -10774,12 +10778,83 @@ model Beneficiary {
   updatedAt       DateTime          @updatedAt
   deletedAt       DateTime?
 
-  createdBy    User                     @relation("BeneficiaryCreator", fields: [createdById], references: [id])
-  assignedTo   User?                    @relation("BeneficiaryOwner", fields: [assignedToId], references: [id])
-  interactions BeneficiaryInteraction[]
-  documents    BeneficiaryDocument[]
-  needs        BeneficiaryNeed[]
+  // ─── Dados principais ─────────────────────────────────────────
+  beneficiaryNumber        String?
+  maritalStatus            MaritalStatus?
+  idDocumentType           String?
+  idDocumentNumber         String?
+  idDocumentIssuedAt       DateTime?
+  idDocumentExpiresAt      DateTime?
+  idDocumentCountry        String?
+  photoUrl                 String?
+  alternativePhone         String?
+  municipality             String?
+  commune                  String?
+  neighborhood             String?
+  postalCode               String?
+  emergencyContactName     String?
+  emergencyContactPhone    String?
+  emergencyContactRelation String?
 
+  // ─── Classificação CRM ────────────────────────────────────────
+  profile           String?
+  programName       String?
+  originInstitution String?
+  registeredAt      DateTime      @default(now())
+  responsibleUnit   String?
+  accountManagerId  Int?
+  priority          NeedPriority?
+
+  // ─── Agregado / enquadramento ─────────────────────────────────
+  householdSize         Int?
+  dependentsCount       Int?
+  householdHeadName     String?
+  householdHeadRelation String?
+  employmentStatus      String?
+  employer              String?
+  jobTitle              String?
+  monthlyIncome         Float?
+  incomeSource          String?
+  housingSituation      String?
+
+  // ─── Elegibilidade ────────────────────────────────────────────
+  isEligible          Boolean?
+  eligibilityCriteria String?
+
+  // ─── Acompanhamento ───────────────────────────────────────────
+  followUpStatus FollowUpStatus?
+  goals          String?
+  followUpPlan   String?
+  followUpResult String?
+  nextActions    String?
+
+  // ─── Consentimentos e privacidade ─────────────────────────────
+  consentDataProcessing    Boolean       @default(false)
+  consentCommunications    Boolean       @default(false)
+  consentDataSharing       Boolean       @default(false)
+  authorizedChannels       String[]
+  consentAt                DateTime?
+  consentStatus            ConsentStatus @default(PENDING)
+  consentRevokedAt         DateTime?
+  communicationPreferences String?
+
+  // ─── Auditoria ────────────────────────────────────────────────
+  updatedById Int?
+
+  createdBy           User                       @relation("BeneficiaryCreator", fields: [createdById], references: [id])
+  assignedTo          User?                      @relation("BeneficiaryOwner", fields: [assignedToId], references: [id])
+  accountManager      User?                      @relation("BeneficiaryAccountManager", fields: [accountManagerId], references: [id])
+  updatedBy           User?                      @relation("BeneficiaryUpdater", fields: [updatedById], references: [id])
+  interactions        BeneficiaryInteraction[]
+  relatedInteractions BeneficiaryInteraction[]   @relation("InteractionRelatedBeneficiary")
+  documents           BeneficiaryDocument[]
+  needs               BeneficiaryNeed[]
+  benefits            BeneficiaryBenefit[]
+  participations      BeneficiaryParticipation[]
+
+  @@index([accountManagerId])
+  @@index([beneficiaryNumber])
+  @@index([municipality])
   @@index([type])
   @@index([status])
   @@index([province])
@@ -10790,27 +10865,30 @@ model Beneficiary {
 }
 
 model BeneficiaryInteraction {
-  id             String          @id @default(cuid())
-  beneficiaryId  String
-  userId         Int
-  type           InteractionType
-  channel        String?
-  subject        String
-  description    String
-  date           DateTime        @default(now())
-  durationMin    Int?
-  outcome        String?
-  nextAction     String?
-  nextActionDate DateTime?
-  satisfaction   Int?
-  attachments    String[]
-  isPrivate      Boolean         @default(false)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  deletedAt      DateTime?
+  id                   String          @id @default(cuid())
+  beneficiaryId        String
+  userId               Int
+  type                 InteractionType
+  channel              String?
+  subject              String
+  description          String
+  date                 DateTime        @default(now())
+  durationMin          Int?
+  outcome              String?
+  nextAction           String?
+  nextActionDate       DateTime?
+  satisfaction         Int?
+  attachments          String[]
+  isPrivate            Boolean         @default(false)
+  notes                String?
+  relatedBeneficiaryId String?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  deletedAt            DateTime?
 
-  beneficiary Beneficiary @relation(fields: [beneficiaryId], references: [id])
-  user        User        @relation("InteractionUser", fields: [userId], references: [id])
+  beneficiary        Beneficiary  @relation(fields: [beneficiaryId], references: [id])
+  user               User         @relation("InteractionUser", fields: [userId], references: [id])
+  relatedBeneficiary Beneficiary? @relation("InteractionRelatedBeneficiary", fields: [relatedBeneficiaryId], references: [id])
 
   @@index([beneficiaryId])
   @@index([type])
@@ -10819,20 +10897,27 @@ model BeneficiaryInteraction {
 }
 
 model BeneficiaryDocument {
-  id            String    @id @default(cuid())
-  beneficiaryId String
-  name          String
-  type          String
-  fileUrl       String
-  fileSize      Int?
-  expiresAt     DateTime?
-  isVerified    Boolean   @default(false)
-  uploadedById  Int
-  createdAt     DateTime  @default(now())
-  deletedAt     DateTime?
+  id               String                   @id @default(cuid())
+  beneficiaryId    String
+  name             String
+  type             String
+  fileUrl          String
+  fileSize         Int?
+  expiresAt        DateTime?
+  isVerified       Boolean                  @default(false)
+  uploadedById     Int
+  createdAt        DateTime                 @default(now())
+  deletedAt        DateTime?
+  documentNumber   String?
+  issuedAt         DateTime?
+  validationStatus DocumentValidationStatus @default(PENDING)
+  validatedById    Int?
+  validatedAt      DateTime?
+  notes            String?
 
   beneficiary Beneficiary @relation(fields: [beneficiaryId], references: [id])
   uploadedBy  User        @relation("DocumentUploader", fields: [uploadedById], references: [id])
+  validatedBy User?       @relation("DocumentValidator", fields: [validatedById], references: [id])
 
   @@index([beneficiaryId])
   @@index([expiresAt])
@@ -10858,6 +10943,118 @@ model BeneficiaryNeed {
   @@index([priority])
 }
 
+model BeneficiaryBenefit {
+  id            String        @id @default(cuid())
+  beneficiaryId String
+  kind          BenefitKind
+  name          String
+  amount        Float?
+  currency      String        @default("AOA")
+  awardedAt     DateTime?
+  startDate     DateTime?
+  endDate       DateTime?
+  status        BenefitStatus @default(ACTIVE)
+  notes         String?
+  createdById   Int
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
+
+  beneficiary Beneficiary @relation(fields: [beneficiaryId], references: [id])
+  createdBy   User        @relation("BenefitCreator", fields: [createdById], references: [id])
+
+  @@index([beneficiaryId])
+  @@index([kind])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model BeneficiaryParticipation {
+  id             String              @id @default(cuid())
+  beneficiaryId  String
+  program        String
+  project        String?
+  province       AngolaProvince?
+  municipality   String?
+  locality       String?
+  cohort         String?
+  programEdition String?
+  enrolledAt     DateTime?
+  startDate      DateTime?
+  completedAt    DateTime?
+  status         ParticipationStatus @default(ENROLLED)
+  attendanceRate Float?
+  performance    String?
+  certification  String?
+  employability  String?
+  referral       String?
+  finalResult    String?
+  impact         String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  deletedAt      DateTime?
+
+  beneficiary Beneficiary @relation(fields: [beneficiaryId], references: [id])
+
+  @@index([beneficiaryId])
+  @@index([program])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+  COMMON_LAW
+}
+
+enum FollowUpStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  ON_HOLD
+}
+
+enum ConsentStatus {
+  PENDING
+  GRANTED
+  REVOKED
+}
+
+enum DocumentValidationStatus {
+  PENDING
+  VALID
+  INVALID
+  EXPIRED
+}
+
+enum BenefitKind {
+  BENEFIT
+  SERVICE
+  PROGRAM
+  TRAINING
+  COURSE
+  SCHOLARSHIP
+  SUPPORT
+}
+
+enum BenefitStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  ENDED
+}
+
+enum ParticipationStatus {
+  ENROLLED
+  IN_PROGRESS
+  COMPLETED
+  DROPPED
+  SUSPENDED
+}
+
 enum BeneficiaryType {
   INDIVIDUAL
   FAMILY
@@ -10872,6 +11069,13 @@ enum BeneficiaryStatus {
   PROSPECT
   FORMER
   BLOCKED
+  UNDER_FOLLOW_UP
+  SUSPENDED
+  ELIGIBLE
+  NOT_ELIGIBLE
+  BENEFIT_ACTIVE
+  BENEFIT_ENDED
+  ARCHIVED
 }
 
 enum AngolaProvince {
@@ -10903,6 +11107,13 @@ enum InteractionType {
   EVENT
   NOTE
   TASK
+  WHATSAPP
+  SMS
+  IN_PERSON
+  VIDEO_CALL
+  PORTAL
+  MOBILE_APP
+  OTHER
 }
 
 enum NeedPriority {

@@ -1391,9 +1391,75 @@ const AlertCategory = {
   SECURITY: 'SECURITY',
 };
 
-const BeneficiaryType = { EMPLOYEE: 'EMPLOYEE', DEPENDENT: 'DEPENDENT', EMERGENCY: 'EMERGENCY' };
+const BeneficiaryType = {
+  EMPLOYEE: 'EMPLOYEE',
+  DEPENDENT: 'DEPENDENT',
+  EMERGENCY: 'EMERGENCY',
+  INDIVIDUAL: 'INDIVIDUAL',
+  FAMILY: 'FAMILY',
+  INSTITUTION: 'INSTITUTION',
+  COMMUNITY: 'COMMUNITY',
+  GROUP: 'GROUP',
+};
 
-const BeneficiaryStatus = { ACTIVE: 'ACTIVE', INACTIVE: 'INACTIVE', PENDING: 'PENDING' };
+const BeneficiaryStatus = {
+  ACTIVE: 'ACTIVE',
+  INACTIVE: 'INACTIVE',
+  PENDING: 'PENDING',
+  PROSPECT: 'PROSPECT',
+  FORMER: 'FORMER',
+  BLOCKED: 'BLOCKED',
+  UNDER_FOLLOW_UP: 'UNDER_FOLLOW_UP',
+  SUSPENDED: 'SUSPENDED',
+  ELIGIBLE: 'ELIGIBLE',
+  NOT_ELIGIBLE: 'NOT_ELIGIBLE',
+  BENEFIT_ACTIVE: 'BENEFIT_ACTIVE',
+  BENEFIT_ENDED: 'BENEFIT_ENDED',
+  ARCHIVED: 'ARCHIVED',
+};
+
+const MaritalStatus = {
+  SINGLE: 'SINGLE',
+  MARRIED: 'MARRIED',
+  DIVORCED: 'DIVORCED',
+  WIDOWED: 'WIDOWED',
+  COMMON_LAW: 'COMMON_LAW',
+};
+const FollowUpStatus = {
+  PENDING: 'PENDING',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  ON_HOLD: 'ON_HOLD',
+};
+const ConsentStatus = { PENDING: 'PENDING', GRANTED: 'GRANTED', REVOKED: 'REVOKED' };
+const DocumentValidationStatus = {
+  PENDING: 'PENDING',
+  VALID: 'VALID',
+  INVALID: 'INVALID',
+  EXPIRED: 'EXPIRED',
+};
+const BenefitKind = {
+  BENEFIT: 'BENEFIT',
+  SERVICE: 'SERVICE',
+  PROGRAM: 'PROGRAM',
+  TRAINING: 'TRAINING',
+  COURSE: 'COURSE',
+  SCHOLARSHIP: 'SCHOLARSHIP',
+  SUPPORT: 'SUPPORT',
+};
+const BenefitStatus = {
+  PENDING: 'PENDING',
+  ACTIVE: 'ACTIVE',
+  SUSPENDED: 'SUSPENDED',
+  ENDED: 'ENDED',
+};
+const ParticipationStatus = {
+  ENROLLED: 'ENROLLED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  DROPPED: 'DROPPED',
+  SUSPENDED: 'SUSPENDED',
+};
 
 const AngolaProvince = {
   LUANDA: 'LUANDA',
@@ -1423,6 +1489,14 @@ const InteractionType = {
   VISIT: 'VISIT',
   EVENT: 'EVENT',
   NOTE: 'NOTE',
+  TASK: 'TASK',
+  WHATSAPP: 'WHATSAPP',
+  SMS: 'SMS',
+  IN_PERSON: 'IN_PERSON',
+  VIDEO_CALL: 'VIDEO_CALL',
+  PORTAL: 'PORTAL',
+  MOBILE_APP: 'MOBILE_APP',
+  OTHER: 'OTHER',
 };
 
 const NeedPriority = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', URGENT: 'URGENT' };
@@ -2696,6 +2770,13 @@ module.exports = {
   AlertCategory,
   BeneficiaryType,
   BeneficiaryStatus,
+  MaritalStatus,
+  FollowUpStatus,
+  ConsentStatus,
+  DocumentValidationStatus,
+  BenefitKind,
+  BenefitStatus,
+  ParticipationStatus,
   AngolaProvince,
   InteractionType,
   NeedPriority,
