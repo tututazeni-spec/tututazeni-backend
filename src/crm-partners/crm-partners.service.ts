@@ -18,6 +18,13 @@ import {
   UpdatePartnerContributionDto,
   CreatePartnerFunderLinkDto,
   UpdatePartnerFunderLinkDto,
+  CreatePartnerOpportunityDto,
+  UpdatePartnerOpportunityDto,
+  CreatePartnerImpactIndicatorDto,
+  UpdatePartnerImpactIndicatorDto,
+  CreatePartnerDocumentDto,
+  UpdatePartnerDocumentDto,
+  CreatePartnerDocumentVersionDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
@@ -761,6 +768,433 @@ export class CrmPartnersService {
       this.prisma.read.beneficiaryParticipation.count({ where }),
     ]);
     return buildPaginatedResponse(data, total, page, limit);
+  }
+
+  // ─── OPORTUNIDADES DE PARCERIA (⑪) ──────────────────
+  // Pipeline separado da parceria activa: uma oportunidade só vira programa/acordo
+  // quando alguém os regista nos separadores respectivos.
+
+  private static readonly OPPORTUNITY_CLOSED: string[] = ['AGREEMENT_REACHED', 'NOT_CONCLUDED'];
+
+  async getOpportunities(partnerId: string) {
+    await this.findOne(partnerId);
+    return this.prisma.read.partnerOpportunity.findMany({
+      where: { partnerId, deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      include: { responsible: { select: { id: true, fullName: true } } },
+    });
+  }
+
+  private async findOpportunity(partnerId: string, opportunityId: string) {
+    const opportunity = await this.prisma.partnerOpportunity.findFirst({
+      where: { id: opportunityId, partnerId, deletedAt: null },
+    });
+    if (!opportunity) throw new NotFoundException('Oportunidade não encontrada');
+    return opportunity;
+  }
+
+  async addOpportunity(partnerId: string, dto: CreatePartnerOpportunityDto, userId: number) {
+    await this.findOne(partnerId);
+    await this.assertUserExists(dto.responsibleId);
+    const { expectedDate, ...rest } = dto;
+    const opportunity = await this.prisma.partnerOpportunity.create({
+      data: {
+        ...rest,
+        ...(expectedDate && { expectedDate: new Date(expectedDate) }),
+        ...(dto.status &&
+          CrmPartnersService.OPPORTUNITY_CLOSED.includes(dto.status) && { closedAt: new Date() }),
+        partnerId,
+      },
+      include: { responsible: { select: { id: true, fullName: true } } },
+    });
+    await this.audit.logEntity(userId, 'CREATE', 'PartnerOpportunity', opportunity.id, {
+      partnerId,
+      name: dto.name,
+    });
+    return opportunity;
+  }
+
+  async updateOpportunity(
+    partnerId: string,
+    opportunityId: string,
+    dto: UpdatePartnerOpportunityDto,
+    userId: number,
+  ) {
+    const current = await this.findOpportunity(partnerId, opportunityId);
+    await this.assertUserExists(dto.responsibleId);
+    const { expectedDate, ...rest } = dto;
+    let closedAt: Date | null | undefined;
+    if (dto.status && dto.status !== current.status) {
+      closedAt = CrmPartnersService.OPPORTUNITY_CLOSED.includes(dto.status) ? new Date() : null;
+    }
+    const updated = await this.prisma.partnerOpportunity.update({
+      where: { id: opportunityId },
+      data: {
+        ...rest,
+        ...(expectedDate && { expectedDate: new Date(expectedDate) }),
+        ...(closedAt !== undefined && { closedAt }),
+      },
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'PartnerOpportunity', opportunityId, dto);
+    return updated;
+  }
+
+  async removeOpportunity(partnerId: string, opportunityId: string, userId: number) {
+    await this.findOpportunity(partnerId, opportunityId);
+    await this.prisma.partnerOpportunity.update({
+      where: { id: opportunityId },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.logEntity(userId, 'DELETE', 'PartnerOpportunity', opportunityId, {
+      partnerId,
+    });
+    return { message: 'Oportunidade removida com sucesso' };
+  }
+
+  /** Pipeline do parceiro: contagens por estado e valores (bruto e ponderado) por moeda. */
+  async getOpportunityPipeline(partnerId: string) {
+    const opportunities = await this.getOpportunities(partnerId);
+    const byStatus = new Map<string, number>();
+    const open = new Map<string, { currency: string; total: number; weighted: number }>();
+    for (const o of opportunities) {
+      byStatus.set(o.status, (byStatus.get(o.status) ?? 0) + 1);
+      if (CrmPartnersService.OPPORTUNITY_CLOSED.includes(o.status)) continue;
+      const entry = open.get(o.currency) ?? { currency: o.currency, total: 0, weighted: 0 };
+      const value = o.potentialValue ?? 0;
+      entry.total += value;
+      entry.weighted += (value * (o.probability ?? 0)) / 100;
+      open.set(o.currency, entry);
+    }
+    const won = byStatus.get('AGREEMENT_REACHED') ?? 0;
+    const lost = byStatus.get('NOT_CONCLUDED') ?? 0;
+    return {
+      total: opportunities.length,
+      open: opportunities.length - won - lost,
+      won,
+      lost,
+      winRate: won + lost > 0 ? Math.round((won / (won + lost)) * 100) : null,
+      byStatus: [...byStatus].map(([status, count]) => ({ status, count })),
+      openValueByCurrency: [...open.values()],
+    };
+  }
+
+  // ─── DESEMPENHO DA PARCERIA (⑫) ─────────────────────
+  // Quase tudo é derivado de dados já registados; só os indicadores de impacto
+  // são introduzidos à mão (PartnerImpactIndicator).
+
+  async getImpactIndicators(partnerId: string) {
+    await this.findOne(partnerId);
+    const indicators = await this.prisma.read.partnerImpactIndicator.findMany({
+      where: { partnerId, deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+    return indicators.map(i => ({
+      ...i,
+      attainment: i.target ? Math.round((i.value / i.target) * 100) : null,
+    }));
+  }
+
+  private async findImpactIndicator(partnerId: string, indicatorId: string) {
+    const indicator = await this.prisma.partnerImpactIndicator.findFirst({
+      where: { id: indicatorId, partnerId, deletedAt: null },
+    });
+    if (!indicator) throw new NotFoundException('Indicador não encontrado');
+    return indicator;
+  }
+
+  async addImpactIndicator(
+    partnerId: string,
+    dto: CreatePartnerImpactIndicatorDto,
+    userId: number,
+  ) {
+    await this.findOne(partnerId);
+    this.assertDateRange(dto.periodStart, dto.periodEnd);
+    const { periodStart, periodEnd, ...rest } = dto;
+    const indicator = await this.prisma.partnerImpactIndicator.create({
+      data: {
+        ...rest,
+        ...(periodStart && { periodStart: new Date(periodStart) }),
+        ...(periodEnd && { periodEnd: new Date(periodEnd) }),
+        partnerId,
+      },
+    });
+    await this.audit.logEntity(userId, 'CREATE', 'PartnerImpactIndicator', indicator.id, {
+      partnerId,
+      name: dto.name,
+    });
+    return indicator;
+  }
+
+  async updateImpactIndicator(
+    partnerId: string,
+    indicatorId: string,
+    dto: UpdatePartnerImpactIndicatorDto,
+    userId: number,
+  ) {
+    const current = await this.findImpactIndicator(partnerId, indicatorId);
+    this.assertDateRange(
+      dto.periodStart ?? current.periodStart,
+      dto.periodEnd ?? current.periodEnd,
+    );
+    const { periodStart, periodEnd, ...rest } = dto;
+    const updated = await this.prisma.partnerImpactIndicator.update({
+      where: { id: indicatorId },
+      data: {
+        ...rest,
+        ...(periodStart && { periodStart: new Date(periodStart) }),
+        ...(periodEnd && { periodEnd: new Date(periodEnd) }),
+      },
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'PartnerImpactIndicator', indicatorId, dto);
+    return updated;
+  }
+
+  async removeImpactIndicator(partnerId: string, indicatorId: string, userId: number) {
+    await this.findImpactIndicator(partnerId, indicatorId);
+    await this.prisma.partnerImpactIndicator.update({
+      where: { id: indicatorId },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.logEntity(userId, 'DELETE', 'PartnerImpactIndicator', indicatorId, {
+      partnerId,
+    });
+    return { message: 'Indicador removido com sucesso' };
+  }
+
+  private sumByCurrency(rows: { currency: string; value: number | null }[]) {
+    const totals = new Map<string, number>();
+    for (const r of rows) {
+      if (!r.value) continue;
+      totals.set(r.currency, (totals.get(r.currency) ?? 0) + r.value);
+    }
+    return [...totals].map(([currency, total]) => ({ currency, total }));
+  }
+
+  async getPerformance(partnerId: string) {
+    await this.findOne(partnerId);
+    const now = new Date();
+    const [programs, contributions, funding, milestones, beneficiaries, indicators] =
+      await Promise.all([
+        this.prisma.read.partnerProgram.findMany({
+          where: { partnerId, deletedAt: null },
+          select: { status: true },
+        }),
+        this.prisma.read.partnerContribution.findMany({
+          where: { partnerId, deletedAt: null },
+          select: { estimatedValue: true, currency: true, startDate: true },
+        }),
+        this.prisma.read.partnerFunderLink.findMany({
+          where: { partnerId, deletedAt: null },
+          select: { amountFunded: true, currency: true },
+        }),
+        this.prisma.read.partnerMilestone.findMany({
+          where: { partnerId, deletedAt: null, status: { not: 'CANCELLED' } },
+          select: { status: true, dueDate: true, completedAt: true },
+        }),
+        this.getBeneficiariesSummary(partnerId),
+        this.getImpactIndicators(partnerId),
+      ]);
+
+    const programCount = (status: string) => programs.filter(p => p.status === status).length;
+    const completedTrainings = beneficiaries.byStatus
+      .filter(s => s.status === 'COMPLETED')
+      .reduce((sum, s) => sum + s.participations, 0);
+
+    // Compromissos "exigíveis": concluídos ou já vencidos
+    const due = milestones.filter(m => m.status === 'COMPLETED' || m.dueDate <= now);
+    const completed = due.filter(m => m.status === 'COMPLETED');
+    const onTime = completed.filter(m => m.completedAt && m.completedAt <= m.dueDate);
+
+    return {
+      programs: {
+        supported: programs.filter(p => p.status !== 'CANCELLED').length,
+        active: programCount('ACTIVE'),
+        completed: programCount('COMPLETED'),
+      },
+      beneficiaries: {
+        reached: beneficiaries.totalBeneficiaries,
+        participations: beneficiaries.totalParticipations,
+        completedTrainings,
+        provinces: beneficiaries.provinces.length,
+      },
+      invested: {
+        contributionsByCurrency: this.sumByCurrency(
+          contributions.map(c => ({ currency: c.currency, value: c.estimatedValue })),
+        ),
+        fundingByCurrency: this.sumByCurrency(
+          funding.map(f => ({ currency: f.currency, value: f.amountFunded })),
+        ),
+      },
+      contributions: {
+        total: contributions.length,
+        realized: contributions.filter(c => !c.startDate || c.startDate <= now).length,
+      },
+      commitments: {
+        due: due.length,
+        completed: completed.length,
+        completedOnTime: onTime.length,
+        complianceRate: due.length ? Math.round((completed.length / due.length) * 100) : null,
+      },
+      impactIndicators: indicators,
+    };
+  }
+
+  // ─── DOCUMENTOS (⑬) ──────────────────────────────────
+  // Um documento é identificado por (parceiro, nome); cada nova versão é uma linha
+  // com o número seguinte, por isso o histórico fica sempre acessível.
+
+  async getDocuments(partnerId: string, includeHistory = false) {
+    await this.findOne(partnerId);
+    const docs = await this.prisma.read.partnerDocument.findMany({
+      where: { partnerId, deletedAt: null },
+      orderBy: [{ name: 'asc' }, { version: 'desc' }],
+      include: { responsible: { select: { id: true, fullName: true } } },
+    });
+    const now = new Date();
+    // Validade vencida aparece como EXPIRED sem precisar de job a actualizar a coluna
+    const withStatus = docs.map(d =>
+      d.status === 'VALID' && d.validUntil && d.validUntil < now
+        ? { ...d, status: 'EXPIRED' as const }
+        : d,
+    );
+    if (includeHistory) return withStatus;
+    // ordenado por versão desc dentro do nome → a primeira de cada nome é a mais recente
+    const seen = new Set<string>();
+    return withStatus.filter(d => {
+      if (seen.has(d.name)) return false;
+      seen.add(d.name);
+      return true;
+    });
+  }
+
+  private async findDocument(partnerId: string, documentId: string) {
+    const doc = await this.prisma.partnerDocument.findFirst({
+      where: { id: documentId, partnerId, deletedAt: null },
+    });
+    if (!doc) throw new NotFoundException('Documento não encontrado');
+    return doc;
+  }
+
+  async getDocumentHistory(partnerId: string, documentId: string) {
+    const doc = await this.findDocument(partnerId, documentId);
+    return this.prisma.read.partnerDocument.findMany({
+      where: { partnerId, name: doc.name, deletedAt: null },
+      orderBy: { version: 'desc' },
+      include: { uploadedBy: { select: { id: true, fullName: true } } },
+    });
+  }
+
+  async addDocument(partnerId: string, dto: CreatePartnerDocumentDto, userId: number) {
+    await this.findOne(partnerId);
+    await this.assertUserExists(dto.responsibleId);
+    this.assertDateRange(dto.documentDate, dto.validUntil);
+    const existing = await this.prisma.partnerDocument.findFirst({
+      where: { partnerId, name: dto.name, deletedAt: null },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new BadRequestException(
+        'Já existe um documento com este nome — carregue uma nova versão em vez de o duplicar',
+      );
+    }
+    const { documentDate, validUntil, ...rest } = dto;
+    // O @@unique cobre também versões apagadas, por isso a numeração continua a partir delas
+    const last = await this.prisma.partnerDocument.aggregate({
+      where: { partnerId, name: dto.name },
+      _max: { version: true },
+    });
+    const doc = await this.prisma.partnerDocument.create({
+      data: {
+        ...rest,
+        ...(documentDate && { documentDate: new Date(documentDate) }),
+        ...(validUntil && { validUntil: new Date(validUntil) }),
+        partnerId,
+        uploadedById: userId,
+        version: (last._max.version ?? 0) + 1,
+      },
+    });
+    await this.audit.logEntity(userId, 'CREATE', 'PartnerDocument', doc.id, {
+      partnerId,
+      name: dto.name,
+      type: dto.type,
+    });
+    return doc;
+  }
+
+  async updateDocument(
+    partnerId: string,
+    documentId: string,
+    dto: UpdatePartnerDocumentDto,
+    userId: number,
+  ) {
+    const current = await this.findDocument(partnerId, documentId);
+    await this.assertUserExists(dto.responsibleId);
+    this.assertDateRange(
+      dto.documentDate ?? current.documentDate,
+      dto.validUntil ?? current.validUntil,
+    );
+    const { documentDate, validUntil, ...rest } = dto;
+    const updated = await this.prisma.partnerDocument.update({
+      where: { id: documentId },
+      data: {
+        ...rest,
+        ...(documentDate && { documentDate: new Date(documentDate) }),
+        ...(validUntil && { validUntil: new Date(validUntil) }),
+      },
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'PartnerDocument', documentId, dto);
+    return updated;
+  }
+
+  async addDocumentVersion(
+    partnerId: string,
+    documentId: string,
+    dto: CreatePartnerDocumentVersionDto,
+    userId: number,
+  ) {
+    const current = await this.findDocument(partnerId, documentId);
+    this.assertDateRange(dto.documentDate, dto.validUntil);
+    const { documentDate, validUntil, ...rest } = dto;
+    // Serializável: dois uploads simultâneos não podem obter o mesmo número de versão
+    const doc = await this.prisma.$transaction(
+      async tx => {
+        const last = await tx.partnerDocument.aggregate({
+          where: { partnerId, name: current.name },
+          _max: { version: true },
+        });
+        return tx.partnerDocument.create({
+          data: {
+            ...rest,
+            ...(documentDate && { documentDate: new Date(documentDate) }),
+            ...(validUntil && { validUntil: new Date(validUntil) }),
+            partnerId,
+            name: current.name,
+            type: current.type,
+            responsibleId: current.responsibleId,
+            status: 'VALID',
+            uploadedById: userId,
+            version: (last._max.version ?? 0) + 1,
+          },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+    await this.audit.logEntity(userId, 'CREATE', 'PartnerDocument', doc.id, {
+      partnerId,
+      name: doc.name,
+      version: doc.version,
+    });
+    return doc;
+  }
+
+  async removeDocument(partnerId: string, documentId: string, userId: number) {
+    await this.findDocument(partnerId, documentId);
+    await this.prisma.partnerDocument.update({
+      where: { id: documentId },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.logEntity(userId, 'DELETE', 'PartnerDocument', documentId, { partnerId });
+    return { message: 'Documento removido com sucesso' };
   }
 
   // ─── INTERACÇÕES ─────────────────────────────────────

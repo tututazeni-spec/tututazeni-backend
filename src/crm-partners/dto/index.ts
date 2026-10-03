@@ -8,3 +8,6 @@ export * from './create-partner-program.dto';
 export * from './create-partner-agreement.dto';
 export * from './create-partner-contribution.dto';
 export * from './create-partner-funder-link.dto';
+export * from './create-partner-opportunity.dto';
+export * from './create-partner-impact-indicator.dto';
+export * from './create-partner-document.dto';

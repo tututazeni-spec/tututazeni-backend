@@ -27,6 +27,12 @@ const Prisma = {
   },
   PrismaClientValidationError: class PrismaClientValidationError extends Error {},
   PrismaClientInitializationError: class PrismaClientInitializationError extends Error {},
+  TransactionIsolationLevel: {
+    ReadUncommitted: 'ReadUncommitted',
+    ReadCommitted: 'ReadCommitted',
+    RepeatableRead: 'RepeatableRead',
+    Serializable: 'Serializable',
+  },
 };
 
 // ── Enums (gerados a partir do schema.prisma) ─────────────────────────────────
@@ -1611,6 +1617,36 @@ const PartnerContributionPeriodicity = {
   ANNUAL: 'ANNUAL',
 };
 
+const PartnerOpportunityStatus = {
+  IDENTIFIED: 'IDENTIFIED',
+  CONTACTED: 'CONTACTED',
+  IN_DISCUSSION: 'IN_DISCUSSION',
+  PROPOSAL_SENT: 'PROPOSAL_SENT',
+  IN_NEGOTIATION: 'IN_NEGOTIATION',
+  AGREEMENT_REACHED: 'AGREEMENT_REACHED',
+  NOT_CONCLUDED: 'NOT_CONCLUDED',
+};
+
+const PartnerDocumentType = {
+  CONTRACT: 'CONTRACT',
+  PROTOCOL: 'PROTOCOL',
+  MEMORANDUM: 'MEMORANDUM',
+  CERTIFICATE_OF_REGISTRATION: 'CERTIFICATE_OF_REGISTRATION',
+  PROPOSAL: 'PROPOSAL',
+  REPORT: 'REPORT',
+  PROOF: 'PROOF',
+  CERTIFICATE: 'CERTIFICATE',
+  INSTITUTIONAL: 'INSTITUTIONAL',
+  OTHER: 'OTHER',
+};
+
+const PartnerDocumentStatus = {
+  DRAFT: 'DRAFT',
+  VALID: 'VALID',
+  EXPIRED: 'EXPIRED',
+  ARCHIVED: 'ARCHIVED',
+};
+
 const PartnerTier = { PLATINUM: 'PLATINUM', GOLD: 'GOLD', SILVER: 'SILVER', STANDARD: 'STANDARD' };
 
 const PartnerStatus = {
@@ -2881,6 +2917,9 @@ module.exports = {
   PartnerOrganizationSize,
   PartnerContributionType,
   PartnerContributionPeriodicity,
+  PartnerOpportunityStatus,
+  PartnerDocumentType,
+  PartnerDocumentStatus,
   PartnerStatus,
   PartnerInteractionType,
   MilestoneStatus,

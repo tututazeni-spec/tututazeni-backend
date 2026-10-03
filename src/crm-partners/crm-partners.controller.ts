@@ -35,6 +35,13 @@ import {
   UpdatePartnerContributionDto,
   CreatePartnerFunderLinkDto,
   UpdatePartnerFunderLinkDto,
+  CreatePartnerOpportunityDto,
+  UpdatePartnerOpportunityDto,
+  CreatePartnerImpactIndicatorDto,
+  UpdatePartnerImpactIndicatorDto,
+  CreatePartnerDocumentDto,
+  UpdatePartnerDocumentDto,
+  CreatePartnerDocumentVersionDto,
 } from './dto';
 import { Role } from '../auth/enums/role.enum';
 
@@ -308,6 +315,171 @@ export class CrmPartnersController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.service.removeContribution(id, contributionId, user.id);
+  }
+
+  // ─── OPORTUNIDADES DE PARCERIA ───────────────────────
+
+  @Get(':id/opportunities')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar oportunidades de parceria' })
+  getOpportunities(@Param('id') id: string) {
+    return this.service.getOpportunities(id);
+  }
+
+  @Get(':id/opportunities/pipeline')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Pipeline de oportunidades: estados, valor bruto e ponderado' })
+  getOpportunityPipeline(@Param('id') id: string) {
+    return this.service.getOpportunityPipeline(id);
+  }
+
+  @Post(':id/opportunities')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Registar oportunidade de parceria' })
+  addOpportunity(
+    @Param('id') id: string,
+    @Body() dto: CreatePartnerOpportunityDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addOpportunity(id, dto, user.id);
+  }
+
+  @Put(':id/opportunities/:opportunityId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar oportunidade (inclui mudança de estado)' })
+  updateOpportunity(
+    @Param('id') id: string,
+    @Param('opportunityId') opportunityId: string,
+    @Body() dto: UpdatePartnerOpportunityDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateOpportunity(id, opportunityId, dto, user.id);
+  }
+
+  @Delete(':id/opportunities/:opportunityId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover oportunidade' })
+  removeOpportunity(
+    @Param('id') id: string,
+    @Param('opportunityId') opportunityId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeOpportunity(id, opportunityId, user.id);
+  }
+
+  // ─── DESEMPENHO DA PARCERIA ──────────────────────────
+
+  @Get(':id/performance')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Desempenho da parceria (derivado de dados já registados)' })
+  getPerformance(@Param('id') id: string) {
+    return this.service.getPerformance(id);
+  }
+
+  @Get(':id/impact-indicators')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar indicadores de impacto' })
+  getImpactIndicators(@Param('id') id: string) {
+    return this.service.getImpactIndicators(id);
+  }
+
+  @Post(':id/impact-indicators')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Registar indicador de impacto' })
+  addImpactIndicator(
+    @Param('id') id: string,
+    @Body() dto: CreatePartnerImpactIndicatorDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addImpactIndicator(id, dto, user.id);
+  }
+
+  @Put(':id/impact-indicators/:indicatorId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar indicador de impacto' })
+  updateImpactIndicator(
+    @Param('id') id: string,
+    @Param('indicatorId') indicatorId: string,
+    @Body() dto: UpdatePartnerImpactIndicatorDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateImpactIndicator(id, indicatorId, dto, user.id);
+  }
+
+  @Delete(':id/impact-indicators/:indicatorId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover indicador de impacto' })
+  removeImpactIndicator(
+    @Param('id') id: string,
+    @Param('indicatorId') indicatorId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeImpactIndicator(id, indicatorId, user.id);
+  }
+
+  // ─── DOCUMENTOS ──────────────────────────────────────
+
+  @Get(':id/documents')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar documentos (última versão de cada; ?history=true para todas)' })
+  getDocuments(@Param('id') id: string, @Query('history') history?: string) {
+    return this.service.getDocuments(id, history === 'true');
+  }
+
+  @Get(':id/documents/:documentId/history')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Histórico de versões de um documento' })
+  getDocumentHistory(@Param('id') id: string, @Param('documentId') documentId: string) {
+    return this.service.getDocumentHistory(id, documentId);
+  }
+
+  @Post(':id/documents')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Adicionar documento' })
+  addDocument(
+    @Param('id') id: string,
+    @Body() dto: CreatePartnerDocumentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addDocument(id, dto, user.id);
+  }
+
+  @Post(':id/documents/:documentId/versions')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Carregar nova versão de um documento' })
+  addDocumentVersion(
+    @Param('id') id: string,
+    @Param('documentId') documentId: string,
+    @Body() dto: CreatePartnerDocumentVersionDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addDocumentVersion(id, documentId, dto, user.id);
+  }
+
+  @Put(':id/documents/:documentId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar metadados do documento' })
+  updateDocument(
+    @Param('id') id: string,
+    @Param('documentId') documentId: string,
+    @Body() dto: UpdatePartnerDocumentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateDocument(id, documentId, dto, user.id);
+  }
+
+  @Delete(':id/documents/:documentId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover documento' })
+  removeDocument(
+    @Param('id') id: string,
+    @Param('documentId') documentId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeDocument(id, documentId, user.id);
   }
 
   // ─── FINANCIAMENTO (ligação a CRM → Funders) ─────────

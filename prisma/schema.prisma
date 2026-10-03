@@ -991,13 +991,16 @@ model User {
   beneficiaryBenefitsCreated   BeneficiaryBenefit[]     @relation("BenefitCreator")
 
   // ─── CRM Parceiros ────────────────────────────────────────────
-  createdPartners          Partner[]                 @relation("PartnerCreator")
-  assignedPartners         Partner[]                 @relation("PartnerOwner")
-  partnerProgramsOwned     PartnerProgram[]          @relation("PartnerProgramResponsible")
-  partnerAgreementsOwned   PartnerAgreement[]        @relation("PartnerAgreementResponsible")
-  partnerAgreementUploads  PartnerAgreementVersion[] @relation("PartnerAgreementVersionUploader")
-  partnerInteractions      PartnerInteraction[]      @relation("PartnerInteractionUser")
-  createdPartnerMilestones PartnerMilestone[]        @relation("MilestoneCreator")
+  createdPartners           Partner[]                 @relation("PartnerCreator")
+  assignedPartners          Partner[]                 @relation("PartnerOwner")
+  partnerProgramsOwned      PartnerProgram[]          @relation("PartnerProgramResponsible")
+  partnerAgreementsOwned    PartnerAgreement[]        @relation("PartnerAgreementResponsible")
+  partnerAgreementUploads   PartnerAgreementVersion[] @relation("PartnerAgreementVersionUploader")
+  partnerOpportunitiesOwned PartnerOpportunity[]      @relation("PartnerOpportunityOwner")
+  partnerDocsOwned          PartnerDocument[]         @relation("PartnerDocumentResponsible")
+  partnerDocsUploaded       PartnerDocument[]         @relation("PartnerDocumentUploader")
+  partnerInteractions       PartnerInteraction[]      @relation("PartnerInteractionUser")
+  createdPartnerMilestones  PartnerMilestone[]        @relation("MilestoneCreator")
 
   // ─── CRM Financiadores ────────────────────────────────────────
   createdFunders            Funder[]            @relation("FunderCreator")
@@ -11211,15 +11214,18 @@ model Partner {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  createdBy     User                  @relation("PartnerCreator", fields: [createdById], references: [id])
-  assignedTo    User?                 @relation("PartnerOwner", fields: [assignedToId], references: [id])
-  interactions  PartnerInteraction[]
-  milestones    PartnerMilestone[]
-  contacts      PartnerContact[]
-  programs      PartnerProgram[]
-  agreements    PartnerAgreement[]
-  contributions PartnerContribution[]
-  funderLinks   PartnerFunderLink[]
+  createdBy        User                     @relation("PartnerCreator", fields: [createdById], references: [id])
+  assignedTo       User?                    @relation("PartnerOwner", fields: [assignedToId], references: [id])
+  interactions     PartnerInteraction[]
+  milestones       PartnerMilestone[]
+  contacts         PartnerContact[]
+  programs         PartnerProgram[]
+  agreements       PartnerAgreement[]
+  contributions    PartnerContribution[]
+  funderLinks      PartnerFunderLink[]
+  opportunities    PartnerOpportunity[]
+  impactIndicators PartnerImpactIndicator[]
+  documents        PartnerDocument[]
 
   @@index([type])
   @@index([tier])
@@ -11434,6 +11440,114 @@ model PartnerFunderLink {
   @@index([partnerId])
   @@index([funderId])
   @@index([deletedAt])
+}
+
+// ⑪ Oportunidades de parceria (pipeline) — separadas da parceria activa
+model PartnerOpportunity {
+  id              String                   @id @default(cuid())
+  partnerId       String
+  name            String
+  program         String?
+  partnershipType PartnershipKind?
+  responsibleId   Int?
+  potentialValue  Float?
+  currency        String                   @default("AOA")
+  probability     Int?
+  expectedDate    DateTime?
+  status          PartnerOpportunityStatus @default(IDENTIFIED)
+  closedAt        DateTime?
+  notes           String?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  deletedAt       DateTime?
+
+  partner     Partner @relation(fields: [partnerId], references: [id])
+  responsible User?   @relation("PartnerOpportunityOwner", fields: [responsibleId], references: [id])
+
+  @@index([partnerId])
+  @@index([status])
+  @@index([expectedDate])
+  @@index([deletedAt])
+}
+
+// ⑫ Indicadores de impacto registados manualmente (o resto do desempenho é derivado)
+model PartnerImpactIndicator {
+  id          String    @id @default(cuid())
+  partnerId   String
+  name        String
+  value       Float
+  target      Float?
+  unit        String?
+  periodStart DateTime?
+  periodEnd   DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  partner Partner @relation(fields: [partnerId], references: [id])
+
+  @@index([partnerId])
+  @@index([deletedAt])
+}
+
+// ⑬ Documentos do parceiro (versão por documento: nova versão = novo registo com o mesmo nome)
+model PartnerDocument {
+  id            String                @id @default(cuid())
+  partnerId     String
+  type          PartnerDocumentType
+  name          String
+  fileUrl       String
+  fileSize      Int?
+  documentDate  DateTime?
+  validUntil    DateTime?
+  status        PartnerDocumentStatus @default(VALID)
+  responsibleId Int?
+  version       Int                   @default(1)
+  notes         String?
+  uploadedById  Int
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  deletedAt     DateTime?
+
+  partner     Partner @relation(fields: [partnerId], references: [id])
+  responsible User?   @relation("PartnerDocumentResponsible", fields: [responsibleId], references: [id])
+  uploadedBy  User    @relation("PartnerDocumentUploader", fields: [uploadedById], references: [id])
+
+  @@unique([partnerId, name, version])
+  @@index([partnerId])
+  @@index([validUntil])
+  @@index([deletedAt])
+}
+
+enum PartnerOpportunityStatus {
+  IDENTIFIED
+  CONTACTED
+  IN_DISCUSSION
+  PROPOSAL_SENT
+  IN_NEGOTIATION
+  AGREEMENT_REACHED
+  NOT_CONCLUDED
+}
+
+enum PartnerDocumentType {
+  CONTRACT
+  PROTOCOL
+  MEMORANDUM
+  CERTIFICATE_OF_REGISTRATION
+  PROPOSAL
+  REPORT
+  PROOF
+  CERTIFICATE
+  INSTITUTIONAL
+  OTHER
+}
+
+enum PartnerDocumentStatus {
+  DRAFT
+  VALID
+  EXPIRED
+  ARCHIVED
 }
 
 enum PartnerContributionType {
