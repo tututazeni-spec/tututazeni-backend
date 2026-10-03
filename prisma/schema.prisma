@@ -998,6 +998,7 @@ model User {
   funderOpportunitiesOwned  FunderOpportunity[]       @relation("FunderOpportunityResponsible")
   funderContractsOwned      FunderContract[]          @relation("FunderContractResponsible")
   funderReportsOwned        FunderReport[]            @relation("FunderReportResponsible")
+  funderInteractionsOwned   FunderInteraction[]       @relation("FunderInteractionResponsible")
   partnerAgreementsOwned    PartnerAgreement[]        @relation("PartnerAgreementResponsible")
   partnerAgreementUploads   PartnerAgreementVersion[] @relation("PartnerAgreementVersionUploader")
   partnerOpportunitiesOwned PartnerOpportunity[]      @relation("PartnerOpportunityOwner")
@@ -11437,24 +11438,29 @@ model PartnerContribution {
 
 // ⑧ Financiamento: liga o parceiro a Funders existentes (sem duplicar dados do Funder)
 model PartnerFunderLink {
-  id             String    @id @default(cuid())
+  id             String                    @id @default(cuid())
   partnerId      String
   funderId       String
   fundedPrograms String[]
   amountFunded   Float?
-  currency       String    @default("AOA")
+  currency       String                    @default("AOA")
   periodStart    DateTime?
   periodEnd      DateTime?
   notes          String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  // Funder ↔ Parceiro ↔ Programa/Projecto (consórcios, co-financiamento)
+  programId      String?
+  relationType   FunderPartnerRelationType @default(OTHER)
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
   deletedAt      DateTime?
 
-  partner Partner @relation(fields: [partnerId], references: [id])
-  funder  Funder  @relation(fields: [funderId], references: [id])
+  partner Partner        @relation(fields: [partnerId], references: [id])
+  funder  Funder         @relation(fields: [funderId], references: [id])
+  program FunderProgram? @relation(fields: [programId], references: [id])
 
   @@index([partnerId])
   @@index([funderId])
+  @@index([programId])
   @@index([deletedAt])
 }
 
@@ -11833,6 +11839,7 @@ model Funder {
   notes             String?
   lastContactAt     DateTime?
   nextReportDue     DateTime?
+  nextContactAt     DateTime?
   satisfactionAvg   Float        @default(0)
   createdById       Int
   createdAt         DateTime     @default(now())
@@ -11904,6 +11911,7 @@ model Funder {
   @@index([status])
   @@index([assignedToId])
   @@index([nextReportDue])
+  @@index([nextContactAt])
   @@index([deletedAt])
 }
 
@@ -11955,6 +11963,7 @@ model FunderProgram {
   grants        FundingGrant[]
   opportunities FunderOpportunity[]
   indicators    FunderIndicator[]
+  partnerLinks  PartnerFunderLink[]
 
   @@index([funderId])
   @@index([program])
@@ -12079,32 +12088,38 @@ model FunderOpportunityDocument {
 }
 
 model FunderInteraction {
-  id           String                @id @default(cuid())
-  funderId     String
-  userId       Int
-  grantId      String?
-  type         FunderInteractionType
-  subject      String
-  description  String
-  date         DateTime              @default(now())
-  durationMin  Int?
-  outcome      String?
-  nextAction   String?
-  nextDate     DateTime?
-  satisfaction Int?
-  attachments  String[]
-  isPrivate    Boolean               @default(false)
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @updatedAt
-  deletedAt    DateTime?
+  id            String                @id @default(cuid())
+  funderId      String
+  userId        Int
+  grantId       String?
+  type          FunderInteractionType
+  subject       String
+  description   String
+  date          DateTime              @default(now())
+  durationMin   Int?
+  outcome       String?
+  nextAction    String?
+  nextDate      DateTime?
+  satisfaction  Int?
+  attachments   String[]
+  isPrivate     Boolean               @default(false)
+  // ⑮ Responsável e participantes
+  responsibleId Int?
+  participants  String[]
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  deletedAt     DateTime?
 
-  funder Funder        @relation(fields: [funderId], references: [id])
-  user   User          @relation("FunderInteractionUser", fields: [userId], references: [id])
-  grant  FundingGrant? @relation(fields: [grantId], references: [id])
+  funder      Funder        @relation(fields: [funderId], references: [id])
+  user        User          @relation("FunderInteractionUser", fields: [userId], references: [id])
+  responsible User?         @relation("FunderInteractionResponsible", fields: [responsibleId], references: [id])
+  grant       FundingGrant? @relation(fields: [grantId], references: [id])
 
   @@index([funderId])
   @@index([grantId])
   @@index([date])
+  @@index([type])
+  @@index([responsibleId])
   @@index([deletedAt])
 }
 
@@ -12344,6 +12359,23 @@ enum FunderInteractionType {
   EVENT
   NOTE
   REVIEW
+  CONTACT
+  PROJECT_PRESENTATION
+  APPLICATION
+  NEGOTIATION
+  FOLLOW_UP
+  EVALUATION
+  CONTRACT_SIGNING
+  REPORT
+  RENEWAL
+}
+
+enum FunderPartnerRelationType {
+  CONSORTIUM
+  CO_FINANCING
+  IMPLEMENTATION
+  TECHNICAL_SUPPORT
+  OTHER
 }
 
 enum ReportStatus {

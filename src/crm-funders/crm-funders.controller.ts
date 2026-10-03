@@ -32,6 +32,11 @@ import {
   UpdateFunderOpportunityDto,
   CreateOpportunityDocumentDto,
   CreateFunderInteractionDto,
+  UpdateFunderInteractionDto,
+  FilterFunderInteractionDto,
+  CreateFunderPartnerLinkDto,
+  UpdateFunderPartnerLinkDto,
+  FilterFunderBeneficiaryDto,
   CreateFunderReportDto,
   UpdateFunderReportDto,
   FilterFunderReportDto,
@@ -453,7 +458,21 @@ export class CrmFundersController {
     return this.service.removeIndicator(id, indicatorId, user.id);
   }
 
-  // ─── INTERACÇÕES ─────────────────────────────────────
+  // ─── ACTIVIDADES E RELACIONAMENTO (⑮) ────────────────
+
+  @Get(':id/interactions')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Timeline de actividades do financiador (filtrável, paginada)' })
+  getInteractions(
+    @Param('id') id: string,
+    @Query() filters: FilterFunderInteractionDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.getInteractions(id, filters, {
+      id: user.id,
+      isAdmin: user.role?.name === Role.ADMIN,
+    });
+  }
 
   @Post(':id/interactions')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
@@ -464,6 +483,94 @@ export class CrmFundersController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.service.addInteraction(id, dto, user.id);
+  }
+
+  @Put(':id/interactions/:interactionId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar actividade' })
+  updateInteraction(
+    @Param('id') id: string,
+    @Param('interactionId') interactionId: string,
+    @Body() dto: UpdateFunderInteractionDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateInteraction(id, interactionId, dto, user.id);
+  }
+
+  @Delete(':id/interactions/:interactionId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover actividade' })
+  removeInteraction(
+    @Param('id') id: string,
+    @Param('interactionId') interactionId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeInteraction(id, interactionId, user.id);
+  }
+
+  // ─── BENEFICIÁRIOS FINANCIADOS (⑬) ────────────────────
+
+  @Get(':id/beneficiaries/summary')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Financiador → Programa → Projecto → nº de beneficiários' })
+  getBeneficiariesSummary(@Param('id') id: string) {
+    return this.service.getBeneficiariesSummary(id);
+  }
+
+  @Get(':id/beneficiaries')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Beneficiários financiados (participações, paginado)' })
+  getFundedBeneficiaries(
+    @Param('id') id: string,
+    @Query() filters: FilterFunderBeneficiaryDto,
+    @Query() pagination: PaginationFilterDto,
+  ) {
+    return this.service.getFundedBeneficiaries(id, filters, pagination);
+  }
+
+  // ─── PARCEIROS ASSOCIADOS (⑭) ─────────────────────────
+
+  @Get(':id/partners')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Parceiros associados (lista e vista por programa)' })
+  getPartners(@Param('id') id: string) {
+    return this.service.getPartners(id);
+  }
+
+  @Post(':id/partners')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Associar parceiro (opcionalmente a um programa)' })
+  addPartner(
+    @Param('id') id: string,
+    @Body() dto: CreateFunderPartnerLinkDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addPartner(id, dto, user.id);
+  }
+
+  @Put(':id/partners/:linkId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar parceiro associado' })
+  updatePartner(
+    @Param('id') id: string,
+    @Param('linkId') linkId: string,
+    @Body() dto: UpdateFunderPartnerLinkDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updatePartner(id, linkId, dto, user.id);
+  }
+
+  @Delete(':id/partners/:linkId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Desassociar parceiro' })
+  removePartner(
+    @Param('id') id: string,
+    @Param('linkId') linkId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removePartner(id, linkId, user.id);
   }
 
   // ─── RELATÓRIOS ──────────────────────────────────────

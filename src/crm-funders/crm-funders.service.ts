@@ -17,6 +17,11 @@ import {
   UpdateFunderOpportunityDto,
   CreateOpportunityDocumentDto,
   CreateFunderInteractionDto,
+  UpdateFunderInteractionDto,
+  FilterFunderInteractionDto,
+  CreateFunderPartnerLinkDto,
+  UpdateFunderPartnerLinkDto,
+  FilterFunderBeneficiaryDto,
   CreateFunderReportDto,
   UpdateFunderReportDto,
   FilterFunderReportDto,
@@ -1271,10 +1276,88 @@ export class CrmFundersService {
     });
   }
 
-  // ─── INTERACÇÕES ─────────────────────────────────────
+  // ─── ACTIVIDADES E RELACIONAMENTO (⑮) ────────────────
+  // Timeline de interacções. lastContactAt / nextContactAt / satisfactionAvg do
+  // financiador são sempre recalculados a partir das interacções (nunca ficam
+  // presos ao último valor escrito). nextReportDue pertence aos relatórios (§11).
+
+  private async refreshInteractionStats(funderId: string) {
+    const now = new Date();
+    const [last, next, ratings] = await Promise.all([
+      this.prisma.funderInteraction.findFirst({
+        where: { funderId, deletedAt: null, date: { lte: now } },
+        orderBy: { date: 'desc' },
+        select: { date: true },
+      }),
+      this.prisma.funderInteraction.findFirst({
+        where: { funderId, deletedAt: null, nextDate: { gte: now } },
+        orderBy: { nextDate: 'asc' },
+        select: { nextDate: true },
+      }),
+      this.prisma.funderInteraction.aggregate({
+        where: { funderId, deletedAt: null, satisfaction: { not: null } },
+        _avg: { satisfaction: true },
+      }),
+    ]);
+    await this.prisma.funder.update({
+      where: { id: funderId },
+      data: {
+        lastContactAt: last?.date ?? null,
+        nextContactAt: next?.nextDate ?? null,
+        satisfactionAvg: ratings._avg.satisfaction ?? 0,
+      },
+    });
+  }
+
+  private async findInteraction(funderId: string, interactionId: string) {
+    const interaction = await this.prisma.funderInteraction.findFirst({
+      where: { id: interactionId, funderId, deletedAt: null },
+    });
+    if (!interaction) throw new NotFoundException('Actividade não encontrada');
+    return interaction;
+  }
+
+  async getInteractions(
+    funderId: string,
+    filters: FilterFunderInteractionDto,
+    viewer: { id: number; isAdmin: boolean },
+  ) {
+    await this.findOne(funderId);
+    const { type, grantId, responsibleId, from, to, page = 1, limit = DEFAULT_PAGE_SIZE } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+    const where: Prisma.FunderInteractionWhereInput = {
+      funderId,
+      deletedAt: null,
+      // Notas privadas só são visíveis a quem as registou (e a ADMIN)
+      ...(!viewer.isAdmin && { OR: [{ isPrivate: false }, { userId: viewer.id }] }),
+      ...(type && { type }),
+      ...(grantId && { grantId }),
+      ...(responsibleId && { responsibleId }),
+      ...((from || to) && {
+        date: { ...(from && { gte: new Date(from) }), ...(to && { lte: new Date(to) }) },
+      }),
+    };
+    const [data, total] = await Promise.all([
+      this.prisma.read.funderInteraction.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { date: 'desc' },
+        include: {
+          user: { select: { id: true, fullName: true } },
+          responsible: { select: { id: true, fullName: true } },
+          grant: { select: { code: true, title: true } },
+        },
+      }),
+      this.prisma.read.funderInteraction.count({ where }),
+    ]);
+    return buildPaginatedResponse(data, total, page, limit);
+  }
 
   async addInteraction(funderId: string, dto: CreateFunderInteractionDto, userId: number) {
     await this.findOne(funderId);
+    await this.assertGrantOfFunder(funderId, dto.grantId);
+    await this.assertUserExists(dto.responsibleId);
     const { date, nextDate, ...rest } = dto;
     const interaction = await this.prisma.funderInteraction.create({
       data: {
@@ -1284,30 +1367,289 @@ export class CrmFundersService {
         funderId,
         userId,
       },
-      include: { user: { select: { fullName: true } } },
-    });
-
-    const ratings = await this.prisma.funderInteraction.findMany({
-      where: { funderId, satisfaction: { not: null }, deletedAt: null },
-      select: { satisfaction: true },
-    });
-    const avg =
-      ratings.length > 0
-        ? ratings.reduce((s, r) => s + (r.satisfaction || 0), 0) / ratings.length
-        : 0;
-
-    await this.prisma.funder.update({
-      where: { id: funderId },
-      data: {
-        lastContactAt: new Date(),
-        satisfactionAvg: avg,
-        ...(nextDate && { nextReportDue: new Date(nextDate) }),
+      include: {
+        user: { select: { fullName: true } },
+        responsible: { select: { id: true, fullName: true } },
       },
     });
+    await this.refreshInteractionStats(funderId);
     await this.audit.logEntity(userId, 'CREATE', 'FunderInteraction', interaction.id, {
       funderId,
     });
     return interaction;
+  }
+
+  async updateInteraction(
+    funderId: string,
+    interactionId: string,
+    dto: UpdateFunderInteractionDto,
+    userId: number,
+  ) {
+    await this.findInteraction(funderId, interactionId);
+    await this.assertGrantOfFunder(funderId, dto.grantId);
+    await this.assertUserExists(dto.responsibleId);
+    const { date, nextDate, ...rest } = dto;
+    const updated = await this.prisma.funderInteraction.update({
+      where: { id: interactionId },
+      data: {
+        ...rest,
+        ...(date && { date: new Date(date) }),
+        ...(nextDate && { nextDate: new Date(nextDate) }),
+      },
+      include: { responsible: { select: { id: true, fullName: true } } },
+    });
+    await this.refreshInteractionStats(funderId);
+    await this.audit.logEntity(userId, 'UPDATE', 'FunderInteraction', interactionId, dto);
+    return updated;
+  }
+
+  async removeInteraction(funderId: string, interactionId: string, userId: number) {
+    await this.findInteraction(funderId, interactionId);
+    await this.prisma.funderInteraction.update({
+      where: { id: interactionId },
+      data: { deletedAt: new Date() },
+    });
+    await this.refreshInteractionStats(funderId);
+    await this.audit.logEntity(userId, 'DELETE', 'FunderInteraction', interactionId, { funderId });
+    return { message: 'Actividade removida com sucesso' };
+  }
+
+  // ─── BENEFICIÁRIOS FINANCIADOS (⑬) ────────────────────
+  // Financiador → Programa → Projecto → Beneficiários. Só leitura: cruza os
+  // programas do financiador com as participações já registadas em
+  // CRM → Beneficiários. O beneficiário nunca é duplicado.
+
+  private participationWhereForProgram(p: {
+    program: string;
+    project: string | null;
+  }): Prisma.BeneficiaryParticipationWhereInput {
+    return {
+      program: { equals: p.program.trim(), mode: 'insensitive' },
+      // Linha com projecto só conta participações desse projecto; sem projecto, o programa todo
+      ...(p.project && { project: { equals: p.project.trim(), mode: 'insensitive' } }),
+    };
+  }
+
+  async getBeneficiariesSummary(funderId: string) {
+    await this.findOne(funderId);
+    const rows = await this.prisma.read.funderProgram.findMany({
+      where: { funderId, deletedAt: null },
+      select: { id: true, program: true, project: true, expectedBeneficiaries: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const entries = await Promise.all(
+      rows.map(async row => {
+        const distinct = await this.prisma.read.beneficiaryParticipation.findMany({
+          where: {
+            deletedAt: null,
+            beneficiary: { deletedAt: null },
+            ...this.participationWhereForProgram(row),
+          },
+          distinct: ['beneficiaryId'],
+          select: { beneficiaryId: true },
+        });
+        return { row, ids: distinct.map(d => d.beneficiaryId) };
+      }),
+    );
+
+    // Programa (nome, case-insensitive) → projectos. O total do programa não soma duas
+    // vezes o mesmo beneficiário inscrito em vários projectos.
+    const programs = new Map<
+      string,
+      { program: string; ids: Set<string>; expected: number; projects: unknown[] }
+    >();
+    for (const { row, ids } of entries) {
+      const key = row.program.trim().toLowerCase();
+      const node = programs.get(key) ?? {
+        program: row.program.trim(),
+        ids: new Set<string>(),
+        expected: 0,
+        projects: [],
+      };
+      ids.forEach(id => node.ids.add(id));
+      node.expected += row.expectedBeneficiaries ?? 0;
+      node.projects.push({
+        programId: row.id,
+        project: row.project,
+        expectedBeneficiaries: row.expectedBeneficiaries,
+        beneficiaries: ids.length,
+      });
+      programs.set(key, node);
+    }
+
+    const all = new Set<string>();
+    entries.forEach(e => e.ids.forEach(id => all.add(id)));
+    return {
+      totalBeneficiaries: all.size,
+      programs: [...programs.values()].map(n => ({
+        program: n.program,
+        expectedBeneficiaries: n.expected,
+        beneficiaries: n.ids.size,
+        projects: n.projects,
+      })),
+    };
+  }
+
+  async getFundedBeneficiaries(
+    funderId: string,
+    filters: FilterFunderBeneficiaryDto,
+    pagination: PaginationFilterDto,
+  ) {
+    await this.findOne(funderId);
+    const page = pagination.page ?? 1;
+    const limit = Math.min(pagination.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+    const { skip, take } = calculatePagination(page, limit);
+    const rows = await this.prisma.read.funderProgram.findMany({
+      where: { funderId, deletedAt: null },
+      select: { program: true, project: true },
+    });
+    const norm = (v?: string | null) => v?.trim().toLowerCase();
+    const matching = rows.filter(
+      r =>
+        (!filters.program || norm(r.program) === norm(filters.program)) &&
+        (!filters.project || norm(r.project) === norm(filters.project)),
+    );
+    if (!matching.length) return buildPaginatedResponse([], 0, page, limit);
+    const where: Prisma.BeneficiaryParticipationWhereInput = {
+      deletedAt: null,
+      beneficiary: { deletedAt: null },
+      OR: matching.map(r => this.participationWhereForProgram(r)),
+    };
+    const [data, total] = await Promise.all([
+      this.prisma.read.beneficiaryParticipation.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          beneficiary: {
+            select: { id: true, code: true, fullName: true, province: true, status: true },
+          },
+        },
+      }),
+      this.prisma.read.beneficiaryParticipation.count({ where }),
+    ]);
+    return buildPaginatedResponse(data, total, page, limit);
+  }
+
+  // ─── PARCEIROS ASSOCIADOS (⑭) ─────────────────────────
+  // Financiador ↔ Parceiro ↔ Programa/Projecto. Usa a mesma PartnerFunderLink
+  // que o separador "Financiamento" do parceiro: criar de um lado aparece no outro.
+
+  private async findPartnerLink(funderId: string, linkId: string) {
+    const link = await this.prisma.partnerFunderLink.findFirst({
+      where: { id: linkId, funderId, deletedAt: null },
+    });
+    if (!link) throw new NotFoundException('Parceiro associado não encontrado');
+    return link;
+  }
+
+  async getPartners(funderId: string) {
+    await this.findOne(funderId);
+    const links = await this.prisma.read.partnerFunderLink.findMany({
+      where: { funderId, deletedAt: null, partner: { deletedAt: null } },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        partner: { select: { id: true, code: true, name: true, type: true, status: true } },
+        program: { select: { id: true, program: true, project: true } },
+      },
+    });
+    // Vista por programa: quem co-financia/implementa cada programa (consórcios)
+    const byProgram = new Map<string, { program: unknown; partners: unknown[] }>();
+    for (const l of links) {
+      const key = l.programId ?? 'none';
+      const node = byProgram.get(key) ?? { program: l.program, partners: [] };
+      node.partners.push({
+        linkId: l.id,
+        partner: l.partner,
+        relationType: l.relationType,
+        amountFunded: l.amountFunded,
+        currency: l.currency,
+      });
+      byProgram.set(key, node);
+    }
+    return { links, byProgram: [...byProgram.values()] };
+  }
+
+  async addPartner(funderId: string, dto: CreateFunderPartnerLinkDto, userId: number) {
+    await this.findOne(funderId);
+    this.assertDateRange(dto.periodStart, dto.periodEnd);
+    await this.assertProgramOfFunder(funderId, dto.programId);
+    const partner = await this.prisma.partner.findFirst({
+      where: { id: dto.partnerId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!partner) throw new BadRequestException('Parceiro não encontrado');
+    const duplicate = await this.prisma.partnerFunderLink.findFirst({
+      where: {
+        funderId,
+        partnerId: dto.partnerId,
+        programId: dto.programId ?? null,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (duplicate) {
+      throw new BadRequestException('Este parceiro já está associado ao financiador/programa');
+    }
+    const { periodStart, periodEnd, ...rest } = dto;
+    const link = await this.prisma.$transaction(async tx => {
+      // Ter um financiador associado implica que o parceiro exerce o papel de financiador
+      await tx.partner.update({ where: { id: dto.partnerId }, data: { isFunder: true } });
+      return tx.partnerFunderLink.create({
+        data: {
+          ...rest,
+          ...(periodStart && { periodStart: new Date(periodStart) }),
+          ...(periodEnd && { periodEnd: new Date(periodEnd) }),
+          funderId,
+        },
+        include: {
+          partner: { select: { id: true, code: true, name: true } },
+          program: { select: { id: true, program: true, project: true } },
+        },
+      });
+    });
+    await this.audit.logEntity(userId, 'CREATE', 'PartnerFunderLink', link.id, {
+      funderId,
+      partnerId: dto.partnerId,
+    });
+    return link;
+  }
+
+  async updatePartner(
+    funderId: string,
+    linkId: string,
+    dto: UpdateFunderPartnerLinkDto,
+    userId: number,
+  ) {
+    const current = await this.findPartnerLink(funderId, linkId);
+    await this.assertProgramOfFunder(funderId, dto.programId);
+    this.assertDateRange(
+      dto.periodStart ?? current.periodStart,
+      dto.periodEnd ?? current.periodEnd,
+    );
+    const { periodStart, periodEnd, ...rest } = dto;
+    const updated = await this.prisma.partnerFunderLink.update({
+      where: { id: linkId },
+      data: {
+        ...rest,
+        ...(periodStart && { periodStart: new Date(periodStart) }),
+        ...(periodEnd && { periodEnd: new Date(periodEnd) }),
+      },
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'PartnerFunderLink', linkId, dto);
+    return updated;
+  }
+
+  async removePartner(funderId: string, linkId: string, userId: number) {
+    await this.findPartnerLink(funderId, linkId);
+    await this.prisma.partnerFunderLink.update({
+      where: { id: linkId },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.logEntity(userId, 'DELETE', 'PartnerFunderLink', linkId, { funderId });
+    return { message: 'Parceiro desassociado com sucesso' };
   }
 
   // ─── DASHBOARD ───────────────────────────────────────

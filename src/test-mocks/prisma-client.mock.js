@@ -1692,6 +1692,23 @@ const PartnerInteractionType = {
   EVENT: 'EVENT',
   NOTE: 'NOTE',
   REVIEW: 'REVIEW',
+  CONTACT: 'CONTACT',
+  PROJECT_PRESENTATION: 'PROJECT_PRESENTATION',
+  APPLICATION: 'APPLICATION',
+  NEGOTIATION: 'NEGOTIATION',
+  FOLLOW_UP: 'FOLLOW_UP',
+  EVALUATION: 'EVALUATION',
+  CONTRACT_SIGNING: 'CONTRACT_SIGNING',
+  REPORT: 'REPORT',
+  RENEWAL: 'RENEWAL',
+};
+
+const FunderPartnerRelationType = {
+  CONSORTIUM: 'CONSORTIUM',
+  CO_FINANCING: 'CO_FINANCING',
+  IMPLEMENTATION: 'IMPLEMENTATION',
+  TECHNICAL_SUPPORT: 'TECHNICAL_SUPPORT',
+  OTHER: 'OTHER',
 };
 
 const MilestoneStatus = {
@@ -3131,6 +3148,7 @@ module.exports = {
   FunderContractRenewal,
   FunderIndicatorKey,
   FunderInteractionType,
+  FunderPartnerRelationType,
   ReportStatus,
   LibraryItemType,
   LibraryAction,

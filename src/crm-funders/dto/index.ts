@@ -12,3 +12,4 @@ export * from './pagination-filter.dto';
 export * from './create-funder-opportunity.dto';
 export * from './create-funder-contract.dto';
 export * from './create-funder-indicator.dto';
+export * from './funder-partner-link.dto';
