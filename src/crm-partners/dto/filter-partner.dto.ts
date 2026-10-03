@@ -1,7 +1,13 @@
 import { IsOptional, IsEnum, IsString, IsInt } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { PartnerType, PartnerTier, PartnerStatus } from '@prisma/client';
+import {
+  PartnerType,
+  PartnerTier,
+  PartnerStatus,
+  PartnershipLevel,
+  PartnershipKind,
+} from '@prisma/client';
 import { BaseFilterDto } from '../../common/dtos/pagination.dto';
 
 export class FilterPartnerDto extends BaseFilterDto {
@@ -19,6 +25,31 @@ export class FilterPartnerDto extends BaseFilterDto {
   @IsOptional()
   @IsEnum(PartnerStatus)
   status?: PartnerStatus;
+
+  @ApiPropertyOptional({ enum: PartnershipLevel })
+  @IsOptional()
+  @IsEnum(PartnershipLevel)
+  partnershipLevel?: PartnershipLevel;
+
+  @ApiPropertyOptional({ enum: PartnershipKind })
+  @IsOptional()
+  @IsEnum(PartnershipKind)
+  partnershipType?: PartnershipKind;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sector?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  tag?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

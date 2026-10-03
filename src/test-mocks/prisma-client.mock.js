@@ -27,6 +27,12 @@ const Prisma = {
   },
   PrismaClientValidationError: class PrismaClientValidationError extends Error {},
   PrismaClientInitializationError: class PrismaClientInitializationError extends Error {},
+  TransactionIsolationLevel: {
+    ReadUncommitted: 'ReadUncommitted',
+    ReadCommitted: 'ReadCommitted',
+    RepeatableRead: 'RepeatableRead',
+    Serializable: 'Serializable',
+  },
 };
 
 // ── Enums (gerados a partir do schema.prisma) ─────────────────────────────────
@@ -1521,6 +1527,153 @@ const PartnerType = {
   OTHER: 'OTHER',
 };
 
+const PartnershipKind = {
+  TRAINING: 'TRAINING',
+  EDUCATION: 'EDUCATION',
+  EMPLOYMENT: 'EMPLOYMENT',
+  INTERNSHIPS: 'INTERNSHIPS',
+  RECRUITMENT: 'RECRUITMENT',
+  FUNDING: 'FUNDING',
+  PROJECT_IMPLEMENTATION: 'PROJECT_IMPLEMENTATION',
+  TECHNICAL_SUPPORT: 'TECHNICAL_SUPPORT',
+  SUPPLY: 'SUPPLY',
+  TECHNOLOGY: 'TECHNOLOGY',
+  CONTENT: 'CONTENT',
+  EVENTS: 'EVENTS',
+  MENTORING: 'MENTORING',
+  RESEARCH: 'RESEARCH',
+  CERTIFICATION: 'CERTIFICATION',
+  LOGISTICS: 'LOGISTICS',
+  COMMUNICATION: 'COMMUNICATION',
+  SOCIAL_RESPONSIBILITY: 'SOCIAL_RESPONSIBILITY',
+  COMMUNITY_DEVELOPMENT: 'COMMUNITY_DEVELOPMENT',
+  OTHER: 'OTHER',
+};
+
+const PartnerProgramStatus = {
+  PLANNED: 'PLANNED',
+  ACTIVE: 'ACTIVE',
+  COMPLETED: 'COMPLETED',
+  SUSPENDED: 'SUSPENDED',
+  CANCELLED: 'CANCELLED',
+};
+
+const PartnerAgreementType = {
+  MOU: 'MOU',
+  CONTRACT: 'CONTRACT',
+  PROTOCOL: 'PROTOCOL',
+  PARTNERSHIP_AGREEMENT: 'PARTNERSHIP_AGREEMENT',
+  COLLABORATION_TERMS: 'COLLABORATION_TERMS',
+  OTHER: 'OTHER',
+};
+
+const PartnerAgreementStatus = {
+  DRAFTING: 'DRAFTING',
+  NEGOTIATION: 'NEGOTIATION',
+  ACTIVE: 'ACTIVE',
+  EXPIRED: 'EXPIRED',
+  TERMINATED: 'TERMINATED',
+};
+
+const PartnershipLevel = {
+  STRATEGIC: 'STRATEGIC',
+  INSTITUTIONAL: 'INSTITUTIONAL',
+  OPERATIONAL: 'OPERATIONAL',
+  TECHNICAL: 'TECHNICAL',
+  COMMERCIAL: 'COMMERCIAL',
+  TRAINING: 'TRAINING',
+  COMMUNITY: 'COMMUNITY',
+};
+
+const PartnerOrganizationSize = {
+  MICRO: 'MICRO',
+  SMALL: 'SMALL',
+  MEDIUM: 'MEDIUM',
+  LARGE: 'LARGE',
+};
+
+const PartnerContributionType = {
+  FINANCIAL: 'FINANCIAL',
+  HUMAN_RESOURCES: 'HUMAN_RESOURCES',
+  EQUIPMENT: 'EQUIPMENT',
+  FACILITIES: 'FACILITIES',
+  TRAINING: 'TRAINING',
+  CONTENT: 'CONTENT',
+  TECHNOLOGY: 'TECHNOLOGY',
+  SERVICES: 'SERVICES',
+  LOGISTICS: 'LOGISTICS',
+  SCHOLARSHIPS: 'SCHOLARSHIPS',
+  MATERIALS: 'MATERIALS',
+  NETWORK: 'NETWORK',
+  TECHNICAL_KNOWLEDGE: 'TECHNICAL_KNOWLEDGE',
+  OTHER: 'OTHER',
+};
+
+const PartnerContributionPeriodicity = {
+  ONE_TIME: 'ONE_TIME',
+  MONTHLY: 'MONTHLY',
+  QUARTERLY: 'QUARTERLY',
+  SEMIANNUAL: 'SEMIANNUAL',
+  ANNUAL: 'ANNUAL',
+};
+
+const PartnerOpportunityStatus = {
+  IDENTIFIED: 'IDENTIFIED',
+  CONTACTED: 'CONTACTED',
+  IN_DISCUSSION: 'IN_DISCUSSION',
+  PROPOSAL_SENT: 'PROPOSAL_SENT',
+  IN_NEGOTIATION: 'IN_NEGOTIATION',
+  AGREEMENT_REACHED: 'AGREEMENT_REACHED',
+  NOT_CONCLUDED: 'NOT_CONCLUDED',
+};
+
+const PartnerDocumentType = {
+  CONTRACT: 'CONTRACT',
+  PROTOCOL: 'PROTOCOL',
+  MEMORANDUM: 'MEMORANDUM',
+  CERTIFICATE_OF_REGISTRATION: 'CERTIFICATE_OF_REGISTRATION',
+  PROPOSAL: 'PROPOSAL',
+  REPORT: 'REPORT',
+  PROOF: 'PROOF',
+  CERTIFICATE: 'CERTIFICATE',
+  INSTITUTIONAL: 'INSTITUTIONAL',
+  OTHER: 'OTHER',
+};
+
+const PartnerLocationType = {
+  HEADQUARTERS: 'HEADQUARTERS',
+  BRANCH: 'BRANCH',
+  DELEGATION: 'DELEGATION',
+  OFFICE: 'OFFICE',
+  WAREHOUSE: 'WAREHOUSE',
+  OTHER: 'OTHER',
+};
+
+const PartnerRelationshipStatus = {
+  PROSPECTING: 'PROSPECTING',
+  DEVELOPING: 'DEVELOPING',
+  CONSOLIDATED: 'CONSOLIDATED',
+  AT_RISK: 'AT_RISK',
+  PAUSED: 'PAUSED',
+  ENDED: 'ENDED',
+};
+
+const PartnerCustomFieldType = {
+  TEXT: 'TEXT',
+  NUMBER: 'NUMBER',
+  DATE: 'DATE',
+  BOOLEAN: 'BOOLEAN',
+  SELECT: 'SELECT',
+  MULTI_SELECT: 'MULTI_SELECT',
+};
+
+const PartnerDocumentStatus = {
+  DRAFT: 'DRAFT',
+  VALID: 'VALID',
+  EXPIRED: 'EXPIRED',
+  ARCHIVED: 'ARCHIVED',
+};
+
 const PartnerTier = { PLATINUM: 'PLATINUM', GOLD: 'GOLD', SILVER: 'SILVER', STANDARD: 'STANDARD' };
 
 const PartnerStatus = {
@@ -2783,6 +2936,20 @@ module.exports = {
   NeedStatus,
   PartnerType,
   PartnerTier,
+  PartnershipKind,
+  PartnerProgramStatus,
+  PartnerAgreementType,
+  PartnerAgreementStatus,
+  PartnershipLevel,
+  PartnerOrganizationSize,
+  PartnerContributionType,
+  PartnerContributionPeriodicity,
+  PartnerOpportunityStatus,
+  PartnerDocumentType,
+  PartnerDocumentStatus,
+  PartnerLocationType,
+  PartnerRelationshipStatus,
+  PartnerCustomFieldType,
   PartnerStatus,
   PartnerInteractionType,
   MilestoneStatus,
