@@ -293,10 +293,8 @@ describe('CrmFundersService', () => {
     });
 
     it('deve lançar BadRequestException se desembolso excede o grant', async () => {
-      mockPrisma.fundingGrant.findUnique.mockResolvedValue({
-        ...mockGrant,
-        disbursed: 4500000,
-      });
+      mockPrisma.fundingGrant.findUnique.mockResolvedValue(mockGrant);
+      mockPrisma.grantDisbursement.aggregate.mockResolvedValue({ _sum: { amount: 4500000 } });
       await expect(
         service.addDisbursement('grt-1', { amount: 600000, receivedAt: '2026-06-01' } as any, 1),
       ).rejects.toThrow(BadRequestException);

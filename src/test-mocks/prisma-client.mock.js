@@ -1796,6 +1796,40 @@ const GrantStatus = {
   SUSPENDED: 'SUSPENDED',
   CANCELLED: 'CANCELLED',
   CLOSED: 'CLOSED',
+  PREPARING: 'PREPARING',
+  SUBMITTED: 'SUBMITTED',
+  UNDER_EVALUATION: 'UNDER_EVALUATION',
+  APPROVED: 'APPROVED',
+  CONTRACTED: 'CONTRACTED',
+  IN_EXECUTION: 'IN_EXECUTION',
+  REJECTED: 'REJECTED',
+};
+
+const DisbursementStatus = {
+  PREDICTED: 'PREDICTED',
+  RECEIVED: 'RECEIVED',
+  DELAYED: 'DELAYED',
+  CANCELLED: 'CANCELLED',
+};
+
+const FunderOpportunityStatus = {
+  IDENTIFIED: 'IDENTIFIED',
+  UNDER_ANALYSIS: 'UNDER_ANALYSIS',
+  PREPARING: 'PREPARING',
+  SUBMITTED: 'SUBMITTED',
+  UNDER_EVALUATION: 'UNDER_EVALUATION',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  WITHDRAWN: 'WITHDRAWN',
+};
+
+const FunderOpportunityDocumentType = {
+  TERMS_OF_REFERENCE: 'TERMS_OF_REFERENCE',
+  CALL_FOR_PROPOSALS: 'CALL_FOR_PROPOSALS',
+  FORM: 'FORM',
+  BUDGET: 'BUDGET',
+  TECHNICAL_PROPOSAL: 'TECHNICAL_PROPOSAL',
+  OTHER: 'OTHER',
 };
 
 const FunderInteractionType = {
@@ -3030,6 +3064,9 @@ module.exports = {
   FunderFundingType,
   FunderTargetGroup,
   GrantStatus,
+  DisbursementStatus,
+  FunderOpportunityStatus,
+  FunderOpportunityDocumentType,
   FunderInteractionType,
   ReportStatus,
   LibraryItemType,

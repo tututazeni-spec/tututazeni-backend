@@ -25,7 +25,12 @@ import {
   UpdateFunderDto,
   FilterFunderDto,
   CreateGrantDto,
+  UpdateGrantDto,
   CreateDisbursementDto,
+  UpdateDisbursementDto,
+  CreateFunderOpportunityDto,
+  UpdateFunderOpportunityDto,
+  CreateOpportunityDocumentDto,
   CreateFunderInteractionDto,
   CreateFunderReportDto,
   SubmitFunderReportDto,
@@ -204,6 +209,24 @@ export class CrmFundersController {
     return this.service.findGrants(id, filters);
   }
 
+  @Get('grants/:grantId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Detalhe do grant (com parcelas e saldo)' })
+  getGrant(@Param('grantId') grantId: string) {
+    return this.service.getGrant(grantId);
+  }
+
+  @Put('grants/:grantId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar grant' })
+  updateGrant(
+    @Param('grantId') grantId: string,
+    @Body() dto: UpdateGrantDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateGrant(grantId, dto, user.id);
+  }
+
   @Put('grants/:grantId/status')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar estado do grant' })
@@ -233,6 +256,99 @@ export class CrmFundersController {
   @ApiOperation({ summary: 'Listar desembolsos do grant' })
   getDisbursements(@Param('grantId') grantId: string, @Query() filters: PaginationFilterDto) {
     return this.service.getDisbursements(grantId, filters);
+  }
+
+  @Put('grants/:grantId/disbursements/:disbursementId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar desembolso (ex.: marcar como recebido)' })
+  updateDisbursement(
+    @Param('grantId') grantId: string,
+    @Param('disbursementId') disbursementId: string,
+    @Body() dto: UpdateDisbursementDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateDisbursement(grantId, disbursementId, dto, user.id);
+  }
+
+  @Delete('grants/:grantId/disbursements/:disbursementId')
+  @Roles(Role.ADMIN, Role.RH)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover desembolso' })
+  removeDisbursement(
+    @Param('grantId') grantId: string,
+    @Param('disbursementId') disbursementId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeDisbursement(grantId, disbursementId, user.id);
+  }
+
+  // ─── CANDIDATURAS / OPORTUNIDADES ────────────────────
+
+  @Get(':id/opportunities')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar oportunidades de financiamento' })
+  getOpportunities(@Param('id') id: string) {
+    return this.service.getOpportunities(id);
+  }
+
+  @Post(':id/opportunities')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Registar oportunidade de financiamento' })
+  addOpportunity(
+    @Param('id') id: string,
+    @Body() dto: CreateFunderOpportunityDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addOpportunity(id, dto, user.id);
+  }
+
+  @Put(':id/opportunities/:opportunityId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar oportunidade de financiamento' })
+  updateOpportunity(
+    @Param('id') id: string,
+    @Param('opportunityId') opportunityId: string,
+    @Body() dto: UpdateFunderOpportunityDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateOpportunity(id, opportunityId, dto, user.id);
+  }
+
+  @Delete(':id/opportunities/:opportunityId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover oportunidade de financiamento' })
+  removeOpportunity(
+    @Param('id') id: string,
+    @Param('opportunityId') opportunityId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeOpportunity(id, opportunityId, user.id);
+  }
+
+  @Post(':id/opportunities/:opportunityId/documents')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Anexar documento à oportunidade' })
+  addOpportunityDocument(
+    @Param('id') id: string,
+    @Param('opportunityId') opportunityId: string,
+    @Body() dto: CreateOpportunityDocumentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addOpportunityDocument(id, opportunityId, dto, user.id);
+  }
+
+  @Delete(':id/opportunities/:opportunityId/documents/:documentId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover documento da oportunidade' })
+  removeOpportunityDocument(
+    @Param('id') id: string,
+    @Param('opportunityId') opportunityId: string,
+    @Param('documentId') documentId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeOpportunityDocument(id, opportunityId, documentId, user.id);
   }
 
   // ─── INTERACÇÕES ─────────────────────────────────────

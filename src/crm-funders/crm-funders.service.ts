@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { Prisma, GrantStatus } from '@prisma/client';
+import { Prisma, GrantStatus, DisbursementStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateFunderDto,
@@ -10,7 +10,12 @@ import {
   UpdateFunderDto,
   FilterFunderDto,
   CreateGrantDto,
+  UpdateGrantDto,
   CreateDisbursementDto,
+  UpdateDisbursementDto,
+  CreateFunderOpportunityDto,
+  UpdateFunderOpportunityDto,
+  CreateOpportunityDocumentDto,
   CreateFunderInteractionDto,
   CreateFunderReportDto,
   PaginationFilterDto,
@@ -22,6 +27,7 @@ import { calculatePagination, buildPaginatedResponse } from '../common/helpers/p
 const MS_PER_DAY = 86_400_000;
 const DEFAULT_CURRENCY = 'AOA'; // moeda oficial: Kwanza angolano
 const DEFAULT_PAGE_SIZE = 20;
+const EXECUTING_GRANT_STATUSES: GrantStatus[] = ['ACTIVE', 'IN_EXECUTION'];
 const MAX_PAGE_SIZE = 100; // tecto de paginação (alinhado com @Max(100) nos DTOs de filtro)
 
 @Injectable()
@@ -160,6 +166,11 @@ export class CrmFundersService {
           include: {
             _count: { select: { disbursements: true } },
           },
+        },
+        opportunities: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+          include: { documents: { where: { deletedAt: null } } },
         },
         interactions: {
           where: { deletedAt: null },
@@ -412,18 +423,42 @@ export class CrmFundersService {
     return { message: 'Programa removido com sucesso' };
   }
 
-  // ─── GRANTS (FINANCIAMENTOS) ─────────────────────────
+  // ─── FINANCIAMENTOS (⑦) ──────────────────────────────
+
+  /** Saldo = valor aprovado − valor utilizado. */
+  private withBalance<T extends { amount: number; usedAmount: number }>(grant: T) {
+    return { ...grant, balance: grant.amount - grant.usedAmount };
+  }
+
+  private async assertProgramOfFunder(funderId: string, programId?: string | null) {
+    if (!programId) return;
+    const program = await this.prisma.funderProgram.findFirst({
+      where: { id: programId, funderId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!program) throw new BadRequestException('Programa não pertence a este financiador');
+  }
+
+  private assertGrantAmounts(g: { amount?: number; usedAmount?: number | null }) {
+    if (g.amount != null && g.usedAmount != null && g.usedAmount > g.amount) {
+      throw new BadRequestException('O valor utilizado não pode exceder o valor aprovado');
+    }
+  }
 
   async createGrant(funderId: string, dto: CreateGrantDto, userId: number) {
     await this.findOne(funderId);
+    this.assertDateRange(dto.startDate, dto.endDate);
+    this.assertGrantAmounts(dto);
+    await this.assertProgramOfFunder(funderId, dto.programId);
     const code = await this.generateCode('GRT', 'fundingGrant');
-    const { startDate, endDate, nextReportDue, ...rest } = dto;
+    const { startDate, endDate, nextReportDue, approvalDate, ...rest } = dto;
     const grant = await this.prisma.fundingGrant.create({
       data: {
         ...rest,
         startDate: new Date(startDate),
         ...(endDate && { endDate: new Date(endDate) }),
         ...(nextReportDue && { nextReportDue: new Date(nextReportDue) }),
+        ...(approvalDate && { approvalDate: new Date(approvalDate) }),
         funderId,
         code,
       },
@@ -434,7 +469,7 @@ export class CrmFundersService {
       code,
     });
     await this.notifyGrantCreated(grant, dto, userId);
-    return grant;
+    return this.withBalance(grant);
   }
 
   /** Notificação de grant criado — efeito secundário enfileirado (fire-and-forget). */
@@ -465,13 +500,64 @@ export class CrmFundersService {
         take,
         orderBy: { createdAt: 'desc' },
         include: {
+          program: { select: { program: true, project: true } },
           _count: { select: { disbursements: true, reports: true } },
         },
       }),
       this.prisma.read.fundingGrant.count({ where }),
     ]);
-    const { data: pageData, meta } = buildPaginatedResponse(data, total, page, limit);
+    const { data: pageData, meta } = buildPaginatedResponse(
+      data.map(g => this.withBalance(g)),
+      total,
+      page,
+      limit,
+    );
     return { data: pageData, ...meta };
+  }
+
+  private async findGrantOrFail(grantId: string) {
+    const grant = await this.prisma.fundingGrant.findUnique({ where: { id: grantId } });
+    if (!grant || grant.deletedAt) throw new NotFoundException('Grant não encontrado');
+    return grant;
+  }
+
+  async getGrant(grantId: string) {
+    const grant = await this.prisma.read.fundingGrant.findUnique({
+      where: { id: grantId },
+      include: {
+        program: { select: { program: true, project: true } },
+        disbursements: { where: { deletedAt: null }, orderBy: { installmentNumber: 'asc' } },
+      },
+    });
+    if (!grant || grant.deletedAt) throw new NotFoundException('Grant não encontrado');
+    return this.withBalance(grant);
+  }
+
+  async updateGrant(grantId: string, dto: UpdateGrantDto, userId: number) {
+    const current = await this.findGrantOrFail(grantId);
+    const { startDate, endDate, nextReportDue, approvalDate, ...rest } = dto;
+    this.assertDateRange(startDate ?? current.startDate, endDate ?? current.endDate);
+    this.assertGrantAmounts({
+      amount: dto.amount ?? current.amount,
+      usedAmount: dto.usedAmount ?? current.usedAmount,
+    });
+    if (dto.amount != null && dto.amount < current.disbursed) {
+      throw new BadRequestException('O valor aprovado não pode ser inferior ao já desembolsado');
+    }
+    await this.assertProgramOfFunder(current.funderId, dto.programId);
+    const updated = await this.prisma.fundingGrant.update({
+      where: { id: grantId },
+      data: {
+        ...rest,
+        ...(startDate && { startDate: new Date(startDate) }),
+        ...(endDate && { endDate: new Date(endDate) }),
+        ...(nextReportDue && { nextReportDue: new Date(nextReportDue) }),
+        ...(approvalDate && { approvalDate: new Date(approvalDate) }),
+      },
+    });
+    await this.updateFunderTotals(current.funderId);
+    await this.audit.logEntity(userId, 'UPDATE', 'FundingGrant', grantId, dto);
+    return this.withBalance(updated);
   }
 
   async updateGrantStatus(grantId: string, status: string, userId: number) {
@@ -495,42 +581,169 @@ export class CrmFundersService {
     return updated;
   }
 
-  // ─── DESEMBOLSOS ─────────────────────────────────────
+  // ─── DESEMBOLSOS (⑧) ─────────────────────────────────
+
+  /** Soma das parcelas que ainda contam para o valor aprovado (tudo menos canceladas). */
+  private async sumCommittedParcels(grantId: string, excludeId?: string): Promise<number> {
+    const agg = await this.prisma.grantDisbursement.aggregate({
+      where: {
+        grantId,
+        deletedAt: null,
+        status: { not: 'CANCELLED' },
+        ...(excludeId && { id: { not: excludeId } }),
+      },
+      _sum: { amount: true },
+    });
+    return agg?._sum?.amount ?? 0;
+  }
+
+  /** O desembolsado do financiamento é sempre derivado das parcelas recebidas. */
+  private async syncGrantDisbursed(grantId: string, funderId: string) {
+    const agg = await this.prisma.grantDisbursement.aggregate({
+      where: { grantId, deletedAt: null, status: 'RECEIVED' },
+      _sum: { amount: true },
+    });
+    await this.prisma.fundingGrant.update({
+      where: { id: grantId },
+      data: { disbursed: agg?._sum?.amount ?? 0 },
+    });
+    await this.updateFunderTotals(funderId);
+  }
+
+  /** Estado/data efectiva coerentes: RECEIVED tem data (por omissão, agora); os restantes não. */
+  private resolveDisbursementState(dto: {
+    status?: DisbursementStatus;
+    receivedAt?: string | Date | null;
+  }) {
+    const status: DisbursementStatus = dto.status ?? (dto.receivedAt ? 'RECEIVED' : 'PREDICTED');
+    if (status !== 'RECEIVED' && dto.receivedAt) {
+      throw new BadRequestException('Só uma parcela recebida pode ter data efectiva');
+    }
+    const receivedAt = status === 'RECEIVED' ? new Date(dto.receivedAt ?? new Date()) : null;
+    return { status, receivedAt };
+  }
+
+  private async assertInstallmentFree(grantId: string, n: number, excludeId?: string) {
+    const clash = await this.prisma.grantDisbursement.findFirst({
+      where: {
+        grantId,
+        installmentNumber: n,
+        deletedAt: null,
+        ...(excludeId && { id: { not: excludeId } }),
+      },
+      select: { id: true },
+    });
+    if (clash) throw new BadRequestException(`A parcela nº ${n} já existe neste financiamento`);
+  }
 
   async addDisbursement(grantId: string, dto: CreateDisbursementDto, userId: number) {
-    const grant = await this.prisma.fundingGrant.findUnique({
-      where: { id: grantId },
-    });
-    if (!grant) throw new NotFoundException('Grant não encontrado');
+    const grant = await this.findGrantOrFail(grantId);
+    const { status, receivedAt } = this.resolveDisbursementState(dto);
 
-    const totalDisbursed = grant.disbursed + dto.amount;
-    if (totalDisbursed > grant.amount) {
-      throw new BadRequestException(
-        `Desembolso excede o valor total do grant (${grant.amount} ${grant.currency})`,
-      );
+    if (status !== 'CANCELLED') {
+      const committed = await this.sumCommittedParcels(grantId);
+      if (committed + dto.amount > grant.amount) {
+        throw new BadRequestException(
+          `Desembolso excede o valor total do grant (${grant.amount} ${grant.currency})`,
+        );
+      }
     }
 
-    const { receivedAt, ...rest } = dto;
+    let installmentNumber = dto.installmentNumber;
+    if (installmentNumber != null) {
+      await this.assertInstallmentFree(grantId, installmentNumber);
+    } else {
+      const last = await this.prisma.grantDisbursement.aggregate({
+        where: { grantId, deletedAt: null },
+        _max: { installmentNumber: true },
+      });
+      installmentNumber = (last?._max?.installmentNumber ?? 0) + 1;
+    }
+
+    const { expectedDate, receivedAt: _received, status: _status, ...rest } = dto;
     const disbursement = await this.prisma.grantDisbursement.create({
       data: {
         ...rest,
-        receivedAt: new Date(receivedAt),
+        installmentNumber,
+        status,
+        receivedAt,
+        ...(expectedDate && { expectedDate: new Date(expectedDate) }),
         grantId,
         createdById: userId,
       },
     });
 
-    await this.prisma.fundingGrant.update({
-      where: { id: grantId },
-      data: { disbursed: totalDisbursed },
-    });
-
-    await this.updateFunderTotals(grant.funderId);
+    await this.syncGrantDisbursed(grantId, grant.funderId);
     await this.audit.logEntity(userId, 'CREATE', 'GrantDisbursement', disbursement.id, {
       grantId,
       amount: dto.amount,
+      status,
     });
     return disbursement;
+  }
+
+  async updateDisbursement(
+    grantId: string,
+    disbursementId: string,
+    dto: UpdateDisbursementDto,
+    userId: number,
+  ) {
+    const grant = await this.findGrantOrFail(grantId);
+    const current = await this.prisma.grantDisbursement.findFirst({
+      where: { id: disbursementId, grantId, deletedAt: null },
+    });
+    if (!current) throw new NotFoundException('Desembolso não encontrado');
+
+    const statusTouched = dto.status !== undefined || dto.receivedAt !== undefined;
+    const state = statusTouched
+      ? this.resolveDisbursementState({
+          status: dto.status ?? (dto.receivedAt ? undefined : current.status),
+          receivedAt:
+            dto.receivedAt ?? (dto.status === 'RECEIVED' ? current.receivedAt : undefined),
+        })
+      : { status: current.status, receivedAt: current.receivedAt };
+
+    const amount = dto.amount ?? current.amount;
+    if (state.status !== 'CANCELLED') {
+      const others = await this.sumCommittedParcels(grantId, disbursementId);
+      if (others + amount > grant.amount) {
+        throw new BadRequestException(
+          `Desembolso excede o valor total do grant (${grant.amount} ${grant.currency})`,
+        );
+      }
+    }
+    if (dto.installmentNumber != null && dto.installmentNumber !== current.installmentNumber) {
+      await this.assertInstallmentFree(grantId, dto.installmentNumber, disbursementId);
+    }
+
+    const { expectedDate, receivedAt: _received, status: _status, ...rest } = dto;
+    const updated = await this.prisma.grantDisbursement.update({
+      where: { id: disbursementId },
+      data: {
+        ...rest,
+        ...(expectedDate && { expectedDate: new Date(expectedDate) }),
+        ...(statusTouched && { status: state.status, receivedAt: state.receivedAt }),
+      },
+    });
+    await this.syncGrantDisbursed(grantId, grant.funderId);
+    await this.audit.logEntity(userId, 'UPDATE', 'GrantDisbursement', disbursementId, dto);
+    return updated;
+  }
+
+  async removeDisbursement(grantId: string, disbursementId: string, userId: number) {
+    const grant = await this.findGrantOrFail(grantId);
+    const current = await this.prisma.grantDisbursement.findFirst({
+      where: { id: disbursementId, grantId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!current) throw new NotFoundException('Desembolso não encontrado');
+    await this.prisma.grantDisbursement.update({
+      where: { id: disbursementId },
+      data: { deletedAt: new Date() },
+    });
+    await this.syncGrantDisbursed(grantId, grant.funderId);
+    await this.audit.logEntity(userId, 'DELETE', 'GrantDisbursement', disbursementId, { grantId });
+    return { message: 'Desembolso removido com sucesso' };
   }
 
   async getDisbursements(grantId: string, filters: PaginationFilterDto) {
@@ -542,13 +755,135 @@ export class CrmFundersService {
         where,
         skip,
         take,
-        orderBy: { receivedAt: 'desc' },
+        orderBy: [{ installmentNumber: 'asc' }, { createdAt: 'asc' }],
         include: { createdBy: { select: { fullName: true } } },
       }),
       this.prisma.read.grantDisbursement.count({ where }),
     ]);
     const { data: pageData, meta } = buildPaginatedResponse(data, total, page, limit);
     return { data: pageData, ...meta };
+  }
+
+  // ─── CANDIDATURAS / OPORTUNIDADES (⑨) ────────────────
+
+  private async findOpportunity(funderId: string, opportunityId: string) {
+    const opportunity = await this.prisma.funderOpportunity.findFirst({
+      where: { id: opportunityId, funderId, deletedAt: null },
+    });
+    if (!opportunity) throw new NotFoundException('Oportunidade não encontrada');
+    return opportunity;
+  }
+
+  async getOpportunities(funderId: string) {
+    await this.findOne(funderId);
+    return this.prisma.read.funderOpportunity.findMany({
+      where: { funderId, deletedAt: null },
+      orderBy: [{ deadline: 'asc' }, { createdAt: 'desc' }],
+      include: {
+        program: { select: { program: true, project: true } },
+        responsible: { select: { fullName: true } },
+        documents: { where: { deletedAt: null }, orderBy: { createdAt: 'asc' } },
+      },
+    });
+  }
+
+  async addOpportunity(funderId: string, dto: CreateFunderOpportunityDto, userId: number) {
+    await this.findOne(funderId);
+    this.assertDateRange(dto.openingDate, dto.deadline);
+    this.assertDateRange(dto.deadline, dto.expectedDecisionDate);
+    await this.assertProgramOfFunder(funderId, dto.programId);
+    await this.assertUserExists(dto.responsibleId);
+    const { openingDate, deadline, expectedDecisionDate, ...rest } = dto;
+    const opportunity = await this.prisma.funderOpportunity.create({
+      data: {
+        ...rest,
+        ...(openingDate && { openingDate: new Date(openingDate) }),
+        ...(deadline && { deadline: new Date(deadline) }),
+        ...(expectedDecisionDate && { expectedDecisionDate: new Date(expectedDecisionDate) }),
+        funderId,
+      },
+      include: { documents: true },
+    });
+    await this.audit.logEntity(userId, 'CREATE', 'FunderOpportunity', opportunity.id, {
+      funderId,
+      name: dto.name,
+    });
+    return opportunity;
+  }
+
+  async updateOpportunity(
+    funderId: string,
+    opportunityId: string,
+    dto: UpdateFunderOpportunityDto,
+    userId: number,
+  ) {
+    const current = await this.findOpportunity(funderId, opportunityId);
+    const deadline = dto.deadline ?? current.deadline;
+    this.assertDateRange(dto.openingDate ?? current.openingDate, deadline);
+    this.assertDateRange(deadline, dto.expectedDecisionDate ?? current.expectedDecisionDate);
+    await this.assertProgramOfFunder(funderId, dto.programId);
+    await this.assertUserExists(dto.responsibleId);
+    const { openingDate, deadline: dl, expectedDecisionDate, ...rest } = dto;
+    const updated = await this.prisma.funderOpportunity.update({
+      where: { id: opportunityId },
+      data: {
+        ...rest,
+        ...(openingDate && { openingDate: new Date(openingDate) }),
+        ...(dl && { deadline: new Date(dl) }),
+        ...(expectedDecisionDate && { expectedDecisionDate: new Date(expectedDecisionDate) }),
+      },
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'FunderOpportunity', opportunityId, dto);
+    return updated;
+  }
+
+  async removeOpportunity(funderId: string, opportunityId: string, userId: number) {
+    await this.findOpportunity(funderId, opportunityId);
+    await this.prisma.funderOpportunity.update({
+      where: { id: opportunityId },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.logEntity(userId, 'DELETE', 'FunderOpportunity', opportunityId, { funderId });
+    return { message: 'Oportunidade removida com sucesso' };
+  }
+
+  async addOpportunityDocument(
+    funderId: string,
+    opportunityId: string,
+    dto: CreateOpportunityDocumentDto,
+    userId: number,
+  ) {
+    await this.findOpportunity(funderId, opportunityId);
+    const document = await this.prisma.funderOpportunityDocument.create({
+      data: { ...dto, opportunityId },
+    });
+    await this.audit.logEntity(userId, 'CREATE', 'FunderOpportunityDocument', document.id, {
+      opportunityId,
+      type: dto.type,
+    });
+    return document;
+  }
+
+  async removeOpportunityDocument(
+    funderId: string,
+    opportunityId: string,
+    documentId: string,
+    userId: number,
+  ) {
+    await this.findOpportunity(funderId, opportunityId);
+    const document = await this.prisma.funderOpportunityDocument.findFirst({
+      where: { id: documentId, opportunityId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!document) throw new NotFoundException('Documento não encontrado');
+    await this.prisma.funderOpportunityDocument.update({
+      where: { id: documentId },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.logEntity(userId, 'DELETE', 'FunderOpportunityDocument', documentId, {
+      opportunityId,
+    });
+    return { message: 'Documento removido com sucesso' };
   }
 
   // ─── INTERACÇÕES ─────────────────────────────────────
@@ -665,14 +1000,14 @@ export class CrmFundersService {
       }),
       this.prisma.read.fundingGrant.aggregate({
         _sum: { amount: true },
-        where: { status: 'ACTIVE', deletedAt: null },
+        where: { status: { in: EXECUTING_GRANT_STATUSES }, deletedAt: null },
       }),
       this.prisma.read.fundingGrant.aggregate({
         _sum: { disbursed: true },
-        where: { status: 'ACTIVE', deletedAt: null },
+        where: { status: { in: EXECUTING_GRANT_STATUSES }, deletedAt: null },
       }),
       this.prisma.read.fundingGrant.count({
-        where: { status: 'ACTIVE', deletedAt: null },
+        where: { status: { in: EXECUTING_GRANT_STATUSES }, deletedAt: null },
       }),
       this.prisma.read.funderReport.count({
         where: {
@@ -684,7 +1019,7 @@ export class CrmFundersService {
         where: { dueDate: { lte: in30Days, gte: now }, status: 'PENDING' },
       }),
       this.prisma.read.grantDisbursement.findMany({
-        where: { createdAt: { gte: startOfMonth }, deletedAt: null },
+        where: { createdAt: { gte: startOfMonth }, deletedAt: null, status: 'RECEIVED' },
         orderBy: { receivedAt: 'desc' },
         take: 5,
         include: {
@@ -737,7 +1072,7 @@ export class CrmFundersService {
       this.prisma.read.fundingGrant.count({ where: { createdAt: range } }),
       this.prisma.read.grantDisbursement.aggregate({
         _sum: { amount: true },
-        where: { receivedAt: range },
+        where: { receivedAt: range, status: 'RECEIVED', deletedAt: null },
       }),
       this.prisma.read.funderReport.count({ where: { submittedAt: range } }),
     ]);

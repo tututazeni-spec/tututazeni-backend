@@ -995,6 +995,7 @@ model User {
   assignedPartners          Partner[]                 @relation("PartnerOwner")
   partnerProgramsOwned      PartnerProgram[]          @relation("PartnerProgramResponsible")
   funderProgramsOwned       FunderProgram[]           @relation("FunderProgramResponsible")
+  funderOpportunitiesOwned  FunderOpportunity[]       @relation("FunderOpportunityResponsible")
   partnerAgreementsOwned    PartnerAgreement[]        @relation("PartnerAgreementResponsible")
   partnerAgreementUploads   PartnerAgreementVersion[] @relation("PartnerAgreementVersionUploader")
   partnerOpportunitiesOwned PartnerOpportunity[]      @relation("PartnerOpportunityOwner")
@@ -11885,14 +11886,15 @@ model Funder {
   cofinancingCriteria       String?
   otherEligibilityCriteria  String?
 
-  createdBy    User                @relation("FunderCreator", fields: [createdById], references: [id])
-  assignedTo   User?               @relation("FunderOwner", fields: [assignedToId], references: [id])
-  contacts     FunderContact[]
-  programs     FunderProgram[]
-  grants       FundingGrant[]
-  interactions FunderInteraction[]
-  reports      FunderReport[]
-  partnerLinks PartnerFunderLink[]
+  createdBy     User                @relation("FunderCreator", fields: [createdById], references: [id])
+  assignedTo    User?               @relation("FunderOwner", fields: [assignedToId], references: [id])
+  contacts      FunderContact[]
+  programs      FunderProgram[]
+  opportunities FunderOpportunity[]
+  grants        FundingGrant[]
+  interactions  FunderInteraction[]
+  reports       FunderReport[]
+  partnerLinks  PartnerFunderLink[]
 
   @@index([type])
   @@index([status])
@@ -11943,8 +11945,10 @@ model FunderProgram {
   updatedAt             DateTime             @updatedAt
   deletedAt             DateTime?
 
-  funder      Funder @relation(fields: [funderId], references: [id])
-  responsible User?  @relation("FunderProgramResponsible", fields: [responsibleId], references: [id])
+  funder        Funder              @relation(fields: [funderId], references: [id])
+  responsible   User?               @relation("FunderProgramResponsible", fields: [responsibleId], references: [id])
+  grants        FundingGrant[]
+  opportunities FunderOpportunity[]
 
   @@index([funderId])
   @@index([program])
@@ -11953,56 +11957,116 @@ model FunderProgram {
 }
 
 model FundingGrant {
-  id             String      @id @default(cuid())
-  funderId       String
-  code           String      @unique
-  title          String
-  description    String?
-  amount         Float
-  disbursed      Float       @default(0)
-  currency       String      @default("AOA")
-  exchangeRate   Float?
-  startDate      DateTime
-  endDate        DateTime?
-  status         GrantStatus @default(ACTIVE)
-  objectives     String[]
-  conditions     String?
-  reportingCycle String      @default("quarterly")
-  nextReportDue  DateTime?
-  programIds     String[]
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  deletedAt      DateTime?
+  id              String             @id @default(cuid())
+  funderId        String
+  code            String             @unique
+  title           String
+  description     String?
+  amount          Float
+  disbursed       Float              @default(0)
+  currency        String             @default("AOA")
+  exchangeRate    Float?
+  startDate       DateTime
+  endDate         DateTime?
+  status          GrantStatus        @default(ACTIVE)
+  objectives      String[]
+  conditions      String?
+  reportingCycle  String             @default("quarterly")
+  nextReportDue   DateTime?
+  programIds      String[]
+  // ⑦ Financiamentos
+  fundingType     FunderFundingType?
+  programId       String?
+  requestedAmount Float?
+  usedAmount      Float              @default(0)
+  approvalDate    DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  deletedAt       DateTime?
 
   funder        Funder              @relation(fields: [funderId], references: [id])
+  program       FunderProgram?      @relation(fields: [programId], references: [id])
   disbursements GrantDisbursement[]
   reports       FunderReport[]
   interactions  FunderInteraction[]
 
   @@index([funderId])
   @@index([status])
+  @@index([programId])
   @@index([nextReportDue])
   @@index([deletedAt])
 }
 
 model GrantDisbursement {
-  id          String    @id @default(cuid())
-  grantId     String
-  amount      Float
-  currency    String    @default("AOA")
-  receivedAt  DateTime
-  reference   String?
-  bankRef     String?
-  notes       String?
-  createdById Int
-  createdAt   DateTime  @default(now())
-  deletedAt   DateTime?
+  id                String             @id @default(cuid())
+  grantId           String
+  amount            Float
+  currency          String             @default("AOA")
+  receivedAt        DateTime?
+  reference         String?
+  bankRef           String?
+  notes             String?
+  // ⑧ Desembolsos
+  installmentNumber Int?
+  expectedDate      DateTime?
+  status            DisbursementStatus @default(RECEIVED)
+  proofUrl          String?
+  createdById       Int
+  createdAt         DateTime           @default(now())
+  deletedAt         DateTime?
 
   grant     FundingGrant @relation(fields: [grantId], references: [id])
   createdBy User         @relation("DisbursementCreator", fields: [createdById], references: [id])
 
   @@index([grantId])
   @@index([receivedAt])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+// ⑨ Candidaturas / oportunidades de financiamento
+model FunderOpportunity {
+  id                   String                  @id @default(cuid())
+  funderId             String
+  name                 String
+  programId            String?
+  thematicArea         FunderThematicArea?
+  potentialValue       Float?
+  currency             String                  @default("AOA")
+  openingDate          DateTime?
+  deadline             DateTime?
+  expectedDecisionDate DateTime?
+  responsibleId        Int?
+  status               FunderOpportunityStatus @default(IDENTIFIED)
+  notes                String?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  deletedAt            DateTime?
+
+  funder      Funder                      @relation(fields: [funderId], references: [id])
+  program     FunderProgram?              @relation(fields: [programId], references: [id])
+  responsible User?                       @relation("FunderOpportunityResponsible", fields: [responsibleId], references: [id])
+  documents   FunderOpportunityDocument[]
+
+  @@index([funderId])
+  @@index([programId])
+  @@index([status])
+  @@index([deadline])
+  @@index([deletedAt])
+}
+
+model FunderOpportunityDocument {
+  id            String                        @id @default(cuid())
+  opportunityId String
+  type          FunderOpportunityDocumentType
+  name          String
+  fileUrl       String
+  createdAt     DateTime                      @default(now())
+  deletedAt     DateTime?
+
+  opportunity FunderOpportunity @relation(fields: [opportunityId], references: [id])
+
+  @@index([opportunityId])
   @@index([deletedAt])
 }
 
@@ -12158,6 +12222,40 @@ enum GrantStatus {
   SUSPENDED
   CANCELLED
   CLOSED
+  PREPARING
+  SUBMITTED
+  UNDER_EVALUATION
+  APPROVED
+  CONTRACTED
+  IN_EXECUTION
+  REJECTED
+}
+
+enum DisbursementStatus {
+  PREDICTED
+  RECEIVED
+  DELAYED
+  CANCELLED
+}
+
+enum FunderOpportunityStatus {
+  IDENTIFIED
+  UNDER_ANALYSIS
+  PREPARING
+  SUBMITTED
+  UNDER_EVALUATION
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum FunderOpportunityDocumentType {
+  TERMS_OF_REFERENCE
+  CALL_FOR_PROPOSALS
+  FORM
+  BUDGET
+  TECHNICAL_PROPOSAL
+  OTHER
 }
 
 enum FunderInteractionType {

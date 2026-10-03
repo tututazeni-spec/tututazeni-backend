@@ -9,3 +9,4 @@ export * from './create-funder-interaction.dto';
 export * from './create-report.dto';
 export * from './submit-report.dto';
 export * from './pagination-filter.dto';
+export * from './create-funder-opportunity.dto';
