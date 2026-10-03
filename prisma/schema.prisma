@@ -7450,56 +7450,64 @@ enum ExecutionStatus {
 }
 
 model AutomationRule {
-  id                 Int                   @id @default(autoincrement())
-  name               String
-  trigger            String
-  action             String
-  condition          String
-  active             Boolean               @default(true)
-  createdAt          DateTime              @default(now())
-  tenantId           String
-  description        String?
-  triggerType        AutomationTrigger
-  triggerConfigJson  String // JSON com configuração do trigger (ex: { "eventType": "USER_HIRED" })
-  conditionsJson     String? // JSON array de condições (ex: department, position)
-  actionsJson        String // JSON array de ações (ex: enroll_course, send_notification)
-  priority           Int                   @default(0) // ordem de execução
-  isActive           Boolean               @default(true)
-  runCount           Int                   @default(0)
-  lastRunAt          DateTime?
-  lastRunStatus      ExecutionStatus?
-  createdBy          String // userId
-  updatedAt          DateTime              @updatedAt
-  category           AutomationCategory?
-  actionParams       String? // JSON — parâmetros da acção (legado, ver também actionsJson)
-  maxRetries         Int?
-  entity             String? // entidade alvo do gatilho (ex: "User", "Course", "Enrollment") — metadado do form, não usado no matching do engine
-  ownerId            String? // userId do responsável pela regra (pode diferir de createdBy)
-  environment        String?               @default("production") // "development" | "staging" | "production"
-  notifyOnError      Boolean               @default(true) // notificar o responsável quando uma execução falha
-  notes              String? // observações livres — distinto de description
+  id                  Int                   @id @default(autoincrement())
+  name                String
+  trigger             String
+  action              String
+  condition           String
+  active              Boolean               @default(true)
+  createdAt           DateTime              @default(now())
+  tenantId            String
+  description         String?
+  triggerType         AutomationTrigger
+  triggerConfigJson   String // JSON com configuração do trigger (ex: { "eventType": "USER_HIRED" })
+  conditionsJson      String? // JSON array de condições (ex: department, position)
+  actionsJson         String // JSON array de ações (ex: enroll_course, send_notification)
+  priority            Int                   @default(0) // ordem de execução
+  isActive            Boolean               @default(true)
+  runCount            Int                   @default(0)
+  lastRunAt           DateTime?
+  lastRunStatus       ExecutionStatus?
+  createdBy           String // userId
+  updatedAt           DateTime              @updatedAt
+  category            AutomationCategory?
+  actionParams        String? // JSON — parâmetros da acção (legado, ver também actionsJson)
+  maxRetries          Int?
+  entity              String? // entidade alvo do gatilho (ex: "User", "Course", "Enrollment") — metadado do form, não usado no matching do engine
+  ownerId             String? // userId do responsável pela regra (pode diferir de createdBy)
+  environment         String?               @default("production") // "development" | "staging" | "production"
+  notifyOnError       Boolean               @default(true) // notificar o responsável quando uma execução falha
+  notes               String? // observações livres — distinto de description
   // docs/Modulo_Processes.md §9 — regras de processos reutilizam este motor.
-  code               String?               @unique
-  module             String? // módulo de origem ("PROCESSES", ...) — filtra a vista por módulo
-  activeFrom         DateTime?
-  activeUntil        DateTime?
-  retryPolicy        String? // NONE | FIXED | EXPONENTIAL
-  retryDelayMinutes  Int?
-  errorHandling      String? // LOG | NOTIFY_OWNER | DISABLE_RULE
+  code                String?               @unique
+  module              String? // módulo de origem ("PROCESSES", ...) — filtra a vista por módulo
+  activeFrom          DateTime?
+  activeUntil         DateTime?
+  retryPolicy         String? // NONE | FIXED | EXPONENTIAL
+  retryDelayMinutes   Int?
+  errorHandling       String? // LOG | NOTIFY_OWNER | DISABLE_RULE
   // docs/modulo_automation.md §4 — Construtor de Fluxos.
-  flowJson           String? // JSON { steps: [...] } — acções/condições (sim/não)/atrasos encadeados
-  tags               String? // JSON array de etiquetas
-  departmentIds      String? // JSON array de departamentos abrangidos (âmbito organizacional)
-  draft              Boolean               @default(false) // rascunho: nunca dispara
-  version            Int                   @default(0) // última versão publicada (0 = nunca publicada)
-  publishedAt        DateTime?
-  publishedBy        String?
+  flowJson            String? // JSON { steps: [...] } — acções/condições (sim/não)/atrasos encadeados
+  tags                String? // JSON array de etiquetas
+  departmentIds       String? // JSON array de departamentos abrangidos (âmbito organizacional)
+  draft               Boolean               @default(false) // rascunho: nunca dispara
+  version             Int                   @default(0) // última versão publicada (0 = nunca publicada)
+  publishedAt         DateTime?
+  publishedBy         String?
   // §9 — minutos de trabalho manual que cada execução bem-sucedida poupa (estimativa; omissão = parâmetro do relatório).
-  manualMinutesSaved Int?
-  tenant             TenantConfig          @relation(fields: [tenantId], references: [id])
-  executions         AutomationExecution[]
-  versions           AutomationVersion[]
-  schedules          AutomationSchedule[]
+  manualMinutesSaved  Int?
+  // docs/modulo_automation.md §10 — governação: automações críticas só publicam com aprovação.
+  critical            Boolean               @default(false)
+  publishStatus       String? // PENDING | REJECTED — pedido de publicação à espera de decisão
+  publishRequestedBy  String?
+  publishRequestedAt  DateTime?
+  publishDecisionNote String?
+  lastFailureAlertAt  DateTime? // último alerta de falhas persistentes (evita repetir alertas)
+  templateKey         String? // §11 — modelo pré-configurado de origem
+  tenant              TenantConfig          @relation(fields: [tenantId], references: [id])
+  executions          AutomationExecution[]
+  versions            AutomationVersion[]
+  schedules           AutomationSchedule[]
 
   @@index([module])
   @@map("automation_rules")
@@ -7533,9 +7541,12 @@ model AutomationExecution {
   errorStep     String?
   cancelledBy   String?
   cancelReason  String?
+  // §10 — arquivo: payload/resultado removidos após `archiveAfterDays`; a linha fica para estatística.
+  archivedAt    DateTime?
   rule          AutomationRule  @relation(fields: [ruleId], references: [id])
 
   @@index([ruleId, dedupeKey])
+  @@index([startedAt])
   @@index([status, nextRetryAt])
   @@index([status, resumeAt])
   @@index([eventId])
@@ -7643,6 +7654,109 @@ model AutomationSchedule {
   @@index([status, nextRunAt])
   @@index([ruleId])
   @@map("automation_schedules")
+}
+
+// §10 — configuração global de governação do módulo (linha única, id "default").
+model AutomationSettings {
+  id                        String   @id @default("default")
+  maxExecutionsPerMinute    Int      @default(120) // por regra
+  maxConcurrentPerRule      Int      @default(5) // execuções em curso (RUNNING) por regra
+  maxEventDepth             Int      @default(5) // profundidade máxima de cadeias evento → regra
+  requireApprovalCritical   Boolean  @default(true) // publicar automações críticas exige aprovação
+  failureAlertThreshold     Int      @default(5) // falhas definitivas na janela que disparam alerta
+  failureAlertWindowMinutes Int      @default(60)
+  archiveAfterDays          Int      @default(90) // dados pessoais do registo removidos
+  retentionDays             Int      @default(365) // execuções apagadas
+  deadLetterRetentionDays   Int      @default(180)
+  auditRetentionDays        Int      @default(730)
+  updatedBy                 Int?
+  updatedAt                 DateTime @updatedAt
+
+  @@map("automation_settings")
+}
+
+// §10 — permissões do módulo por perfil (role) e âmbito organizacional.
+model AutomationRolePermission {
+  id          Int      @id @default(autoincrement())
+  roleCode    String   @unique
+  canView     Boolean  @default(true)
+  canCreate   Boolean  @default(false)
+  canEdit     Boolean  @default(false)
+  canTest     Boolean  @default(false)
+  canActivate Boolean  @default(false)
+  canExecute  Boolean  @default(false)
+  canCancel   Boolean  @default(false)
+  canDelete   Boolean  @default(false)
+  scope       String   @default("ALL") // ALL | DEPARTMENT (só automações do seu departamento)
+  updatedBy   Int?
+  updatedAt   DateTime @updatedAt
+
+  @@map("automation_role_permissions")
+}
+
+// §10/§12 — auditoria de alterações e operações (quem, o quê, quando, antes/depois).
+model AutomationAuditLog {
+  id         String   @id @default(cuid())
+  entity     String // RULE | SETTINGS | PERMISSION | CONNECTION | DEAD_LETTER | TEMPLATE | RETENTION
+  entityId   String?
+  ruleId     Int?
+  action     String
+  userId     Int?
+  beforeJson String?
+  afterJson  String?
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@index([ruleId, createdAt])
+  @@index([entity, createdAt])
+  @@index([userId])
+  @@map("automation_audit_logs")
+}
+
+// §10/§12 — integrações autorizadas; o segredo é cifrado (AES-256-GCM) e nunca devolvido.
+model AutomationConnection {
+  id             String    @id @default(cuid())
+  name           String    @unique
+  type           String    @default("HTTP") // HTTP | WEBHOOK | SMTP | SMS | WHATSAPP | OTHER
+  baseUrl        String?
+  authType       String    @default("NONE") // NONE | BEARER | BASIC | API_KEY_HEADER
+  headerName     String? // API_KEY_HEADER
+  username       String? // BASIC
+  secretEnc      String? // iv:tag:dados (base64)
+  secretHint     String? // últimos 4 caracteres, só para identificação visual
+  status         String    @default("ACTIVE") // ACTIVE | DISABLED
+  description    String?
+  lastTestedAt   DateTime?
+  lastTestStatus String?
+  ownerId        Int?
+  createdBy      Int?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@map("automation_connections")
+}
+
+// §10/§12 — eventos/execuções que falharam depois de esgotadas as tentativas.
+model AutomationDeadLetter {
+  id             String    @id @default(cuid())
+  ruleId         Int
+  executionId    String?
+  eventId        String?
+  correlationId  String?
+  payload        String? // JSON sem dados sensíveis
+  errorCode      String?
+  errorMessage   String?
+  attempts       Int       @default(1)
+  status         String    @default("OPEN") // OPEN | REPROCESSED | DISCARDED
+  createdAt      DateTime  @default(now())
+  resolvedAt     DateTime?
+  resolvedBy     Int?
+  resolutionNote String?
+
+  @@index([status, createdAt])
+  @@index([ruleId])
+  @@index([executionId])
+  @@map("automation_dead_letters")
 }
 
 model SlaConfig {

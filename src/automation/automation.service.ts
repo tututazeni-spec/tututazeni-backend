@@ -1,5 +1,12 @@
-﻿// src/automation/automation.service.ts
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+// src/automation/automation.service.ts
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import {
   EnrollmentStatus,
@@ -44,6 +51,11 @@ import {
 } from './automation-flow';
 import { EVENT_CATALOG, moduleOfTrigger } from './automation-events.catalog';
 import { appendHistory } from './automation-tasks.util';
+import { failureCode, classifyFailure } from './automation-failure.util';
+import { AutomationSettingsService, AutomationLimits, DEFAULT_LIMITS } from './automation-settings.service';
+import { AutomationAuditService, diffFields } from './automation-audit.service';
+import { AutomationFailuresService } from './automation-failures.service';
+import { AutomationConnectionsService } from './automation-connections.service';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 
@@ -67,6 +79,8 @@ interface AutomationActionParams {
   points?: number;
   badgeCode?: string;
   url?: string;
+  connectionId?: string;
+  path?: string;
   method?: string;
   headers?: Record<string, string>;
   recipient?: string;
@@ -386,28 +400,7 @@ export function bucketKey(d: Date, g: OverviewGranularity): string {
   return iso.slice(0, 10);
 }
 
-/** Código estável do erro (§7) — o texto livre da mensagem não serve para filtrar. */
-export function failureCode(message: string | null | undefined): string {
-  const m = (message ?? '').toLowerCase();
-  if (!m) return 'UNKNOWN';
-  if (/forbidden|permiss|unauthori|403|401/.test(m)) return 'PERMISSION_DENIED';
-  if (/not found|não encontrad|nao encontrad|404/.test(m)) return 'RECORD_NOT_FOUND';
-  if (/valid|inválid|invalid|obrigat/.test(m)) return 'VALIDATION_ERROR';
-  if (/timeout|econn|network|fetch|socket|enotfound/.test(m)) return 'NETWORK_ERROR';
-  if (/mail|smtp|sms|entrega|deliver/.test(m)) return 'DELIVERY_ERROR';
-  return 'ACTION_FAILED';
-}
-
-export function classifyFailure(message: string | null): string {
-  const m = (message ?? '').toLowerCase();
-  if (!m) return 'Sem detalhe';
-  if (/forbidden|permiss|unauthori|403|401/.test(m)) return 'Permissões';
-  if (/not found|não encontrad|nao encontrad|404/.test(m)) return 'Registo não encontrado';
-  if (/valid|inválid|invalid|obrigat/.test(m)) return 'Validação de dados';
-  if (/timeout|econn|network|fetch|socket|enotfound/.test(m)) return 'Rede / tempo limite';
-  if (/mail|smtp|sms|entrega|deliver/.test(m)) return 'Entrega de comunicação';
-  return 'Outros';
-}
+export { failureCode, classifyFailure } from './automation-failure.util';
 
 @Injectable()
 export class AutomationService {
@@ -428,7 +421,17 @@ export class AutomationService {
     private readonly gamification: GamificationService,
     private readonly mail: MailService,
     private readonly sms: SmsService,
+    // §10 — governação. Opcionais para que módulos/testes que só precisam do motor
+    // básico continuem a instanciá-lo; em produção o AutomationModule fornece-os.
+    @Optional() private readonly settings?: AutomationSettingsService,
+    @Optional() private readonly audit?: AutomationAuditService,
+    @Optional() private readonly failures?: AutomationFailuresService,
+    @Optional() private readonly connections?: AutomationConnectionsService,
   ) {}
+
+  private limits(): Promise<AutomationLimits> {
+    return this.settings ? this.settings.get() : Promise.resolve({ ...DEFAULT_LIMITS });
+  }
 
   // Carrega email/telemóvel do destinatário — só chamado quando o canal
   // pedido precisa mesmo deles (evita uma query extra no caminho comum,
@@ -504,7 +507,10 @@ export class AutomationService {
    * categoria solta (chamadores antigos) ou o conjunto completo de filtros.
    * O estado é derivado: não há coluna dedicada (ver RuleListStatus).
    */
-  async getRules(filterOrCategory?: AutomationCategory | RuleFilterDto) {
+  async getRules(
+    filterOrCategory?: AutomationCategory | RuleFilterDto,
+    scopeRuleIds?: number[] | null,
+  ) {
     const f: RuleFilterDto =
       typeof filterOrCategory === 'string'
         ? { category: filterOrCategory }
@@ -512,6 +518,8 @@ export class AutomationService {
     const where: Prisma.AutomationRuleWhereInput = {};
     const and: Prisma.AutomationRuleWhereInput[] = [];
 
+    // §10 — âmbito por departamento: só as automações visíveis ao utilizador.
+    if (scopeRuleIds) where.id = { in: scopeRuleIds };
     if (f.category) where.category = f.category;
     if (f.module) where.module = f.module;
     if (f.ownerId) where.ownerId = f.ownerId;
@@ -609,8 +617,8 @@ export class AutomationService {
   }
 
   /** Exportação CSV da listagem filtrada (mesmos filtros de getRules). */
-  async exportRulesCsv(filters: RuleFilterDto = {}) {
-    const rules = await this.getRules(filters);
+  async exportRulesCsv(filters: RuleFilterDto = {}, scopeRuleIds?: number[] | null) {
+    const rules = await this.getRules(filters, scopeRuleIds);
     const esc = (v: unknown) => {
       const t =
         v === null || v === undefined ? '' : v instanceof Date ? v.toISOString() : String(v);
@@ -868,6 +876,7 @@ export class AutomationService {
       departmentIds: dto.departmentIds ? JSON.stringify(dto.departmentIds) : undefined,
       manualMinutesSaved: dto.manualMinutesSaved,
       draft: dto.draft ?? false,
+      critical: dto.critical,
       condition: dto.condition ?? '',
       active: dto.draft ? false : (dto.active ?? true),
       triggerType: this.mapTriggerType(dto.trigger),
@@ -946,10 +955,15 @@ export class AutomationService {
 
   /** Substitui a configuração completa de uma regra (usado pela aba Automações dos Processos). */
   async updateRuleFull(id: number, dto: CreateRuleDto, userId: number) {
-    await this.getRule(id);
+    const before = await this.getRule(id);
     const { createdBy: _createdBy, ...data } = this.buildRuleData(dto, userId);
     const updated = await this.prisma.automationRule.update({ where: { id }, data });
-    await this.auditRule('AUTOMATION_RULE_UPDATED', id, { name: dto.name, userId });
+    await this.auditRule(
+      'AUTOMATION_RULE_UPDATED',
+      id,
+      { name: dto.name, userId },
+      this.ruleDiff(before, updated),
+    );
     return updated;
   }
 
@@ -975,9 +989,24 @@ export class AutomationService {
     return this.evaluateRuleConditions(rule, payload);
   }
 
-  async updateRule(id: number, dto: UpdateRuleDto) {
-    await this.getRule(id);
-    return this.prisma.automationRule.update({ where: { id }, data: dto });
+  async updateRule(id: number, dto: UpdateRuleDto, userId?: number) {
+    const before = await this.getRule(id);
+    const updated = await this.prisma.automationRule.update({ where: { id }, data: dto });
+    await this.auditRule(
+      'AUTOMATION_RULE_UPDATED',
+      id,
+      { name: updated.name, userId },
+      this.ruleDiff(before, updated),
+    );
+    return updated;
+  }
+
+  /** Campos da regra que mudaram (sem colunas que mudam sozinhas a cada execução). */
+  private ruleDiff(before: AutomationRuleRecord, after: AutomationRuleRecord) {
+    const skip = new Set(['updatedAt', 'lastRunAt', 'lastRunStatus', 'runCount']);
+    const strip = (r: AutomationRuleRecord) =>
+      Object.fromEntries(Object.entries(r).filter(([k]) => !skip.has(k)));
+    return diffFields(strip(before), strip(after));
   }
 
   async toggleRule(id: number, userId?: number) {
@@ -1004,9 +1033,9 @@ export class AutomationService {
     return { message: 'Regra removida' };
   }
 
-  async cloneRule(id: number) {
+  async cloneRule(id: number, userId?: number) {
     const source = await this.getRule(id);
-    return this.prisma.automationRule.create({
+    const copy = await this.prisma.automationRule.create({
       data: {
         ...source,
         id: undefined,
@@ -1017,11 +1046,18 @@ export class AutomationService {
         version: 0,
         publishedAt: null,
         publishedBy: null,
+        publishStatus: null,
+        publishRequestedBy: null,
+        publishRequestedAt: null,
+        publishDecisionNote: null,
+        lastFailureAlertAt: null,
         lastRunAt: null,
         lastRunStatus: null,
         runCount: 0,
       },
     });
+    await this.auditRule('AUTOMATION_RULE_CLONED', copy.id, { sourceId: id, userId });
+    return copy;
   }
 
   // ══════════════════════════════════════════════════════
@@ -1033,6 +1069,7 @@ export class AutomationService {
     const now = new Date();
     const payload = dto.payload ?? {};
     const incoming = readChainMeta(payload);
+    const limits = await this.limits();
     const correlationId = dto.correlationId ?? incoming.correlationId;
     const eventId = dto.eventId ?? randomUUID();
     const envelope = {
@@ -1046,14 +1083,14 @@ export class AutomationService {
     };
 
     // §5 — profundidade máxima (cadeias evento → regra → evento) e idempotência.
-    if (incoming.depth > MAX_EVENT_DEPTH) {
+    if (incoming.depth > limits.maxEventDepth) {
       await this.registerEvent(envelope);
       await this.finishEvent(eventId, {
         matchedRules: 0,
         executed: 0,
         skipped: 0,
         status: 'REJECTED',
-        note: `Profundidade máxima (${MAX_EVENT_DEPTH}) excedida — possível ciclo`,
+        note: `Profundidade máxima (${limits.maxEventDepth}) excedida — possível ciclo`,
       });
       return { triggered: 0, message: 'Cadeia de eventos demasiado profunda — evento ignorado' };
     }
@@ -1110,12 +1147,21 @@ export class AutomationService {
         });
         continue;
       }
-      if ((await this.recentExecutionCount(rule.id)) >= MAX_RULE_EXECUTIONS_PER_MINUTE) {
+      if ((await this.recentExecutionCount(rule.id)) >= limits.maxExecutionsPerMinute) {
         results.push({
           ruleId: rule.id,
           name: rule.name,
           status: 'SKIPPED',
           reason: 'Limite de frequência da regra atingido',
+        });
+        continue;
+      }
+      if ((await this.runningExecutionCount(rule.id)) >= limits.maxConcurrentPerRule) {
+        results.push({
+          ruleId: rule.id,
+          name: rule.name,
+          status: 'SKIPPED',
+          reason: 'Limite de execuções simultâneas da regra atingido',
         });
         continue;
       }
@@ -1369,8 +1415,150 @@ export class AutomationService {
   }
 
   /** Publica: valida, regista a versão (snapshot + autor) e activa a regra. */
-  async publishRule(id: number, userId: number, note?: string) {
+  /**
+   * Publica a regra. Uma automação crítica só é publicada por um ADMIN; os restantes
+   * perfis registam um pedido de publicação que um ADMIN diferente aprova ou recusa (§10).
+   */
+  async publishRule(id: number, userId: number, note?: string, opts: { isAdmin?: boolean } = {}) {
     const rule = await this.getRule(id);
+    const limits = await this.limits();
+    if (rule.critical && limits.requireApprovalCritical && !opts.isAdmin) {
+      return this.requestPublication(rule, userId, note);
+    }
+    return this.doPublish(rule, userId, note);
+  }
+
+  private async requestPublication(rule: AutomationRuleRecord, userId: number, note?: string) {
+    const flow = parseFlow(rule.flowJson);
+    if (flow) {
+      const check = validateFlow(flow);
+      if (!check.valid) throw new BadRequestException(check.errors.join(' '));
+    }
+    if (rule.publishStatus === 'PENDING') {
+      throw new BadRequestException('Já existe um pedido de publicação à espera de decisão');
+    }
+    const updated = await this.prisma.automationRule.update({
+      where: { id: rule.id },
+      data: {
+        publishStatus: 'PENDING',
+        publishRequestedBy: String(userId),
+        publishRequestedAt: new Date(),
+        publishDecisionNote: note ?? null,
+      },
+    });
+    const admins = await this.prisma.read.user.findMany({
+      where: { active: true, role: { name: 'ADMIN' }, id: { not: userId } },
+      select: { id: true },
+      take: 20,
+    });
+    for (const a of admins) {
+      await createNotificationSafe(this.prisma, this.logger, {
+        userId: a.id,
+        type: 'AUTOMATION_PUBLISH_REQUEST',
+        message: `Pedido de publicação da automação crítica "${rule.name}"`,
+        metadata: { ruleId: rule.id, requestedBy: userId },
+      });
+    }
+    await this.auditRule('AUTOMATION_PUBLISH_REQUESTED', rule.id, { userId, note });
+    return { ...updated, pendingApproval: true };
+  }
+
+  /** ADMIN aprova o pedido (nunca o próprio pedido) e a regra é publicada. */
+  async approvePublication(id: number, approverId: number, note?: string) {
+    const rule = await this.getRule(id);
+    if (rule.publishStatus !== 'PENDING') {
+      throw new BadRequestException('Não há pedido de publicação pendente para esta automação');
+    }
+    if (rule.publishRequestedBy === String(approverId)) {
+      throw new ForbiddenException('Quem pediu a publicação não pode aprová-la');
+    }
+    const requester = rule.publishRequestedBy;
+    const published = await this.doPublish(
+      rule,
+      approverId,
+      note ?? rule.publishDecisionNote ?? undefined,
+      { requestedBy: requester },
+    );
+    await this.auditRule('AUTOMATION_PUBLISH_APPROVED', id, { userId: approverId, note, requestedBy: requester });
+    await this.notifyPublicationDecision(rule, requester, `A publicação de "${rule.name}" foi aprovada`);
+    return published;
+  }
+
+  async rejectPublication(id: number, approverId: number, note?: string) {
+    const rule = await this.getRule(id);
+    if (rule.publishStatus !== 'PENDING') {
+      throw new BadRequestException('Não há pedido de publicação pendente para esta automação');
+    }
+    if (!note?.trim()) throw new BadRequestException('Indique o motivo da recusa');
+    const updated = await this.prisma.automationRule.update({
+      where: { id },
+      data: { publishStatus: 'REJECTED', publishDecisionNote: note },
+    });
+    await this.auditRule('AUTOMATION_PUBLISH_REJECTED', id, {
+      userId: approverId,
+      note,
+      requestedBy: rule.publishRequestedBy,
+    });
+    await this.notifyPublicationDecision(
+      rule,
+      rule.publishRequestedBy,
+      `A publicação de "${rule.name}" foi recusada: ${note}`,
+    );
+    return updated;
+  }
+
+  async pendingPublications() {
+    const rules = await this.prisma.read.automationRule.findMany({
+      where: { publishStatus: 'PENDING' },
+      orderBy: { publishRequestedAt: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        module: true,
+        trigger: true,
+        version: true,
+        publishRequestedBy: true,
+        publishRequestedAt: true,
+        publishDecisionNote: true,
+      },
+    });
+    const ids = [...new Set(rules.map(r => r.publishRequestedBy))]
+      .filter((v): v is string => !!v && /^\d+$/.test(v))
+      .map(Number);
+    const users = ids.length
+      ? await this.prisma.read.user.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, fullName: true },
+        })
+      : [];
+    const name = new Map(users.map(u => [String(u.id), u.fullName]));
+    return rules.map(r => ({
+      ...r,
+      requestedByName: (r.publishRequestedBy && name.get(r.publishRequestedBy)) || null,
+    }));
+  }
+
+  private async notifyPublicationDecision(
+    rule: AutomationRuleRecord,
+    requester: string | null,
+    message: string,
+  ) {
+    if (!requester || !/^\d+$/.test(requester)) return;
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: Number(requester),
+      type: 'AUTOMATION_PUBLISH_DECISION',
+      message,
+      metadata: { ruleId: rule.id },
+    });
+  }
+
+  private async doPublish(
+    rule: AutomationRuleRecord,
+    userId: number,
+    note?: string,
+    extra: { requestedBy?: string | null } = {},
+  ) {
+    const id = rule.id;
     const flow = parseFlow(rule.flowJson);
     if (flow) {
       const check = validateFlow(flow);
@@ -1392,6 +1580,8 @@ export class AutomationService {
       retryPolicy: rule.retryPolicy,
       maxRetries: rule.maxRetries,
       errorHandling: rule.errorHandling,
+      critical: rule.critical,
+      departmentIds: parseJsonArray(rule.departmentIds),
     };
     await this.prisma.automationVersion.create({
       data: {
@@ -1411,9 +1601,18 @@ export class AutomationService {
         version,
         publishedAt: new Date(),
         publishedBy: String(userId),
+        publishStatus: null,
+        publishRequestedBy: null,
+        publishRequestedAt: null,
+        publishDecisionNote: null,
       },
     });
-    await this.auditRule('AUTOMATION_RULE_PUBLISHED', id, { version, note, userId });
+    await this.auditRule('AUTOMATION_RULE_PUBLISHED', id, {
+      version,
+      note,
+      userId,
+      ...(extra.requestedBy ? { requestedBy: extra.requestedBy } : {}),
+    });
     return updated;
   }
 
@@ -1441,7 +1640,22 @@ export class AutomationService {
   }
 
   /** Auditoria das operações sobre regras (best-effort — nunca bloqueia a operação). */
-  private async auditRule(action: string, ruleId: number, changes: Record<string, unknown>) {
+  private async auditRule(
+    action: string,
+    ruleId: number,
+    changes: Record<string, unknown>,
+    diff?: { before: Record<string, unknown>; after: Record<string, unknown> },
+  ) {
+    // Auditoria própria do módulo (§10): quem, quando e o que mudou (antes/depois).
+    await this.audit?.record({
+      entity: 'RULE',
+      entityId: ruleId,
+      ruleId,
+      action,
+      userId: typeof changes.userId === 'number' ? changes.userId : undefined,
+      before: diff?.before,
+      after: diff?.after ?? changes,
+    });
     try {
       await this.prisma.auditLog.create({
         data: {
@@ -1948,6 +2162,21 @@ export class AutomationService {
     }
   }
 
+  /** Limite de concorrência: execuções da regra ainda em curso (ignora as "presas" há mais de 1 h). */
+  private async runningExecutionCount(ruleId: number): Promise<number> {
+    try {
+      return await this.prisma.automationExecution.count({
+        where: {
+          ruleId,
+          status: 'RUNNING',
+          startedAt: { gte: new Date(Date.now() - 3_600_000) },
+        },
+      });
+    } catch {
+      return 0;
+    }
+  }
+
   /** Catálogo de eventos por módulo, com regras activas e volume dos últimos 30 dias. */
   async getEventCatalog() {
     const since = new Date(Date.now() - 30 * 86_400_000);
@@ -2353,15 +2582,38 @@ export class AutomationService {
       case ActionType.INTEGRATE_EXTERNAL:
       case ActionType.WEBHOOK:
       case ActionType.HTTP_REQUEST: {
-        if (params.url) {
-          const res = await fetch(params.url, {
+        // §10 — credenciais vêm de uma ligação gerida (segredo cifrado), não da regra.
+        let url = params.url;
+        let authHeaders: Record<string, string> = {};
+        if (params.connectionId) {
+          if (!this.connections) {
+            actionError = 'Gestão de ligações indisponível';
+            result = { affected: 0, error: actionError };
+            break;
+          }
+          try {
+            const conn = await this.connections.authHeaders(params.connectionId);
+            authHeaders = conn.headers;
+            if (!url && conn.baseUrl) url = `${conn.baseUrl.replace(/\/$/, '')}${params.path ?? ''}`;
+          } catch (e: unknown) {
+            actionError = e instanceof Error ? e.message : String(e);
+            result = { affected: 0, error: actionError };
+            break;
+          }
+        }
+        if (url) {
+          const res = await fetch(url, {
             method: params.method ?? 'POST',
-            headers: { 'Content-Type': 'application/json', ...(params.headers ?? {}) },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(params.headers ?? {}),
+              ...authHeaders,
+            },
             body: JSON.stringify({ event: rule.trigger, payload, ruleId: rule.id }),
             signal: AbortSignal.timeout(10000),
           }).catch(e => {
             this.logger.warn({
-              url: params.url,
+              url,
               ruleId: rule.id,
               action: 'AUTOMATION_WEBHOOK_REQUEST',
               err: { message: e instanceof Error ? e.message : String(e) },
@@ -2420,8 +2672,8 @@ export class AutomationService {
           actionError = 'Automação a executar não indicada';
         } else if (targetId === rule.id || link.chain.includes(targetId)) {
           actionError = 'Ciclo detectado: a automação já faz parte desta cadeia';
-        } else if (link.depth + 1 > MAX_EVENT_DEPTH) {
-          actionError = `Profundidade máxima de encadeamento (${MAX_EVENT_DEPTH}) excedida`;
+        } else if (link.depth + 1 > (await this.limits()).maxEventDepth) {
+          actionError = `Profundidade máxima de encadeamento (${(await this.limits()).maxEventDepth}) excedida`;
         }
         if (actionError) {
           result = { affected: 0, error: actionError };
@@ -2525,7 +2777,9 @@ export class AutomationService {
         });
         return;
       }
-      // Sem mais tentativas: aplica o tratamento de erros da regra.
+      // Sem mais tentativas: dead letter (§10), alerta de falhas persistentes e
+      // tratamento de erros da regra.
+      await this.onDefinitiveFailure(rule, execId, attempt, error);
       const handling = rule.errorHandling ?? (rule.notifyOnError ? 'NOTIFY_OWNER' : 'LOG');
       if (handling === 'NOTIFY_OWNER' && rule.ownerId && /^\d+$/.test(rule.ownerId)) {
         await createNotificationSafe(this.prisma, this.logger, {
@@ -2546,6 +2800,60 @@ export class AutomationService {
         err: { message: e instanceof Error ? e.message : String(e) },
         msg: 'Falha ao registar o resultado da execução na regra',
       });
+    }
+  }
+
+  /**
+   * Falha definitiva (sem mais tentativas): guarda a execução na dead letter e, se a
+   * automação acumulou falhas a mais, alerta e emite `automation.execution_failed`
+   * (uma vez por janela) para que regras de administração possam reagir.
+   */
+  private async onDefinitiveFailure(
+    rule: AutomationRuleRecord,
+    execId: string | null,
+    attempt: number,
+    error?: string,
+  ) {
+    if (!this.failures) return;
+    const exec = execId
+      ? await this.prisma.automationExecution
+          .findUnique({
+            where: { id: execId },
+            select: { payload: true, eventId: true, correlationId: true },
+          })
+          .catch(() => null)
+      : null;
+    let payload: Record<string, unknown> | undefined;
+    try {
+      payload = exec?.payload ? (JSON.parse(exec.payload) as Record<string, unknown>) : undefined;
+    } catch {
+      payload = undefined;
+    }
+    await this.failures.registerDeadLetter({
+      ruleId: rule.id,
+      executionId: execId,
+      attempts: attempt,
+      error,
+      payload,
+      eventId: exec?.eventId ?? undefined,
+      correlationId: exec?.correlationId ?? undefined,
+    });
+    // Uma regra que reage ao próprio evento de falha nunca o volta a emitir (evita laços).
+    if (rule.trigger === TriggerType.AUTOMATION_EXECUTION_FAILED) return;
+    if (await this.failures.alertIfPersistent(rule)) {
+      await this.triggerEvent({
+        event: TriggerType.AUTOMATION_EXECUTION_FAILED,
+        module: 'AUTOMATION',
+        recordType: 'AutomationRule',
+        recordId: String(rule.id),
+        payload: { ruleId: rule.id, ruleName: rule.name, lastError: error?.slice(0, 300) },
+      }).catch((e: unknown) =>
+        this.logger.warn({
+          ruleId: rule.id,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao emitir automation.execution_failed',
+        }),
+      );
     }
   }
 
@@ -2713,12 +3021,14 @@ export class AutomationService {
   // EXECUTION LOGS
   // ══════════════════════════════════════════════════════
 
-  async getExecutions(filters: ExecutionFilterDto = {}) {
+  async getExecutions(filters: ExecutionFilterDto = {}, scopeRuleIds?: number[] | null) {
     const { page = 1, limit = 30, status, ruleId, from, to } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.AutomationExecutionWhereInput = {};
     if (status) where.status = status;
-    if (ruleId) where.ruleId = ruleId;
+    if (scopeRuleIds) {
+      where.ruleId = ruleId ? (scopeRuleIds.includes(ruleId) ? ruleId : -1) : { in: scopeRuleIds };
+    } else if (ruleId) where.ruleId = ruleId;
     if (from || to) {
       where.startedAt = {};
       if (from) where.startedAt.gte = new Date(from);
@@ -2772,6 +3082,9 @@ export class AutomationService {
       });
 
     if (!exec) return { message: 'Execução não encontrada' };
+    if (exec.archivedAt) {
+      return { message: 'Execução arquivada: os dados originais já não existem — não pode ser repetida' };
+    }
 
     const rule = await this.prisma.automationRule
       .findUnique({ where: { id: exec.ruleId } })

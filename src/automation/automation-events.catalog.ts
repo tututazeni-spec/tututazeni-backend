@@ -269,7 +269,11 @@ export const EVENT_CATALOG: CatalogModule[] = [
     module: 'AUTOMATION',
     label: 'Automações',
     events: [
-      { key: 'automation.execution_failed', label: 'Execução falhada' },
+      {
+        key: 'automation.execution_failed',
+        label: 'Falhas repetidas numa automação',
+        trigger: T.AUTOMATION_EXECUTION_FAILED,
+      },
       { key: 'automation.rule_changed', label: 'Regra alterada' },
     ],
     actions: ['Alertar administradores', 'Iniciar recuperação controlada'],

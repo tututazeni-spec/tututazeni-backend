@@ -5,6 +5,8 @@ import { AutomationScheduleService } from './automation-schedule.service';
 import { AutomationHistoryService } from './automation-history.service';
 import { AutomationTasksService } from './automation-tasks.service';
 import { AutomationReportsService } from './automation-reports.service';
+import { AutomationAccessService } from './automation-access.service';
+import { AutomationPermissionGuard } from './automation-permission.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -40,6 +42,10 @@ const mockTasks = {
   decide: jest.fn().mockResolvedValue({ status: 'APPROVED' }),
 };
 
+const mockAccess = {
+  scopedRuleIds: jest.fn().mockResolvedValue(null),
+};
+
 const mockReports = {
   build: jest.fn().mockResolvedValue({}),
 };
@@ -57,19 +63,22 @@ describe('AutomationController', () => {
         { provide: AutomationHistoryService, useValue: mockHistory },
         { provide: AutomationTasksService, useValue: mockTasks },
         { provide: AutomationReportsService, useValue: mockReports },
+        { provide: AutomationAccessService, useValue: mockAccess },
       ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard)
       .useValue({ canActivate: () => true })
+      .overrideGuard(AutomationPermissionGuard)
+      .useValue({ canActivate: () => true })
       .compile();
     controller = module.get<AutomationController>(AutomationController);
   });
 
   it('rules → getRules(category)', async () => {
-    await controller.rules();
-    expect(mockSvc.getRules).toHaveBeenCalledWith(undefined);
+    await controller.rules({} as any, { id: 1 } as any);
+    expect(mockSvc.getRules).toHaveBeenCalledWith({}, null);
   });
 
   it('create → createRule(dto, user.id)', async () => {
@@ -81,8 +90,8 @@ describe('AutomationController', () => {
 
   it('update → updateRule(id, dto)', async () => {
     const dto = {} as any;
-    await controller.update(1, dto);
-    expect(mockSvc.updateRule).toHaveBeenCalledWith(1, dto);
+    await controller.update(1, dto, { id: 7 } as any);
+    expect(mockSvc.updateRule).toHaveBeenCalledWith(1, dto, 7);
   });
 
   it('toggle → toggleRule(id)', async () => {
@@ -91,8 +100,8 @@ describe('AutomationController', () => {
   });
 
   it('clone → cloneRule(id)', async () => {
-    await controller.clone(3);
-    expect(mockSvc.cloneRule).toHaveBeenCalledWith(3);
+    await controller.clone(3, { id: 7 } as any);
+    expect(mockSvc.cloneRule).toHaveBeenCalledWith(3, 7);
   });
 
   it('remove → deleteRule(id)', async () => {
@@ -113,8 +122,8 @@ describe('AutomationController', () => {
 
   it('executions → getExecutions(filters)', async () => {
     const filters = {} as any;
-    await controller.executions(filters);
-    expect(mockSvc.getExecutions).toHaveBeenCalledWith(filters);
+    await controller.executions(filters, { id: 7 } as any);
+    expect(mockSvc.getExecutions).toHaveBeenCalledWith(filters, null);
   });
 
   it('rerun → rerunExecution(id)', async () => {

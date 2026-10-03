@@ -1,7 +1,7 @@
 // src/automation/automation-history.service.ts
 // §7 — Histórico de Execuções: listagem filtrável, detalhe por etapa (com dados
 // sensíveis ocultados), cancelamento por utilizador autorizado e exportação.
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
@@ -9,6 +9,7 @@ import { ExecutionDisplayStatus, HistoryFilterDto } from './automation.dto';
 import { parseRedacted, redactSensitive } from './automation-redact.util';
 import { parseHistory } from './automation-tasks.util';
 import { toCsv } from './automation-csv.util';
+import { AutomationAuditService } from './automation-audit.service';
 import { moduleOfTrigger } from './automation-events.catalog';
 import type { ActionResult, FlowStepLog } from './automation.service';
 
@@ -67,10 +68,18 @@ const TERMINAL = ['SUCCESS', 'FAILED', 'SKIPPED', 'CANCELLED'];
 
 @Injectable()
 export class AutomationHistoryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly audit?: AutomationAuditService,
+  ) {}
 
-  private buildWhere(f: HistoryFilterDto): Prisma.AutomationExecutionWhereInput {
+  private buildWhere(
+    f: HistoryFilterDto,
+    scopeRuleIds?: number[] | null,
+  ): Prisma.AutomationExecutionWhereInput {
     const and: Prisma.AutomationExecutionWhereInput[] = [];
+    // §10 — âmbito por departamento.
+    if (scopeRuleIds) and.push({ ruleId: { in: scopeRuleIds } });
     if (f.status) and.push(statusWhere(f.status));
     if (f.ruleId) and.push({ ruleId: f.ruleId });
     if (f.module) and.push({ rule: { module: f.module } });
@@ -168,10 +177,10 @@ export class AutomationHistoryService {
     });
   }
 
-  async list(f: HistoryFilterDto = {}) {
+  async list(f: HistoryFilterDto = {}, scopeRuleIds?: number[] | null) {
     const { page = 1, limit = 30 } = f;
     const { skip, take } = calculatePagination(page, limit);
-    const where = this.buildWhere(f);
+    const where = this.buildWhere(f, scopeRuleIds);
     const [rows, total] = await Promise.all([
       this.prisma.automationExecution.findMany({
         where,
@@ -186,12 +195,14 @@ export class AutomationHistoryService {
   }
 
   /** Detalhe: resultado de cada etapa, duração, acções realizadas e erros (sem dados sensíveis). */
-  async detail(id: string) {
+  async detail(id: string, scopeRuleIds?: number[] | null) {
     const e = await this.prisma.automationExecution.findUnique({
       where: { id },
       include: { rule: { select: { id: true, name: true, module: true, trigger: true } } },
     });
-    if (!e) throw new NotFoundException('Execução não encontrada');
+    if (!e || (scopeRuleIds && !scopeRuleIds.includes(e.ruleId))) {
+      throw new NotFoundException('Execução não encontrada');
+    }
     const [summary] = await this.decorate([e]);
     const log = parseLog(e.actionsLog);
 
@@ -278,9 +289,11 @@ export class AutomationHistoryService {
   }
 
   /** Cancela uma execução ainda não terminada (e as tarefas de aprovação abertas). */
-  async cancel(id: string, userId: number, reason?: string) {
+  async cancel(id: string, userId: number, reason?: string, scopeRuleIds?: number[] | null) {
     const e = await this.prisma.automationExecution.findUnique({ where: { id } });
-    if (!e) throw new NotFoundException('Execução não encontrada');
+    if (!e || (scopeRuleIds && !scopeRuleIds.includes(e.ruleId))) {
+      throw new NotFoundException('Execução não encontrada');
+    }
     const cancellable =
       e.status === 'PENDING' ||
       e.status === 'RUNNING' ||
@@ -337,12 +350,20 @@ export class AutomationHistoryService {
         changes: JSON.stringify({ executionId: id, reason: reason ?? null }),
       },
     });
+    await this.audit?.record({
+      entity: 'RULE',
+      ruleId: e.ruleId,
+      entityId: e.ruleId,
+      action: 'AUTOMATION_EXECUTION_CANCELLED',
+      userId,
+      note: `${id}${reason ? ` — ${reason}` : ''}`,
+    });
     return { id, status: 'CANCELLED', cancelledTasks: openTasks.length };
   }
 
-  async exportCsv(f: HistoryFilterDto = {}) {
+  async exportCsv(f: HistoryFilterDto = {}, scopeRuleIds?: number[] | null) {
     const rows = await this.prisma.automationExecution.findMany({
-      where: this.buildWhere(f),
+      where: this.buildWhere(f, scopeRuleIds),
       orderBy: { startedAt: 'desc' },
       take: 10000,
       include: { rule: { select: { id: true, name: true, module: true, trigger: true } } },

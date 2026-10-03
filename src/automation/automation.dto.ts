@@ -71,6 +71,9 @@ export enum TriggerType {
   ENROLLMENT_EXPIRING = 'ENROLLMENT_EXPIRING',
   PAYSLIP_DUE = 'PAYSLIP_DUE',
   // Manual / catch-all
+  // Emitido pelo próprio motor quando uma automação atinge o limite de falhas (§10).
+  AUTOMATION_EXECUTION_FAILED = 'automation.execution_failed',
+
   MANUAL = 'manual',
   OTHER = 'other',
 }
@@ -398,6 +401,13 @@ export class CreateRuleDto {
   @IsString()
   @MaxLength(2000)
   notes?: string;
+
+  @ApiPropertyOptional({
+    description: 'Automação crítica: só é publicada com aprovação de um ADMIN (§10)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  critical?: boolean;
 
   // ── Módulo de origem, vigência e tratamento de erros (§9 Processos) ──
   @ApiPropertyOptional({ description: 'Código da regra (único) — gerado se omitido nos Processos' })

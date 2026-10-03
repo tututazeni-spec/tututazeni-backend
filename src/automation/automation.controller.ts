@@ -45,6 +45,8 @@ import { AutomationTasksService } from './automation-tasks.service';
 import { AutomationReportsService, ReportSection } from './automation-reports.service';
 import { AutomationScheduleService } from './automation-schedule.service';
 import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
+import { AutomationAccessService } from './automation-access.service';
+import { AutomationPerm } from './automation-permission.guard';
 
 const ADMIN = ['ADMIN', 'RH'] as const;
 
@@ -60,48 +62,56 @@ export class AutomationController {
     private readonly history: AutomationHistoryService,
     private readonly tasks: AutomationTasksService,
     private readonly reports: AutomationReportsService,
+    private readonly access: AutomationAccessService,
   ) {}
 
   // ─── Rules ────────────────────────────────────────────────────
 
   @Get('rules')
+  @AutomationPerm('view')
   @ApiOperation({ summary: 'Listar regras com stats de execução' })
-  rules(@Query() filters: RuleFilterDto) {
-    return this.svc.getRules(filters);
+  async rules(@Query() filters: RuleFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.getRules(filters, await this.access.scopedRuleIds(user));
   }
 
   @Get('rules/export')
+  @AutomationPerm('view')
   @ApiOperation({ summary: 'Exportar a listagem filtrada de regras (CSV)' })
-  async exportRules(@Query() filters: RuleFilterDto) {
-    const content = await this.svc.exportRulesCsv(filters);
+  async exportRules(@Query() filters: RuleFilterDto, @CurrentUser() user: CurrentUserData) {
+    const content = await this.svc.exportRulesCsv(filters, await this.access.scopedRuleIds(user));
     return { filename: `automacoes-${new Date().toISOString().slice(0, 10)}.csv`, content };
   }
 
   @Get('rules/:id')
+  @AutomationPerm('view', 'id')
   @ApiOperation({ summary: 'Detalhe da regra (fluxo, condições e etiquetas já interpretados)' })
   rule(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getRuleDetail(id);
   }
 
   @Get('modules')
+  @AutomationPerm('view')
   @ApiOperation({ summary: 'Módulos de origem existentes (filtro)' })
   modules() {
     return this.svc.getModules();
   }
 
   @Get('overview')
+  @AutomationPerm('view')
   @ApiOperation({ summary: 'Visão Geral — cards e gráficos filtráveis por período/módulo/estado' })
   overview(@Query() filters: OverviewFilterDto) {
     return this.svc.getOverview(filters);
   }
 
   @Post('rules/:id/run')
+  @AutomationPerm('execute', 'id')
   @ApiOperation({ summary: 'Executar manualmente uma regra (a UI exige confirmação)' })
   runOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.runRule(id, { manual: true }, user.id, { triggeredBy: String(user.id) });
   }
 
   @Post('rules')
+  @AutomationPerm('create')
   @ApiOperation({ summary: 'Criar regra de automação (trigger → condition → action)' })
   create(@Body() dto: CreateRuleDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.createRule(dto, user.id);
@@ -110,6 +120,7 @@ export class AutomationController {
   // ─── Construtor de Fluxos (§4) ────────────────────────────────
 
   @Post('rules/validate')
+  @AutomationPerm('view')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Validar a definição (campos, fluxo, limites) sem gravar' })
   validate(@Body() dto: Partial<CreateRuleDto>) {
@@ -117,6 +128,7 @@ export class AutomationController {
   }
 
   @Put('rules/:id/full')
+  @AutomationPerm('edit', 'id')
   @ApiOperation({ summary: 'Substituir a configuração completa da regra (editor de fluxos)' })
   updateFull(
     @Param('id', ParseIntPipe) id: number,
@@ -127,6 +139,7 @@ export class AutomationController {
   }
 
   @Post('rules/:id/test')
+  @AutomationPerm('test', 'id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Executar teste com dados de exemplo (simulação, sem efeitos)' })
   test(@Param('id', ParseIntPipe) id: number, @Body() dto: FlowTestDto) {
@@ -134,6 +147,7 @@ export class AutomationController {
   }
 
   @Post('rules/:id/publish')
+  @AutomationPerm('activate', 'id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Publicar: regista versão e autor e activa a regra' })
   publish(
@@ -141,34 +155,43 @@ export class AutomationController {
     @Body() dto: PublishRuleDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.publishRule(id, user.id, dto.note);
+    return this.svc.publishRule(id, user.id, dto.note, { isAdmin: user.role?.name === 'ADMIN' });
   }
 
   @Get('rules/:id/versions')
+  @AutomationPerm('view', 'id')
   @ApiOperation({ summary: 'Versões publicadas da regra' })
   versions(@Param('id', ParseIntPipe) id: number) {
     return this.svc.listVersions(id);
   }
 
   @Put('rules/:id')
+  @AutomationPerm('edit', 'id')
   @ApiOperation({ summary: 'Actualizar regra' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateRuleDto) {
-    return this.svc.updateRule(id, dto);
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateRuleDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.updateRule(id, dto, user.id);
   }
 
   @Patch('rules/:id/toggle')
+  @AutomationPerm('activate', 'id')
   @ApiOperation({ summary: 'Activar/desactivar regra' })
   toggle(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.toggleRule(id, user.id);
   }
 
   @Post('rules/:id/clone')
+  @AutomationPerm('create', 'id')
   @ApiOperation({ summary: 'Clonar regra (cria cópia inactiva)' })
-  clone(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.cloneRule(id);
+  clone(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.cloneRule(id, user.id);
   }
 
   @Delete('rules/:id')
+  @AutomationPerm('delete', 'id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remover regra' })
   remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
@@ -178,6 +201,7 @@ export class AutomationController {
   // ─── Execution ────────────────────────────────────────────────
 
   @Post('run')
+  @AutomationPerm('execute')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Executar manualmente todas as regras activas' })
   runAll() {
@@ -185,6 +209,7 @@ export class AutomationController {
   }
 
   @Post('trigger')
+  @AutomationPerm('execute')
   @ApiOperation({ summary: 'Disparar evento e executar automações correspondentes' })
   trigger(@Body() dto: TriggerEventDto) {
     return this.svc.triggerEvent(dto);
@@ -193,12 +218,14 @@ export class AutomationController {
   // ─── Executions ───────────────────────────────────────────────
 
   @Get('executions')
+  @AutomationPerm('view')
   @ApiOperation({ summary: 'Histórico de execuções (filtrar por status, regra, período)' })
-  executions(@Query() filters: ExecutionFilterDto) {
-    return this.svc.getExecutions(filters);
+  async executions(@Query() filters: ExecutionFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.getExecutions(filters, await this.access.scopedRuleIds(user));
   }
 
   @Post('executions/:id/rerun')
+  @AutomationPerm('execute')
   @ApiOperation({ summary: 'Re-executar uma execução falhada' })
   rerun(@Param('id') id: string) {
     return this.svc.rerunExecution(id);
@@ -207,33 +234,37 @@ export class AutomationController {
   // ─── Histórico de Execuções (§7) ──────────────────────────────
 
   @Get('history')
+  @AutomationPerm('view')
   @ApiOperation({ summary: 'Histórico de execuções — filtros por estado, regra, módulo, período' })
-  historyList(@Query() filters: HistoryFilterDto) {
-    return this.history.list(filters);
+  async historyList(@Query() filters: HistoryFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.history.list(filters, await this.access.scopedRuleIds(user));
   }
 
   @Get('history/export')
+  @AutomationPerm('view')
   @ApiOperation({ summary: 'Exportar o histórico filtrado (CSV)' })
-  async historyExport(@Query() filters: HistoryFilterDto) {
-    const content = await this.history.exportCsv(filters);
+  async historyExport(@Query() filters: HistoryFilterDto, @CurrentUser() user: CurrentUserData) {
+    const content = await this.history.exportCsv(filters, await this.access.scopedRuleIds(user));
     return { filename: `execucoes-${new Date().toISOString().slice(0, 10)}.csv`, content };
   }
 
   @Get('history/:id')
+  @AutomationPerm('view')
   @ApiOperation({ summary: 'Detalhe: etapas, duração, acções, erros (sem dados sensíveis)' })
-  historyDetail(@Param('id') id: string) {
-    return this.history.detail(id);
+  async historyDetail(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.history.detail(id, await this.access.scopedRuleIds(user));
   }
 
   @Post('history/:id/cancel')
+  @AutomationPerm('cancel')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Cancelar uma execução não terminada' })
-  historyCancel(
+  async historyCancel(
     @Param('id') id: string,
     @Body() dto: CancelExecutionDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.history.cancel(id, user.id, dto.reason);
+    return this.history.cancel(id, user.id, dto.reason, await this.access.scopedRuleIds(user));
   }
 
   // ─── Aprovações e tarefas (§8) — o serviço restringe a quem é aprovador ──
@@ -316,12 +347,14 @@ export class AutomationController {
   // ─── Relatórios e indicadores (§9) ────────────────────────────
 
   @Get('reports')
+  @AutomationPerm('view')
   @ApiOperation({ summary: 'Relatórios e indicadores filtráveis (tempo poupado = estimativa)' })
   report(@Query() filters: ReportFilterDto) {
     return this.reports.build(filters);
   }
 
   @Get('reports/export')
+  @AutomationPerm('view')
   @ApiOperation({ summary: 'Exportar uma secção do relatório (CSV)' })
   async reportExport(@Query() filters: ReportFilterDto, @Query('section') section: string) {
     const content = await this.reports.exportCsv(section as ReportSection, filters);
@@ -334,12 +367,14 @@ export class AutomationController {
   // ─── Eventos entre módulos (§5) ───────────────────────────────
 
   @Get('events/catalog')
+  @AutomationPerm('view')
   @ApiOperation({ summary: 'Catálogo de eventos por módulo (implementados vs. propostos)' })
   eventCatalog() {
     return this.svc.getEventCatalog();
   }
 
   @Get('events')
+  @AutomationPerm('view')
   @ApiOperation({ summary: 'Eventos recebidos (envelope, correlação e regras accionadas)' })
   events(@Query() filters: EventFilterDto) {
     return this.svc.getEvents(filters);
@@ -348,12 +383,14 @@ export class AutomationController {
   // ─── Agendamentos (§6) ────────────────────────────────────────
 
   @Get('schedules')
+  @AutomationPerm('view')
   @ApiOperation({ summary: 'Listar agendamentos' })
   listSchedules(@Query() filters: ScheduleFilterDto) {
     return this.schedules.list(filters);
   }
 
   @Post('schedules/preview')
+  @AutomationPerm('view')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Próximas ocorrências de uma configuração (sem gravar)' })
   previewSchedule(@Body() dto: CreateScheduleDto) {
@@ -361,36 +398,42 @@ export class AutomationController {
   }
 
   @Post('schedules')
+  @AutomationPerm('edit')
   @ApiOperation({ summary: 'Criar agendamento' })
   createSchedule(@Body() dto: CreateScheduleDto, @CurrentUser() user: CurrentUserData) {
     return this.schedules.create(dto, user.id);
   }
 
   @Get('schedules/:id')
+  @AutomationPerm('view')
   @ApiOperation({ summary: 'Detalhe do agendamento, com as próximas ocorrências' })
   getSchedule(@Param('id') id: string) {
     return this.schedules.get(id);
   }
 
   @Put('schedules/:id')
+  @AutomationPerm('edit')
   @ApiOperation({ summary: 'Editar agendamento' })
   updateSchedule(@Param('id') id: string, @Body() dto: UpdateScheduleDto) {
     return this.schedules.update(id, dto);
   }
 
   @Patch('schedules/:id/pause')
+  @AutomationPerm('activate')
   @ApiOperation({ summary: 'Pausar agendamento' })
   pauseSchedule(@Param('id') id: string) {
     return this.schedules.pause(id);
   }
 
   @Patch('schedules/:id/resume')
+  @AutomationPerm('activate')
   @ApiOperation({ summary: 'Retomar agendamento' })
   resumeSchedule(@Param('id') id: string) {
     return this.schedules.resume(id);
   }
 
   @Post('schedules/:id/run')
+  @AutomationPerm('execute')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Executar agora (não altera a próxima ocorrência)' })
   runSchedule(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
@@ -398,6 +441,7 @@ export class AutomationController {
   }
 
   @Delete('schedules/:id')
+  @AutomationPerm('delete')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remover agendamento' })
   removeSchedule(@Param('id') id: string) {
@@ -407,6 +451,7 @@ export class AutomationController {
   // ─── Stats ────────────────────────────────────────────────────
 
   @Get('stats')
+  @AutomationPerm('view')
   @ApiOperation({ summary: 'Dashboard — total de regras, taxa de sucesso, por categoria' })
   stats() {
     return this.svc.getStats();
@@ -415,12 +460,14 @@ export class AutomationController {
   // ─── Templates ────────────────────────────────────────────────
 
   @Get('templates')
+  @AutomationPerm('view')
   @ApiOperation({ summary: 'Biblioteca de templates pré-configurados (7 built-in)' })
   templates() {
     return this.svc.getTemplates();
   }
 
   @Post('templates/:index/apply')
+  @AutomationPerm('create')
   @ApiOperation({ summary: 'Aplicar template à lista de automações' })
   applyTemplate(@Param('index', ParseIntPipe) index: number) {
     return this.svc.applyTemplate(index);
@@ -429,6 +476,7 @@ export class AutomationController {
   // ─── Init defaults (legacy) ───────────────────────────────────
 
   @Post('rules/init-defaults')
+  @AutomationPerm('create')
   @ApiOperation({ summary: '[Legacy] Criar regras padrão se não existirem' })
   initDefaults() {
     return this.svc.initDefaultRules();
