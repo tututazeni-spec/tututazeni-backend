@@ -1,4 +1,3 @@
-◇ injected env (35) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
 -- CreateEnum
 CREATE TYPE "PartnerOpportunityStatus" AS ENUM ('IDENTIFIED', 'CONTACTED', 'IN_DISCUSSION', 'PROPOSAL_SENT', 'IN_NEGOTIATION', 'AGREEMENT_REACHED', 'NOT_CONCLUDED');
 
