@@ -64,6 +64,12 @@ export class AutomationController {
     return { filename: `automacoes-${new Date().toISOString().slice(0, 10)}.csv`, content };
   }
 
+  @Get('rules/:id')
+  @ApiOperation({ summary: 'Detalhe da regra (fluxo, condições e etiquetas já interpretados)' })
+  rule(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getRuleDetail(id);
+  }
+
   @Get('modules')
   @ApiOperation({ summary: 'Módulos de origem existentes (filtro)' })
   modules() {

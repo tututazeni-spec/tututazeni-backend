@@ -755,6 +755,23 @@ export class AutomationService {
     return rows.map(r => r.module as string);
   }
 
+  /** Detalhe de uma regra com JSON já interpretado (editor de fluxos). */
+  async getRuleDetail(id: number) {
+    const r = await this.getRule(id);
+    const structured = parseConditionsList(r.conditionsJson);
+    return {
+      ...r,
+      condition: parseCondition(r.condition),
+      actionParams: parseParams(r.actionParams),
+      flow: parseFlow(r.flowJson),
+      conditions: structured?.rows ?? [],
+      conditionsLogic: structured?.logic ?? ConditionsLogic.AND,
+      tags: parseJsonArray(r.tags),
+      departmentIds: parseJsonArray(r.departmentIds),
+      status: deriveRuleStatus(r),
+    };
+  }
+
   async getRule(id: number) {
     const r = await this.prisma.read.automationRule.findUnique({ where: { id } });
     if (!r) throw new NotFoundException('Regra não encontrada');
