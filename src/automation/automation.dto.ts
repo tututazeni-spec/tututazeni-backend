@@ -7,14 +7,19 @@ import {
   IsInt,
   IsArray,
   IsDateString,
+  IsObject,
+  IsIn,
+  ValidateIf,
   MaxLength,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { AutomationCategory, ExecutionStatus } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
+import type { FlowDefinition } from './automation-flow';
 
 // ─── Enums ────────────────────────────────────────────────────────
 
@@ -66,6 +71,9 @@ export enum TriggerType {
   ENROLLMENT_EXPIRING = 'ENROLLMENT_EXPIRING',
   PAYSLIP_DUE = 'PAYSLIP_DUE',
   // Manual / catch-all
+  // Emitido pelo próprio motor quando uma automação atinge o limite de falhas (§10).
+  AUTOMATION_EXECUTION_FAILED = 'automation.execution_failed',
+
   MANUAL = 'manual',
   OTHER = 'other',
 }
@@ -91,6 +99,7 @@ export enum ActionType {
   HTTP_REQUEST = 'http_request',
   INTEGRATE_EXTERNAL = 'integrate_external',
   GENERATE_REPORT = 'generate_report',
+  RUN_AUTOMATION = 'run_automation',
   LOG = 'log',
   WAIT = 'wait',
   OTHER = 'other',
@@ -187,9 +196,51 @@ export class CreateRuleDto {
   @IsEnum(TriggerType)
   trigger!: TriggerType;
 
-  @ApiProperty({ enum: ActionType })
+  @ApiPropertyOptional({
+    enum: ActionType,
+    description: 'Acção única (regras simples). Dispensável quando `flow` define as acções.',
+  })
+  @ValidateIf(o => !o.flow)
   @IsEnum(ActionType)
   action!: ActionType;
+
+  // ── Construtor de Fluxos (§4) ────────────────────────────────
+  @ApiPropertyOptional({
+    description:
+      'Fluxo { steps: [...] } com acções, condições Sim/Não e atrasos — substitui a acção única',
+  })
+  @IsOptional()
+  @IsObject()
+  flow?: FlowDefinition;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(40, { each: true })
+  tags?: string[];
+
+  @ApiPropertyOptional({ type: [String], description: 'Departamentos abrangidos' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  departmentIds?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Estimativa: minutos de trabalho manual que cada execução bem-sucedida poupa (§9)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(600)
+  manualMinutesSaved?: number;
+
+  @ApiPropertyOptional({
+    description: 'Guardar como rascunho: fica inactiva e nunca dispara até ser publicada',
+  })
+  @IsOptional()
+  @IsBoolean()
+  draft?: boolean;
 
   @ApiPropertyOptional({ description: 'Condição JSON — ex: {"minScore": 4, "departmentId": 1}' })
   @IsOptional()
@@ -351,6 +402,13 @@ export class CreateRuleDto {
   @MaxLength(2000)
   notes?: string;
 
+  @ApiPropertyOptional({
+    description: 'Automação crítica: só é publicada com aprovação de um ADMIN (§10)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  critical?: boolean;
+
   // ── Módulo de origem, vigência e tratamento de erros (§9 Processos) ──
   @ApiPropertyOptional({ description: 'Código da regra (único) — gerado se omitido nos Processos' })
   @IsOptional()
@@ -406,6 +464,146 @@ export class TriggerEventDto {
   @ApiProperty({ enum: TriggerType }) @IsEnum(TriggerType) event!: TriggerType;
   @ApiPropertyOptional() @IsOptional() payload?: Record<string, unknown>;
   @ApiPropertyOptional() @IsOptional() @IsInt() userId?: number;
+
+  // ── Envelope do evento (§5) ─────────────────────────────────
+  @ApiPropertyOptional({
+    description: 'Identificador único do evento — o mesmo eventId nunca é processado duas vezes',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  eventId?: string;
+  @ApiPropertyOptional({ description: 'Módulo de origem (ex: PDI)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  module?: string;
+  @ApiPropertyOptional({ description: 'Tipo do registo afectado (ex: Enrollment)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  recordType?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(120) recordId?: string;
+  @ApiPropertyOptional({ description: 'Liga eventos/execuções encadeadas entre módulos' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  correlationId?: string;
+}
+
+export class FlowTestDto {
+  @ApiPropertyOptional({ description: 'Dados de exemplo do evento' })
+  @IsOptional()
+  @IsObject()
+  payload?: Record<string, unknown>;
+}
+
+export class PublishRuleDto {
+  @ApiPropertyOptional({ description: 'Nota da versão (o que mudou)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
+}
+
+export class EventFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() module?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() type?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() correlationId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() to?: string;
+}
+
+// ─── Agendamentos (§6) ────────────────────────────────────────────
+
+export const SCHEDULE_TYPES = ['ONCE', 'DAILY', 'WEEKLY', 'MONTHLY', 'CUSTOM'] as const;
+export const SCHEDULE_STATUSES = ['ACTIVE', 'PAUSED', 'COMPLETED', 'ERROR'] as const;
+export const MISSED_POLICIES = ['RUN_ONCE', 'RUN_ALL', 'SKIP'] as const;
+
+export class CreateScheduleDto {
+  @ApiProperty() @IsString() @MaxLength(200) name!: string;
+  @ApiProperty({ description: 'Automação (regra) a executar' })
+  @IsInt()
+  @Type(() => Number)
+  ruleId!: number;
+  @ApiProperty({ enum: SCHEDULE_TYPES }) @IsIn(SCHEDULE_TYPES as readonly string[]) type!: string;
+  @ApiProperty({ description: 'Data de início (ISO)' }) @IsDateString() startDate!: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() endDate?: string;
+  @ApiProperty({ description: 'HH:mm no fuso configurado' })
+  @IsString()
+  @MaxLength(5)
+  time!: string;
+  @ApiPropertyOptional({ default: 'Africa/Luanda' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  timezone?: string;
+  @ApiPropertyOptional({ type: [Number], description: '0=Domingo … 6=Sábado (WEEKLY)' })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  @Max(6, { each: true })
+  daysOfWeek?: number[];
+  @ApiPropertyOptional({ description: 'Dia do mês 1-31 (MONTHLY)' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(31)
+  dayOfMonth?: number;
+  @ApiPropertyOptional({ description: 'Cron de 5 campos (CUSTOM)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  cronExpression?: string;
+  @ApiPropertyOptional({ enum: MISSED_POLICIES, default: 'RUN_ONCE' })
+  @IsOptional()
+  @IsIn(MISSED_POLICIES as readonly string[])
+  missedPolicy?: string;
+  @ApiPropertyOptional({ description: 'userId do responsável — default: quem cria' })
+  @IsOptional()
+  @IsString()
+  ownerId?: string;
+}
+
+export class UpdateScheduleDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) name?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) ruleId?: number;
+  @ApiPropertyOptional({ enum: SCHEDULE_TYPES })
+  @IsOptional()
+  @IsIn(SCHEDULE_TYPES as readonly string[])
+  type?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() startDate?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() endDate?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(5) time?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(60) timezone?: string;
+  @ApiPropertyOptional({ type: [Number] })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  @Max(6, { each: true })
+  daysOfWeek?: number[];
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(31) dayOfMonth?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) cronExpression?: string;
+  @ApiPropertyOptional({ enum: MISSED_POLICIES })
+  @IsOptional()
+  @IsIn(MISSED_POLICIES as readonly string[])
+  missedPolicy?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() ownerId?: string;
+}
+
+export class ScheduleFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional({ enum: SCHEDULE_STATUSES })
+  @IsOptional()
+  @IsIn(SCHEDULE_STATUSES as readonly string[])
+  status?: string;
+  @ApiPropertyOptional({ enum: SCHEDULE_TYPES })
+  @IsOptional()
+  @IsIn(SCHEDULE_TYPES as readonly string[])
+  type?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) ruleId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(120) search?: string;
 }
 
 export class ExecutionFilterDto extends BaseFilterDto {
@@ -416,4 +614,208 @@ export class ExecutionFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) ruleId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() from?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() to?: string;
+}
+
+// ─── Listagem "Todas as Automações" (docs/modulo_automation.md §3) ─
+
+/** Estado derivado da regra — não há coluna dedicada; vem de active + lastRunStatus. */
+export enum RuleListStatus {
+  DRAFT = 'DRAFT',
+  ACTIVE = 'ACTIVE',
+  PAUSED = 'PAUSED',
+  ERROR = 'ERROR',
+}
+
+const toBool = ({ value }: { value: unknown }) =>
+  value === 'true' || value === true
+    ? true
+    : value === 'false' || value === false
+      ? false
+      : undefined;
+
+export class RuleFilterDto {
+  @ApiPropertyOptional({ description: 'Pesquisa por nome ou código' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() module?: string;
+  @ApiPropertyOptional({ enum: AutomationCategory })
+  @IsOptional()
+  @IsEnum(AutomationCategory)
+  category?: AutomationCategory;
+  @ApiPropertyOptional({ enum: RuleListStatus })
+  @IsOptional()
+  @IsEnum(RuleListStatus)
+  status?: RuleListStatus;
+  @ApiPropertyOptional({ description: 'userId do responsável' })
+  @IsOptional()
+  @IsString()
+  ownerId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() createdFrom?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() createdTo?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() lastRunFrom?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() lastRunTo?: string;
+  @ApiPropertyOptional({ description: 'Só regras com pelo menos uma execução falhada' })
+  @IsOptional()
+  @Transform(toBool)
+  @IsBoolean()
+  withFailures?: boolean;
+}
+
+// ─── Visão Geral (docs/modulo_automation.md §2) ───────────────────
+
+export enum OverviewGranularity {
+  DAY = 'day',
+  WEEK = 'week',
+  MONTH = 'month',
+}
+
+export class OverviewFilterDto {
+  @ApiPropertyOptional({ description: 'Início do período (ISO). Omissão: últimos 30 dias' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() module?: string;
+  @ApiPropertyOptional({ enum: AutomationCategory })
+  @IsOptional()
+  @IsEnum(AutomationCategory)
+  category?: AutomationCategory;
+  @ApiPropertyOptional({ enum: ExecutionStatus })
+  @IsOptional()
+  @IsEnum(ExecutionStatus)
+  status?: ExecutionStatus;
+  @ApiPropertyOptional({ enum: OverviewGranularity })
+  @IsOptional()
+  @IsEnum(OverviewGranularity)
+  granularity?: OverviewGranularity;
+}
+
+// ─── Histórico de Execuções (§7) ──────────────────────────────────
+
+/** Estado apresentado ao utilizador — deriva de status + resumeAt/nextRetryAt. */
+export const EXECUTION_DISPLAY_STATUSES = [
+  'QUEUED',
+  'RUNNING',
+  'WAITING_APPROVAL',
+  'WAITING_DELAY',
+  'SUCCESS',
+  'FAILED',
+  'RETRY_SCHEDULED',
+  'CANCELLED',
+  'SKIPPED',
+] as const;
+export type ExecutionDisplayStatus = (typeof EXECUTION_DISPLAY_STATUSES)[number];
+
+export class HistoryFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional({ enum: EXECUTION_DISPLAY_STATUSES })
+  @IsOptional()
+  @IsIn(EXECUTION_DISPLAY_STATUSES as unknown as string[])
+  status?: ExecutionDisplayStatus;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) ruleId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() module?: string;
+  @ApiPropertyOptional({ description: 'ID da execução, nome da regra ou correlação' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() eventId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() correlationId?: string;
+  @ApiPropertyOptional({ description: 'Id do utilizador que iniciou, ou SYSTEM' })
+  @IsOptional()
+  @IsString()
+  triggeredBy?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+}
+
+export class CancelExecutionDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) reason?: string;
+}
+
+// ─── Aprovações e tarefas (§8) ────────────────────────────────────
+
+export class TaskFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional({
+    enum: ['PENDING', 'APPROVED', 'REJECTED', 'COMPLETED', 'CANCELLED', 'EXPIRED'],
+  })
+  @IsOptional()
+  @IsIn(['PENDING', 'APPROVED', 'REJECTED', 'COMPLETED', 'CANCELLED', 'EXPIRED'])
+  status?: string;
+  @ApiPropertyOptional({ enum: ['APPROVAL', 'TASK'] })
+  @IsOptional()
+  @IsIn(['APPROVAL', 'TASK'])
+  kind?: string;
+  @ApiPropertyOptional({ enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] })
+  @IsOptional()
+  @IsIn(['LOW', 'MEDIUM', 'HIGH', 'URGENT'])
+  priority?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) ruleId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() module?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) approverId?: number;
+  @ApiPropertyOptional({ description: 'Só as minhas (aprovador ou substituto)' })
+  @IsOptional()
+  @Transform(toBool)
+  @IsBoolean()
+  mine?: boolean;
+  @ApiPropertyOptional({ description: 'Só as pendentes com prazo ultrapassado' })
+  @IsOptional()
+  @Transform(toBool)
+  @IsBoolean()
+  overdue?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(120) search?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+}
+
+export class DecideTaskDto {
+  @ApiProperty({ enum: ['APPROVE', 'REJECT', 'COMPLETE'] })
+  @IsIn(['APPROVE', 'REJECT', 'COMPLETE'])
+  decision!: 'APPROVE' | 'REJECT' | 'COMPLETE';
+  @ApiPropertyOptional({ description: 'Obrigatório ao recusar (justificação da decisão)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  comment?: string;
+}
+
+export class TaskCommentDto {
+  @ApiProperty() @IsString() @MaxLength(2000) comment!: string;
+}
+
+export class ReassignTaskDto {
+  @ApiProperty() @IsInt() @Type(() => Number) approverId!: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) comment?: string;
+}
+
+// ─── Relatórios e indicadores (§9) ────────────────────────────────
+
+export class ReportFilterDto {
+  @ApiPropertyOptional({ description: 'Início do período (ISO). Omissão: últimos 30 dias' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() module?: string;
+  @ApiPropertyOptional({ enum: AutomationCategory })
+  @IsOptional()
+  @IsEnum(AutomationCategory)
+  category?: AutomationCategory;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) ruleId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+  @ApiPropertyOptional({ enum: OverviewGranularity })
+  @IsOptional()
+  @IsEnum(OverviewGranularity)
+  granularity?: OverviewGranularity;
+  @ApiPropertyOptional({
+    description: 'Parâmetro da estimativa: minutos manuais poupados por execução bem-sucedida',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(600)
+  @Type(() => Number)
+  minutesPerExecution?: number;
 }

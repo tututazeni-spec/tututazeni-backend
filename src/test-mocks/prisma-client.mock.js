@@ -1992,6 +1992,8 @@ const ExecutionStatus = {
   SUCCESS: 'SUCCESS',
   FAILED: 'FAILED',
   SKIPPED: 'SKIPPED',
+  CANCELLED: 'CANCELLED',
+  WAITING_APPROVAL: 'WAITING_APPROVAL',
 };
 
 const AuthType = {
