@@ -92,7 +92,7 @@ describe('Automation Acceptance (§13) Integration', () => {
       .post(`/automation/rules/${ruleId}/test`)
       .set('Authorization', `Bearer ${rhToken}`)
       .send({ payload: {} })
-      .expect(201);
+      .expect(200);
     expect(res.body.dryRun).toBe(true);
     expect(await prisma.automationExecution.count({ where: { ruleId } })).toBe(before);
   });
@@ -150,7 +150,7 @@ describe('Automation Acceptance (§13) Integration', () => {
       .post(`/automation/rules/${ruleId}/publish`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ note: 'aceitação' })
-      .expect(201);
+      .expect(200);
 
     const versions = await http()
       .get(`/automation/rules/${ruleId}/versions`)
