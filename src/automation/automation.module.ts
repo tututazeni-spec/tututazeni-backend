@@ -4,6 +4,9 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AutomationService } from './automation.service';
 import { AutomationController } from './automation.controller';
 import { AutomationScheduleService } from './automation-schedule.service';
+import { AutomationHistoryService } from './automation-history.service';
+import { AutomationTasksService } from './automation-tasks.service';
+import { AutomationReportsService } from './automation-reports.service';
 import { EnrollmentsModule } from '../enrollments/enrollments.module';
 import { DevelopmentPlansModule } from '../development-plans/development-plans.module';
 import { GamificationModule } from '../gamification/gamification.module';
@@ -19,7 +22,13 @@ import { SmsModule } from '../sms/sms.module';
     MailModule,
     SmsModule,
   ],
-  providers: [AutomationService, AutomationScheduleService],
+  providers: [
+    AutomationService,
+    AutomationScheduleService,
+    AutomationHistoryService,
+    AutomationTasksService,
+    AutomationReportsService,
+  ],
   controllers: [AutomationController],
   exports: [AutomationService, AutomationScheduleService],
 })

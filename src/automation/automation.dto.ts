@@ -224,6 +224,15 @@ export class CreateRuleDto {
   departmentIds?: string[];
 
   @ApiPropertyOptional({
+    description: 'Estimativa: minutos de trabalho manual que cada execução bem-sucedida poupa (§9)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(600)
+  manualMinutesSaved?: number;
+
+  @ApiPropertyOptional({
     description: 'Guardar como rascunho: fica inactiva e nunca dispara até ser publicada',
   })
   @IsOptional()
@@ -672,4 +681,131 @@ export class OverviewFilterDto {
   @IsOptional()
   @IsEnum(OverviewGranularity)
   granularity?: OverviewGranularity;
+}
+
+// ─── Histórico de Execuções (§7) ──────────────────────────────────
+
+/** Estado apresentado ao utilizador — deriva de status + resumeAt/nextRetryAt. */
+export const EXECUTION_DISPLAY_STATUSES = [
+  'QUEUED',
+  'RUNNING',
+  'WAITING_APPROVAL',
+  'WAITING_DELAY',
+  'SUCCESS',
+  'FAILED',
+  'RETRY_SCHEDULED',
+  'CANCELLED',
+  'SKIPPED',
+] as const;
+export type ExecutionDisplayStatus = (typeof EXECUTION_DISPLAY_STATUSES)[number];
+
+export class HistoryFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional({ enum: EXECUTION_DISPLAY_STATUSES })
+  @IsOptional()
+  @IsIn(EXECUTION_DISPLAY_STATUSES as unknown as string[])
+  status?: ExecutionDisplayStatus;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) ruleId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() module?: string;
+  @ApiPropertyOptional({ description: 'ID da execução, nome da regra ou correlação' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() eventId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() correlationId?: string;
+  @ApiPropertyOptional({ description: 'Id do utilizador que iniciou, ou SYSTEM' })
+  @IsOptional()
+  @IsString()
+  triggeredBy?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+}
+
+export class CancelExecutionDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) reason?: string;
+}
+
+// ─── Aprovações e tarefas (§8) ────────────────────────────────────
+
+export class TaskFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional({
+    enum: ['PENDING', 'APPROVED', 'REJECTED', 'COMPLETED', 'CANCELLED', 'EXPIRED'],
+  })
+  @IsOptional()
+  @IsIn(['PENDING', 'APPROVED', 'REJECTED', 'COMPLETED', 'CANCELLED', 'EXPIRED'])
+  status?: string;
+  @ApiPropertyOptional({ enum: ['APPROVAL', 'TASK'] })
+  @IsOptional()
+  @IsIn(['APPROVAL', 'TASK'])
+  kind?: string;
+  @ApiPropertyOptional({ enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] })
+  @IsOptional()
+  @IsIn(['LOW', 'MEDIUM', 'HIGH', 'URGENT'])
+  priority?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) ruleId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() module?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) approverId?: number;
+  @ApiPropertyOptional({ description: 'Só as minhas (aprovador ou substituto)' })
+  @IsOptional()
+  @Transform(toBool)
+  @IsBoolean()
+  mine?: boolean;
+  @ApiPropertyOptional({ description: 'Só as pendentes com prazo ultrapassado' })
+  @IsOptional()
+  @Transform(toBool)
+  @IsBoolean()
+  overdue?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(120) search?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+}
+
+export class DecideTaskDto {
+  @ApiProperty({ enum: ['APPROVE', 'REJECT', 'COMPLETE'] })
+  @IsIn(['APPROVE', 'REJECT', 'COMPLETE'])
+  decision!: 'APPROVE' | 'REJECT' | 'COMPLETE';
+  @ApiPropertyOptional({ description: 'Obrigatório ao recusar (justificação da decisão)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  comment?: string;
+}
+
+export class TaskCommentDto {
+  @ApiProperty() @IsString() @MaxLength(2000) comment!: string;
+}
+
+export class ReassignTaskDto {
+  @ApiProperty() @IsInt() @Type(() => Number) approverId!: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) comment?: string;
+}
+
+// ─── Relatórios e indicadores (§9) ────────────────────────────────
+
+export class ReportFilterDto {
+  @ApiPropertyOptional({ description: 'Início do período (ISO). Omissão: últimos 30 dias' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() module?: string;
+  @ApiPropertyOptional({ enum: AutomationCategory })
+  @IsOptional()
+  @IsEnum(AutomationCategory)
+  category?: AutomationCategory;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) ruleId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+  @ApiPropertyOptional({ enum: OverviewGranularity })
+  @IsOptional()
+  @IsEnum(OverviewGranularity)
+  granularity?: OverviewGranularity;
+  @ApiPropertyOptional({
+    description: 'Parâmetro da estimativa: minutos manuais poupados por execução bem-sucedida',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(600)
+  @Type(() => Number)
+  minutesPerExecution?: number;
 }

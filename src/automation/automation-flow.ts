@@ -39,7 +39,29 @@ export interface FlowConditionStep {
   else?: FlowStep[];
 }
 
-export type FlowStep = FlowActionStep | FlowDelayStep | FlowConditionStep;
+/**
+ * §8 — pede uma aprovação (ou tarefa) a uma pessoa e suspende o fluxo até haver
+ * decisão. A automação nunca decide por si: só a decisão humana retoma o fluxo.
+ */
+export interface FlowApprovalStep {
+  id?: string;
+  type: 'approval';
+  label?: string;
+  /** APPROVAL (omissão): aprovar/recusar. TASK: apenas concluir. */
+  kind?: 'APPROVAL' | 'TASK';
+  title: string;
+  description?: string;
+  /** Utilizador aprovador; omitido → resolve-se de `approverField` no payload. */
+  approverId?: number;
+  approverField?: string;
+  substituteId?: number;
+  escalateToId?: number;
+  escalateAfterHours?: number;
+  dueHours?: number;
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+}
+
+export type FlowStep = FlowActionStep | FlowDelayStep | FlowConditionStep | FlowApprovalStep;
 
 export interface FlowDefinition {
   steps: FlowStep[];
@@ -48,6 +70,7 @@ export interface FlowDefinition {
 export type FlowInstruction =
   | { kind: 'action'; step: FlowActionStep; ref: string }
   | { kind: 'delay'; step: FlowDelayStep; ref: string }
+  | { kind: 'approval'; step: FlowApprovalStep; ref: string }
   | {
       kind: 'branch';
       step: FlowConditionStep;
@@ -143,6 +166,30 @@ export function validateFlow(flow: FlowDefinition | null | undefined): FlowValid
           }
           break;
         }
+        case 'approval': {
+          if (!step.title?.trim()) {
+            errors.push(`Etapa ${where}${label}: o pedido de aprovação precisa de um título.`);
+          }
+          if (!step.approverId && !step.approverField) {
+            errors.push(`Etapa ${where}${label}: indique o aprovador (utilizador ou campo).`);
+          }
+          if (step.approverId !== undefined && !Number.isInteger(step.approverId)) {
+            errors.push(`Etapa ${where}${label}: aprovador inválido.`);
+          }
+          if (
+            step.escalateToId !== undefined &&
+            (!step.escalateAfterHours || step.escalateAfterHours < 1)
+          ) {
+            errors.push(`Etapa ${where}${label}: o escalonamento precisa de um prazo em horas.`);
+          }
+          if (
+            step.dueHours !== undefined &&
+            (!Number.isInteger(step.dueHours) || step.dueHours < 1)
+          ) {
+            errors.push(`Etapa ${where}${label}: o prazo tem de ser um número de horas ≥ 1.`);
+          }
+          break;
+        }
         case 'condition': {
           stats.conditions += 1;
           if (!Array.isArray(step.rows) || step.rows.length === 0) {
@@ -192,6 +239,7 @@ export function compileFlow(flow: FlowDefinition): FlowInstruction[] {
       const ref = step.id ?? `${path}${i + 1}`;
       if (step.type === 'action') out.push({ kind: 'action', step, ref });
       else if (step.type === 'delay') out.push({ kind: 'delay', step, ref });
+      else if (step.type === 'approval') out.push({ kind: 'approval', step, ref });
       else if (step.type === 'condition') {
         const branch: FlowInstruction = { kind: 'branch', step, ref, elsePc: -1 };
         out.push(branch);

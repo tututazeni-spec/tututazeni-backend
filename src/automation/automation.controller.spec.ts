@@ -2,6 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AutomationController } from './automation.controller';
 import { AutomationService } from './automation.service';
 import { AutomationScheduleService } from './automation-schedule.service';
+import { AutomationHistoryService } from './automation-history.service';
+import { AutomationTasksService } from './automation-tasks.service';
+import { AutomationReportsService } from './automation-reports.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -27,6 +30,20 @@ const mockSchedules = {
   create: jest.fn().mockResolvedValue({ id: 's1' }),
 };
 
+const mockHistory = {
+  list: jest.fn().mockResolvedValue({ data: [] }),
+  cancel: jest.fn().mockResolvedValue({ status: 'CANCELLED' }),
+};
+
+const mockTasks = {
+  list: jest.fn().mockResolvedValue({ data: [] }),
+  decide: jest.fn().mockResolvedValue({ status: 'APPROVED' }),
+};
+
+const mockReports = {
+  build: jest.fn().mockResolvedValue({}),
+};
+
 describe('AutomationController', () => {
   let controller: AutomationController;
 
@@ -37,6 +54,9 @@ describe('AutomationController', () => {
       providers: [
         { provide: AutomationService, useValue: mockSvc },
         { provide: AutomationScheduleService, useValue: mockSchedules },
+        { provide: AutomationHistoryService, useValue: mockHistory },
+        { provide: AutomationTasksService, useValue: mockTasks },
+        { provide: AutomationReportsService, useValue: mockReports },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -66,8 +86,8 @@ describe('AutomationController', () => {
   });
 
   it('toggle → toggleRule(id)', async () => {
-    await controller.toggle(2);
-    expect(mockSvc.toggleRule).toHaveBeenCalledWith(2);
+    await controller.toggle(2, { id: 7 } as any);
+    expect(mockSvc.toggleRule).toHaveBeenCalledWith(2, 7);
   });
 
   it('clone → cloneRule(id)', async () => {
@@ -76,8 +96,8 @@ describe('AutomationController', () => {
   });
 
   it('remove → deleteRule(id)', async () => {
-    await controller.remove(4);
-    expect(mockSvc.deleteRule).toHaveBeenCalledWith(4);
+    await controller.remove(4, { id: 7 } as any);
+    expect(mockSvc.deleteRule).toHaveBeenCalledWith(4, 7);
   });
 
   it('runAll → runAllActiveRules', async () => {

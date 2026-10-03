@@ -35,6 +35,7 @@ import { calculatePagination, buildPaginatedResponse } from '../common/helpers/p
 import {
   FlowInstruction,
   FlowActionStep,
+  FlowApprovalStep,
   FlowDefinition,
   compileFlow,
   firstActionOf,
@@ -42,6 +43,7 @@ import {
   validateFlow,
 } from './automation-flow';
 import { EVENT_CATALOG, moduleOfTrigger } from './automation-events.catalog';
+import { appendHistory } from './automation-tasks.util';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 
@@ -108,16 +110,21 @@ interface ExecutionMeta {
   priorSteps?: FlowStepLog[];
   /** Execução existente a continuar (retoma depois de um atraso). */
   resumeExecId?: string;
+  /** §7 — utilizador (id) que iniciou a execução; omitido = SYSTEM. */
+  triggeredBy?: string;
 }
 
 /** Resultado de uma etapa de um fluxo — gravado em AutomationExecution.actionsLog. */
 export interface FlowStepLog {
   ref: string;
-  type: 'action' | 'condition' | 'delay';
+  type: 'action' | 'condition' | 'delay' | 'approval';
   label?: string;
   action?: string;
   status: 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'WAITING';
   decision?: 'yes' | 'no';
+  /** §8 — desfecho do pedido de aprovação/tarefa e tarefa criada. */
+  outcome?: string;
+  taskId?: string;
   result?: ActionResult;
   error?: string;
   durationMs?: number;
@@ -366,9 +373,9 @@ function deriveRuleStatus(r: {
 }
 
 /** Minutos de trabalho manual assumidos por execução bem-sucedida — apenas uma estimativa. */
-const MANUAL_MINUTES_PER_EXECUTION = 5;
+export const MANUAL_MINUTES_PER_EXECUTION = 5;
 
-function bucketKey(d: Date, g: OverviewGranularity): string {
+export function bucketKey(d: Date, g: OverviewGranularity): string {
   const iso = d.toISOString();
   if (g === OverviewGranularity.MONTH) return iso.slice(0, 7);
   if (g === OverviewGranularity.WEEK) {
@@ -379,7 +386,19 @@ function bucketKey(d: Date, g: OverviewGranularity): string {
   return iso.slice(0, 10);
 }
 
-function classifyFailure(message: string | null): string {
+/** Código estável do erro (§7) — o texto livre da mensagem não serve para filtrar. */
+export function failureCode(message: string | null | undefined): string {
+  const m = (message ?? '').toLowerCase();
+  if (!m) return 'UNKNOWN';
+  if (/forbidden|permiss|unauthori|403|401/.test(m)) return 'PERMISSION_DENIED';
+  if (/not found|não encontrad|nao encontrad|404/.test(m)) return 'RECORD_NOT_FOUND';
+  if (/valid|inválid|invalid|obrigat/.test(m)) return 'VALIDATION_ERROR';
+  if (/timeout|econn|network|fetch|socket|enotfound/.test(m)) return 'NETWORK_ERROR';
+  if (/mail|smtp|sms|entrega|deliver/.test(m)) return 'DELIVERY_ERROR';
+  return 'ACTION_FAILED';
+}
+
+export function classifyFailure(message: string | null): string {
   const m = (message ?? '').toLowerCase();
   if (!m) return 'Sem detalhe';
   if (/forbidden|permiss|unauthori|403|401/.test(m)) return 'Permissões';
@@ -678,6 +697,8 @@ export class AutomationService {
       PENDING: 0,
       RUNNING: 0,
       SKIPPED: 0,
+      CANCELLED: 0,
+      WAITING_APPROVAL: 0,
     };
     const timeline = new Map<string, { total: number; success: number; failed: number }>();
     const byModule = new Map<string, number>();
@@ -716,8 +737,7 @@ export class AutomationService {
         activeRules,
         executions: rows.length,
         failedExecutions: byStatus.FAILED,
-        // Só execuções: aprovações/tarefas ainda não têm modelo (ver §8 do spec).
-        waiting: byStatus.PENDING + byStatus.RUNNING,
+        waiting: byStatus.PENDING + byStatus.RUNNING + byStatus.WAITING_APPROVAL,
         timeSaved: {
           minutes: savedMinutes,
           hours: +(savedMinutes / 60).toFixed(1),
@@ -846,6 +866,7 @@ export class AutomationService {
       flowJson: flow ? JSON.stringify(flow) : null,
       tags: dto.tags ? JSON.stringify(dto.tags) : undefined,
       departmentIds: dto.departmentIds ? JSON.stringify(dto.departmentIds) : undefined,
+      manualMinutesSaved: dto.manualMinutesSaved,
       draft: dto.draft ?? false,
       condition: dto.condition ?? '',
       active: dto.draft ? false : (dto.active ?? true),
@@ -904,7 +925,7 @@ export class AutomationService {
     await this.prisma.auditLog
       .create({
         data: {
-          userId: 0,
+          userId: createdById > 0 ? createdById : undefined,
           action: 'AUTOMATION_RULE_CREATED',
           entity: 'AutomationRule',
           entityId: rule.id,
@@ -959,7 +980,7 @@ export class AutomationService {
     return this.prisma.automationRule.update({ where: { id }, data: dto });
   }
 
-  async toggleRule(id: number) {
+  async toggleRule(id: number, userId?: number) {
     const r = await this.prisma.read.automationRule.findUnique({ where: { id } });
     if (!r) throw new NotFoundException('Regra não encontrada');
     if (r.draft) {
@@ -969,13 +990,17 @@ export class AutomationService {
       where: { id },
       data: { active: !r.active },
     });
-    await this.auditRule(r.active ? 'AUTOMATION_RULE_PAUSED' : 'AUTOMATION_RULE_ACTIVATED', id, {});
+    await this.auditRule(r.active ? 'AUTOMATION_RULE_PAUSED' : 'AUTOMATION_RULE_ACTIVATED', id, {
+      name: r.name,
+      userId,
+    });
     return updated;
   }
 
-  async deleteRule(id: number) {
-    await this.getRule(id);
+  async deleteRule(id: number, userId?: number) {
+    const rule = await this.getRule(id);
     await this.prisma.automationRule.delete({ where: { id } });
+    await this.auditRule('AUTOMATION_RULE_DELETED', id, { name: rule.name, userId });
     return { message: 'Regra removida' };
   }
 
@@ -1314,6 +1339,18 @@ export class AutomationService {
             atMinute: elapsed,
           });
           pc++;
+        } else if (ins.kind === 'approval') {
+          steps.push({
+            ref: ins.ref,
+            type: 'approval',
+            label: ins.step.label,
+            title: ins.step.title,
+            approverId: ins.step.approverId ?? null,
+            wouldRun: true,
+            atMinute: elapsed,
+            message: 'O fluxo ficaria suspenso até haver decisão humana.',
+          });
+          pc++;
         } else {
           steps.push({
             ref: ins.ref,
@@ -1408,7 +1445,7 @@ export class AutomationService {
     try {
       await this.prisma.auditLog.create({
         data: {
-          userId: 0,
+          userId: typeof changes.userId === 'number' ? changes.userId : undefined,
           action,
           entity: 'AutomationRule',
           entityId: ruleId,
@@ -1465,6 +1502,7 @@ export class AutomationService {
     let affected = 0;
     let failure: string | undefined;
     let failedPc: number | undefined;
+    let failedRef: string | undefined;
 
     const updateExec = (data: Prisma.AutomationExecutionUpdateInput) =>
       execId
@@ -1527,7 +1565,54 @@ export class AutomationService {
         };
       }
 
+      if (ins.kind === 'approval') {
+        await updateExec({ currentStep: ins.step.label ?? ins.ref });
+        const approverId = this.resolveApprover(ins.step, payload);
+        if (!approverId) {
+          steps.push({
+            ref: ins.ref,
+            type: 'approval',
+            label: ins.step.label,
+            status: 'FAILED',
+            error: 'Aprovador não identificado (utilizador ou campo do evento em falta)',
+            at,
+          });
+          failure = 'Aprovador não identificado (utilizador ou campo do evento em falta)';
+          failedPc = pc;
+          failedRef = ins.ref;
+          break;
+        }
+        const taskId = await this.createApprovalTask(
+          rule,
+          ins.step,
+          approverId,
+          payload,
+          execId,
+          ins.ref,
+          meta.triggeredBy,
+        );
+        steps.push({
+          ref: ins.ref,
+          type: 'approval',
+          label: ins.step.label,
+          status: 'WAITING',
+          taskId,
+          at,
+        });
+        await updateExec({
+          status: 'WAITING_APPROVAL',
+          resumePc: pc + 1,
+          actionsLog: JSON.stringify({ steps, affected }),
+        });
+        return {
+          status: 'WAITING_APPROVAL',
+          affected,
+          message: `A aguardar decisão de "${ins.step.title}"`,
+        };
+      }
+
       const step: FlowActionStep = ins.step;
+      await updateExec({ currentStep: step.label ?? ins.ref });
       const started = Date.now();
       const stepRule = {
         ...rule,
@@ -1563,6 +1648,7 @@ export class AutomationService {
       if (stepError && step.onError !== 'continue') {
         failure = stepError;
         failedPc = pc;
+        failedRef = step.label ? `${ins.ref} · ${step.label}` : ins.ref;
         break;
       }
       pc++;
@@ -1572,7 +1658,7 @@ export class AutomationService {
     if (failure !== undefined && failedPc !== undefined) {
       for (let i = failedPc + 1; i < program.length; i++) {
         const rest = program[i];
-        if (rest.kind === 'action' || rest.kind === 'delay') {
+        if (rest.kind === 'action' || rest.kind === 'delay' || rest.kind === 'approval') {
           steps.push({
             ref: rest.ref,
             type: rest.kind,
@@ -1589,6 +1675,9 @@ export class AutomationService {
       status,
       actionsLog: JSON.stringify({ steps, affected }),
       errorMessage: failure,
+      errorCode: failure !== undefined ? failureCode(failure) : null,
+      errorStep: failure !== undefined ? (failedRef ?? String(failedPc)) : null,
+      currentStep: null,
       finishedAt: new Date(),
       resumeAt: null,
       resumePc: failedPc ?? null,
@@ -1647,6 +1736,152 @@ export class AutomationService {
       resumed++;
     }
     return { resumed };
+  }
+
+  // ══════════════════════════════════════════════════════
+  // APROVAÇÕES E TAREFAS (§8) — suspensão e retoma do fluxo
+  // ══════════════════════════════════════════════════════
+
+  private resolveApprover(
+    step: FlowApprovalStep,
+    payload: Record<string, unknown>,
+  ): number | undefined {
+    if (step.approverId) return step.approverId;
+    const raw = step.approverField ? payload[step.approverField] : undefined;
+    const n = Number(raw);
+    return Number.isInteger(n) && n > 0 ? n : undefined;
+  }
+
+  private async createApprovalTask(
+    rule: AutomationRuleRecord,
+    step: FlowApprovalStep,
+    approverId: number,
+    payload: Record<string, unknown>,
+    execId: string | null,
+    ref: string,
+    createdBy?: string,
+  ): Promise<string> {
+    const now = new Date();
+    const creator = createdBy && /^\d+$/.test(createdBy) ? Number(createdBy) : null;
+    const title = interpolate(step.title, undefined, payload) ?? step.title;
+    const task = await this.prisma.automationTask.create({
+      data: {
+        kind: step.kind ?? 'APPROVAL',
+        title,
+        description: interpolate(step.description, undefined, payload),
+        ruleId: rule.id,
+        executionId: execId,
+        stepRef: ref,
+        module: rule.module ?? moduleOfTrigger(rule.trigger),
+        recordType: typeof payload.recordType === 'string' ? payload.recordType : undefined,
+        recordId: payload.recordId !== undefined ? String(payload.recordId) : undefined,
+        approverId,
+        substituteId: step.substituteId,
+        escalateToId: step.escalateToId,
+        escalateAfterHours: step.escalateAfterHours,
+        priority: step.priority ?? 'MEDIUM',
+        dueAt: step.dueHours ? new Date(now.getTime() + step.dueHours * 3_600_000) : null,
+        createdBy: creator,
+        historyJson: appendHistory(null, { by: creator, action: 'CREATED', to: approverId }, now),
+      },
+    });
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: approverId,
+      type: 'AUTOMATION_TASK',
+      message: `${step.kind === 'TASK' ? 'Nova tarefa' : 'Aprovação pendente'}: ${title}`,
+    });
+    return task.id;
+  }
+
+  /**
+   * Retoma (ou termina) a execução que aguardava uma decisão humana. Só aprovada/
+   * concluída continua o fluxo; recusada, cancelada ou expirada cancelam a execução.
+   * Idempotente entre réplicas: o estado WAITING_APPROVAL é reclamado atomicamente.
+   */
+  async resumeAfterTask(
+    executionId: string,
+    outcome: 'APPROVED' | 'COMPLETED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED',
+    taskId: string,
+    comment?: string,
+  ): Promise<{ resumed: boolean; status?: string }> {
+    const exec = await this.prisma.automationExecution.findUnique({ where: { id: executionId } });
+    if (!exec || exec.status !== 'WAITING_APPROVAL') return { resumed: false };
+
+    let steps: FlowStepLog[] = [];
+    try {
+      steps = (JSON.parse(exec.actionsLog ?? '{}') as { steps?: FlowStepLog[] }).steps ?? [];
+    } catch {
+      steps = [];
+    }
+    const proceed = outcome === 'APPROVED' || outcome === 'COMPLETED';
+    const reasons: Record<string, string> = {
+      REJECTED: 'Aprovação recusada',
+      CANCELLED: 'Tarefa cancelada',
+      EXPIRED: 'Prazo da aprovação expirado',
+    };
+    const closed: FlowStepLog[] = steps.map(st =>
+      st.status === 'WAITING' && (st.taskId === taskId || !st.taskId)
+        ? {
+            ...st,
+            outcome,
+            status: proceed ? 'SUCCESS' : 'FAILED',
+            ...(proceed ? {} : { error: reasons[outcome] }),
+          }
+        : st,
+    );
+
+    if (!proceed) {
+      const claimed = await this.prisma.automationExecution.updateMany({
+        where: { id: executionId, status: 'WAITING_APPROVAL' },
+        data: {
+          status: 'CANCELLED',
+          finishedAt: new Date(),
+          currentStep: null,
+          cancelledBy: 'SYSTEM',
+          cancelReason: `${reasons[outcome]}${comment ? `: ${comment}` : ''}`,
+          actionsLog: JSON.stringify({ steps: closed, affected: 0 }),
+        },
+      });
+      if (claimed.count === 0) return { resumed: false };
+      const rule = await this.prisma.automationRule.findUnique({ where: { id: exec.ruleId } });
+      if (rule) {
+        await this.auditExecution(rule, executionId, 'CANCELLED', {
+          eventId: exec.eventId ?? undefined,
+          correlationId: exec.correlationId ?? undefined,
+        });
+      }
+      return { resumed: false, status: 'CANCELLED' };
+    }
+
+    const claimed = await this.prisma.automationExecution.updateMany({
+      where: { id: executionId, status: 'WAITING_APPROVAL' },
+      data: { status: 'RUNNING' },
+    });
+    if (claimed.count === 0) return { resumed: false };
+    const rule = await this.prisma.automationRule.findUnique({ where: { id: exec.ruleId } });
+    if (!rule || rule.draft || !rule.active) {
+      await this.prisma.automationExecution.update({
+        where: { id: executionId },
+        data: {
+          status: 'SKIPPED',
+          finishedAt: new Date(),
+          errorMessage: 'A automação foi pausada ou removida durante a aprovação',
+        },
+      });
+      return { resumed: false, status: 'SKIPPED' };
+    }
+    const payload = exec.payload ? (JSON.parse(exec.payload) as Record<string, unknown>) : {};
+    const out = await this.executeAction(rule, payload, undefined, {
+      resumeExecId: executionId,
+      startPc: exec.resumePc ?? 0,
+      priorSteps: closed,
+      attempt: exec.attempt,
+      eventId: exec.eventId ?? undefined,
+      correlationId: exec.correlationId ?? undefined,
+      dedupeKey: exec.dedupeKey ?? undefined,
+      triggeredBy: exec.triggeredBy ?? undefined,
+    });
+    return { resumed: true, status: out.status };
   }
 
   // ══════════════════════════════════════════════════════
@@ -1823,6 +2058,8 @@ export class AutomationService {
           data: {
             ruleId: rule.id,
             status: 'RUNNING',
+            triggeredBy: meta.triggeredBy ?? 'SYSTEM',
+            targetUserId: targetUserId !== undefined ? String(targetUserId) : undefined,
             payload: JSON.stringify(payload),
             startedAt: new Date(),
             dedupeKey: meta.dedupeKey,
@@ -1869,6 +2106,7 @@ export class AutomationService {
               status: execStatus,
               actionsLog: JSON.stringify(result),
               errorMessage: actionError,
+              ...(actionError ? { errorCode: failureCode(actionError), errorStep: '1' } : {}),
               finishedAt: new Date(),
             },
           })
@@ -1903,6 +2141,8 @@ export class AutomationService {
             data: {
               status: 'FAILED',
               errorMessage: err instanceof Error ? err.message : String(err),
+              errorCode: 'EXCEPTION',
+              errorStep: '1',
               finishedAt: new Date(),
             },
           })
