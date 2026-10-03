@@ -24,6 +24,12 @@ import {
   FilterBeneficiaryDto,
   CreateInteractionDto,
   CreateNeedDto,
+  CreateBeneficiaryDocumentDto,
+  ValidateBeneficiaryDocumentDto,
+  CreateBenefitDto,
+  UpdateBenefitDto,
+  CreateParticipationDto,
+  UpdateParticipationDto,
 } from './dto';
 import { Role } from '../auth/enums/role.enum';
 
@@ -141,5 +147,117 @@ export class CrmBeneficiariesController {
   @ApiOperation({ summary: 'Resolver necessidade' })
   resolveNeed(@Param('needId') needId: string, @CurrentUser() user: CurrentUserData) {
     return this.service.resolveNeed(needId, user.id);
+  }
+
+  // ─── HISTÓRICO ───────────────────────────────────────
+
+  @Get(':id/history')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Histórico de alterações / registo de actividades' })
+  getHistory(
+    @Param('id') id: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+  ) {
+    return this.service.getHistory(id, page, limit);
+  }
+
+  // ─── DOCUMENTOS ──────────────────────────────────────
+
+  @Post(':id/documents')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Adicionar documento' })
+  addDocument(
+    @Param('id') id: string,
+    @Body() dto: CreateBeneficiaryDocumentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addDocument(id, dto, user.id);
+  }
+
+  @Put('documents/:docId/validate')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Validar / rejeitar documento' })
+  validateDocument(
+    @Param('docId') docId: string,
+    @Body() dto: ValidateBeneficiaryDocumentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.validateDocument(docId, dto, user.id);
+  }
+
+  @Delete('documents/:docId')
+  @Roles(Role.ADMIN, Role.RH)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover documento (soft delete)' })
+  removeDocument(@Param('docId') docId: string, @CurrentUser() user: CurrentUserData) {
+    return this.service.removeDocument(docId, user.id);
+  }
+
+  // ─── BENEFÍCIOS / SERVIÇOS ───────────────────────────
+
+  @Post(':id/benefits')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Atribuir benefício / serviço / apoio' })
+  addBenefit(
+    @Param('id') id: string,
+    @Body() dto: CreateBenefitDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addBenefit(id, dto, user.id);
+  }
+
+  @Put('benefits/:benefitId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar estado do benefício' })
+  updateBenefit(
+    @Param('benefitId') benefitId: string,
+    @Body() dto: UpdateBenefitDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateBenefit(benefitId, dto, user.id);
+  }
+
+  @Delete('benefits/:benefitId')
+  @Roles(Role.ADMIN, Role.RH)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover benefício (soft delete)' })
+  removeBenefit(@Param('benefitId') benefitId: string, @CurrentUser() user: CurrentUserData) {
+    return this.service.removeBenefit(benefitId, user.id);
+  }
+
+  // ─── PARTICIPAÇÕES ───────────────────────────────────
+
+  @Post(':id/participations')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Registar participação em programa / formação' })
+  addParticipation(
+    @Param('id') id: string,
+    @Body() dto: CreateParticipationDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addParticipation(id, dto, user.id);
+  }
+
+  @Put('participations/:participationId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar participação' })
+  updateParticipation(
+    @Param('participationId') participationId: string,
+    @Body() dto: UpdateParticipationDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateParticipation(participationId, dto, user.id);
+  }
+
+  @Delete('participations/:participationId')
+  @Roles(Role.ADMIN, Role.RH)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover participação (soft delete)' })
+  removeParticipation(
+    @Param('participationId') participationId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeParticipation(participationId, user.id);
   }
 }
