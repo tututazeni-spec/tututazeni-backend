@@ -1,7 +1,7 @@
 import { Max, IsOptional, IsEnum, IsString, IsInt } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { FunderType, FunderStatus } from '@prisma/client';
+import { FunderType, FunderStatus, FunderThematicArea } from '@prisma/client';
 import { BaseFilterDto } from '../../common/dtos/pagination.dto';
 
 export class FilterFunderDto extends BaseFilterDto {
@@ -30,6 +30,16 @@ export class FilterFunderDto extends BaseFilterDto {
   @Type(() => Number)
   @IsInt()
   assignedToId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sector?: string;
+
+  @ApiPropertyOptional({ enum: FunderThematicArea })
+  @IsOptional()
+  @IsEnum(FunderThematicArea)
+  thematicArea?: FunderThematicArea;
 
   @ApiPropertyOptional({ default: 20 })
   @IsOptional()

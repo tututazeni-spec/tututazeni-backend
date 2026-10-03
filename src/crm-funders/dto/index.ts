@@ -1,4 +1,5 @@
 export * from './create-funder.dto';
+export * from './create-funder-contact.dto';
 export * from './update-funder.dto';
 export * from './filter-funder.dto';
 export * from './create-grant.dto';

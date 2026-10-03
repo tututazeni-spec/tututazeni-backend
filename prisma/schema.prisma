@@ -11835,8 +11835,31 @@ model Funder {
   updatedAt         DateTime     @updatedAt
   deletedAt         DateTime?
 
+  // ① Identificação
+  commercialName     String?
+  logoUrl            String?
+  registeredAt       DateTime @default(now())
+  origin             String?
+  registrationNumber String?
+
+  // ② Dados institucionais (country/region já existem acima)
+  province         AngolaProvince?
+  municipality     String?
+  address          String?
+  sector           String?
+  organizationType String?
+  foundedYear      Int?
+  employeeCount    Int?
+  organizationSize PartnerOrganizationSize?
+  description      String?
+  mission          String?
+  areasOfActivity  String[]
+  fundingCountries String[]
+  thematicAreas    FunderThematicArea[]
+
   createdBy    User                @relation("FunderCreator", fields: [createdById], references: [id])
   assignedTo   User?               @relation("FunderOwner", fields: [assignedToId], references: [id])
+  contacts     FunderContact[]
   grants       FundingGrant[]
   interactions FunderInteraction[]
   reports      FunderReport[]
@@ -11846,6 +11869,31 @@ model Funder {
   @@index([status])
   @@index([assignedToId])
   @@index([nextReportDue])
+  @@index([deletedAt])
+}
+
+// ③ Contactos (vários por financiador, um principal)
+model FunderContact {
+  id               String            @id @default(cuid())
+  funderId         String
+  firstName        String
+  lastName         String?
+  jobTitle         String?
+  department       String?
+  email            String?
+  phone            String?
+  whatsapp         String?
+  preferredChannel String?
+  role             FunderContactRole @default(OTHER)
+  isPrimary        Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  deletedAt        DateTime?
+
+  funder Funder @relation(fields: [funderId], references: [id])
+
+  @@index([funderId])
+  @@index([isPrimary])
   @@index([deletedAt])
 }
 
@@ -11969,6 +12017,15 @@ enum FunderType {
   PRIVATE_FOUNDATION
   CORPORATE
   OTHER
+  FOUNDATION
+  BANK
+  FINANCIAL_INSTITUTION
+  COOPERATION_AGENCY
+  INTERNATIONAL_ORGANIZATION
+  INVESTMENT_FUND
+  PUBLIC_FUND
+  EMBASSY
+  INDIVIDUAL
 }
 
 enum FunderStatus {
@@ -11977,6 +12034,40 @@ enum FunderStatus {
   PROSPECT
   FORMER
   SUSPENDED
+  POTENTIAL
+  NEGOTIATION
+  CLOSED
+}
+
+enum FunderContactRole {
+  DECISION_MAKER
+  TECHNICAL
+  FINANCIAL
+  LEGAL
+  COMMUNICATION
+  MONITORING
+  OTHER
+}
+
+enum FunderThematicArea {
+  EDUCATION
+  VOCATIONAL_TRAINING
+  EMPLOYMENT
+  YOUTH
+  AGRICULTURE
+  AGRIBUSINESS
+  HEALTH
+  COMMUNITY_DEVELOPMENT
+  SOCIAL_INCLUSION
+  ENTREPRENEURSHIP
+  TECHNOLOGY
+  INNOVATION
+  SUSTAINABILITY
+  ENVIRONMENT
+  FOOD_SECURITY
+  ECONOMIC_DEVELOPMENT
+  EQUAL_OPPORTUNITIES
+  OTHER
 }
 
 enum GrantStatus {

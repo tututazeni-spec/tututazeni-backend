@@ -3,6 +3,8 @@ import { Prisma, GrantStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateFunderDto,
+  CreateFunderContactDto,
+  UpdateFunderContactDto,
   UpdateFunderDto,
   FilterFunderDto,
   CreateGrantDto,
@@ -54,10 +56,15 @@ export class CrmFundersService {
 
   async create(dto: CreateFunderDto, userId: number) {
     const code = await this.generateCode('FIN', 'funder');
-    const { relationshipStart, nextReportDue, ...rest } = dto;
+    const { relationshipStart, nextReportDue, registeredAt, contacts, ...rest } = dto;
+    this.assertSinglePrimary(contacts);
     const funder = await this.prisma.funder.create({
       data: {
         ...rest,
+        ...(registeredAt && { registeredAt: new Date(registeredAt) }),
+        ...(contacts?.length && {
+          contacts: { create: this.normalizeContacts(contacts) },
+        }),
         ...(relationshipStart && {
           relationshipStart: new Date(relationshipStart),
         }),
@@ -68,6 +75,7 @@ export class CrmFundersService {
       include: {
         createdBy: { select: { fullName: true } },
         assignedTo: { select: { fullName: true } },
+        contacts: { where: { deletedAt: null }, orderBy: { isPrimary: 'desc' } },
       },
     });
     await this.audit.logEntity(userId, 'CREATE', 'Funder', funder.id, {
@@ -78,16 +86,31 @@ export class CrmFundersService {
   }
 
   async findAll(filters: FilterFunderDto) {
-    const { type, status, search, country, assignedToId, page = 1, limit = 20 } = filters;
+    const {
+      type,
+      status,
+      search,
+      country,
+      assignedToId,
+      sector,
+      thematicArea,
+      page = 1,
+      limit = 20,
+    } = filters;
     const where: Prisma.FunderWhereInput = {
       deletedAt: null,
       ...(type && { type }),
       ...(status && { status }),
       ...(country && { country }),
       ...(assignedToId && { assignedToId }),
+      ...(sector && { sector: { contains: sector, mode: 'insensitive' } }),
+      ...(thematicArea && { thematicAreas: { has: thematicArea } }),
       ...(search && {
         OR: [
           { name: { contains: search, mode: 'insensitive' } },
+          { commercialName: { contains: search, mode: 'insensitive' } },
+          { registrationNumber: { contains: search, mode: 'insensitive' } },
+          { nif: { contains: search } },
           { email: { contains: search, mode: 'insensitive' } },
           { code: { contains: search, mode: 'insensitive' } },
         ],
@@ -117,6 +140,10 @@ export class CrmFundersService {
       include: {
         createdBy: { select: { fullName: true } },
         assignedTo: { select: { fullName: true, email: true } },
+        contacts: {
+          where: { deletedAt: null },
+          orderBy: [{ isPrimary: 'desc' }, { firstName: 'asc' }],
+        },
         grants: {
           where: { deletedAt: null },
           orderBy: { createdAt: 'desc' },
@@ -143,11 +170,12 @@ export class CrmFundersService {
 
   async update(id: string, dto: UpdateFunderDto, userId: number) {
     await this.findOne(id);
-    const { relationshipStart, nextReportDue, ...rest } = dto;
+    const { relationshipStart, nextReportDue, registeredAt, ...rest } = dto;
     const updated = await this.prisma.funder.update({
       where: { id },
       data: {
         ...rest,
+        ...(registeredAt && { registeredAt: new Date(registeredAt) }),
         ...(relationshipStart && {
           relationshipStart: new Date(relationshipStart),
         }),
@@ -166,6 +194,101 @@ export class CrmFundersService {
     });
     await this.audit.logEntity(userId, 'DELETE', 'Funder', id, { deletedAt: new Date() });
     return { message: 'Financiador removido com sucesso' };
+  }
+
+  // ─── CONTACTOS (③) ───────────────────────────────────
+
+  private assertSinglePrimary(contacts?: { isPrimary?: boolean }[]) {
+    if (contacts && contacts.filter(c => c.isPrimary).length > 1) {
+      throw new BadRequestException('Apenas um contacto pode ser principal');
+    }
+  }
+
+  /** Se nenhum for marcado como principal, o primeiro da lista assume o papel. */
+  private normalizeContacts(contacts: CreateFunderContactDto[]) {
+    const hasPrimary = contacts.some(c => c.isPrimary);
+    return contacts.map((c, i) => ({ ...c, isPrimary: hasPrimary ? !!c.isPrimary : i === 0 }));
+  }
+
+  async getContacts(funderId: string) {
+    await this.findOne(funderId);
+    return this.prisma.read.funderContact.findMany({
+      where: { funderId, deletedAt: null },
+      orderBy: [{ isPrimary: 'desc' }, { firstName: 'asc' }],
+    });
+  }
+
+  private async findContact(funderId: string, contactId: string) {
+    const contact = await this.prisma.funderContact.findFirst({
+      where: { id: contactId, funderId, deletedAt: null },
+    });
+    if (!contact) throw new NotFoundException('Contacto não encontrado');
+    return contact;
+  }
+
+  async addContact(funderId: string, dto: CreateFunderContactDto, userId: number) {
+    await this.findOne(funderId);
+    const contact = await this.prisma.$transaction(async tx => {
+      const existing = await tx.funderContact.count({ where: { funderId, deletedAt: null } });
+      // O primeiro contacto é sempre o principal
+      const isPrimary = dto.isPrimary || existing === 0;
+      if (isPrimary) {
+        await tx.funderContact.updateMany({
+          where: { funderId, isPrimary: true },
+          data: { isPrimary: false },
+        });
+      }
+      return tx.funderContact.create({ data: { ...dto, isPrimary, funderId } });
+    });
+    await this.audit.logEntity(userId, 'CREATE', 'FunderContact', contact.id, { funderId });
+    return contact;
+  }
+
+  async updateContact(
+    funderId: string,
+    contactId: string,
+    dto: UpdateFunderContactDto,
+    userId: number,
+  ) {
+    const current = await this.findContact(funderId, contactId);
+    if (dto.isPrimary === false && current.isPrimary) {
+      throw new BadRequestException(
+        'Para mudar o contacto principal, marque outro contacto como principal',
+      );
+    }
+    const updated = await this.prisma.$transaction(async tx => {
+      if (dto.isPrimary) {
+        await tx.funderContact.updateMany({
+          where: { funderId, isPrimary: true, id: { not: contactId } },
+          data: { isPrimary: false },
+        });
+      }
+      return tx.funderContact.update({ where: { id: contactId }, data: dto });
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'FunderContact', contactId, dto);
+    return updated;
+  }
+
+  async removeContact(funderId: string, contactId: string, userId: number) {
+    const current = await this.findContact(funderId, contactId);
+    await this.prisma.$transaction(async tx => {
+      await tx.funderContact.update({
+        where: { id: contactId },
+        data: { deletedAt: new Date(), isPrimary: false },
+      });
+      // Se removeu o principal, promove o contacto mais antigo restante
+      if (current.isPrimary) {
+        const next = await tx.funderContact.findFirst({
+          where: { funderId, deletedAt: null },
+          orderBy: { createdAt: 'asc' },
+        });
+        if (next) {
+          await tx.funderContact.update({ where: { id: next.id }, data: { isPrimary: true } });
+        }
+      }
+    });
+    await this.audit.logEntity(userId, 'DELETE', 'FunderContact', contactId, { funderId });
+    return { message: 'Contacto removido com sucesso' };
   }
 
   // ─── GRANTS (FINANCIAMENTOS) ─────────────────────────

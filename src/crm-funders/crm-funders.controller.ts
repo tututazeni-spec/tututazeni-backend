@@ -18,6 +18,8 @@ import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { CrmFundersService } from './crm-funders.service';
 import {
   CreateFunderDto,
+  CreateFunderContactDto,
+  UpdateFunderContactDto,
   UpdateFunderDto,
   FilterFunderDto,
   CreateGrantDto,
@@ -90,6 +92,50 @@ export class CrmFundersController {
   @ApiOperation({ summary: 'Remover financiador (soft delete)' })
   remove(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.service.softDelete(id, user.id);
+  }
+
+  // ─── CONTACTOS ───────────────────────────────────────
+
+  @Get(':id/contacts')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar contactos do financiador' })
+  getContacts(@Param('id') id: string) {
+    return this.service.getContacts(id);
+  }
+
+  @Post(':id/contacts')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Adicionar contacto ao financiador' })
+  addContact(
+    @Param('id') id: string,
+    @Body() dto: CreateFunderContactDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addContact(id, dto, user.id);
+  }
+
+  @Put(':id/contacts/:contactId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar contacto do financiador' })
+  updateContact(
+    @Param('id') id: string,
+    @Param('contactId') contactId: string,
+    @Body() dto: UpdateFunderContactDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateContact(id, contactId, dto, user.id);
+  }
+
+  @Delete(':id/contacts/:contactId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover contacto do financiador' })
+  removeContact(
+    @Param('id') id: string,
+    @Param('contactId') contactId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeContact(id, contactId, user.id);
   }
 
   // ─── GRANTS ──────────────────────────────────────────
