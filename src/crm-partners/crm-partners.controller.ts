@@ -31,6 +31,10 @@ import {
   CreatePartnerAgreementDto,
   UpdatePartnerAgreementDto,
   CreateAgreementVersionDto,
+  CreatePartnerContributionDto,
+  UpdatePartnerContributionDto,
+  CreatePartnerFunderLinkDto,
+  UpdatePartnerFunderLinkDto,
 } from './dto';
 import { Role } from '../auth/enums/role.enum';
 
@@ -260,6 +264,115 @@ export class CrmPartnersController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.service.addAgreementVersion(id, agreementId, dto, user.id);
+  }
+
+  // ─── CONTRIBUIÇÃO DO PARCEIRO ────────────────────────
+
+  @Get(':id/contributions')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar contribuições do parceiro' })
+  getContributions(@Param('id') id: string) {
+    return this.service.getContributions(id);
+  }
+
+  @Post(':id/contributions')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Registar contribuição do parceiro' })
+  addContribution(
+    @Param('id') id: string,
+    @Body() dto: CreatePartnerContributionDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addContribution(id, dto, user.id);
+  }
+
+  @Put(':id/contributions/:contributionId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar contribuição' })
+  updateContribution(
+    @Param('id') id: string,
+    @Param('contributionId') contributionId: string,
+    @Body() dto: UpdatePartnerContributionDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateContribution(id, contributionId, dto, user.id);
+  }
+
+  @Delete(':id/contributions/:contributionId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover contribuição' })
+  removeContribution(
+    @Param('id') id: string,
+    @Param('contributionId') contributionId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeContribution(id, contributionId, user.id);
+  }
+
+  // ─── FINANCIAMENTO (ligação a CRM → Funders) ─────────
+
+  @Get(':id/funding')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Financiamento: financiadores associados e totais por moeda' })
+  getFunding(@Param('id') id: string) {
+    return this.service.getFunding(id);
+  }
+
+  @Post(':id/funding')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Associar financiador ao parceiro' })
+  addFunderLink(
+    @Param('id') id: string,
+    @Body() dto: CreatePartnerFunderLinkDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addFunderLink(id, dto, user.id);
+  }
+
+  @Put(':id/funding/:linkId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar ligação a financiador' })
+  updateFunderLink(
+    @Param('id') id: string,
+    @Param('linkId') linkId: string,
+    @Body() dto: UpdatePartnerFunderLinkDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateFunderLink(id, linkId, dto, user.id);
+  }
+
+  @Delete(':id/funding/:linkId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover ligação a financiador' })
+  removeFunderLink(
+    @Param('id') id: string,
+    @Param('linkId') linkId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeFunderLink(id, linkId, user.id);
+  }
+
+  // ─── BENEFICIÁRIOS RELACIONADOS ──────────────────────
+
+  @Get(':id/beneficiaries/summary')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Impacto da parceria: beneficiários, províncias e participações' })
+  getBeneficiariesSummary(@Param('id') id: string) {
+    return this.service.getBeneficiariesSummary(id);
+  }
+
+  @Get(':id/beneficiaries')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Beneficiários impactados pelos programas do parceiro (paginado)' })
+  getRelatedBeneficiaries(
+    @Param('id') id: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+    @Query('program') program?: string,
+  ) {
+    return this.service.getRelatedBeneficiaries(id, page, limit, program);
   }
 
   // ─── INTERACÇÕES ─────────────────────────────────────

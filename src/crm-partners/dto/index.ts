@@ -6,3 +6,5 @@ export * from './create-milestone.dto';
 export * from './create-partner-contact.dto';
 export * from './create-partner-program.dto';
 export * from './create-partner-agreement.dto';
+export * from './create-partner-contribution.dto';
+export * from './create-partner-funder-link.dto';

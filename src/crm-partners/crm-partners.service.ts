@@ -14,6 +14,10 @@ import {
   CreatePartnerAgreementDto,
   UpdatePartnerAgreementDto,
   CreateAgreementVersionDto,
+  CreatePartnerContributionDto,
+  UpdatePartnerContributionDto,
+  CreatePartnerFunderLinkDto,
+  UpdatePartnerFunderLinkDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
@@ -144,6 +148,16 @@ export class CrmPartnersService {
             responsible: { select: { fullName: true } },
             versions: { orderBy: { version: 'desc' }, take: 1 },
           },
+        },
+        contributions: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+          include: { program: { select: { id: true, program: true } } },
+        },
+        funderLinks: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+          include: { funder: { select: { id: true, code: true, name: true } } },
         },
         interactions: {
           where: { deletedAt: null },
@@ -495,6 +509,258 @@ export class CrmPartnersService {
       version: version.version,
     });
     return version;
+  }
+
+  // ─── CONTRIBUIÇÃO DO PARCEIRO (⑦) ───────────────────
+
+  private async assertProgramBelongsToPartner(partnerId: string, programId?: string) {
+    if (!programId) return;
+    await this.findProgram(partnerId, programId);
+  }
+
+  async getContributions(partnerId: string) {
+    await this.findOne(partnerId);
+    return this.prisma.read.partnerContribution.findMany({
+      where: { partnerId, deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      include: { program: { select: { id: true, program: true } } },
+    });
+  }
+
+  private async findContribution(partnerId: string, contributionId: string) {
+    const contribution = await this.prisma.partnerContribution.findFirst({
+      where: { id: contributionId, partnerId, deletedAt: null },
+    });
+    if (!contribution) throw new NotFoundException('Contribuição não encontrada');
+    return contribution;
+  }
+
+  async addContribution(partnerId: string, dto: CreatePartnerContributionDto, userId: number) {
+    await this.findOne(partnerId);
+    this.assertDateRange(dto.startDate, dto.endDate);
+    await this.assertProgramBelongsToPartner(partnerId, dto.programId);
+    const { startDate, endDate, ...rest } = dto;
+    const contribution = await this.prisma.partnerContribution.create({
+      data: {
+        ...rest,
+        ...(startDate && { startDate: new Date(startDate) }),
+        ...(endDate && { endDate: new Date(endDate) }),
+        partnerId,
+      },
+      include: { program: { select: { id: true, program: true } } },
+    });
+    await this.audit.logEntity(userId, 'CREATE', 'PartnerContribution', contribution.id, {
+      partnerId,
+      type: dto.type,
+    });
+    return contribution;
+  }
+
+  async updateContribution(
+    partnerId: string,
+    contributionId: string,
+    dto: UpdatePartnerContributionDto,
+    userId: number,
+  ) {
+    const current = await this.findContribution(partnerId, contributionId);
+    this.assertDateRange(dto.startDate ?? current.startDate, dto.endDate ?? current.endDate);
+    await this.assertProgramBelongsToPartner(partnerId, dto.programId);
+    const { startDate, endDate, ...rest } = dto;
+    const updated = await this.prisma.partnerContribution.update({
+      where: { id: contributionId },
+      data: {
+        ...rest,
+        ...(startDate && { startDate: new Date(startDate) }),
+        ...(endDate && { endDate: new Date(endDate) }),
+      },
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'PartnerContribution', contributionId, dto);
+    return updated;
+  }
+
+  async removeContribution(partnerId: string, contributionId: string, userId: number) {
+    await this.findContribution(partnerId, contributionId);
+    await this.prisma.partnerContribution.update({
+      where: { id: contributionId },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.logEntity(userId, 'DELETE', 'PartnerContribution', contributionId, {
+      partnerId,
+    });
+    return { message: 'Contribuição removida com sucesso' };
+  }
+
+  // ─── FINANCIAMENTO (⑧) — ligação a CRM → Funders ─────
+
+  async getFunding(partnerId: string) {
+    const partner = await this.findOne(partnerId);
+    const links = await this.prisma.read.partnerFunderLink.findMany({
+      where: { partnerId, deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      include: { funder: { select: { id: true, code: true, name: true, type: true } } },
+    });
+    // Totais por moeda: somar moedas diferentes seria enganador
+    const totalsByCurrency: Record<string, number> = {};
+    for (const l of links) {
+      totalsByCurrency[l.currency] = (totalsByCurrency[l.currency] ?? 0) + (l.amountFunded ?? 0);
+    }
+    return { isFunder: partner.isFunder, links, totalsByCurrency };
+  }
+
+  private async findFunderLink(partnerId: string, linkId: string) {
+    const link = await this.prisma.partnerFunderLink.findFirst({
+      where: { id: linkId, partnerId, deletedAt: null },
+    });
+    if (!link) throw new NotFoundException('Ligação ao financiador não encontrada');
+    return link;
+  }
+
+  async addFunderLink(partnerId: string, dto: CreatePartnerFunderLinkDto, userId: number) {
+    await this.findOne(partnerId);
+    this.assertDateRange(dto.periodStart, dto.periodEnd);
+    const funder = await this.prisma.funder.findFirst({
+      where: { id: dto.funderId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!funder) throw new BadRequestException('Financiador não encontrado');
+    const { periodStart, periodEnd, ...rest } = dto;
+    const link = await this.prisma.$transaction(async tx => {
+      // Ter um financiador associado implica que o parceiro exerce o papel de financiador
+      await tx.partner.update({ where: { id: partnerId }, data: { isFunder: true } });
+      return tx.partnerFunderLink.create({
+        data: {
+          ...rest,
+          ...(periodStart && { periodStart: new Date(periodStart) }),
+          ...(periodEnd && { periodEnd: new Date(periodEnd) }),
+          partnerId,
+        },
+        include: { funder: { select: { id: true, code: true, name: true, type: true } } },
+      });
+    });
+    await this.audit.logEntity(userId, 'CREATE', 'PartnerFunderLink', link.id, {
+      partnerId,
+      funderId: dto.funderId,
+    });
+    return link;
+  }
+
+  async updateFunderLink(
+    partnerId: string,
+    linkId: string,
+    dto: UpdatePartnerFunderLinkDto,
+    userId: number,
+  ) {
+    const current = await this.findFunderLink(partnerId, linkId);
+    this.assertDateRange(
+      dto.periodStart ?? current.periodStart,
+      dto.periodEnd ?? current.periodEnd,
+    );
+    const { periodStart, periodEnd, ...rest } = dto;
+    const updated = await this.prisma.partnerFunderLink.update({
+      where: { id: linkId },
+      data: {
+        ...rest,
+        ...(periodStart && { periodStart: new Date(periodStart) }),
+        ...(periodEnd && { periodEnd: new Date(periodEnd) }),
+      },
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'PartnerFunderLink', linkId, dto);
+    return updated;
+  }
+
+  async removeFunderLink(partnerId: string, linkId: string, userId: number) {
+    await this.findFunderLink(partnerId, linkId);
+    await this.prisma.partnerFunderLink.update({
+      where: { id: linkId },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.logEntity(userId, 'DELETE', 'PartnerFunderLink', linkId, { partnerId });
+    return { message: 'Ligação ao financiador removida com sucesso' };
+  }
+
+  // ─── BENEFICIÁRIOS RELACIONADOS (⑨) ─────────────────
+  // Só leitura: cruza os programas do parceiro (PartnerProgram.program) com as
+  // participações já registadas em CRM → Beneficiários. Nada é duplicado.
+
+  private async beneficiaryParticipationWhere(
+    partnerId: string,
+    program?: string,
+  ): Promise<Prisma.BeneficiaryParticipationWhereInput | null> {
+    const programs = await this.prisma.read.partnerProgram.findMany({
+      where: { partnerId, deletedAt: null },
+      select: { program: true },
+    });
+    // O filtro é case-insensitive, por isso "Crescer" e "crescer" contam como um só
+    const byLower = new Map(programs.map(p => [p.program.trim().toLowerCase(), p.program.trim()]));
+    let names = [...byLower.values()];
+    if (program) names = names.filter(n => n.toLowerCase() === program.trim().toLowerCase());
+    if (!names.length) return null;
+    return {
+      deletedAt: null,
+      beneficiary: { deletedAt: null },
+      OR: names.map(n => ({ program: { equals: n, mode: 'insensitive' as const } })),
+    };
+  }
+
+  async getBeneficiariesSummary(partnerId: string) {
+    await this.findOne(partnerId);
+    const where = await this.beneficiaryParticipationWhere(partnerId);
+    if (!where) {
+      return {
+        programs: [],
+        totalBeneficiaries: 0,
+        totalParticipations: 0,
+        provinces: [],
+        byStatus: [],
+      };
+    }
+    const [byProgram, byStatus, provinces, distinct] = await Promise.all([
+      this.prisma.read.beneficiaryParticipation.groupBy({
+        by: ['program'],
+        where,
+        _count: { id: true },
+      }),
+      this.prisma.read.beneficiaryParticipation.groupBy({
+        by: ['status'],
+        where,
+        _count: { id: true },
+      }),
+      this.prisma.read.beneficiaryParticipation.groupBy({
+        by: ['province'],
+        where: { ...where, province: { not: null } },
+        _count: { id: true },
+      }),
+      this.prisma.read.beneficiaryParticipation.groupBy({ by: ['beneficiaryId'], where }),
+    ]);
+    return {
+      programs: byProgram.map(p => ({ program: p.program, participations: p._count.id })),
+      totalBeneficiaries: distinct.length,
+      totalParticipations: byProgram.reduce((s, p) => s + p._count.id, 0),
+      provinces: provinces.map(p => ({ province: p.province, participations: p._count.id })),
+      byStatus: byStatus.map(s => ({ status: s.status, participations: s._count.id })),
+    };
+  }
+
+  async getRelatedBeneficiaries(partnerId: string, page = 1, limit = 20, program?: string) {
+    await this.findOne(partnerId);
+    const { skip, take } = calculatePagination(page, limit);
+    const where = await this.beneficiaryParticipationWhere(partnerId, program);
+    if (!where) return buildPaginatedResponse([], 0, page, limit);
+    const [data, total] = await Promise.all([
+      this.prisma.read.beneficiaryParticipation.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          beneficiary: {
+            select: { id: true, code: true, fullName: true, province: true, status: true },
+          },
+        },
+      }),
+      this.prisma.read.beneficiaryParticipation.count({ where }),
+    ]);
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   // ─── INTERACÇÕES ─────────────────────────────────────

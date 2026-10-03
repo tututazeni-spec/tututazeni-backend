@@ -11203,18 +11203,23 @@ model Partner {
   // ④ Tipo de parceria (multi-selecção)
   partnershipTypes PartnershipKind[]
 
+  // ⑧ Financiamento
+  isFunder Boolean @default(false)
+
   createdById Int
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  createdBy    User                 @relation("PartnerCreator", fields: [createdById], references: [id])
-  assignedTo   User?                @relation("PartnerOwner", fields: [assignedToId], references: [id])
-  interactions PartnerInteraction[]
-  milestones   PartnerMilestone[]
-  contacts     PartnerContact[]
-  programs     PartnerProgram[]
-  agreements   PartnerAgreement[]
+  createdBy     User                  @relation("PartnerCreator", fields: [createdById], references: [id])
+  assignedTo    User?                 @relation("PartnerOwner", fields: [assignedToId], references: [id])
+  interactions  PartnerInteraction[]
+  milestones    PartnerMilestone[]
+  contacts      PartnerContact[]
+  programs      PartnerProgram[]
+  agreements    PartnerAgreement[]
+  contributions PartnerContribution[]
+  funderLinks   PartnerFunderLink[]
 
   @@index([type])
   @@index([tier])
@@ -11265,8 +11270,9 @@ model PartnerProgram {
   updatedAt        DateTime             @updatedAt
   deletedAt        DateTime?
 
-  partner     Partner @relation(fields: [partnerId], references: [id])
-  responsible User?   @relation("PartnerProgramResponsible", fields: [responsibleId], references: [id])
+  partner       Partner               @relation(fields: [partnerId], references: [id])
+  responsible   User?                 @relation("PartnerProgramResponsible", fields: [responsibleId], references: [id])
+  contributions PartnerContribution[]
 
   @@index([partnerId])
   @@index([program])
@@ -11379,6 +11385,80 @@ model PartnerMilestone {
   @@index([status])
   @@index([dueDate])
   @@index([deletedAt])
+}
+
+// ⑦ Contribuição do parceiro
+model PartnerContribution {
+  id             String                         @id @default(cuid())
+  partnerId      String
+  programId      String?
+  type           PartnerContributionType
+  description    String?
+  quantity       Float?
+  estimatedValue Float?
+  currency       String                         @default("AOA")
+  periodicity    PartnerContributionPeriodicity @default(ONE_TIME)
+  startDate      DateTime?
+  endDate        DateTime?
+  createdAt      DateTime                       @default(now())
+  updatedAt      DateTime                       @updatedAt
+  deletedAt      DateTime?
+
+  partner Partner         @relation(fields: [partnerId], references: [id])
+  program PartnerProgram? @relation(fields: [programId], references: [id])
+
+  @@index([partnerId])
+  @@index([programId])
+  @@index([type])
+  @@index([deletedAt])
+}
+
+// ⑧ Financiamento: liga o parceiro a Funders existentes (sem duplicar dados do Funder)
+model PartnerFunderLink {
+  id             String    @id @default(cuid())
+  partnerId      String
+  funderId       String
+  fundedPrograms String[]
+  amountFunded   Float?
+  currency       String    @default("AOA")
+  periodStart    DateTime?
+  periodEnd      DateTime?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  partner Partner @relation(fields: [partnerId], references: [id])
+  funder  Funder  @relation(fields: [funderId], references: [id])
+
+  @@index([partnerId])
+  @@index([funderId])
+  @@index([deletedAt])
+}
+
+enum PartnerContributionType {
+  FINANCIAL
+  HUMAN_RESOURCES
+  EQUIPMENT
+  FACILITIES
+  TRAINING
+  CONTENT
+  TECHNOLOGY
+  SERVICES
+  LOGISTICS
+  SCHOLARSHIPS
+  MATERIALS
+  NETWORK
+  TECHNICAL_KNOWLEDGE
+  OTHER
+}
+
+enum PartnerContributionPeriodicity {
+  ONE_TIME
+  MONTHLY
+  QUARTERLY
+  SEMIANNUAL
+  ANNUAL
 }
 
 enum PartnerType {
@@ -11548,6 +11628,7 @@ model Funder {
   grants       FundingGrant[]
   interactions FunderInteraction[]
   reports      FunderReport[]
+  partnerLinks PartnerFunderLink[]
 
   @@index([type])
   @@index([status])

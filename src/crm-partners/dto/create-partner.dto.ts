@@ -12,6 +12,7 @@ import {
   Length,
   ValidateNested,
   ArrayMaxSize,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -292,6 +293,13 @@ export class CreatePartnerDto {
   @IsArray()
   @IsEnum(PartnershipKind, { each: true })
   partnershipTypes?: PartnershipKind[];
+
+  // ─── ⑧ Financiamento ───────────────────────────────
+
+  @ApiPropertyOptional({ description: 'O parceiro também financia iniciativas?', default: false })
+  @IsOptional()
+  @IsBoolean()
+  isFunder?: boolean;
 
   // ─── ③ Contactos ───────────────────────────────────
 
