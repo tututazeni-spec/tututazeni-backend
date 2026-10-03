@@ -24,6 +24,10 @@ import {
   ConditionRuleDto,
   ConditionsLogic,
   CommunicationChannel,
+  RuleFilterDto,
+  RuleListStatus,
+  OverviewFilterDto,
+  OverviewGranularity,
 } from './automation.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
@@ -282,6 +286,37 @@ const DEFAULT_RULES: Omit<CreateRuleDto, never>[] = [
 // SERVICE
 // ─────────────────────────────────────────────────────────────────
 
+/** Estado derivado para a listagem (não há coluna): pausada > erro > activa. */
+function deriveRuleStatus(r: { active: boolean; lastRunStatus: string | null }): RuleListStatus {
+  if (!r.active) return RuleListStatus.PAUSED;
+  return r.lastRunStatus === 'FAILED' ? RuleListStatus.ERROR : RuleListStatus.ACTIVE;
+}
+
+/** Minutos de trabalho manual assumidos por execução bem-sucedida — apenas uma estimativa. */
+const MANUAL_MINUTES_PER_EXECUTION = 5;
+
+function bucketKey(d: Date, g: OverviewGranularity): string {
+  const iso = d.toISOString();
+  if (g === OverviewGranularity.MONTH) return iso.slice(0, 7);
+  if (g === OverviewGranularity.WEEK) {
+    const day = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    day.setUTCDate(day.getUTCDate() - ((day.getUTCDay() + 6) % 7)); // segunda-feira
+    return day.toISOString().slice(0, 10);
+  }
+  return iso.slice(0, 10);
+}
+
+function classifyFailure(message: string | null): string {
+  const m = (message ?? '').toLowerCase();
+  if (!m) return 'Sem detalhe';
+  if (/forbidden|permiss|unauthori|403|401/.test(m)) return 'Permissões';
+  if (/not found|não encontrad|nao encontrad|404/.test(m)) return 'Registo não encontrado';
+  if (/valid|inválid|invalid|obrigat/.test(m)) return 'Validação de dados';
+  if (/timeout|econn|network|fetch|socket|enotfound/.test(m)) return 'Rede / tempo limite';
+  if (/mail|smtp|sms|entrega|deliver/.test(m)) return 'Entrega de comunicação';
+  return 'Outros';
+}
+
 @Injectable()
 export class AutomationService {
   private readonly logger = new Logger(AutomationService.name);
@@ -372,40 +407,272 @@ export class AutomationService {
   // RULES — CRUD
   // ══════════════════════════════════════════════════════
 
-  async getRules(category?: AutomationCategory) {
+  /**
+   * Lista "Todas as Automações" (docs/modulo_automation.md §3). Aceita a
+   * categoria solta (chamadores antigos) ou o conjunto completo de filtros.
+   * O estado é derivado: não há coluna dedicada (ver RuleListStatus).
+   */
+  async getRules(filterOrCategory?: AutomationCategory | RuleFilterDto) {
+    const f: RuleFilterDto =
+      typeof filterOrCategory === 'string'
+        ? { category: filterOrCategory }
+        : (filterOrCategory ?? {});
     const where: Prisma.AutomationRuleWhereInput = {};
-    if (category) where.category = category;
+    const and: Prisma.AutomationRuleWhereInput[] = [];
+
+    if (f.category) where.category = f.category;
+    if (f.module) where.module = f.module;
+    if (f.ownerId) where.ownerId = f.ownerId;
+    if (f.search?.trim()) {
+      const q = f.search.trim();
+      and.push({
+        OR: [
+          { name: { contains: q, mode: 'insensitive' } },
+          { code: { contains: q, mode: 'insensitive' } },
+        ],
+      });
+    }
+    if (f.status === RuleListStatus.PAUSED) where.active = false;
+    if (f.status === RuleListStatus.ACTIVE) {
+      where.active = true;
+      and.push({ OR: [{ lastRunStatus: null }, { lastRunStatus: { not: 'FAILED' } }] });
+    }
+    if (f.status === RuleListStatus.ERROR) {
+      where.active = true;
+      where.lastRunStatus = 'FAILED';
+    }
+    if (f.createdFrom || f.createdTo) {
+      where.createdAt = {
+        ...(f.createdFrom ? { gte: new Date(f.createdFrom) } : {}),
+        ...(f.createdTo ? { lte: new Date(f.createdTo) } : {}),
+      };
+    }
+    if (f.lastRunFrom || f.lastRunTo) {
+      where.lastRunAt = {
+        ...(f.lastRunFrom ? { gte: new Date(f.lastRunFrom) } : {}),
+        ...(f.lastRunTo ? { lte: new Date(f.lastRunTo) } : {}),
+      };
+    }
+    if (f.withFailures) where.executions = { some: { status: 'FAILED' } };
+    if (and.length) where.AND = and;
 
     const rules = await this.prisma.read.automationRule.findMany({
       where,
       orderBy: [{ active: 'desc' }, { priority: 'asc' }, { name: 'asc' }],
     });
 
-    // Enrich with execution stats
-    return Promise.all(
-      rules.map(async r => {
-        const [total, success, failed] = await Promise.all([
-          this.prisma.automationExecution.count({ where: { ruleId: r.id } }),
-          this.prisma.automationExecution.count({
-            where: { ruleId: r.id, status: 'SUCCESS' },
-          }),
-          this.prisma.automationExecution.count({
-            where: { ruleId: r.id, status: 'FAILED' },
-          }),
-        ]);
-        return {
-          ...r,
-          condition: parseCondition(r.condition),
-          actionParams: parseParams(r.actionParams),
-          stats: {
-            total,
-            success,
-            failed,
-            successRate: total > 0 ? +((success / total) * 100).toFixed(1) : 0,
-          },
-        };
+    // Uma só query agregada em vez de 3 counts por regra.
+    const ids = rules.map(r => r.id);
+    const grouped = ids.length
+      ? await this.prisma.automationExecution.groupBy({
+          by: ['ruleId', 'status'],
+          where: { ruleId: { in: ids } },
+          _count: { _all: true },
+        })
+      : [];
+    const counts = new Map<number, { total: number; success: number; failed: number }>();
+    for (const g of grouped) {
+      const c = counts.get(g.ruleId) ?? { total: 0, success: 0, failed: 0 };
+      c.total += g._count._all;
+      if (g.status === 'SUCCESS') c.success += g._count._all;
+      if (g.status === 'FAILED') c.failed += g._count._all;
+      counts.set(g.ruleId, c);
+    }
+
+    const ownerIds = [...new Set(rules.map(r => r.ownerId ?? r.createdBy))]
+      .filter((v): v is string => !!v && /^\d+$/.test(v))
+      .map(Number);
+    const owners = ownerIds.length
+      ? await this.prisma.read.user.findMany({
+          where: { id: { in: ownerIds } },
+          select: { id: true, fullName: true },
+        })
+      : [];
+    const ownerName = new Map(owners.map(u => [String(u.id), u.fullName]));
+
+    return rules.map(r => {
+      const c = counts.get(r.id) ?? { total: 0, success: 0, failed: 0 };
+      const ownerKey = r.ownerId ?? r.createdBy;
+      return {
+        ...r,
+        condition: parseCondition(r.condition),
+        actionParams: parseParams(r.actionParams),
+        status: deriveRuleStatus(r),
+        ownerName: ownerName.get(ownerKey) ?? null,
+        stats: {
+          total: c.total,
+          success: c.success,
+          failed: c.failed,
+          successRate: c.total > 0 ? +((c.success / c.total) * 100).toFixed(1) : 0,
+        },
+      };
+    });
+  }
+
+  /** Exportação CSV da listagem filtrada (mesmos filtros de getRules). */
+  async exportRulesCsv(filters: RuleFilterDto = {}) {
+    const rules = await this.getRules(filters);
+    const esc = (v: unknown) => {
+      const t =
+        v === null || v === undefined ? '' : v instanceof Date ? v.toISOString() : String(v);
+      // Neutraliza injecção de fórmulas em Excel/Sheets.
+      const safe = /^[=+\-@]/.test(t) ? `'${t}` : t;
+      return /[",\n;]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+    };
+    const header = [
+      'Código',
+      'Nome',
+      'Descrição',
+      'Módulo',
+      'Categoria',
+      'Gatilho',
+      'Acção',
+      'Responsável',
+      'Estado',
+      'Última execução',
+      'Execuções',
+      'Taxa de sucesso (%)',
+      'Criada em',
+      'Actualizada em',
+    ];
+    const rows = rules.map(r => [
+      r.code,
+      r.name,
+      r.description,
+      r.module,
+      r.category,
+      r.trigger,
+      r.action,
+      r.ownerName ?? r.ownerId,
+      r.status,
+      r.lastRunAt,
+      r.stats.total,
+      r.stats.successRate,
+      r.createdAt,
+      r.updatedAt,
+    ]);
+    return '﻿' + [header, ...rows].map(row => row.map(esc).join(';')).join('\r\n');
+  }
+
+  // ══════════════════════════════════════════════════════
+  // VISÃO GERAL — dashboard (docs/modulo_automation.md §2)
+  // ══════════════════════════════════════════════════════
+
+  async getOverview(f: OverviewFilterDto = {}) {
+    const to = f.to ? new Date(f.to) : new Date();
+    const from = f.from ? new Date(f.from) : new Date(to.getTime() - 30 * 24 * 3600 * 1000);
+    const granularity = f.granularity ?? OverviewGranularity.DAY;
+
+    const ruleWhere: Prisma.AutomationRuleWhereInput = {
+      ...(f.module ? { module: f.module } : {}),
+      ...(f.category ? { category: f.category } : {}),
+    };
+    const execWhere: Prisma.AutomationExecutionWhereInput = {
+      startedAt: { gte: from, lte: to },
+      ...(f.status ? { status: f.status } : {}),
+      ...(Object.keys(ruleWhere).length ? { rule: ruleWhere } : {}),
+    };
+
+    const EXEC_CAP = 50000;
+    const [totalRules, activeRules, executions] = await Promise.all([
+      this.prisma.read.automationRule.count({ where: ruleWhere }),
+      this.prisma.read.automationRule.count({ where: { ...ruleWhere, active: true } }),
+      this.prisma.automationExecution.findMany({
+        where: execWhere,
+        select: {
+          status: true,
+          startedAt: true,
+          errorMessage: true,
+          rule: { select: { module: true, category: true } },
+        },
+        orderBy: { startedAt: 'asc' },
+        take: EXEC_CAP + 1,
       }),
-    );
+    ]);
+    const truncated = executions.length > EXEC_CAP;
+    const rows = truncated ? executions.slice(0, EXEC_CAP) : executions;
+
+    const byStatus: Record<string, number> = {
+      SUCCESS: 0,
+      FAILED: 0,
+      PENDING: 0,
+      RUNNING: 0,
+      SKIPPED: 0,
+    };
+    const timeline = new Map<string, { total: number; success: number; failed: number }>();
+    const byModule = new Map<string, number>();
+    const failureCauses = new Map<string, number>();
+
+    for (const e of rows) {
+      byStatus[e.status] = (byStatus[e.status] ?? 0) + 1;
+
+      const key = bucketKey(e.startedAt, granularity);
+      const b = timeline.get(key) ?? { total: 0, success: 0, failed: 0 };
+      b.total++;
+      if (e.status === 'SUCCESS') b.success++;
+      if (e.status === 'FAILED') b.failed++;
+      timeline.set(key, b);
+
+      const mod = e.rule?.module ?? e.rule?.category ?? 'GERAL';
+      byModule.set(mod, (byModule.get(mod) ?? 0) + 1);
+
+      if (e.status === 'FAILED') {
+        const cause = classifyFailure(e.errorMessage);
+        failureCauses.set(cause, (failureCauses.get(cause) ?? 0) + 1);
+      }
+    }
+
+    const finished = byStatus.SUCCESS + byStatus.FAILED;
+    const savedMinutes = byStatus.SUCCESS * MANUAL_MINUTES_PER_EXECUTION;
+    const sortDesc = (m: Map<string, number>) =>
+      [...m.entries()]
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count);
+
+    return {
+      period: { from, to, granularity },
+      cards: {
+        totalRules,
+        activeRules,
+        executions: rows.length,
+        failedExecutions: byStatus.FAILED,
+        // Só execuções: aprovações/tarefas ainda não têm modelo (ver §8 do spec).
+        waiting: byStatus.PENDING + byStatus.RUNNING,
+        timeSaved: {
+          minutes: savedMinutes,
+          hours: +(savedMinutes / 60).toFixed(1),
+          estimate: true,
+          basisMinutesPerExecution: MANUAL_MINUTES_PER_EXECUTION,
+        },
+      },
+      byStatus,
+      timeline: [...timeline.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, v]) => ({
+          date,
+          ...v,
+          successRate:
+            v.success + v.failed > 0
+              ? +((v.success / (v.success + v.failed)) * 100).toFixed(1)
+              : null,
+        })),
+      byModule: sortDesc(byModule),
+      failureCauses: sortDesc(failureCauses),
+      successRate: finished > 0 ? +((byStatus.SUCCESS / finished) * 100).toFixed(1) : null,
+      truncated,
+      generatedAt: new Date(),
+    };
+  }
+
+  /** Módulos distintos com regras — alimenta o filtro "Módulo". */
+  async getModules() {
+    const rows = await this.prisma.read.automationRule.findMany({
+      where: { module: { not: null } },
+      select: { module: true },
+      distinct: ['module'],
+      orderBy: { module: 'asc' },
+    });
+    return rows.map(r => r.module as string);
   }
 
   async getRule(id: number) {

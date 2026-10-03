@@ -12,7 +12,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { AutomationCategory, ExecutionStatus } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
@@ -416,4 +416,80 @@ export class ExecutionFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) ruleId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() from?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() to?: string;
+}
+
+// ─── Listagem "Todas as Automações" (docs/modulo_automation.md §3) ─
+
+/** Estado derivado da regra — não há coluna dedicada; vem de active + lastRunStatus. */
+export enum RuleListStatus {
+  ACTIVE = 'ACTIVE',
+  PAUSED = 'PAUSED',
+  ERROR = 'ERROR',
+}
+
+const toBool = ({ value }: { value: unknown }) =>
+  value === 'true' || value === true
+    ? true
+    : value === 'false' || value === false
+      ? false
+      : undefined;
+
+export class RuleFilterDto {
+  @ApiPropertyOptional({ description: 'Pesquisa por nome ou código' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() module?: string;
+  @ApiPropertyOptional({ enum: AutomationCategory })
+  @IsOptional()
+  @IsEnum(AutomationCategory)
+  category?: AutomationCategory;
+  @ApiPropertyOptional({ enum: RuleListStatus })
+  @IsOptional()
+  @IsEnum(RuleListStatus)
+  status?: RuleListStatus;
+  @ApiPropertyOptional({ description: 'userId do responsável' })
+  @IsOptional()
+  @IsString()
+  ownerId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() createdFrom?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() createdTo?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() lastRunFrom?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() lastRunTo?: string;
+  @ApiPropertyOptional({ description: 'Só regras com pelo menos uma execução falhada' })
+  @IsOptional()
+  @Transform(toBool)
+  @IsBoolean()
+  withFailures?: boolean;
+}
+
+// ─── Visão Geral (docs/modulo_automation.md §2) ───────────────────
+
+export enum OverviewGranularity {
+  DAY = 'day',
+  WEEK = 'week',
+  MONTH = 'month',
+}
+
+export class OverviewFilterDto {
+  @ApiPropertyOptional({ description: 'Início do período (ISO). Omissão: últimos 30 dias' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() module?: string;
+  @ApiPropertyOptional({ enum: AutomationCategory })
+  @IsOptional()
+  @IsEnum(AutomationCategory)
+  category?: AutomationCategory;
+  @ApiPropertyOptional({ enum: ExecutionStatus })
+  @IsOptional()
+  @IsEnum(ExecutionStatus)
+  status?: ExecutionStatus;
+  @ApiPropertyOptional({ enum: OverviewGranularity })
+  @IsOptional()
+  @IsEnum(OverviewGranularity)
+  granularity?: OverviewGranularity;
 }

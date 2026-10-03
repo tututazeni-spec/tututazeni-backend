@@ -23,6 +23,7 @@ const mockSms = {
 const makeExec = () => ({
   findMany: jest.fn().mockResolvedValue([]),
   count: jest.fn().mockResolvedValue(0),
+  groupBy: jest.fn().mockResolvedValue([]),
   create: jest.fn().mockResolvedValue({}),
   update: jest.fn().mockResolvedValue({}),
   delete: jest.fn().mockResolvedValue({}),
@@ -98,11 +99,21 @@ describe('AutomationService (additional)', () => {
   describe('getRules', () => {
     it('deve retornar regras com estatísticas', async () => {
       mockPrisma.automationRule.findMany.mockResolvedValue([baseRule]);
-      mockPrisma.automationExecution.count.mockResolvedValue(5);
+      mockPrisma.automationExecution.groupBy.mockResolvedValue([
+        { ruleId: baseRule.id, status: 'SUCCESS', _count: { _all: 5 } },
+      ]);
       const result = await service.getRules();
       expect(result).toHaveLength(1);
       expect(result[0]).toHaveProperty('stats');
       expect(result[0].stats.total).toBe(5);
+    });
+
+    it('deve derivar o estado e filtrar por estado ERROR', async () => {
+      mockPrisma.automationRule.findMany.mockResolvedValue([]);
+      await service.getRules({ status: 'ERROR' as any });
+      expect(mockPrisma.automationRule.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { active: true, lastRunStatus: 'FAILED' } }),
+      );
     });
 
     it('deve filtrar por categoria', async () => {

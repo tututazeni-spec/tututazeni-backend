@@ -37,6 +37,7 @@ const automationExecutionMock = {
   create: jest.fn().mockResolvedValue({ id: 'exec-1' }),
   update: jest.fn().mockResolvedValue({}),
   count: jest.fn().mockResolvedValue(0),
+  groupBy: jest.fn().mockResolvedValue([]),
 };
 
 const mockPrisma = {

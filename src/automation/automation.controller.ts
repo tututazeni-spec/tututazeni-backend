@@ -24,7 +24,8 @@ import {
   UpdateRuleDto,
   TriggerEventDto,
   ExecutionFilterDto,
-  AutomationCategory,
+  RuleFilterDto,
+  OverviewFilterDto,
 } from './automation.dto';
 import { Role } from '../auth/enums/role.enum';
 
@@ -42,8 +43,33 @@ export class AutomationController {
 
   @Get('rules')
   @ApiOperation({ summary: 'Listar regras com stats de execução' })
-  rules(@Query('category') category?: AutomationCategory) {
-    return this.svc.getRules(category);
+  rules(@Query() filters: RuleFilterDto) {
+    return this.svc.getRules(filters);
+  }
+
+  @Get('rules/export')
+  @ApiOperation({ summary: 'Exportar a listagem filtrada de regras (CSV)' })
+  async exportRules(@Query() filters: RuleFilterDto) {
+    const content = await this.svc.exportRulesCsv(filters);
+    return { filename: `automacoes-${new Date().toISOString().slice(0, 10)}.csv`, content };
+  }
+
+  @Get('modules')
+  @ApiOperation({ summary: 'Módulos de origem existentes (filtro)' })
+  modules() {
+    return this.svc.getModules();
+  }
+
+  @Get('overview')
+  @ApiOperation({ summary: 'Visão Geral — cards e gráficos filtráveis por período/módulo/estado' })
+  overview(@Query() filters: OverviewFilterDto) {
+    return this.svc.getOverview(filters);
+  }
+
+  @Post('rules/:id/run')
+  @ApiOperation({ summary: 'Executar manualmente uma regra (a UI exige confirmação)' })
+  runOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.runRule(id, { manual: true }, user.id);
   }
 
   @Post('rules')
