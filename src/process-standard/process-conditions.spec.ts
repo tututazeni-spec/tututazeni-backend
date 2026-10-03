@@ -39,7 +39,10 @@ describe('workflow', () => {
       type: 'TASK',
       responsibleRole: 'RH',
       dependsOnOrders: [1],
-      entryConditions: { logic: 'AND', rows: [{ field: 'step:1.result', operator: 'equals', value: 'APPROVED' }] },
+      entryConditions: {
+        logic: 'AND',
+        rows: [{ field: 'step:1.result', operator: 'equals', value: 'APPROVED' }],
+      },
     },
     {
       order: 3,
@@ -47,7 +50,10 @@ describe('workflow', () => {
       type: 'TASK',
       responsibleRole: 'RH',
       dependsOnOrders: [1],
-      entryConditions: { logic: 'AND', rows: [{ field: 'step:1.result', operator: 'equals', value: 'REJECTED' }] },
+      entryConditions: {
+        logic: 'AND',
+        rows: [{ field: 'step:1.result', operator: 'equals', value: 'REJECTED' }],
+      },
     },
     { order: 4, title: 'Fim', type: 'END', dependsOnOrders: [2, 3] },
   ];
@@ -64,7 +70,12 @@ describe('workflow', () => {
   it('valida: aprovação sem aprovador e condição para etapa inexistente', () => {
     const bad = validateWorkflow([
       { order: 0, title: 'A', type: 'REVIEW' },
-      { order: 1, title: 'B', type: 'END', entryConditions: { rows: [{ field: 'step:9.result', operator: 'equals', value: 'x' }] } },
+      {
+        order: 1,
+        title: 'B',
+        type: 'END',
+        entryConditions: { rows: [{ field: 'step:9.result', operator: 'equals', value: 'x' }] },
+      },
     ]);
     expect(bad.valid).toBe(false);
     expect(bad.errors.join(' ')).toMatch(/aprovador/);

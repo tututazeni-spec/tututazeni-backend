@@ -658,7 +658,10 @@ export class AvatarTrainingReportsService {
       const width = doc.page.width - left - doc.page.margins.right;
       const bottom = () => doc.page.height - doc.page.margins.bottom;
 
-      doc.font('Helvetica-Bold').fontSize(16).text(report.title ?? `Avatar Training — ${type}`);
+      doc
+        .font('Helvetica-Bold')
+        .fontSize(16)
+        .text(report.title ?? `Avatar Training — ${type}`);
       doc
         .font('Helvetica')
         .fontSize(8)
@@ -677,8 +680,7 @@ export class AvatarTrainingReportsService {
         const colW = width / columns.length;
         const drawRow = (cells: string[], bold: boolean) => {
           doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(7);
-          const h =
-            Math.max(...cells.map(c => doc.heightOfString(c, { width: colW - 4 }))) + 4;
+          const h = Math.max(...cells.map(c => doc.heightOfString(c, { width: colW - 4 }))) + 4;
           if (doc.y + h > bottom()) {
             doc.addPage();
             drawRow(columns, true);
@@ -696,7 +698,11 @@ export class AvatarTrainingReportsService {
             .stroke();
         };
         drawRow(columns, true);
-        for (const r of rows) drawRow(columns.map(c => text(r[c]).slice(0, 300)), false);
+        for (const r of rows)
+          drawRow(
+            columns.map(c => text(r[c]).slice(0, 300)),
+            false,
+          );
       }
       if (meta.truncated) {
         doc.moveDown().font('Helvetica-Oblique').fontSize(8).text('Resultados truncados');
