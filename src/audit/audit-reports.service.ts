@@ -3,7 +3,7 @@
 // unidade, tipo de evento e gravidade, com pré-visualização e exportação CSV/XLSX/PDF.
 // Cada exportação fica guardada em AuditExport (§11) e registada como evento de auditoria
 // com autor, data, filtros e resultado.
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import PDFDocument from 'pdfkit';
 import { PrismaService } from '../prisma/prisma.service';
@@ -238,6 +238,9 @@ export class AuditReportsService {
   // ─── construção ───────────────────────────────────────────────────────────
 
   async build(dto: AuditReportDto, viewerRole?: string | null): Promise<AuditReportResult> {
+    if (!(await this.policy.can('view', viewerRole))) {
+      throw new ForbiddenException('O seu perfil não tem permissão para consultar auditoria');
+    }
     const type = dto.type;
     let columns: string[] = [];
     let rows: ReportRow[] = [];
@@ -709,6 +712,9 @@ export class AuditReportsService {
   }
 
   async export(dto: AuditReportExportDto, actor: AuditActor, viewerRole?: string | null) {
+    if (!(await this.policy.can('export', viewerRole))) {
+      throw new ForbiddenException('O seu perfil não tem permissão para exportar auditoria');
+    }
     const { format, confidentiality, ...rest } = dto;
     const filters = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
     try {
