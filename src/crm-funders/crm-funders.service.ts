@@ -30,6 +30,14 @@ import {
   CreateFunderIndicatorDto,
   UpdateFunderIndicatorDto,
   FilterFunderIndicatorDto,
+  CreateFunderDocumentDto,
+  UpdateFunderDocumentDto,
+  CreateFunderDocumentVersionDto,
+  UpdateFunderResponsibleDto,
+  UpdateFunderNotesDto,
+  CreateFunderCustomFieldDto,
+  UpdateFunderCustomFieldDto,
+  UpsertFunderConsentDto,
   PaginationFilterDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
@@ -213,10 +221,14 @@ export class CrmFundersService {
     const current = await this.findOne(id);
     this.assertRanges({ ...current, ...dto });
     const { relationshipStart, nextReportDue, registeredAt, ...rest } = dto;
+    const managerChanged =
+      dto.assignedToId !== undefined && dto.assignedToId !== current.assignedToId;
     const updated = await this.prisma.funder.update({
       where: { id },
       data: {
         ...rest,
+        ...(managerChanged && { assignedAt: new Date() }),
+        updatedById: userId,
         ...(registeredAt && { registeredAt: new Date(registeredAt) }),
         ...(relationshipStart && {
           relationshipStart: new Date(relationshipStart),
@@ -1797,5 +1809,523 @@ export class CrmFundersService {
         totalPending: totalCommitted - totalReceived,
       },
     });
+  }
+
+  // ─── DOCUMENTOS (⑯) ──────────────────────────────────
+  // Um documento é identificado por (financiador, nome); cada nova versão é uma linha
+  // com o número seguinte, por isso o histórico fica sempre acessível.
+
+  async getDocuments(funderId: string, includeHistory = false) {
+    await this.findOne(funderId);
+    const docs = await this.prisma.read.funderDocument.findMany({
+      where: { funderId, deletedAt: null },
+      orderBy: [{ name: 'asc' }, { version: 'desc' }],
+      include: { responsible: { select: { id: true, fullName: true } } },
+    });
+    const now = new Date();
+    // Validade vencida aparece como EXPIRED sem precisar de job a actualizar a coluna
+    const withStatus = docs.map(d =>
+      d.status === 'VALID' && d.validUntil && d.validUntil < now
+        ? { ...d, status: 'EXPIRED' as const }
+        : d,
+    );
+    if (includeHistory) return withStatus;
+    // ordenado por versão desc dentro do nome → a primeira de cada nome é a mais recente
+    const seen = new Set<string>();
+    return withStatus.filter(d => {
+      if (seen.has(d.name)) return false;
+      seen.add(d.name);
+      return true;
+    });
+  }
+
+  private async findDocument(funderId: string, documentId: string) {
+    const doc = await this.prisma.funderDocument.findFirst({
+      where: { id: documentId, funderId, deletedAt: null },
+    });
+    if (!doc) throw new NotFoundException('Documento não encontrado');
+    return doc;
+  }
+
+  async getDocumentHistory(funderId: string, documentId: string) {
+    const doc = await this.findDocument(funderId, documentId);
+    return this.prisma.read.funderDocument.findMany({
+      where: { funderId, name: doc.name, deletedAt: null },
+      orderBy: { version: 'desc' },
+      include: { uploadedBy: { select: { id: true, fullName: true } } },
+    });
+  }
+
+  async addDocument(funderId: string, dto: CreateFunderDocumentDto, userId: number) {
+    await this.findOne(funderId);
+    await this.assertUserExists(dto.responsibleId);
+    this.assertDateRange(dto.documentDate, dto.validUntil);
+    const existing = await this.prisma.funderDocument.findFirst({
+      where: { funderId, name: dto.name, deletedAt: null },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new BadRequestException(
+        'Já existe um documento com este nome — carregue uma nova versão em vez de o duplicar',
+      );
+    }
+    const { documentDate, validUntil, ...rest } = dto;
+    // O @@unique cobre também versões apagadas, por isso a numeração continua a partir delas
+    const last = await this.prisma.funderDocument.aggregate({
+      where: { funderId, name: dto.name },
+      _max: { version: true },
+    });
+    const doc = await this.prisma.funderDocument.create({
+      data: {
+        ...rest,
+        ...(documentDate && { documentDate: new Date(documentDate) }),
+        ...(validUntil && { validUntil: new Date(validUntil) }),
+        funderId,
+        uploadedById: userId,
+        version: (last._max.version ?? 0) + 1,
+      },
+    });
+    await this.audit.logEntity(userId, 'CREATE', 'FunderDocument', doc.id, {
+      funderId,
+      name: dto.name,
+      type: dto.type,
+    });
+    return doc;
+  }
+
+  async updateDocument(
+    funderId: string,
+    documentId: string,
+    dto: UpdateFunderDocumentDto,
+    userId: number,
+  ) {
+    const current = await this.findDocument(funderId, documentId);
+    await this.assertUserExists(dto.responsibleId);
+    this.assertDateRange(
+      dto.documentDate ?? current.documentDate,
+      dto.validUntil ?? current.validUntil,
+    );
+    const { documentDate, validUntil, ...rest } = dto;
+    const updated = await this.prisma.funderDocument.update({
+      where: { id: documentId },
+      data: {
+        ...rest,
+        ...(documentDate && { documentDate: new Date(documentDate) }),
+        ...(validUntil && { validUntil: new Date(validUntil) }),
+      },
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'FunderDocument', documentId, {
+      funderId,
+      ...dto,
+    });
+    return updated;
+  }
+
+  async addDocumentVersion(
+    funderId: string,
+    documentId: string,
+    dto: CreateFunderDocumentVersionDto,
+    userId: number,
+  ) {
+    const current = await this.findDocument(funderId, documentId);
+    this.assertDateRange(dto.documentDate, dto.validUntil);
+    const { documentDate, validUntil, ...rest } = dto;
+    // Serializável: dois uploads simultâneos não podem obter o mesmo número de versão
+    const doc = await this.prisma.$transaction(
+      async tx => {
+        const last = await tx.funderDocument.aggregate({
+          where: { funderId, name: current.name },
+          _max: { version: true },
+        });
+        return tx.funderDocument.create({
+          data: {
+            ...rest,
+            ...(documentDate && { documentDate: new Date(documentDate) }),
+            ...(validUntil && { validUntil: new Date(validUntil) }),
+            funderId,
+            name: current.name,
+            type: current.type,
+            responsibleId: current.responsibleId,
+            status: 'VALID',
+            uploadedById: userId,
+            version: (last._max.version ?? 0) + 1,
+          },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+    await this.audit.logEntity(userId, 'CREATE', 'FunderDocument', doc.id, {
+      funderId,
+      name: doc.name,
+      version: doc.version,
+    });
+    return doc;
+  }
+
+  async removeDocument(funderId: string, documentId: string, userId: number) {
+    await this.findDocument(funderId, documentId);
+    await this.prisma.funderDocument.update({
+      where: { id: documentId },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.logEntity(userId, 'DELETE', 'FunderDocument', documentId, { funderId });
+    return { message: 'Documento removido com sucesso' };
+  }
+
+  // ─── RESPONSÁVEL INTERNO (⑰) ─────────────────────────
+
+  private static readonly RESPONSIBLE_SELECT = {
+    assignedToId: true,
+    assignedTo: { select: { id: true, fullName: true, email: true } },
+    internalUnit: true,
+    internalDepartment: true,
+    internalTeam: true,
+    assignedAt: true,
+    financialManagerId: true,
+    financialManager: { select: { id: true, fullName: true, email: true } },
+    technicalManagerId: true,
+    technicalManager: { select: { id: true, fullName: true, email: true } },
+  } as const;
+
+  async getResponsible(funderId: string) {
+    const funder = await this.prisma.read.funder.findUnique({
+      where: { id: funderId },
+      select: { deletedAt: true, ...CrmFundersService.RESPONSIBLE_SELECT },
+    });
+    if (!funder || funder.deletedAt) throw new NotFoundException('Financiador não encontrado');
+    const { deletedAt: _deletedAt, ...responsible } = funder;
+    return responsible;
+  }
+
+  async updateResponsible(funderId: string, dto: UpdateFunderResponsibleDto, userId: number) {
+    const current = await this.getResponsible(funderId);
+    await Promise.all([
+      this.assertUserExists(dto.assignedToId),
+      this.assertUserExists(dto.financialManagerId),
+      this.assertUserExists(dto.technicalManagerId),
+    ]);
+    const { assignedAt, ...rest } = dto;
+    const managerChanged =
+      dto.assignedToId !== undefined && dto.assignedToId !== current.assignedToId;
+    const updated = await this.prisma.funder.update({
+      where: { id: funderId },
+      data: {
+        ...rest,
+        ...(assignedAt
+          ? { assignedAt: new Date(assignedAt) }
+          : managerChanged && { assignedAt: new Date() }),
+        updatedById: userId,
+      },
+      select: CrmFundersService.RESPONSIBLE_SELECT,
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'FunderResponsible', funderId, {
+      funderId,
+      previousAssignedToId: current.assignedToId,
+      ...dto,
+    });
+    return updated;
+  }
+
+  // ─── NOTAS E INFORMAÇÃO INTERNA (⑱) ──────────────────
+
+  private static readonly NOTES_SELECT = {
+    notes: true,
+    relationshipStrategy: true,
+    relevantHistory: true,
+    observations: true,
+    tags: true,
+  } as const;
+
+  async getNotes(funderId: string) {
+    const funder = await this.prisma.read.funder.findUnique({
+      where: { id: funderId },
+      select: { deletedAt: true, ...CrmFundersService.NOTES_SELECT },
+    });
+    if (!funder || funder.deletedAt) throw new NotFoundException('Financiador não encontrado');
+    const { deletedAt: _deletedAt, ...notes } = funder;
+    return notes;
+  }
+
+  async updateNotes(funderId: string, dto: UpdateFunderNotesDto, userId: number) {
+    await this.findOne(funderId);
+    const { tags, ...rest } = dto;
+    const updated = await this.prisma.funder.update({
+      where: { id: funderId },
+      data: {
+        ...rest,
+        // Tags: aparar, ignorar vazias e deduplicar sem diferenciar maiúsculas
+        ...(tags && {
+          tags: [
+            ...new Map(
+              tags
+                .map(t => t.trim())
+                .filter(Boolean)
+                .map(t => [t.toLowerCase(), t] as const),
+            ).values(),
+          ],
+        }),
+        updatedById: userId,
+      },
+      select: CrmFundersService.NOTES_SELECT,
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'FunderNotes', funderId, {
+      funderId,
+      fields: Object.keys(dto),
+    });
+    return updated;
+  }
+
+  // ─── CAMPOS PERSONALIZADOS (⑱) ───────────────────────
+
+  async getCustomFieldDefinitions(includeInactive = false) {
+    return this.prisma.read.funderCustomFieldDefinition.findMany({
+      where: { deletedAt: null, ...(!includeInactive && { active: true }) },
+      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+    });
+  }
+
+  private assertOptionsMatchType(type: string, options?: string[]) {
+    const needsOptions = type === 'SELECT' || type === 'MULTI_SELECT';
+    if (needsOptions && !options?.length) {
+      throw new BadRequestException('Campos de selecção requerem pelo menos uma opção');
+    }
+    if (!needsOptions && options?.length) {
+      throw new BadRequestException('Só campos de selecção aceitam opções');
+    }
+  }
+
+  private async findCustomFieldDefinition(id: string) {
+    const current = await this.prisma.funderCustomFieldDefinition.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!current) throw new NotFoundException('Campo personalizado não encontrado');
+    return current;
+  }
+
+  async createCustomFieldDefinition(dto: CreateFunderCustomFieldDto, userId: number) {
+    this.assertOptionsMatchType(dto.type ?? 'TEXT', dto.options);
+    // O @unique da BD cobre também as chaves soft-deleted, por isso procuramos sem filtrar deletedAt
+    const existing = await this.prisma.funderCustomFieldDefinition.findUnique({
+      where: { key: dto.key },
+    });
+    if (existing) throw new BadRequestException(`Já existe um campo com a chave "${dto.key}"`);
+    const definition = await this.prisma.funderCustomFieldDefinition.create({ data: dto });
+    await this.audit.logEntity(userId, 'CREATE', 'FunderCustomFieldDefinition', definition.id, {
+      key: dto.key,
+    });
+    return definition;
+  }
+
+  async updateCustomFieldDefinition(id: string, dto: UpdateFunderCustomFieldDto, userId: number) {
+    const current = await this.findCustomFieldDefinition(id);
+    this.assertOptionsMatchType(current.type, dto.options ?? current.options);
+    const updated = await this.prisma.funderCustomFieldDefinition.update({
+      where: { id },
+      data: dto,
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'FunderCustomFieldDefinition', id, dto);
+    return updated;
+  }
+
+  async removeCustomFieldDefinition(id: string, userId: number) {
+    const current = await this.findCustomFieldDefinition(id);
+    // Os valores já guardados nos financiadores ficam intactos mas deixam de ser expostos/validados
+    await this.prisma.funderCustomFieldDefinition.update({
+      where: { id },
+      data: { deletedAt: new Date(), active: false },
+    });
+    await this.audit.logEntity(userId, 'DELETE', 'FunderCustomFieldDefinition', id, {
+      key: current.key,
+    });
+    return { message: 'Campo personalizado removido com sucesso' };
+  }
+
+  private coerceCustomValue(
+    def: { key: string; type: string; options: string[] },
+    value: unknown,
+  ): string | number | boolean | string[] {
+    const fail = (expected: string): never => {
+      throw new BadRequestException(`Campo "${def.key}": esperado ${expected}`);
+    };
+    switch (def.type) {
+      case 'TEXT':
+        return typeof value === 'string' ? value : fail('texto');
+      case 'NUMBER':
+        return typeof value === 'number' && Number.isFinite(value) ? value : fail('número');
+      case 'BOOLEAN':
+        return typeof value === 'boolean' ? value : fail('booleano');
+      case 'DATE':
+        return typeof value === 'string' && !Number.isNaN(Date.parse(value))
+          ? value
+          : fail('data ISO');
+      case 'SELECT':
+        return typeof value === 'string' && def.options.includes(value)
+          ? value
+          : fail(`uma de [${def.options.join(', ')}]`);
+      case 'MULTI_SELECT':
+        return Array.isArray(value) &&
+          value.every(v => typeof v === 'string' && def.options.includes(v))
+          ? (value as string[])
+          : fail(`lista com valores de [${def.options.join(', ')}]`);
+      default:
+        return fail('tipo suportado');
+    }
+  }
+
+  async getCustomFieldValues(funderId: string) {
+    const funder = await this.findOne(funderId);
+    const definitions = await this.getCustomFieldDefinitions();
+    const stored = (funder.customFields ?? {}) as Record<string, unknown>;
+    return {
+      fields: definitions.map(d => ({ ...d, value: stored[d.key] ?? null })),
+      missingRequired: definitions
+        .filter(d => d.required && (stored[d.key] ?? null) === null)
+        .map(d => d.key),
+    };
+  }
+
+  async setCustomFieldValues(funderId: string, values: Record<string, unknown>, userId: number) {
+    const funder = await this.findOne(funderId);
+    const definitions = await this.getCustomFieldDefinitions();
+    const byKey = new Map(definitions.map(d => [d.key, d]));
+    const merged = { ...((funder.customFields ?? {}) as Record<string, unknown>) };
+    for (const [key, raw] of Object.entries(values)) {
+      const def = byKey.get(key);
+      if (!def) throw new BadRequestException(`Campo personalizado desconhecido: "${key}"`);
+      if (raw === null) {
+        if (def.required) {
+          throw new BadRequestException(`Campo "${key}" é obrigatório e não pode ser removido`);
+        }
+        delete merged[key];
+      } else {
+        merged[key] = this.coerceCustomValue(def, raw);
+      }
+    }
+    await this.prisma.funder.update({
+      where: { id: funderId },
+      data: { customFields: merged as Prisma.InputJsonObject, updatedById: userId },
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'FunderCustomFields', funderId, {
+      funderId,
+      keys: Object.keys(values),
+    });
+    return this.getCustomFieldValues(funderId);
+  }
+
+  // ─── PRIVACIDADE E CONTROLO (⑲) ──────────────────────
+
+  async getConsent(funderId: string) {
+    await this.findOne(funderId);
+    const consent = await this.prisma.read.funderConsent.findUnique({ where: { funderId } });
+    // Sem registo = nenhum consentimento concedido (opt-in explícito)
+    return (
+      consent ?? {
+        funderId,
+        emailAllowed: false,
+        whatsappAllowed: false,
+        smsAllowed: false,
+        phoneAllowed: false,
+        institutionalComms: false,
+        eventInvites: false,
+        reportComms: false,
+        contactPreferences: null,
+        consentDate: null,
+        notes: null,
+      }
+    );
+  }
+
+  async upsertConsent(funderId: string, dto: UpsertFunderConsentDto, userId: number) {
+    await this.findOne(funderId);
+    const { consentDate, contactPreferences, notes, ...flags } = dto;
+    const grants = Object.values(flags).some(v => v === true);
+    const date = consentDate ? new Date(consentDate) : grants ? new Date() : undefined;
+    const data = {
+      ...flags,
+      ...(contactPreferences !== undefined && { contactPreferences }),
+      ...(notes !== undefined && { notes }),
+      ...(date && { consentDate: date }),
+      updatedById: userId,
+    };
+    const consent = await this.prisma.funderConsent.upsert({
+      where: { funderId },
+      create: { ...data, funderId },
+      update: data,
+    });
+    await this.prisma.funder.update({ where: { id: funderId }, data: { updatedById: userId } });
+    await this.audit.logEntity(userId, 'UPDATE', 'FunderConsent', consent.id, {
+      funderId,
+      ...flags,
+    });
+    return consent;
+  }
+
+  /** Quem criou/alterou o financiador e quando. */
+  async getRecordInfo(funderId: string) {
+    const funder = await this.prisma.read.funder.findUnique({
+      where: { id: funderId },
+      select: {
+        deletedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        updatedById: true,
+        createdBy: { select: { id: true, fullName: true } },
+      },
+    });
+    if (!funder || funder.deletedAt) throw new NotFoundException('Financiador não encontrado');
+    const updatedBy = funder.updatedById
+      ? await this.prisma.read.user.findUnique({
+          where: { id: funder.updatedById },
+          select: { id: true, fullName: true },
+        })
+      : null;
+    return {
+      createdBy: funder.createdBy,
+      createdAt: funder.createdAt,
+      updatedAt: funder.updatedAt,
+      updatedBy,
+    };
+  }
+
+  /**
+   * Registo de alterações: eventos de auditoria do financiador e dos seus sub-recursos.
+   * O id do financiador vai no metadata (AuditLog.entityId é Int); o cuid é único, por
+   * isso a pesquisa por substring não gera falsos positivos.
+   */
+  async getChangeLog(funderId: string, pagination: PaginationFilterDto) {
+    await this.findOne(funderId);
+    const page = pagination.page ?? 1;
+    const limit = Math.min(pagination.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+    const where: Prisma.AuditLogWhereInput = {
+      metadata: { contains: funderId },
+      OR: [{ entity: { startsWith: 'Funder' } }, { entity: { startsWith: 'Funding' } }],
+    };
+    const [rows, total] = await Promise.all([
+      this.prisma.read.auditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        select: {
+          id: true,
+          action: true,
+          entity: true,
+          metadata: true,
+          createdAt: true,
+          user: { select: { id: true, fullName: true } },
+        },
+      }),
+      this.prisma.read.auditLog.count({ where }),
+    ]);
+    const data = rows.map(({ metadata, ...r }) => {
+      let details: unknown = null;
+      try {
+        details = metadata ? JSON.parse(metadata) : null;
+      } catch {
+        details = metadata;
+      }
+      return { ...r, details };
+    });
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 }

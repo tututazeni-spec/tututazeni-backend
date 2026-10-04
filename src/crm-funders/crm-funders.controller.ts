@@ -46,6 +46,15 @@ import {
   CreateFunderIndicatorDto,
   UpdateFunderIndicatorDto,
   FilterFunderIndicatorDto,
+  CreateFunderDocumentDto,
+  UpdateFunderDocumentDto,
+  CreateFunderDocumentVersionDto,
+  UpdateFunderResponsibleDto,
+  UpdateFunderNotesDto,
+  CreateFunderCustomFieldDto,
+  UpdateFunderCustomFieldDto,
+  SetFunderCustomFieldValuesDto,
+  UpsertFunderConsentDto,
   PaginationFilterDto,
 } from './dto';
 import { Role } from '../auth/enums/role.enum';
@@ -626,5 +635,199 @@ export class CrmFundersController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.service.removeReport(id, reportId, user.id);
+  }
+
+  // ─── DOCUMENTOS (⑯) ──────────────────────────────────
+
+  @Get(':id/documents')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar documentos (última versão de cada; ?history=true para todas)' })
+  getDocuments(@Param('id') id: string, @Query('history') history?: string) {
+    return this.service.getDocuments(id, history === 'true');
+  }
+
+  @Get(':id/documents/:documentId/history')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Histórico de versões de um documento' })
+  getDocumentHistory(@Param('id') id: string, @Param('documentId') documentId: string) {
+    return this.service.getDocumentHistory(id, documentId);
+  }
+
+  @Post(':id/documents')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Adicionar documento' })
+  addDocument(
+    @Param('id') id: string,
+    @Body() dto: CreateFunderDocumentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addDocument(id, dto, user.id);
+  }
+
+  @Post(':id/documents/:documentId/versions')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Carregar nova versão de um documento' })
+  addDocumentVersion(
+    @Param('id') id: string,
+    @Param('documentId') documentId: string,
+    @Body() dto: CreateFunderDocumentVersionDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addDocumentVersion(id, documentId, dto, user.id);
+  }
+
+  @Put(':id/documents/:documentId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar metadados do documento' })
+  updateDocument(
+    @Param('id') id: string,
+    @Param('documentId') documentId: string,
+    @Body() dto: UpdateFunderDocumentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateDocument(id, documentId, dto, user.id);
+  }
+
+  @Delete(':id/documents/:documentId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover documento' })
+  removeDocument(
+    @Param('id') id: string,
+    @Param('documentId') documentId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeDocument(id, documentId, user.id);
+  }
+
+  // ─── RESPONSÁVEL INTERNO (⑰) ─────────────────────────
+
+  @Get(':id/responsible')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Responsável interno do financiador' })
+  getResponsible(@Param('id') id: string) {
+    return this.service.getResponsible(id);
+  }
+
+  @Put(':id/responsible')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Atribuir/actualizar responsável interno' })
+  updateResponsible(
+    @Param('id') id: string,
+    @Body() dto: UpdateFunderResponsibleDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateResponsible(id, dto, user.id);
+  }
+
+  // ─── NOTAS E CAMPOS PERSONALIZADOS (⑱) ───────────────
+
+  @Get(':id/notes')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Notas internas, estratégia, histórico, observações e tags' })
+  getNotes(@Param('id') id: string) {
+    return this.service.getNotes(id);
+  }
+
+  @Put(':id/notes')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar notas internas e tags' })
+  updateNotes(
+    @Param('id') id: string,
+    @Body() dto: UpdateFunderNotesDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateNotes(id, dto, user.id);
+  }
+
+  @Get('custom-fields/definitions')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar definições de campos personalizados' })
+  getCustomFieldDefinitions(@Query('includeInactive') includeInactive?: string) {
+    return this.service.getCustomFieldDefinitions(includeInactive === 'true');
+  }
+
+  @Post('custom-fields/definitions')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Criar campo personalizado (admin)' })
+  createCustomFieldDefinition(
+    @Body() dto: CreateFunderCustomFieldDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.createCustomFieldDefinition(dto, user.id);
+  }
+
+  @Put('custom-fields/definitions/:fieldId')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Actualizar campo personalizado (admin)' })
+  updateCustomFieldDefinition(
+    @Param('fieldId') fieldId: string,
+    @Body() dto: UpdateFunderCustomFieldDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateCustomFieldDefinition(fieldId, dto, user.id);
+  }
+
+  @Delete('custom-fields/definitions/:fieldId')
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover campo personalizado (admin)' })
+  removeCustomFieldDefinition(
+    @Param('fieldId') fieldId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeCustomFieldDefinition(fieldId, user.id);
+  }
+
+  @Get(':id/custom-fields')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Valores dos campos personalizados do financiador' })
+  getCustomFieldValues(@Param('id') id: string) {
+    return this.service.getCustomFieldValues(id);
+  }
+
+  @Put(':id/custom-fields')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Definir valores dos campos personalizados' })
+  setCustomFieldValues(
+    @Param('id') id: string,
+    @Body() dto: SetFunderCustomFieldValuesDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.setCustomFieldValues(id, dto.values, user.id);
+  }
+
+  // ─── PRIVACIDADE E CONTROLO (⑲) ──────────────────────
+
+  @Get(':id/consent')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Consentimentos e preferências de comunicação' })
+  getConsent(@Param('id') id: string) {
+    return this.service.getConsent(id);
+  }
+
+  @Put(':id/consent')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Registar/actualizar consentimentos de comunicação' })
+  upsertConsent(
+    @Param('id') id: string,
+    @Body() dto: UpsertFunderConsentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.upsertConsent(id, dto, user.id);
+  }
+
+  @Get(':id/record-info')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Criado por/em e última alteração por/em' })
+  getRecordInfo(@Param('id') id: string) {
+    return this.service.getRecordInfo(id);
+  }
+
+  @Get(':id/changelog')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Registo de alterações (auditoria do financiador)' })
+  getChangeLog(@Param('id') id: string, @Query() pagination: PaginationFilterDto) {
+    return this.service.getChangeLog(id, pagination);
   }
 }

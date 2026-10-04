@@ -1010,6 +1010,10 @@ model User {
   // ─── CRM Financiadores ────────────────────────────────────────
   createdFunders            Funder[]            @relation("FunderCreator")
   assignedFunders           Funder[]            @relation("FunderOwner")
+  financeManagedFunders     Funder[]            @relation("FunderFinancialManager")
+  technicalManagedFunders   Funder[]            @relation("FunderTechnicalManager")
+  funderDocsOwned           FunderDocument[]    @relation("FunderDocumentResponsible")
+  funderDocsUploaded        FunderDocument[]    @relation("FunderDocumentUploader")
   createdGrantDisbursements GrantDisbursement[] @relation("DisbursementCreator")
   funderInteractions        FunderInteraction[] @relation("FunderInteractionUser")
   createdFunderReports      FunderReport[]      @relation("ReportCreator")
@@ -11895,17 +11899,39 @@ model Funder {
   cofinancingCriteria       String?
   otherEligibilityCriteria  String?
 
-  createdBy     User                @relation("FunderCreator", fields: [createdById], references: [id])
-  assignedTo    User?               @relation("FunderOwner", fields: [assignedToId], references: [id])
-  contacts      FunderContact[]
-  programs      FunderProgram[]
-  opportunities FunderOpportunity[]
-  grants        FundingGrant[]
-  contracts     FunderContract[]
-  indicators    FunderIndicator[]
-  interactions  FunderInteraction[]
-  reports       FunderReport[]
-  partnerLinks  PartnerFunderLink[]
+  // ⑰ Responsável interno (o gestor é assignedToId)
+  internalUnit       String?
+  internalDepartment String?
+  internalTeam       String?
+  assignedAt         DateTime?
+  financialManagerId Int?
+  technicalManagerId Int?
+
+  // ⑱ Notas e informação interna (notes e tags já existem acima)
+  relationshipStrategy String?
+  relevantHistory      String?
+  observations         String?
+  // Valores dos campos personalizados, indexados por FunderCustomFieldDefinition.key
+  customFields         Json?
+
+  // ⑲ Registo de alterações (createdBy/createdAt/updatedAt já existem)
+  updatedById Int?
+
+  createdBy        User                @relation("FunderCreator", fields: [createdById], references: [id])
+  assignedTo       User?               @relation("FunderOwner", fields: [assignedToId], references: [id])
+  financialManager User?               @relation("FunderFinancialManager", fields: [financialManagerId], references: [id])
+  technicalManager User?               @relation("FunderTechnicalManager", fields: [technicalManagerId], references: [id])
+  documents        FunderDocument[]
+  consent          FunderConsent?
+  contacts         FunderContact[]
+  programs         FunderProgram[]
+  opportunities    FunderOpportunity[]
+  grants           FundingGrant[]
+  contracts        FunderContract[]
+  indicators       FunderIndicator[]
+  interactions     FunderInteraction[]
+  reports          FunderReport[]
+  partnerLinks     PartnerFunderLink[]
 
   @@index([type])
   @@index([status])
@@ -14481,4 +14507,103 @@ model AvatarTrainingUsage {
   @@index([attemptId])
   @@index([provider, createdAt])
   @@index([userId])
+}
+
+// ⑯ Documentos do financiador (nova versão = novo registo com o mesmo nome)
+model FunderDocument {
+  id            String               @id @default(cuid())
+  funderId      String
+  type          FunderDocumentType
+  name          String
+  fileUrl       String
+  fileSize      Int?
+  documentDate  DateTime?
+  validUntil    DateTime?
+  status        FunderDocumentStatus @default(VALID)
+  responsibleId Int?
+  version       Int                  @default(1)
+  notes         String?
+  uploadedById  Int
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  deletedAt     DateTime?
+
+  funder      Funder @relation(fields: [funderId], references: [id])
+  responsible User?  @relation("FunderDocumentResponsible", fields: [responsibleId], references: [id])
+  uploadedBy  User   @relation("FunderDocumentUploader", fields: [uploadedById], references: [id])
+
+  @@unique([funderId, name, version])
+  @@index([funderId])
+  @@index([type])
+  @@index([validUntil])
+  @@index([deletedAt])
+}
+
+// ⑲ Consentimentos de comunicação (um registo por financiador)
+model FunderConsent {
+  id                 String    @id @default(cuid())
+  funderId           String    @unique
+  emailAllowed       Boolean   @default(false)
+  whatsappAllowed    Boolean   @default(false)
+  smsAllowed         Boolean   @default(false)
+  phoneAllowed       Boolean   @default(false)
+  institutionalComms Boolean   @default(false)
+  eventInvites       Boolean   @default(false)
+  reportComms        Boolean   @default(false)
+  contactPreferences String?
+  consentDate        DateTime?
+  notes              String?
+  updatedById        Int?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  funder Funder @relation(fields: [funderId], references: [id])
+}
+
+// ⑱ Definição de campos personalizados criados pelo administrador
+model FunderCustomFieldDefinition {
+  id        String                @id @default(cuid())
+  key       String                @unique
+  label     String
+  type      FunderCustomFieldType @default(TEXT)
+  options   String[]
+  required  Boolean               @default(false)
+  active    Boolean               @default(true)
+  sortOrder Int                   @default(0)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+  deletedAt DateTime?
+
+  @@index([deletedAt])
+}
+
+enum FunderDocumentType {
+  CONTRACT
+  GRANT_AGREEMENT
+  APPLICATION
+  PROPOSAL
+  BUDGET
+  REPORT
+  AUDIT
+  PROOF
+  TERMS_OF_REFERENCE
+  EVALUATION
+  CERTIFICATE
+  OTHER
+}
+
+enum FunderDocumentStatus {
+  DRAFT
+  VALID
+  EXPIRED
+  ARCHIVED
+}
+
+enum FunderCustomFieldType {
+  TEXT
+  NUMBER
+  DATE
+  BOOLEAN
+  SELECT
+  MULTI_SELECT
 }

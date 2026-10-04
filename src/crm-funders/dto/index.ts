@@ -13,3 +13,8 @@ export * from './create-funder-opportunity.dto';
 export * from './create-funder-contract.dto';
 export * from './create-funder-indicator.dto';
 export * from './funder-partner-link.dto';
+export * from './create-funder-document.dto';
+export * from './create-funder-custom-field.dto';
+export * from './upsert-funder-consent.dto';
+export * from './update-funder-responsible.dto';
+export * from './update-funder-notes.dto';

@@ -1703,6 +1703,37 @@ const PartnerInteractionType = {
   RENEWAL: 'RENEWAL',
 };
 
+const FunderDocumentType = {
+  CONTRACT: 'CONTRACT',
+  GRANT_AGREEMENT: 'GRANT_AGREEMENT',
+  APPLICATION: 'APPLICATION',
+  PROPOSAL: 'PROPOSAL',
+  BUDGET: 'BUDGET',
+  REPORT: 'REPORT',
+  AUDIT: 'AUDIT',
+  PROOF: 'PROOF',
+  TERMS_OF_REFERENCE: 'TERMS_OF_REFERENCE',
+  EVALUATION: 'EVALUATION',
+  CERTIFICATE: 'CERTIFICATE',
+  OTHER: 'OTHER',
+};
+
+const FunderDocumentStatus = {
+  DRAFT: 'DRAFT',
+  VALID: 'VALID',
+  EXPIRED: 'EXPIRED',
+  ARCHIVED: 'ARCHIVED',
+};
+
+const FunderCustomFieldType = {
+  TEXT: 'TEXT',
+  NUMBER: 'NUMBER',
+  DATE: 'DATE',
+  BOOLEAN: 'BOOLEAN',
+  SELECT: 'SELECT',
+  MULTI_SELECT: 'MULTI_SELECT',
+};
+
 const FunderPartnerRelationType = {
   CONSORTIUM: 'CONSORTIUM',
   CO_FINANCING: 'CO_FINANCING',
@@ -3149,6 +3180,9 @@ module.exports = {
   FunderIndicatorKey,
   FunderInteractionType,
   FunderPartnerRelationType,
+  FunderDocumentType,
+  FunderDocumentStatus,
+  FunderCustomFieldType,
   ReportStatus,
   LibraryItemType,
   LibraryAction,
