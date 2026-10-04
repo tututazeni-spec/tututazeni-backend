@@ -20,6 +20,13 @@ import { withFlatPermissions } from '../common/utils/role-permissions';
 // env. O frontend renova o access token em segundo plano enquanto houver
 // actividade (rato/teclado/toque) dentro desta janela — ver
 // frontend/lib/sessionActivity.ts.
+// Contexto de rede do pedido, registado nos eventos de auditoria de acesso
+// (docs/modulo_audit.md §6). Opcional: chamadores internos/testes omitem-no.
+export interface AuthRequestContext {
+  ip?: string;
+  userAgent?: string;
+}
+
 export function sessionIdleTimeoutMs(
   env: string | undefined = process.env.SESSION_IDLE_TIMEOUT_MS,
 ): number {
@@ -36,7 +43,68 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
-  async login(dto: LoginDto) {
+  /**
+   * Regista um evento de acesso em AuditLog sem nunca afectar o fluxo de
+   * autenticação (fire-and-forget). Nunca recebe nem grava palavras-passe.
+   */
+  private recordAccessEvent(data: {
+    userId?: number | null;
+    action: string;
+    entity: string;
+    entityId?: number;
+    status?: 'SUCCESS' | 'FAILED' | 'DENIED';
+    severity?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+    ctx?: AuthRequestContext;
+    metadata?: Record<string, unknown>;
+  }): void {
+    Promise.resolve()
+      .then(() =>
+        this.prisma.auditLog.create({
+          data: {
+            userId: data.userId ?? null,
+            action: data.action,
+            entity: data.entity,
+            entityId: data.entityId,
+            status: data.status,
+            severity: data.severity,
+            ip: data.ctx?.ip,
+            userAgent: data.ctx?.userAgent?.slice(0, 300),
+            metadata: data.metadata ? JSON.stringify(data.metadata) : undefined,
+          },
+        }),
+      )
+      .catch((err: unknown) =>
+        this.logger.warn({
+          userId: data.userId,
+          action: data.action,
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao registar evento de acesso em AuditLog',
+        }),
+      );
+  }
+
+  private failedLogin(
+    reason: 'UNKNOWN_USER' | 'ACCOUNT_DISABLED' | 'BAD_PASSWORD' | 'NO_PASSWORD',
+    email: string,
+    userId: number | null,
+    ctx?: AuthRequestContext,
+  ): UnauthorizedException {
+    this.recordAccessEvent({
+      userId,
+      action: 'FAILED',
+      entity: 'Auth',
+      entityId: userId ?? undefined,
+      status: 'FAILED',
+      severity: reason === 'BAD_PASSWORD' || reason === 'UNKNOWN_USER' ? 'MEDIUM' : 'LOW',
+      ctx,
+      metadata: { reason, email },
+    });
+    return new UnauthorizedException(
+      reason === 'ACCOUNT_DISABLED' ? 'Conta desativada' : 'Credenciais inválidas',
+    );
+  }
+
+  async login(dto: LoginDto, ctx?: AuthRequestContext) {
     // Apenas role+permissions — unit/department/position não são necessários
     // para autenticar e custavam 3 queries extra por login. O perfil completo
     // vem de GET /auth/me ou do JwtStrategy nos pedidos seguintes.
@@ -52,19 +120,28 @@ export class AuthService {
       omit: { password: false },
     });
 
-    if (!user) throw new UnauthorizedException('Credenciais inválidas');
-    if (!user.active) throw new UnauthorizedException('Conta desativada');
+    if (!user) throw this.failedLogin('UNKNOWN_USER', dto.email, null, ctx);
+    if (!user.active) throw this.failedLogin('ACCOUNT_DISABLED', dto.email, user.id, ctx);
 
-    if (!user.password) throw new UnauthorizedException('Credenciais inválidas');
+    if (!user.password) throw this.failedLogin('NO_PASSWORD', dto.email, user.id, ctx);
     const valid = await bcrypt.compare(dto.password, user.password);
-    if (!valid) throw new UnauthorizedException('Credenciais inválidas');
+    if (!valid) throw this.failedLogin('BAD_PASSWORD', dto.email, user.id, ctx);
 
     const tokens = await this.generateTokens(user.id, user.email);
     await this.persistRefreshToken(user.id, tokens.refreshToken);
 
     // fire-and-forget — não bloqueia a resposta de login
     this.prisma.auditLog
-      .create({ data: { userId: user.id, action: 'LOGIN', entity: 'User', entityId: user.id } })
+      .create({
+        data: {
+          userId: user.id,
+          action: 'LOGIN',
+          entity: 'User',
+          entityId: user.id,
+          ip: ctx?.ip,
+          userAgent: ctx?.userAgent?.slice(0, 300),
+        },
+      })
       .catch((err: unknown) =>
         this.logger.warn({
           userId: user.id,
@@ -261,7 +338,7 @@ export class AuthService {
     return tokens;
   }
 
-  async revokeRefreshToken(presented: string): Promise<void> {
+  async revokeRefreshToken(presented: string, ctx?: AuthRequestContext): Promise<void> {
     const hash = crypto.createHash('sha256').update(presented).digest('hex');
     // Lido antes de revogar só para saber de quem é a sessão — o logout em
     // si não depende deste registo (ver LOGIN acima, mesma tabela).
@@ -272,6 +349,14 @@ export class AuthService {
     });
 
     if (record) {
+      this.recordAccessEvent({
+        userId: record.userId,
+        action: 'LOGOUT',
+        entity: 'Auth',
+        entityId: record.userId,
+        severity: 'LOW',
+        ctx,
+      });
       this.prisma.userAuditLog
         .create({ data: { userId: record.userId, performedById: record.userId, action: 'LOGOUT' } })
         .catch((err: unknown) =>

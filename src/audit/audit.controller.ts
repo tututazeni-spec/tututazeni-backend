@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AuditService } from './audit.service';
-import { AuditFilterDto } from './audit.dto';
+import { AccessFilterDto, AuditFilterDto } from './audit.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
@@ -55,6 +55,42 @@ export class AuditController {
   })
   anomalies() {
     return this.svc.getAnomalySummary();
+  }
+
+  @Get('filter-options')
+  @ApiOperation({ summary: 'Valores distintos para os filtros (entidades, acções, departamentos)' })
+  filterOptions() {
+    return this.svc.getFilterOptions();
+  }
+
+  // ── Acessos e Sessões (§6) ────────────────────────────────────────────────
+
+  @Get('access/summary')
+  @ApiOperation({ summary: 'Indicadores, série diária e alertas de acesso' })
+  @ApiQuery({ name: 'days', required: false, description: '1-365, por omissão 30' })
+  accessSummary(@Query('days') days?: string) {
+    return this.svc.getAccessSummary(days ? parseInt(days, 10) : 30);
+  }
+
+  @Get('access/events')
+  @ApiOperation({ summary: 'Eventos de acesso: login, logout, falhas, palavra-passe, permissões' })
+  accessEvents(@Query() filters: AccessFilterDto) {
+    return this.svc.getAccessEvents(filters);
+  }
+
+  @Get('access/sessions')
+  @ApiOperation({ summary: 'Sessões actualmente activas' })
+  accessSessions(@Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.svc.getActiveSessions(
+      page ? parseInt(page, 10) || 1 : 1,
+      limit ? Math.min(parseInt(limit, 10) || 20, 100) : 20,
+    );
+  }
+
+  @Get(':id/detail')
+  @ApiOperation({ summary: 'Detalhe do evento (modal): diff, contexto, eventos relacionados' })
+  detail(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.getEventDetail(id, user.role?.name);
   }
 
   @Get(':id')

@@ -480,3 +480,79 @@ describe('AuditService — verificação de integridade da cadeia', () => {
     expect(out.broken).toContain(2);
   });
 });
+
+describe('AuditService — detalhe do evento (§5)', () => {
+  let service: AuditService;
+  let mockPrisma: any;
+
+  const baseLog = {
+    id: 125,
+    userId: 7,
+    action: 'UPDATE',
+    entity: 'User',
+    entityId: 9,
+    entityName: null,
+    status: 'SUCCESS',
+    severity: 'MEDIUM',
+    reason: null,
+    ip: '10.0.0.1',
+    userAgent: 'jest',
+    hash: null,
+    timestamp: new Date('2026-03-04T10:00:00Z'),
+    user: {
+      id: 7,
+      fullName: 'Admin',
+      email: 'a@x.com',
+      avatarUrl: null,
+      role: null,
+      department: null,
+    },
+    metadata: JSON.stringify({
+      correlationId: 'req-1',
+      password: 'x',
+      nested: { apiKey: 'k', ok: 1 },
+    }),
+    before: JSON.stringify({ department: 'Logística', password: 'old' }),
+    after: JSON.stringify({ department: 'RH', password: 'new' }),
+    changes: null,
+  };
+
+  beforeEach(async () => {
+    mockPrisma = {
+      auditLog: {
+        findUnique: jest.fn().mockResolvedValue(baseLog),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+    };
+    Object.defineProperty(mockPrisma, 'read', { get: () => mockPrisma, configurable: true });
+    const module = await Test.createTestingModule({
+      providers: [AuditService, { provide: PrismaService, useValue: mockPrisma }],
+    }).compile();
+    service = module.get(AuditService);
+  });
+
+  it('gera código AUD-ANO-000125, remove segredos e calcula o diff', async () => {
+    const d = await service.getEventDetail(125, 'RH');
+    expect(d.code).toBe('AUD-2026-000125');
+    expect(d.correlationId).toBe('req-1');
+    expect(d.metadata).toEqual({ correlationId: 'req-1', nested: { ok: 1 } });
+    expect(d.before).toEqual({ department: 'Logística' });
+    expect(d.changes).toEqual({ department: { from: 'Logística', to: 'RH' } });
+    expect(d.masked).toBe(false);
+  });
+
+  it('oculta valores de entidades sensíveis a quem não é ADMIN', async () => {
+    mockPrisma.auditLog.findUnique.mockResolvedValue({ ...baseLog, entity: 'Payslip' });
+    const rh = await service.getEventDetail(125, 'RH');
+    expect(rh.masked).toBe(true);
+    expect(rh.after).toEqual({ department: '••• oculto' });
+    const admin = await service.getEventDetail(125, 'ADMIN');
+    expect(admin.masked).toBe(false);
+    expect(admin.after).toEqual({ department: 'RH' });
+  });
+
+  it('lança NotFoundException se o evento não existe', async () => {
+    mockPrisma.auditLog.findUnique.mockResolvedValue(null);
+    await expect(service.getEventDetail(1)).rejects.toThrow('não encontrado');
+  });
+});
