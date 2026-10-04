@@ -14,7 +14,7 @@ import { calculatePagination, buildPaginatedResponse } from '../common/helpers/p
 // ─── Helpers ─────────────────────────────────────────────────────
 
 /** Map raw AuditLog action → EventCategory */
-function categorise(action: string, entity: string): EventCategory {
+export function categorise(action: string, entity: string): EventCategory {
   const a = action.toUpperCase();
   const e = entity.toUpperCase();
 
@@ -53,7 +53,7 @@ function categorise(action: string, entity: string): EventCategory {
 }
 
 /** Derive module from entity/action */
-function deriveModule(action: string, entity: string): EventModule {
+export function deriveModule(action: string, entity: string): EventModule {
   const e = entity.toUpperCase();
   const a = action.toUpperCase();
   if (
@@ -110,7 +110,7 @@ function eventIcon(category: EventCategory, action: string): string {
 }
 
 /** Human-readable title from action+entity */
-function buildTitle(action: string, entity: string): string {
+export function buildTitle(action: string, entity: string): string {
   const a = action.toUpperCase();
   if (a === 'CONTENT_VIEW') return `Conteúdo visualizado`;
   if (a === 'CONTENT_BOOKMARK') return `Conteúdo guardado nos favoritos`;
@@ -299,7 +299,7 @@ export class HistoryService {
   // SMART TIMELINE (aggregated multi-source)
   // ══════════════════════════════════════════════════════
 
-  async getUserTimeline(userId: number, filters: TimelineFilterDto) {
+  async getUserTimeline(userId: number, filters: TimelineFilterDto, extras: TimelineEvent[] = []) {
     const { page = 1, limit = 20 } = filters;
     const { skip } = calculatePagination(page, limit);
     const where: Prisma.AuditLogWhereInput = { userId };
@@ -527,6 +527,9 @@ export class HistoryService {
         userId,
       });
     }
+
+    // Extras fornecidos pelo hub (movimentos, ausências, salário)
+    events.push(...extras);
 
     // Sort all by timestamp desc, paginate
     events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
