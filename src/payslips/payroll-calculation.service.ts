@@ -19,10 +19,50 @@ export interface CalcOverrides {
   advanceDeduction?: number;
 }
 
+/** Opções do "Novo Processamento" (payroll.md §2); guardadas em PayrollRun.scope.options. */
+export interface PayrollRunOptions {
+  includeNewEmployees: boolean;
+  includeAbsences: boolean;
+  includeOvertime: boolean;
+  includeSubsidies: boolean;
+  includePrizes: boolean;
+  includeBonuses: boolean;
+  applyDeductions: boolean;
+  calculateInss: boolean;
+  calculateIrt: boolean;
+  applyFaults: boolean;
+  applyDiscounts: boolean;
+}
+
+export const DEFAULT_RUN_OPTIONS: PayrollRunOptions = {
+  includeNewEmployees: true,
+  includeAbsences: true,
+  includeOvertime: true,
+  includeSubsidies: true,
+  includePrizes: true,
+  includeBonuses: true,
+  applyDeductions: true,
+  calculateInss: true,
+  calculateIrt: true,
+  applyFaults: true,
+  applyDiscounts: true,
+};
+
+/** Junta as opções guardadas no scope do run com os valores por omissão. */
+export function resolveRunOptions(scope: unknown): PayrollRunOptions {
+  const raw = ((scope ?? {}) as { options?: Partial<PayrollRunOptions> }).options ?? {};
+  const out = { ...DEFAULT_RUN_OPTIONS };
+  for (const k of Object.keys(out) as Array<keyof PayrollRunOptions>) {
+    if (typeof raw[k] === 'boolean') out[k] = raw[k] as boolean;
+  }
+  return out;
+}
+
 export interface PayrollRunLike {
   countryCode: string;
   taxYear: number | null;
   period: string;
+  scope?: unknown;
 }
 
 export interface PayslipItemWriteData {
@@ -164,20 +204,30 @@ export class PayrollCalculationService {
     });
 
     const inputs = await this.gatherInputs(user.id, run.period);
+    const opts = resolveRunOptions(run.scope);
+    // Faltas só descontam se estiverem incluídas E se "aplicar faltas" estiver activo.
+    const useAbsences = opts.includeAbsences && opts.applyFaults;
+    const useExtras = opts.includePrizes || opts.includeBonuses;
 
     const ctx: PayrollContext = {
       userId: user.id,
       baseSalary: compensation?.baseSalary ?? 0,
       countryCode: run.countryCode,
       taxYear,
-      foodAllowance: compensation?.foodAllowance ?? undefined,
-      transportAllowance: compensation?.transportAllowance ?? undefined,
-      absenceDays: overrides.absenceDays ?? inputs.absenceDays,
-      overtimeHours: overrides.overtimeHours ?? inputs.overtimeHours,
+      // 0 (e não undefined) impede o motor de recorrer ao subsídio por omissão do país.
+      foodAllowance: opts.includeSubsidies ? (compensation?.foodAllowance ?? undefined) : 0,
+      transportAllowance: opts.includeSubsidies
+        ? (compensation?.transportAllowance ?? undefined)
+        : 0,
+      absenceDays: useAbsences ? (overrides.absenceDays ?? inputs.absenceDays) : 0,
+      overtimeHours: opts.includeOvertime ? (overrides.overtimeHours ?? inputs.overtimeHours) : 0,
       workingDaysInMonth: inputs.workingDaysInMonth,
-      bonusAmount: overrides.bonusAmount,
-      advanceDeduction: overrides.advanceDeduction,
-      extraComponents: (compensation?.components ?? []).map(c => ({
+      bonusAmount: useExtras ? overrides.bonusAmount : undefined,
+      advanceDeduction: opts.applyDiscounts ? overrides.advanceDeduction : undefined,
+      skipInss: !opts.calculateInss,
+      skipIrt: !opts.calculateIrt,
+      skipOtherDeductions: !opts.applyDeductions,
+      extraComponents: (useExtras ? (compensation?.components ?? []) : []).map(c => ({
         code: c.componentCode,
         value: c.value,
         isTaxable: true,
@@ -380,14 +430,19 @@ export class PayrollCalculationService {
     });
   }
 
-  async resolveTargetUsers(run: {
-    scope: unknown;
-  }): Promise<Array<{ id: number; fullName: string }>> {
+  async resolveTargetUsers(
+    run: { scope: unknown },
+    period?: string,
+  ): Promise<Array<{ id: number; fullName: string }>> {
     const scope = (run.scope ?? {}) as { departmentIds?: number[]; userIds?: number[] };
     const where: Prisma.UserWhereInput = { active: true };
     if (scope.userIds?.length) where.id = { in: scope.userIds };
     else if (scope.departmentIds?.length) where.departmentId = { in: scope.departmentIds };
     // NB: User não tem countryCode — um scope vazio abrange todos os utilizadores activos.
+    if (period && !resolveRunOptions(run.scope).includeNewEmployees) {
+      // Exclui quem foi criado dentro (ou depois) do mês do processamento.
+      where.createdAt = { lt: this.monthRange(period).start };
+    }
     return this.prisma.read.user.findMany({ where, select: { id: true, fullName: true } });
   }
 
@@ -395,7 +450,7 @@ export class PayrollCalculationService {
     const run = await this.prisma.payrollRun.findUnique({ where: { id: runId } });
     if (!run) throw new NotFoundException('PayrollRun não encontrado');
 
-    const targets = await this.resolveTargetUsers(run);
+    const targets = await this.resolveTargetUsers(run, run.period);
 
     // countryCode/taxYear são invariantes por run — carrega a config UMA vez
     // (join a irtBrackets) e reutiliza para todos os colaboradores.
@@ -424,7 +479,12 @@ export class PayrollCalculationService {
 
         for (const user of targets) {
           const calc = await this.calculatePayslip(
-            { countryCode: run.countryCode, taxYear: run.taxYear, period: run.period },
+            {
+              countryCode: run.countryCode,
+              taxYear: run.taxYear,
+              period: run.period,
+              scope: run.scope,
+            },
             user,
           );
 

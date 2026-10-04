@@ -61,6 +61,8 @@ export class PayrollWorkflowService {
     if (dto.departmentIds?.length)
       (scope as Record<string, unknown>).departmentIds = dto.departmentIds;
     if (dto.userIds?.length) (scope as Record<string, unknown>).userIds = dto.userIds;
+    if (dto.options && Object.keys(dto.options).length)
+      (scope as Record<string, unknown>).options = { ...dto.options };
 
     return this.prisma.payrollRun.create({
       data: {
@@ -69,6 +71,7 @@ export class PayrollWorkflowService {
         taxYear: dto.taxYear ?? Number(dto.period.slice(0, 4)),
         payGroup: dto.payGroup ?? null,
         notes: dto.notes ?? null,
+        expectedPaymentDate: dto.expectedPaymentDate ? new Date(dto.expectedPaymentDate) : null,
         scope: Object.keys(scope).length ? scope : Prisma.DbNull,
         status: 'DRAFT',
         createdById: actorId,
@@ -115,7 +118,7 @@ export class PayrollWorkflowService {
     assertPayslipEditable(payslip);
 
     const calc = await this.calc.calculatePayslip(
-      { countryCode: run.countryCode, taxYear: run.taxYear, period: run.period },
+      { countryCode: run.countryCode, taxYear: run.taxYear, period: run.period, scope: run.scope },
       { id: payslip.userId },
       {
         absenceDays: dto.absenceDays,

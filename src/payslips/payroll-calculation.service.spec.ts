@@ -222,6 +222,77 @@ describe('PayrollCalculationService.calculatePayslip', () => {
     const [ctx] = engine.calculate.mock.calls[0];
     expect(ctx.taxYear).toBe(2026);
   });
+
+  it('opções do run desligam subsídios, horas extra, faltas, INSS, IRT e deduções', async () => {
+    engine.calculate.mockResolvedValue(engineResult);
+    prisma.read.employeeCompensation.findFirst.mockResolvedValue({
+      baseSalary: 100000,
+      foodAllowance: 25000,
+      components: [{ componentCode: 'PREMIO', value: 1000 }],
+    });
+    await svc.calculatePayslip(
+      {
+        countryCode: 'AO',
+        taxYear: 2026,
+        period: '2026-09',
+        scope: {
+          options: {
+            includeSubsidies: false,
+            includeOvertime: false,
+            applyFaults: false,
+            includePrizes: false,
+            includeBonuses: false,
+            calculateInss: false,
+            calculateIrt: false,
+            applyDeductions: false,
+          },
+        },
+      },
+      { id: 1 },
+      { absenceDays: 2, overtimeHours: 4, bonusAmount: 5000 },
+    );
+    const [ctx] = engine.calculate.mock.calls[0];
+    expect(ctx).toMatchObject({
+      foodAllowance: 0,
+      transportAllowance: 0,
+      absenceDays: 0,
+      overtimeHours: 0,
+      skipInss: true,
+      skipIrt: true,
+      skipOtherDeductions: true,
+    });
+    expect(ctx.bonusAmount).toBeUndefined();
+    expect(ctx.extraComponents).toEqual([]);
+  });
+
+  it('sem opções, mantém o comportamento por omissão (tudo incluído)', async () => {
+    engine.calculate.mockResolvedValue(engineResult);
+    prisma.read.employeeCompensation.findFirst.mockResolvedValue({
+      baseSalary: 100000,
+      foodAllowance: 25000,
+      components: [{ componentCode: 'PREMIO', value: 1000 }],
+    });
+    await svc.calculatePayslip(
+      { countryCode: 'AO', taxYear: 2026, period: '2026-09' },
+      { id: 1 },
+      { absenceDays: 2 },
+    );
+    const [ctx] = engine.calculate.mock.calls[0];
+    expect(ctx).toMatchObject({
+      foodAllowance: 25000,
+      absenceDays: 2,
+      skipInss: false,
+      skipIrt: false,
+      skipOtherDeductions: false,
+    });
+    expect(ctx.extraComponents).toHaveLength(1);
+  });
+
+  it('resolveTargetUsers exclui novos colaboradores do mês quando includeNewEmployees=false', async () => {
+    await svc.resolveTargetUsers({ scope: { options: { includeNewEmployees: false } } }, '2026-09');
+    const where = prisma.read.user.findMany.mock.calls[0][0].where;
+    expect(where.createdAt).toEqual({ lt: new Date(Date.UTC(2026, 8, 1)) });
+  });
 });
 
 describe('PayrollCalculationService.detectExceptions', () => {

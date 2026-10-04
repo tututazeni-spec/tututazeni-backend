@@ -8,6 +8,7 @@ import {
   Min,
   ValidateIf,
   IsBoolean,
+  IsDateString,
   IsEnum,
   ValidateNested,
 } from 'class-validator';
@@ -16,6 +17,20 @@ import { ApiProperty, ApiPropertyOptional, PartialType, OmitType } from '@nestjs
 import { ComponentType, ComponentCalcType } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 import { EmptyStringToUndefined } from '../common/transformers/empty-string-to-undefined';
+
+export class PayrollRunOptionsDto {
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() includeNewEmployees?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() includeAbsences?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() includeOvertime?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() includeSubsidies?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() includePrizes?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() includeBonuses?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() applyDeductions?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() calculateInss?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() calculateIrt?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() applyFaults?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() applyDiscounts?: boolean;
+}
 
 export class CreatePayrollRunDto {
   @ApiProperty({ example: '2026-09' })
@@ -57,6 +72,18 @@ export class CreatePayrollRunDto {
   @EmptyStringToUndefined()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ example: '2026-09-30', description: 'Data prevista de pagamento' })
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsDateString()
+  expectedPaymentDate?: string;
+
+  @ApiPropertyOptional({ type: PayrollRunOptionsDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PayrollRunOptionsDto)
+  options?: PayrollRunOptionsDto;
 }
 
 export class PayrollRunFilterDto extends BaseFilterDto {

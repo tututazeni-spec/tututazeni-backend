@@ -31,6 +31,10 @@ export interface PayrollContext {
   workingDaysInMonth?: number;
   advanceDeduction?: number;
   extraComponents?: Array<{ code: string; value: number; isTaxable: boolean }>;
+  // Opções do run ("Novo Processamento") — por omissão tudo é calculado.
+  skipInss?: boolean;
+  skipIrt?: boolean;
+  skipOtherDeductions?: boolean; // seguro de saúde, quota sindical, adiantamento
 }
 
 export interface PayrollLineItem {
@@ -199,7 +203,7 @@ export class PayrollEngineService {
     const ssRate = config.socialSecurity?.employeeRate ?? 0.03;
     const ssCeiling = config.socialSecurity?.ceiling;
     const ssBase = ssCeiling ? Math.min(taxableBase, ssCeiling) : taxableBase;
-    const ssEmployee = +(ssBase * ssRate).toFixed(2);
+    const ssEmployee = ctx.skipInss ? 0 : +(ssBase * ssRate).toFixed(2);
 
     lines.push({
       code: 'INSS_EMPLOYEE',
@@ -213,7 +217,9 @@ export class PayrollEngineService {
 
     // ── Base tributável IRT = bruto tributável - INSS colaborador ────
     const irtBase = Math.max(0, taxableBase - ssEmployee);
-    const { irt, bracketLabel } = this.calculateIRT(irtBase, config.irtBrackets ?? []);
+    const { irt, bracketLabel } = ctx.skipIrt
+      ? { irt: 0, bracketLabel: 'Não calculado' }
+      : this.calculateIRT(irtBase, config.irtBrackets ?? []);
 
     if (irt > 0) {
       lines.push({
@@ -228,7 +234,7 @@ export class PayrollEngineService {
     }
 
     // ── Seguro de saúde ────────────────────────────────────────────────
-    const healthRate = config.healthInsuranceRate ?? 0;
+    const healthRate = ctx.skipOtherDeductions ? 0 : (config.healthInsuranceRate ?? 0);
     if (healthRate > 0) {
       const healthVal = +(grossSalary * healthRate).toFixed(2);
       lines.push({
@@ -243,7 +249,7 @@ export class PayrollEngineService {
     }
 
     // ── Sindicato ─────────────────────────────────────────────────────
-    const unionRate = config.unionFeeRate ?? 0;
+    const unionRate = ctx.skipOtherDeductions ? 0 : (config.unionFeeRate ?? 0);
     if (unionRate > 0) {
       const unionVal = +(grossSalary * unionRate).toFixed(2);
       lines.push({
@@ -258,7 +264,7 @@ export class PayrollEngineService {
     }
 
     // ── Adiantamento ──────────────────────────────────────────────────
-    if (ctx.advanceDeduction && ctx.advanceDeduction > 0) {
+    if (!ctx.skipOtherDeductions && ctx.advanceDeduction && ctx.advanceDeduction > 0) {
       lines.push({
         code: 'ADVANCE',
         name: 'Adiantamento',
