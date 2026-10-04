@@ -1,6 +1,6 @@
 // src/audit/audit.service.ts
 import { Injectable, Logger } from '@nestjs/common';
-import { AuditLog, Prisma } from '@prisma/client';
+import { AuditLog, Prisma, RiskLevel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditFilterDto, LogAuditDto, AuditSeverity, AuditStatus } from './audit.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
@@ -474,6 +474,127 @@ export class AuditService {
       byStatus: Object.fromEntries(byStatus.map(s => [s.status ?? 'N/D', s._count])),
       topUsers,
       recentCritical,
+    };
+  }
+
+  // ─── VISÃO GERAL (aba 01) ─────────────────────────────────────────────────
+
+  /**
+   * Agregados da aba "Visão Geral" para os últimos `days` dias.
+   * "Módulo" é aproximado pela entidade auditada (AuditLog não tem coluna
+   * `module`). "Acessos" = acções LOGIN (sucesso) e FAILED (falha) da
+   * entidade Auth. "Alertas por analisar" = anomalias detectadas — ainda não
+   * existe modelo de incidentes (aba 05).
+   */
+  async getOverview(days = 30) {
+    const safeDays = Math.min(Math.max(Math.trunc(days) || 30, 1), 365);
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
+    since.setDate(since.getDate() - (safeDays - 1));
+    const inPeriod = { timestamp: { gte: since } };
+    const critical = { severity: { in: ['CRITICAL', 'HIGH'] as RiskLevel[] } };
+
+    const [
+      total,
+      failedAccess,
+      successAccess,
+      criticalCount,
+      byModule,
+      bySeverity,
+      topUsers,
+      dailyRows,
+      recent,
+      recentCritical,
+      anomalies,
+    ] = await Promise.all([
+      this.prisma.read.auditLog.count({ where: inPeriod }),
+      this.prisma.read.auditLog.count({ where: { ...inPeriod, action: 'FAILED', entity: 'Auth' } }),
+      this.prisma.read.auditLog.count({ where: { ...inPeriod, action: 'LOGIN' } }),
+      this.prisma.read.auditLog.count({ where: { ...inPeriod, ...critical } }),
+      this.prisma.read.auditLog.groupBy({
+        by: ['entity'],
+        where: inPeriod,
+        _count: true,
+        orderBy: { _count: { entity: 'desc' } },
+        take: 8,
+      }),
+      this.prisma.read.auditLog.groupBy({ by: ['severity'], where: inPeriod, _count: true }),
+      this.prisma.read.auditLog.groupBy({
+        by: ['userId'],
+        where: { ...inPeriod, userId: { not: null } },
+        _count: true,
+        orderBy: { _count: { userId: 'desc' } },
+        take: 5,
+      }),
+      this.prisma.read.$queryRaw<Array<{ day: Date; total: bigint; failed: bigint }>>`
+        SELECT date_trunc('day', "timestamp") AS day,
+               COUNT(*) AS total,
+               COUNT(*) FILTER (WHERE action = 'FAILED' AND entity = 'Auth') AS failed
+        FROM "AuditLog"
+        WHERE "timestamp" >= ${since}
+        GROUP BY 1
+        ORDER BY 1`,
+      this.prisma.read.auditLog.findMany({
+        where: inPeriod,
+        include: { user: { select: { id: true, fullName: true, email: true, avatarUrl: true } } },
+        orderBy: { timestamp: 'desc' },
+        take: 10,
+      }),
+      this.prisma.read.auditLog.findMany({
+        where: { ...inPeriod, ...critical },
+        include: { user: { select: { id: true, fullName: true, email: true, avatarUrl: true } } },
+        orderBy: { timestamp: 'desc' },
+        take: 5,
+      }),
+      this.getAnomalySummary(),
+    ]);
+
+    const userIds = topUsers.map(u => u.userId).filter((id): id is number => id != null);
+    const users = userIds.length
+      ? await this.prisma.read.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, fullName: true, email: true },
+        })
+      : [];
+    const userById = new Map(users.map(u => [u.id, u]));
+
+    // Série diária contínua (dias sem eventos aparecem a zero).
+    const byDay = new Map(
+      dailyRows.map(r => [
+        new Date(r.day).toISOString().slice(0, 10),
+        { total: Number(r.total), failed: Number(r.failed) },
+      ]),
+    );
+    const daily: Array<{ date: string; total: number; failedAccess: number }> = [];
+    for (let i = 0; i < safeDays; i++) {
+      const d = new Date(since);
+      d.setDate(since.getDate() + i);
+      const key = d.toISOString().slice(0, 10);
+      const v = byDay.get(key);
+      daily.push({ date: key, total: v?.total ?? 0, failedAccess: v?.failed ?? 0 });
+    }
+
+    return {
+      periodDays: safeDays,
+      since,
+      totals: {
+        events: total,
+        failedAccess,
+        criticalActions: criticalCount,
+        pendingAlerts: anomalies.totalAlerts,
+      },
+      access: { success: successAccess, failed: failedAccess },
+      daily,
+      byModule: byModule.map(m => ({ module: m.entity, count: m._count })),
+      bySeverity: Object.fromEntries(bySeverity.map(s => [s.severity, s._count])),
+      topUsers: topUsers.map(u => ({
+        userId: u.userId,
+        count: u._count,
+        user: u.userId != null ? (userById.get(u.userId) ?? null) : null,
+      })),
+      recent,
+      recentCritical,
+      anomalies,
     };
   }
 

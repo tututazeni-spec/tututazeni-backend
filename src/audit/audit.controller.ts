@@ -40,6 +40,15 @@ export class AuditController {
     return this.svc.getStats();
   }
 
+  @Get('overview')
+  @ApiOperation({
+    summary: 'Visão Geral: indicadores, séries diárias, módulos, gravidade, utilizadores',
+  })
+  @ApiQuery({ name: 'days', required: false, description: '1-365, por omissão 30' })
+  overview(@Query('days') days?: string) {
+    return this.svc.getOverview(days ? parseInt(days, 10) : 30);
+  }
+
   @Get('anomalies')
   @ApiOperation({
     summary: 'Resumo de anomalias (logins suspeitos, exportações em massa, deletes)',
