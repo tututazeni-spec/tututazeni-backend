@@ -145,3 +145,12 @@ export class LogAuditDto {
   reason?: string;
   metadata?: Record<string, unknown>;
 }
+
+// Aba "Alterações de Dados" (modulo_audit.md §7): mesmos filtros do AuditLog +
+// o nome do campo alterado.
+export class ChangesFilterDto extends AuditFilterDto {
+  @ApiPropertyOptional({ description: 'Nome do campo alterado (ex.: status, email)' })
+  @IsOptional()
+  @IsString()
+  field?: string;
+}

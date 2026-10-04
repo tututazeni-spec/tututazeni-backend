@@ -9,6 +9,7 @@ import {
   LogAuditDto,
   AuditSeverity,
   AuditStatus,
+  ChangesFilterDto,
 } from './audit.dto';
 import { sessionIdleTimeoutMs } from '../auth/auth.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
@@ -1161,6 +1162,180 @@ export class AuditService {
       massExports: massExports.map(e => ({ userId: e.userId, count: e._count })),
       massDeletes: massDeletes.map(d => ({ userId: d.userId, count: d._count })),
       totalAlerts: failedLogins.length + massExports.length + massDeletes.length,
+    };
+  }
+
+  // ─── ALTERAÇÕES DE DADOS (§7) ─────────────────────────────────────────────
+
+  /** Acções que representam uma alteração de dados (criar, alterar, estado, aprovar, transferir…). */
+  private static readonly CHANGE_ACTIONS = [
+    'CREATE',
+    'UPDATE',
+    'DELETE',
+    'DEACTIVATE',
+    'REACTIVATE',
+    'ACTIVATE',
+    'RESTORE',
+    'ARCHIVE',
+    'STATUS',
+    'APPROVE',
+    'REJECT',
+    'TRANSFER',
+    'ASSIGN',
+  ];
+
+  /** Campos cujo valor só ADMIN vê (pessoais/salariais/bancários), em qualquer entidade. */
+  private static readonly SENSITIVE_FIELD =
+    /salar|wage|remunera|iban|nib|nif|bank|tax|ssn|birth|nascimento|address|morada/i;
+
+  private changeWhere(filters: ChangesFilterDto): Prisma.AuditLogWhereInput {
+    const base = this.buildWhere(filters);
+    const and: Prisma.AuditLogWhereInput[] = Array.isArray(base.AND)
+      ? [...base.AND]
+      : base.AND
+        ? [base.AND]
+        : [];
+    and.push({
+      OR: [
+        { changes: { not: null } },
+        ...AuditService.CHANGE_ACTIONS.map(a => ({
+          action: { contains: a, mode: 'insensitive' as const },
+        })),
+      ],
+    });
+    // Eventos de acesso/leitura nunca são "alterações de dados".
+    and.push({ NOT: { action: { in: ['LOGIN', 'LOGOUT', 'READ', 'FAILED', 'EXPORT'] } } });
+    const field = filters.field?.trim();
+    if (field) and.push({ changes: { contains: `"${field}"` } });
+    return { ...base, AND: and };
+  }
+
+  /** Alterações campo a campo de um registo de auditoria, com ocultação por permissão. */
+  private fieldChanges(
+    log: Pick<AuditLog, 'entity' | 'changes' | 'before' | 'after'>,
+    viewerRole?: string | null,
+  ): Array<{ field: string; from: unknown; to: unknown; masked: boolean }> {
+    const isAdmin = viewerRole === 'ADMIN';
+    const entityMasked = AuditService.SENSITIVE_ENTITY.test(log.entity) && !isAdmin;
+    let raw = this.scrub(this.parseJson(log.changes), false) as Record<
+      string,
+      { from: unknown; to: unknown }
+    > | null;
+    if (!raw || typeof raw !== 'object') {
+      const before = this.scrub(this.parseJson(log.before), false);
+      const after = this.scrub(this.parseJson(log.after), false);
+      if (before && after && typeof before === 'object' && typeof after === 'object') {
+        raw = this.diffObjects(before as Record<string, unknown>, after as Record<string, unknown>);
+      } else if (after && typeof after === 'object') {
+        // Criação: todos os campos novos.
+        raw = Object.fromEntries(
+          Object.entries(after as Record<string, unknown>).map(([k, v]) => [
+            k,
+            { from: null, to: v },
+          ]),
+        );
+      } else if (before && typeof before === 'object') {
+        raw = Object.fromEntries(
+          Object.entries(before as Record<string, unknown>).map(([k, v]) => [
+            k,
+            { from: v, to: null },
+          ]),
+        );
+      }
+    }
+    if (!raw || typeof raw !== 'object') return [];
+    return Object.entries(raw)
+      .filter(([k]) => !AuditService.SECRET_KEY.test(k))
+      .map(([field, v]) => {
+        const masked = entityMasked || (!isAdmin && AuditService.SENSITIVE_FIELD.test(field));
+        return {
+          field,
+          from: masked ? AuditService.MASK : (v?.from ?? null),
+          to: masked ? AuditService.MASK : (v?.to ?? null),
+          masked,
+        };
+      });
+  }
+
+  async getChanges(filters: ChangesFilterDto, viewerRole?: string | null) {
+    const { page = 1, limit = 20 } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+    const where = this.changeWhere(filters);
+    const [rows, total] = await Promise.all([
+      this.prisma.read.auditLog.findMany({
+        where,
+        skip,
+        take,
+        include: AuditService.USER_INCLUDE,
+        orderBy: { timestamp: 'desc' },
+      }),
+      this.prisma.read.auditLog.count({ where }),
+    ]);
+
+    const data = rows.map(l => {
+      const meta = this.parseJson(l.metadata) as Record<string, unknown> | null;
+      const m = meta && typeof meta === 'object' ? meta : {};
+      const pick = (...keys: string[]): string | null => {
+        for (const k of keys)
+          if (typeof m[k] === 'string' || typeof m[k] === 'number') return String(m[k]);
+        return null;
+      };
+      return {
+        id: l.id,
+        code: this.eventCode(l.id, new Date(l.timestamp)),
+        timestamp: l.timestamp,
+        action: l.action,
+        entity: l.entity,
+        entityId: l.entityId,
+        entityName: l.entityName,
+        status: l.status,
+        severity: l.severity,
+        reason: l.reason,
+        user: l.user,
+        actorType: l.userId == null ? 'SYSTEM' : 'USER',
+        // Origem: canal declarado nos metadados; senão o IP do pedido.
+        origin: pick('origin', 'source', 'channel') ?? (l.ip ? `IP ${l.ip}` : null),
+        approvalRef: pick('approvalId', 'approvalRef', 'approvedBy'),
+        fields: this.fieldChanges(l, viewerRole),
+      };
+    });
+
+    return buildPaginatedResponse(data, total, page, limit);
+  }
+
+  async getChangesSummary(days = 30, viewerRole?: string | null) {
+    void viewerRole;
+    const safeDays = Math.min(Math.max(Math.trunc(days) || 30, 1), 365);
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
+    since.setDate(since.getDate() - (safeDays - 1));
+    const where = this.changeWhere({ from: since.toISOString() } as ChangesFilterDto);
+
+    const [total, failed, byEntity, byAction, authors] = await Promise.all([
+      this.prisma.read.auditLog.count({ where }),
+      this.prisma.read.auditLog.count({ where: { ...where, status: { not: 'SUCCESS' } } }),
+      this.prisma.read.auditLog.groupBy({
+        by: ['entity'],
+        where,
+        _count: true,
+        orderBy: { _count: { entity: 'desc' } },
+        take: 8,
+      }),
+      this.prisma.read.auditLog.groupBy({
+        by: ['action'],
+        where,
+        _count: true,
+        orderBy: { _count: { action: 'desc' } },
+        take: 8,
+      }),
+      this.prisma.read.auditLog.groupBy({ by: ['userId'], where }),
+    ]);
+
+    return {
+      periodDays: safeDays,
+      totals: { changes: total, failed, authors: authors.filter(a => a.userId != null).length },
+      byEntity: byEntity.map(e => ({ entity: e.entity, count: e._count })),
+      byAction: byAction.map(a => ({ action: a.action, count: a._count })),
     };
   }
 }

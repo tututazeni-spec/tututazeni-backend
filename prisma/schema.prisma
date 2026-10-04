@@ -14856,3 +14856,161 @@ enum FunderCustomFieldType {
   SELECT
   MULTI_SELECT
 }
+
+// ── Auditoria: Segurança e Incidentes (docs/modulo_audit.md §8) ─────────────
+enum SecurityIncidentStatus {
+  OPEN
+  IN_ANALYSIS
+  MITIGATED
+  CLOSED
+}
+
+// IDs de utilizadores (assigneeId, createdById, ...) são Int sem FK de
+// propósito: um incidente/auditoria é registo de compliance e não pode ser
+// bloqueado nem apagado em cascata por alterações a utilizadores.
+model SecurityIncident {
+  id          Int                        @id @default(autoincrement())
+  code        String                     @unique
+  title       String
+  description String?                    @db.Text
+  category    String // SECURITY | ACCESS | DATA | INTEGRATION | OTHER
+  type        String? // tipo de incidente do §8 (ex.: UNAUTHORIZED_ACCESS)
+  severity    RiskLevel                  @default(MEDIUM)
+  status      SecurityIncidentStatus     @default(OPEN)
+  detectedAt  DateTime                   @default(now())
+  source      String // USER | SYSTEM | RULE
+  sourceLabel String? // utilizador/regra de deteção que originou o incidente
+  assigneeId  Int?
+  createdById Int?
+  resolution  String?                    @db.Text
+  closedAt    DateTime?
+  createdAt   DateTime                   @default(now())
+  updatedAt   DateTime                   @updatedAt
+  evidences   SecurityIncidentEvidence[]
+
+  @@index([status])
+  @@index([severity])
+  @@index([detectedAt])
+  @@index([assigneeId])
+}
+
+model SecurityIncidentEvidence {
+  id         Int              @id @default(autoincrement())
+  incidentId Int
+  incident   SecurityIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  auditLogId Int? // evento de auditoria relacionado
+  note       String?          @db.Text
+  addedById  Int?
+  createdAt  DateTime         @default(now())
+
+  @@index([incidentId])
+}
+
+// ── Auditoria: Auditorias e Inspeções (docs/modulo_audit.md §9) ─────────────
+enum InternalAuditStatus {
+  PLANNED
+  PREPARING
+  IN_PROGRESS
+  IN_REVIEW
+  AWAITING_CORRECTIVE_ACTIONS
+  COMPLETED
+  CANCELLED
+}
+
+enum InternalAuditType {
+  INTERNAL
+  OPERATIONAL
+  COMPLIANCE
+  SECURITY
+}
+
+model InternalAudit {
+  id            Int                     @id @default(autoincrement())
+  code          String                  @unique
+  title         String
+  objective     String?                 @db.Text
+  scope         String?                 @db.Text
+  type          InternalAuditType       @default(INTERNAL)
+  modules       String[]
+  periodFrom    DateTime?
+  periodTo      DateTime?
+  criteria      String?                 @db.Text
+  leadAuditorId Int?
+  teamIds       Int[]
+  startDate     DateTime?
+  dueDate       DateTime?
+  status        InternalAuditStatus     @default(PLANNED)
+  result        String? // CONFORME | CONFORME_COM_RESERVAS | NAO_CONFORME
+  closingReport String?                 @db.Text
+  approvedById  Int?
+  approvedAt    DateTime?
+  cancelReason  String?                 @db.Text
+  createdById   Int?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+  checks        InternalAuditCheck[]
+  evidences     InternalAuditEvidence[]
+  findings      InternalAuditFinding[]
+  actions       InternalAuditAction[]
+
+  @@index([status])
+  @@index([dueDate])
+}
+
+model InternalAuditCheck {
+  id        Int           @id @default(autoincrement())
+  auditId   Int
+  audit     InternalAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  title     String
+  status    String        @default("PENDING") // PENDING | PASSED | FAILED | NOT_APPLICABLE
+  notes     String?       @db.Text
+  createdAt DateTime      @default(now())
+
+  @@index([auditId])
+}
+
+model InternalAuditEvidence {
+  id          Int           @id @default(autoincrement())
+  auditId     Int
+  audit       InternalAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  title       String
+  description String?       @db.Text
+  url         String?
+  auditLogId  Int? // evento de auditoria usado como evidência
+  addedById   Int?
+  createdAt   DateTime      @default(now())
+
+  @@index([auditId])
+}
+
+model InternalAuditFinding {
+  id             Int                   @id @default(autoincrement())
+  auditId        Int
+  audit          InternalAudit         @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?               @db.Text
+  nonConformity  Boolean               @default(false)
+  risk           RiskLevel             @default(MEDIUM)
+  recommendation String?               @db.Text
+  createdAt      DateTime              @default(now())
+  actions        InternalAuditAction[]
+
+  @@index([auditId])
+}
+
+model InternalAuditAction {
+  id            Int                   @id @default(autoincrement())
+  auditId       Int
+  audit         InternalAudit         @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  findingId     Int?
+  finding       InternalAuditFinding? @relation(fields: [findingId], references: [id], onDelete: SetNull)
+  description   String                @db.Text
+  responsibleId Int?
+  dueDate       DateTime?
+  status        String                @default("OPEN") // OPEN | IN_PROGRESS | DONE
+  completedAt   DateTime?
+  createdAt     DateTime              @default(now())
+
+  @@index([auditId])
+  @@index([findingId])
+}

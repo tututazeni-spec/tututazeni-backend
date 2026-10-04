@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AuditService } from './audit.service';
-import { AccessFilterDto, AuditFilterDto } from './audit.dto';
+import { AccessFilterDto, AuditFilterDto, ChangesFilterDto } from './audit.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
@@ -85,6 +85,21 @@ export class AuditController {
       page ? parseInt(page, 10) || 1 : 1,
       limit ? Math.min(parseInt(limit, 10) || 20, 100) : 20,
     );
+  }
+
+  // ── Alterações de Dados (§7) ──────────────────────────────────────────────
+
+  @Get('changes/summary')
+  @ApiOperation({ summary: 'Indicadores das alterações de dados (por entidade e acção)' })
+  @ApiQuery({ name: 'days', required: false, description: '1-365, por omissão 30' })
+  changesSummary(@Query('days') days?: string, @CurrentUser() user?: CurrentUserData) {
+    return this.svc.getChangesSummary(days ? parseInt(days, 10) : 30, user?.role?.name);
+  }
+
+  @Get('changes')
+  @ApiOperation({ summary: 'Alterações de dados campo a campo (valores sensíveis ocultados)' })
+  changes(@Query() filters: ChangesFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.getChanges(filters, user.role?.name);
   }
 
   @Get(':id/detail')
