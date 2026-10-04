@@ -201,7 +201,9 @@ describe('LeaveManagementController', () => {
 
   it('create → colaborador não pode submeter em nome de outro', async () => {
     const employee = { id: 7, email: 'e@innova.com', role: { name: 'COLABORADOR' } };
-    await expect(controller.create({ userId: 8 } as any, employee as any)).rejects.toThrow();
+    await expect(async () =>
+      controller.create({ userId: 8 } as any, employee as any),
+    ).rejects.toThrow();
     expect(mockSvc.create).not.toHaveBeenCalled();
   });
 

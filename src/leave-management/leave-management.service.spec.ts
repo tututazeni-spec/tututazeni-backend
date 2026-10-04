@@ -83,6 +83,7 @@ const mockEffects = {
 
 const baseLeaveRequest = {
   id: 1,
+  createdAt: new Date('2024-06-01'),
   userId: 1,
   leaveTypeCode: 'ANNUAL',
   startDate: new Date('2024-07-01'),
@@ -414,6 +415,7 @@ const lmRhUser = { id: 1, role: { name: 'RH' } } as any;
 function makeLeaveService(leaveRequest: any) {
   const prismaLocal: any = {
     leaveRequest: { findUnique: jest.fn().mockResolvedValue(leaveRequest) },
+    leaveTypeConfig: { findMany: jest.fn().mockResolvedValue([]) },
     notificationLog: { create: jest.fn().mockResolvedValue({}) },
     auditLog: { create: jest.fn().mockResolvedValue({}) },
   };

@@ -345,12 +345,7 @@ export class LeaveManagementService {
     const needsDocument =
       leaveType.requiresDocument ||
       (!!leaveType.category && cfg.documentRequiredCategories.includes(leaveType.category));
-    if (
-      needsDocument &&
-      !dto.saveAsDraft &&
-      documents.length === 0 &&
-      !dto.attachments?.length
-    )
+    if (needsDocument && !dto.saveAsDraft && documents.length === 0 && !dto.attachments?.length)
       throw new BadRequestException(`O tipo "${leaveType.name}" exige um documento comprovativo`);
 
     // ── Calcular duração (regra de contagem, horas por dia e feriados da localização)

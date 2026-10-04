@@ -52,7 +52,13 @@ describe('leave-calendar.helper', () => {
     it('feriado recorrente repete-se em todos os anos', () => {
       configureLeaveCalendar({
         holidays: [
-          { date: '2026-08-12', name: 'Aniversário', location: null, recurring: true, active: true },
+          {
+            date: '2026-08-12',
+            name: 'Aniversário',
+            location: null,
+            recurring: true,
+            active: true,
+          },
         ],
       });
       expect(holidaysForYear(2029).get('2029-08-12')).toBe('Aniversário');
@@ -79,7 +85,9 @@ describe('leave-calendar.helper', () => {
     it('configurar invalida a cache de feriados', () => {
       expect(holidaysForYear(2026).has('2026-08-12')).toBe(false);
       configureLeaveCalendar({
-        holidays: [{ date: '2026-08-12', name: 'N', location: null, recurring: false, active: true }],
+        holidays: [
+          { date: '2026-08-12', name: 'N', location: null, recurring: false, active: true },
+        ],
       });
       expect(holidaysForYear(2026).has('2026-08-12')).toBe(true);
     });

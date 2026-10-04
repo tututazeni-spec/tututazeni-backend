@@ -110,9 +110,7 @@ describe('mergeSettings / diffSettings / validateSettings', () => {
 describe('LeaveSettingsService.update', () => {
   it('exige o motivo da alteração', async () => {
     const { svc } = makeService();
-    await expect(svc.update({ hoursPerDay: 7, changeNote: '  ' }, 1)).rejects.toThrow(
-      /motivo/,
-    );
+    await expect(svc.update({ hoursPerDay: 7, changeNote: '  ' }, 1)).rejects.toThrow(/motivo/);
   });
 
   it('cria uma nova versão imutável, regista na auditoria e invalida o cache', async () => {
@@ -217,9 +215,9 @@ describe('LeaveSettingsService — feriados por localização', () => {
   it('rejeita feriado duplicado na mesma data e localização', async () => {
     const { svc, prisma } = makeService();
     prisma.leaveHoliday.findFirst.mockResolvedValue({ id: 1 });
-    await expect(
-      svc.createHoliday({ name: 'X', date: '2026-08-12' }, 1),
-    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(svc.createHoliday({ name: 'X', date: '2026-08-12' }, 1)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
   });
 
   it('remover feriado inexistente → 404', async () => {

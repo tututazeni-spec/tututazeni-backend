@@ -159,7 +159,10 @@ export class LeavePlanningService {
       if (!isWeekend(d) && !holidayKeys.has(dayKey(d))) workingDays.push(d);
     }
 
-    type DeptDay = { approved: Set<number>; pending: Set<number> };
+    interface DeptDay {
+      approved: Set<number>;
+      pending: Set<number>;
+    }
     const grid = new Map<string, Map<number | null, DeptDay>>();
     const cell = (k: string, dept: number | null) => {
       const byDept = grid.get(k) ?? new Map<number | null, DeptDay>();

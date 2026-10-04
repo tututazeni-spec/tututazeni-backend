@@ -217,7 +217,13 @@ export class LeaveEffectsService {
         orderBy: [{ userId: 'asc' }, { date: 'asc' }],
       }),
       this.prisma.read.leaveTypeConfig.findMany({
-        select: { code: true, name: true, isPaid: true, isSensitive: true, requiresPayrollValidation: true },
+        select: {
+          code: true,
+          name: true,
+          isPaid: true,
+          isSensitive: true,
+          requiresPayrollValidation: true,
+        },
       }),
     ]);
     const typeOf = new Map(types.map(t => [t.code, t]));
@@ -263,6 +269,11 @@ export class LeaveEffectsService {
       userId: actorId,
       metadata: { period, leaves: leaveRows.length, absences: absenceRows.length },
     });
-    return { period, generatedAt: new Date().toISOString(), leaves: leaveRows, absences: absenceRows };
+    return {
+      period,
+      generatedAt: new Date().toISOString(),
+      leaves: leaveRows,
+      absences: absenceRows,
+    };
   }
 }

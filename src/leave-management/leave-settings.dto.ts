@@ -106,7 +106,11 @@ const HH_MM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /** Todos os campos são opcionais: o que vier substitui o valor activo. */
 export class UpdateLeaveSettingsDto {
-  @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsInt() @Min(2000) @Max(2100)
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(2000)
+  @Max(2100)
   referenceYear?: number | null;
 
   @ApiPropertyOptional({ description: 'MM-DD', nullable: true })
@@ -153,12 +157,24 @@ export class UpdateLeaveSettingsDto {
   unjustifiedOccurrenceTypes?: AbsenceOccurrenceType[];
 
   @ApiPropertyOptional() @IsOptional() @IsBoolean() carryOverEnabled?: boolean;
-  @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsInt() @Min(0) @Max(365)
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(365)
   carryOverMaxDays?: number | null;
 
-  @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsInt() @Min(0) @Max(365)
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(365)
   minNoticeDays?: number | null;
-  @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsInt() @Min(1) @Max(1095)
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1095)
   maxAdvanceDays?: number | null;
 
   @ApiPropertyOptional({ type: [String] })
@@ -169,14 +185,26 @@ export class UpdateLeaveSettingsDto {
   @MaxLength(60, { each: true })
   documentRequiredCategories?: string[];
 
-  @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsInt() @Min(1) @Max(365)
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(365)
   substituteRequiredOverDays?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(60) decisionSlaDays?: number;
-  @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsInt() @Min(1) @Max(60)
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(60)
   escalationAfterDays?: number | null;
 
   @ApiPropertyOptional() @IsOptional() @IsBoolean() employeeCanCancelApproved?: boolean;
-  @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsInt() @Min(0) @Max(365)
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(365)
   cancelApprovedMinDaysBefore?: number | null;
 
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(100) defaultMaxAbsencePercent?: number;
@@ -200,7 +228,13 @@ export class UpdateLeaveSettingsDto {
 }
 
 export class SettingsHistoryFilterDto {
-  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(200) limit?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  limit?: number;
 }
 
 export class CreateLeaveHolidayDto {
@@ -227,7 +261,13 @@ export class UpdateLeaveHolidayDto {
 }
 
 export class HolidayFilterDto {
-  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() @Min(2000) @Max(2100) year?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(2000)
+  @Max(2100)
+  year?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(120) location?: string;
 }
 

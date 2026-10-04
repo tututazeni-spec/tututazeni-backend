@@ -135,7 +135,10 @@ export class LeaveSettingsService implements OnModuleInit {
             versionId: upcoming.id,
             effectiveFrom: upcoming.effectiveFrom,
             changeNote: upcoming.changeNote,
-            changedKeys: diffSettings(mergeSettings(active?.values), mergeSettings(upcoming.values)),
+            changedKeys: diffSettings(
+              mergeSettings(active?.values),
+              mergeSettings(upcoming.values),
+            ),
           }
         : null,
       defaults: DEFAULT_LEAVE_SETTINGS,
@@ -165,7 +168,10 @@ export class LeaveSettingsService implements OnModuleInit {
         changeNote: r.changeNote,
         scheduled: r.effectiveFrom.getTime() > now,
         // Primeira versão: tudo o que difere dos valores por omissão.
-        changedKeys: diffSettings(prev ? mergeSettings(prev.values) : DEFAULT_LEAVE_SETTINGS, values),
+        changedKeys: diffSettings(
+          prev ? mergeSettings(prev.values) : DEFAULT_LEAVE_SETTINGS,
+          values,
+        ),
         values,
       };
     });
@@ -273,7 +279,8 @@ export class LeaveSettingsService implements OnModuleInit {
     const date = toDateOnly(dto.date);
     const location = dto.location?.trim() || null;
     const clash = await this.prisma.leaveHoliday.findFirst({ where: { date, location } });
-    if (clash) throw new ConflictException('Já existe um feriado configurado nessa data e localização');
+    if (clash)
+      throw new ConflictException('Já existe um feriado configurado nessa data e localização');
     const row = await this.prisma.leaveHoliday.create({
       data: {
         name: dto.name.trim(),
@@ -303,7 +310,8 @@ export class LeaveSettingsService implements OnModuleInit {
     const clash = await this.prisma.leaveHoliday.findFirst({
       where: { date, location, id: { not: id } },
     });
-    if (clash) throw new ConflictException('Já existe um feriado configurado nessa data e localização');
+    if (clash)
+      throw new ConflictException('Já existe um feriado configurado nessa data e localização');
     const row = await this.prisma.leaveHoliday.update({
       where: { id },
       data: {
@@ -348,7 +356,9 @@ export class LeaveSettingsService implements OnModuleInit {
     const orgWide = isPrivileged(viewer, [Role.ADMIN, Role.RH]);
     const rows = await this.prisma.leaveDelegation.findMany({
       where: {
-        ...(onlyActive ? { active: true, endDate: { gte: toDateOnly(new Date().toISOString()) } } : {}),
+        ...(onlyActive
+          ? { active: true, endDate: { gte: toDateOnly(new Date().toISOString()) } }
+          : {}),
         ...(orgWide ? {} : { OR: [{ delegatorId: viewer.id }, { delegateId: viewer.id }] }),
       },
       orderBy: [{ startDate: 'desc' }, { id: 'desc' }],
@@ -385,7 +395,12 @@ export class LeaveSettingsService implements OnModuleInit {
       throw new NotFoundException('Substituto não encontrado');
     }
     const overlap = await this.prisma.leaveDelegation.findFirst({
-      where: { delegatorId, active: true, startDate: { lte: endDate }, endDate: { gte: startDate } },
+      where: {
+        delegatorId,
+        active: true,
+        startDate: { lte: endDate },
+        endDate: { gte: startDate },
+      },
     });
     if (overlap) throw new ConflictException('Já existe uma delegação activa nesse período');
 
@@ -429,7 +444,12 @@ export class LeaveSettingsService implements OnModuleInit {
   async activeDelegateOf(approverId: number, at = new Date()): Promise<number | null> {
     const day = toDateOnly(at.toISOString());
     const row = await this.prisma.leaveDelegation.findFirst({
-      where: { delegatorId: approverId, active: true, startDate: { lte: day }, endDate: { gte: day } },
+      where: {
+        delegatorId: approverId,
+        active: true,
+        startDate: { lte: day },
+        endDate: { gte: day },
+      },
       orderBy: { id: 'desc' },
       select: { delegateId: true },
     });

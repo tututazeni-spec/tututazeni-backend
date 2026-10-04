@@ -260,7 +260,9 @@ describe('cancelamento (§10 política de cancelamento)', () => {
   it('antecedência mínima de cancelamento é aplicada ao colaborador', async () => {
     const { svc, prisma } = harness({ settings: { cancelApprovedMinDaysBefore: 7 } });
     prisma.leaveRequest.findUnique.mockResolvedValue(approved(3));
-    await expect(svc.cancel(77, 10, { actor: owner })).rejects.toThrow(/7 dia\(s\) de antecedência/);
+    await expect(svc.cancel(77, 10, { actor: owner })).rejects.toThrow(
+      /7 dia\(s\) de antecedência/,
+    );
   });
 
   it('ADMIN/RH cancelam fora da política e fica registado quem cancelou', async () => {
@@ -361,10 +363,7 @@ describe('regras das Configurações na submissão (§10)', () => {
 
   it('horas por dia vêm das Configurações', async () => {
     const { svc, prisma } = harness({ settings: { hoursPerDay: 6 } });
-    await svc.create(
-      dto({ endDate: '2031-03-10', durationMode: 'HOURS', hours: 3 }),
-      10,
-    );
+    await svc.create(dto({ endDate: '2031-03-10', durationMode: 'HOURS', hours: 3 }), 10);
     expect(prisma.leaveRequest.create.mock.calls[0][0].data.workDays).toBe(0.5);
   });
 

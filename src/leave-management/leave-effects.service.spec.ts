@@ -91,9 +91,9 @@ describe('syncAttendanceOnApproval', () => {
     expect(r.created).toBe(7);
     const data = prisma.attendanceRecord.createMany.mock.calls[0][0].data;
     expect(data).toHaveLength(7);
-    expect(data.every((d: { leaveRequestId: number; status: string }) => d.leaveRequestId === 7)).toBe(
-      true,
-    );
+    expect(
+      data.every((d: { leaveRequestId: number; status: string }) => d.leaveRequestId === 7),
+    ).toBe(true);
     expect(data[0].status).toBe('ON_LEAVE');
     expect(prisma.attendanceRecord.createMany.mock.calls[0][0].skipDuplicates).toBe(true);
   });
@@ -106,8 +106,8 @@ describe('syncAttendanceOnApproval', () => {
     ]);
     const r = await svc.syncAttendanceOnApproval(request);
     expect(r.created).toBe(5);
-    const days = prisma.attendanceRecord.createMany.mock.calls[0][0].data.map(
-      (d: { date: Date }) => d.date.toISOString().slice(0, 10),
+    const days = prisma.attendanceRecord.createMany.mock.calls[0][0].data.map((d: { date: Date }) =>
+      d.date.toISOString().slice(0, 10),
     );
     expect(days).not.toContain('2026-11-04');
     expect(days).not.toContain('2026-11-05');
@@ -185,7 +185,13 @@ describe('payrollFeed', () => {
       },
     ]);
     prisma.leaveTypeConfig.findMany.mockResolvedValue([
-      { code: 'UNPAID', name: 'Sem vencimento', isPaid: false, isSensitive: false, requiresPayrollValidation: true },
+      {
+        code: 'UNPAID',
+        name: 'Sem vencimento',
+        isPaid: false,
+        isSensitive: false,
+        requiresPayrollValidation: true,
+      },
     ]);
     prisma.absenceRecord.findMany.mockResolvedValue([
       {
@@ -230,7 +236,13 @@ describe('payrollFeed', () => {
       },
     ]);
     prisma.leaveTypeConfig.findMany.mockResolvedValue([
-      { code: 'SICK', name: 'Baixa médica', isPaid: true, isSensitive: true, requiresPayrollValidation: true },
+      {
+        code: 'SICK',
+        name: 'Baixa médica',
+        isPaid: true,
+        isSensitive: true,
+        requiresPayrollValidation: true,
+      },
     ]);
     const feed = await svc.payrollFeed('2026-11', 1);
     expect(feed.leaves[0].typeCode).toBe('SENSITIVE');

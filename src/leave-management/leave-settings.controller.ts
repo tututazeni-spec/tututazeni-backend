@@ -43,7 +43,9 @@ export class LeaveSettingsController {
 
   @Get()
   @Roles(Role.ADMIN, Role.RH)
-  @ApiOperation({ summary: 'Configurações em vigor, próxima versão agendada e valores por omissão' })
+  @ApiOperation({
+    summary: 'Configurações em vigor, próxima versão agendada e valores por omissão',
+  })
   overview() {
     return this.svc.overview();
   }
