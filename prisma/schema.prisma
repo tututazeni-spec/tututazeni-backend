@@ -743,6 +743,7 @@ model User {
   eventParticipations       EventParticipant[]
   eventFeedbacks            EventFeedback[]
   attendanceRecords         AttendanceRecord[]        @relation("UserAttendanceRecords")
+  absenceRecords            AbsenceRecord[]           @relation("UserAbsenceRecords")
   createdVacancies          InternalVacancy[]         @relation("VacancyCreator")
   managedVacancies          InternalVacancy[]         @relation("VacancyResponsibleManager")
   vacancyApplications       InternalApplication[]
@@ -9695,6 +9696,11 @@ model LeaveRequest {
   // alternativo durante a ausência.
   referenceYear      Int?
   contactDuringLeave String?
+  // Licenças (§4): quem registou o pedido (≠ userId quando é feito em nome do
+  // colaborador) e janela horária opcional para licenças de poucas horas.
+  createdById        Int?
+  startTime          String?
+  endTime            String?
 
   @@index([userId, status])
   @@index([startDate, endDate])
@@ -9759,6 +9765,8 @@ model LeaveDocument {
   fileUrl      String
   mimeType     String?
   uploadedById Int
+  // Comprovativos de tipos sensíveis (saúde, etc.) só o titular e o RH abrem.
+  isSensitive  Boolean      @default(false)
   createdAt    DateTime     @default(now())
 }
 
@@ -9773,24 +9781,29 @@ model LeaveImpactPreview {
 }
 
 model LeaveTypeConfig {
-  id                   Int      @id @default(autoincrement())
-  code                 String   @unique
-  name                 String
-  description          String?
-  color                String?
-  icon                 String?
-  isPaid               Boolean  @default(true)
-  annualLimit          Int?
-  allowCarryOver       Boolean  @default(false)
-  carryOverLimit       Int?
-  countWorkDaysOnly    Boolean  @default(true)
-  autoApprove          Boolean  @default(false)
-  autoApproveUnderDays Int?
-  minNoticeDays        Int?
-  maxConsecutiveDays   Int?
-  active               Boolean  @default(true)
-  category             String?
-  createdAt            DateTime @default(now())
+  id                        Int      @id @default(autoincrement())
+  code                      String   @unique
+  name                      String
+  description               String?
+  color                     String?
+  icon                      String?
+  isPaid                    Boolean  @default(true)
+  annualLimit               Int?
+  allowCarryOver            Boolean  @default(false)
+  carryOverLimit            Int?
+  countWorkDaysOnly         Boolean  @default(true)
+  autoApprove               Boolean  @default(false)
+  autoApproveUnderDays      Int?
+  minNoticeDays             Int?
+  maxConsecutiveDays        Int?
+  active                    Boolean  @default(true)
+  category                  String?
+  // Licenças (§4): documento comprovativo obrigatório, dados sensíveis
+  // (saúde — o gestor não vê motivo/anexos) e sinalização para o Payroll.
+  requiresDocument          Boolean  @default(false)
+  isSensitive               Boolean  @default(false)
+  requiresPayrollValidation Boolean  @default(false)
+  createdAt                 DateTime @default(now())
 
   @@map("leave_type_configs")
 }
@@ -9808,6 +9821,97 @@ model LeavePolicy {
   createdAt         DateTime @default(now())
 
   @@map("leave_policies")
+}
+
+enum AbsenceOccurrenceType {
+  JUSTIFIED_ABSENCE
+  UNJUSTIFIED_ABSENCE
+  LATE
+  EARLY_DEPARTURE
+  PARTIAL_ABSENCE
+  HEALTH_ABSENCE
+  AUTHORIZED_ABSENCE
+  PERSONAL_ABSENCE
+  NO_SHOW
+  OTHER
+}
+
+enum AbsenceSource {
+  MANUAL
+  ATTENDANCE
+  INTEGRATION
+}
+
+enum AbsenceJustificationStatus {
+  TO_JUSTIFY
+  SUBMITTED
+  VALIDATED
+  REJECTED
+}
+
+// Gestão de Ausências (docs/Modulo_Leave.md §5): faltas e ocorrências
+// pontuais, separadas dos pedidos (LeaveRequest). `attendanceRecordId`
+// associa o registo existente em Attendance em vez de criar uma segunda
+// ocorrência independente (único por registo de assiduidade).
+model AbsenceRecord {
+  id                  Int                        @id @default(autoincrement())
+  userId              Int
+  user                User                       @relation("UserAbsenceRecords", fields: [userId], references: [id])
+  date                DateTime
+  startTime           String?
+  endTime             String?
+  durationDays        Float                      @default(1)
+  durationHours       Float?
+  occurrenceType      AbsenceOccurrenceType
+  customCategory      String?
+  justification       String?
+  source              AbsenceSource              @default(MANUAL)
+  justificationStatus AbsenceJustificationStatus @default(TO_JUSTIFY)
+  validatorId         Int?
+  validatedAt         DateTime?
+  validationNotes     String?
+  attendanceRecordId  Int?                       @unique
+  forwardedToId       Int?
+  forwardedAt         DateTime?
+  sentToHrAt          DateTime?
+  createdById         Int
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  attachments         AbsenceAttachment[]
+  revisions           AbsenceRevision[]
+
+  @@index([userId, date])
+  @@index([date])
+  @@index([justificationStatus])
+  @@map("absence_records")
+}
+
+model AbsenceAttachment {
+  id           Int           @id @default(autoincrement())
+  absenceId    Int
+  absence      AbsenceRecord @relation(fields: [absenceId], references: [id], onDelete: Cascade)
+  name         String
+  fileUrl      String
+  mimeType     String?
+  isSensitive  Boolean       @default(false)
+  uploadedById Int
+  createdAt    DateTime      @default(now())
+
+  @@index([absenceId])
+  @@map("absence_attachments")
+}
+
+model AbsenceRevision {
+  id          Int           @id @default(autoincrement())
+  absenceId   Int
+  absence     AbsenceRecord @relation(fields: [absenceId], references: [id], onDelete: Cascade)
+  changedById Int
+  reason      String
+  changes     Json
+  createdAt   DateTime      @default(now())
+
+  @@index([absenceId])
+  @@map("absence_revisions")
 }
 
 enum JustificationStatus {

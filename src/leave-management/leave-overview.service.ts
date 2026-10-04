@@ -5,10 +5,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
 import { buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { isPrivileged } from '../common/authz/ownership';
+import { leaveScopeOf, leaveUserFilter, ORG_WIDE_ROLES, TEAM_ROLES } from './leave-scope.helper';
 import {
   DurationPreviewDto,
   LeaveStatus,
@@ -19,8 +19,6 @@ import {
 import { countCalendarDays, countWorkDays, holidaysInRange } from './leave-calendar.helper';
 
 export const VACATION_CODE = 'VACATION';
-const ORG_WIDE_ROLES = [Role.ADMIN, Role.RH];
-const TEAM_ROLES = [Role.GESTOR, Role.DIRECTOR, Role.LIDER];
 
 function startOfDay(d: Date): Date {
   const x = new Date(d);
@@ -32,33 +30,11 @@ function startOfDay(d: Date): Date {
 export class LeaveOverviewService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * Quem cada perfil pode ver: colaborador → só si; gestor/líder/director →
-   * a sua equipa (subordinados directos + departamentos que chefia) e si;
-   * ADMIN/RH → toda a organização.
-   */
-  private scopeWhere(user: CurrentUserData): Prisma.UserWhereInput {
-    if (isPrivileged(user, ORG_WIDE_ROLES)) return {};
-    if (isPrivileged(user, TEAM_ROLES)) {
-      return {
-        OR: [
-          { id: user.id },
-          { managerId: user.id },
-          { department: { OR: [{ headId: user.id }, { directManagerId: user.id }] } },
-        ],
-      };
-    }
-    return { id: user.id };
-  }
-
   private userFilter(
     user: CurrentUserData,
     f: { unitId?: number; departmentId?: number },
   ): Prisma.UserWhereInput {
-    const and: Prisma.UserWhereInput[] = [this.scopeWhere(user)];
-    if (f.unitId) and.push({ unitId: f.unitId });
-    if (f.departmentId) and.push({ departmentId: f.departmentId });
-    return { AND: and };
+    return leaveUserFilter(user, f);
   }
 
   // ══════════════════════════════════════════════════════════════════
@@ -191,11 +167,7 @@ export class LeaveOverviewService {
 
     return {
       period: { from, to },
-      scope: isPrivileged(user, ORG_WIDE_ROLES)
-        ? 'ORGANIZATION'
-        : isPrivileged(user, TEAM_ROLES)
-          ? 'TEAM'
-          : 'SELF',
+      scope: leaveScopeOf(user),
       cards: {
         vacationAvailable: myVacation?.balance ?? null,
         pendingRequests: pendingCount,

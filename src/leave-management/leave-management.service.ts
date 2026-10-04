@@ -32,6 +32,7 @@ import {
   DurationMode,
 } from './leave-management.dto';
 import { countWorkDays, countCalendarDays } from './leave-calendar.helper';
+import { canSeeSensitive } from './leave-scope.helper';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,11 @@ import { countWorkDays, countCalendarDays } from './leave-calendar.helper';
 // coincide literalmente com um dos 10 membros do enum, para manter leitores
 // antigos a funcionar sem voltar a rebentar em códigos customizados.
 const LEAVE_TYPE_ENUM_VALUES = new Set<string>(Object.values(LeaveType));
+
+function timeToMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
 
 function toLeaveTypeEnum(code: string): LeaveType | null {
   return LEAVE_TYPE_ENUM_VALUES.has(code) ? (code as LeaveType) : null;
@@ -144,9 +150,7 @@ export class LeaveManagementService {
     });
   }
 
-  private async getApplicablePolicy(
-    userId: number,
-  ): Promise<Prisma.LeavePolicyGetPayload<object> | null> {
+  async getApplicablePolicy(userId: number): Promise<Prisma.LeavePolicyGetPayload<object> | null> {
     const user = await this.prisma.read.user.findUnique({
       where: { id: userId },
       include: { department: { select: { name: true } } },
@@ -167,7 +171,7 @@ export class LeaveManagementService {
   // LEAVE REQUESTS — LIST / DETAIL
   // ══════════════════════════════════════════════════════════════════
 
-  async findAll(filters: LeaveFilterDto) {
+  async findAll(filters: LeaveFilterDto, viewer?: CurrentUserData) {
     const {
       page = 1,
       limit = 20,
@@ -212,7 +216,36 @@ export class LeaveManagementService {
       this.prisma.read.leaveRequest.count({ where }),
     ]);
 
-    return buildPaginatedResponse(data, total, page, limit);
+    return buildPaginatedResponse(await this.redactSensitive(data, viewer), total, page, limit);
+  }
+
+  /**
+   * Tipos sensíveis (saúde, etc.): quem não é o titular nem ADMIN/RH não recebe
+   * o motivo nem os comprovativos — o gestor decide sobre a ausência, não
+   * precisa do detalhe clínico (docs/Modulo_Leave.md §4).
+   */
+  private async redactSensitive<
+    T extends {
+      userId: number;
+      leaveTypeCode: string;
+      reason?: string | null;
+      documents?: unknown[];
+      attachments?: string[];
+    },
+  >(rows: T[], viewer?: CurrentUserData): Promise<T[]> {
+    if (!viewer || rows.length === 0) return rows;
+    const sensitiveTypes =
+      (await this.prisma.read.leaveTypeConfig.findMany({
+        where: { isSensitive: true },
+        select: { code: true },
+      })) ?? [];
+    const sensitive = new Set(sensitiveTypes.map(t => t.code));
+    if (sensitive.size === 0) return rows;
+    return rows.map(r =>
+      sensitive.has(r.leaveTypeCode) && !canSeeSensitive(viewer, r.userId)
+        ? { ...r, reason: null, documents: [], attachments: [] }
+        : r,
+    );
   }
 
   async findOne(id: number, user?: CurrentUserData) {
@@ -231,11 +264,11 @@ export class LeaveManagementService {
     // Ownership (A3): dono OU ADMIN/RH/GESTOR; senão 404.
     if (user) assertCanAccess(r, r?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     else if (!r) throw new NotFoundException('Pedido não encontrado');
-    return r;
+    return user ? (await this.redactSensitive([r], user))[0] : r;
   }
 
-  async getPendingApprovals(approverId: number) {
-    return this.prisma.read.leaveRequest.findMany({
+  async getPendingApprovals(approverId: number, viewer?: CurrentUserData) {
+    const rows = await this.prisma.read.leaveRequest.findMany({
       where: {
         status: LeaveStatus.PENDING,
         approvals: { some: { approverId, decidedAt: null } },
@@ -246,6 +279,7 @@ export class LeaveManagementService {
       },
       orderBy: { createdAt: 'asc' },
     });
+    return this.redactSensitive(rows, viewer);
   }
 
   // ══════════════════════════════════════════════════════════════════
@@ -264,17 +298,39 @@ export class LeaveManagementService {
     if (!leaveType)
       throw new NotFoundException(`Tipo de licença "${dto.leaveTypeCode}" não encontrado`);
 
+    // ── Janela horária (licenças de poucas horas): HH:mm → horas
+    if ((dto.startTime && !dto.endTime) || (!dto.startTime && dto.endTime))
+      throw new BadRequestException('Indique a hora de início e a hora de fim');
+    let hours = dto.hours;
+    let durationMode = dto.durationMode;
+    if (dto.startTime && dto.endTime) {
+      const span = timeToMinutes(dto.endTime) - timeToMinutes(dto.startTime);
+      if (span <= 0) throw new BadRequestException('A hora de fim tem de ser posterior ao início');
+      hours = +(span / 60).toFixed(2);
+      durationMode = durationMode ?? DurationMode.HOURS;
+    }
+
+    // ── Documento comprovativo exigido pelo tipo (§4) — rascunhos ficam isentos
+    const documents = dto.documents ?? [];
+    if (
+      leaveType.requiresDocument &&
+      !dto.saveAsDraft &&
+      documents.length === 0 &&
+      !dto.attachments?.length
+    )
+      throw new BadRequestException(`O tipo "${leaveType.name}" exige um documento comprovativo`);
+
     // ── Calcular duração
     const { workDays, calendarDays } = this.calculateDuration(
       start,
       end,
-      dto.durationMode,
-      dto.hours,
+      durationMode,
+      hours,
       leaveType.countWorkDaysOnly,
     );
 
     // ── Validações
-    await this.runValidations(dto.userId, leaveType, start, end, workDays, dto.durationMode);
+    await this.runValidations(dto.userId, leaveType, start, end, workDays, durationMode);
 
     // ── Determinar status inicial e fluxo de aprovação
     const autoApprove = leaveType.autoApprove && workDays <= (leaveType.autoApproveUnderDays ?? 1);
@@ -298,8 +354,11 @@ export class LeaveManagementService {
         leaveType: toLeaveTypeEnum(dto.leaveTypeCode),
         startDate: start,
         endDate: end,
-        durationMode: dto.durationMode ?? DurationMode.FULL_DAY,
-        hours: dto.hours,
+        durationMode: durationMode ?? DurationMode.FULL_DAY,
+        hours,
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+        createdById,
         workDays,
         calendarDays,
         reason: dto.reason,
@@ -308,6 +367,17 @@ export class LeaveManagementService {
         referenceYear: dto.referenceYear ?? start.getFullYear(),
         contactDuringLeave: dto.contactDuringLeave,
         attachments: dto.attachments ?? [],
+        documents: documents.length
+          ? {
+              create: documents.map(d => ({
+                name: d.name,
+                fileUrl: d.fileUrl,
+                mimeType: d.mimeType,
+                uploadedById: createdById,
+                isSensitive: leaveType.isSensitive,
+              })),
+            }
+          : undefined,
         impactPreview: impact ? { create: impact } : undefined,
       },
       include: { user: { select: { id: true, fullName: true } } },

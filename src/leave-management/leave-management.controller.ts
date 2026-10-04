@@ -13,6 +13,8 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { LeaveManagementService } from './leave-management.service';
 import { LeaveOverviewService } from './leave-overview.service';
+import { LeaveLicensesService } from './leave-licenses.service';
+import { LeaveAbsenceCalendarService } from './leave-absence-calendar.service';
 import {
   LeaveFilterDto,
   CalendarFilterDto,
@@ -27,6 +29,9 @@ import {
   OverviewFilterDto,
   VacationFilterDto,
   DurationPreviewDto,
+  LicenseFilterDto,
+  ApprovalRouteDto,
+  AbsenceCalendarFilterDto,
 } from './leave-management.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -42,6 +47,8 @@ export class LeaveManagementController {
   constructor(
     private readonly svc: LeaveManagementService,
     private readonly overview: LeaveOverviewService,
+    private readonly licenses: LeaveLicensesService,
+    private readonly absenceCalendar: LeaveAbsenceCalendarService,
   ) {}
 
   // ── Leave Types ────────────────────────────────────────────────────
@@ -113,6 +120,42 @@ export class LeaveManagementController {
     return this.overview.previewDuration(dto, user);
   }
 
+  @Get('licenses')
+  @ApiOperation({
+    summary:
+      'Aba Licenças — tabela com privacidade por perfil (motivo/comprovativos sensíveis ocultos)',
+  })
+  getLicenses(@Query() filters: LicenseFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.licenses.list(filters, user);
+  }
+
+  @Get('approval-route')
+  @ApiOperation({ summary: 'Encaminhamento de aprovação previsto antes de submeter' })
+  getApprovalRoute(@Query() dto: ApprovalRouteDto, @CurrentUser() user: CurrentUserData) {
+    return this.licenses.approvalRoute(dto, user);
+  }
+
+  @Get('absence-calendar')
+  @ApiOperation({
+    summary: 'Calendário de ausências (dia/semana/mês/ano) com cobertura e sobreposições',
+  })
+  getAbsenceCalendar(
+    @Query() filters: AbsenceCalendarFilterDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.absenceCalendar.getCalendar(filters, user);
+  }
+
+  @Get('absence-calendar/export')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR, Role.DIRECTOR, Role.LIDER)
+  @ApiOperation({ summary: 'Exportar o calendário de ausências (CSV)' })
+  exportAbsenceCalendar(
+    @Query() filters: AbsenceCalendarFilterDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.absenceCalendar.exportCsv(filters, user);
+  }
+
   @Get('analytics/absenteeism')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Relatório de absenteísmo por período' })
@@ -158,7 +201,7 @@ export class LeaveManagementController {
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Pedidos pendentes de aprovação do utilizador actual' })
   getPendingApprovals(@CurrentUser() user: CurrentUserData) {
-    return this.svc.getPendingApprovals(user.id);
+    return this.svc.getPendingApprovals(user.id, user);
   }
 
   // ── My Requests & Balance ─────────────────────────────────────────
@@ -166,7 +209,7 @@ export class LeaveManagementController {
   @Get('my')
   @ApiOperation({ summary: 'Meus pedidos de licença' })
   myRequests(@CurrentUser() user: CurrentUserData, @Query() filters: LeaveFilterDto) {
-    return this.svc.findAll({ ...filters, userId: user.id });
+    return this.svc.findAll({ ...filters, userId: user.id }, user);
   }
 
   @Get('my/balance')
@@ -186,8 +229,8 @@ export class LeaveManagementController {
   @Get()
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar todos os pedidos com filtros' })
-  findAll(@Query() filters: LeaveFilterDto) {
-    return this.svc.findAll(filters);
+  findAll(@Query() filters: LeaveFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.findAll(filters, user);
   }
 
   @Get(':id')
