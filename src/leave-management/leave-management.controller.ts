@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { LeaveManagementService } from './leave-management.service';
+import { LeaveOverviewService } from './leave-overview.service';
 import {
   LeaveFilterDto,
   CalendarFilterDto,
@@ -23,6 +24,9 @@ import {
   UpdateBalanceDto,
   AccrueBalanceDto,
   CreateLeavePolicyDto,
+  OverviewFilterDto,
+  VacationFilterDto,
+  DurationPreviewDto,
 } from './leave-management.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -35,7 +39,10 @@ import { assertCanAccess } from '../common/authz/ownership';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('leave')
 export class LeaveManagementController {
-  constructor(private readonly svc: LeaveManagementService) {}
+  constructor(
+    private readonly svc: LeaveManagementService,
+    private readonly overview: LeaveOverviewService,
+  ) {}
 
   // ── Leave Types ────────────────────────────────────────────────────
 
@@ -84,6 +91,26 @@ export class LeaveManagementController {
   @ApiQuery({ name: 'department', required: false })
   getDashboard(@Query('department') department?: string) {
     return this.svc.getDashboard(department);
+  }
+
+  @Get('overview')
+  @ApiOperation({
+    summary: 'Visão Geral — cards e gráficos de férias/ausências, âmbito conforme o perfil',
+  })
+  getOverview(@Query() filters: OverviewFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.overview.getOverview(filters, user);
+  }
+
+  @Get('vacations')
+  @ApiOperation({ summary: 'Aba Férias — saldos e plano anual por colaborador' })
+  getVacations(@Query() filters: VacationFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.overview.getVacations(filters, user);
+  }
+
+  @Get('duration-preview')
+  @ApiOperation({ summary: 'Duração, feriados, saldo e sobreposição antes de submeter' })
+  previewDuration(@Query() dto: DurationPreviewDto, @CurrentUser() user: CurrentUserData) {
+    return this.overview.previewDuration(dto, user);
   }
 
   @Get('analytics/absenteeism')
@@ -172,6 +199,8 @@ export class LeaveManagementController {
   @Post()
   @ApiOperation({ summary: 'Submeter pedido de licença (suporta rascunho, meios dias, horas)' })
   create(@Body() dto: CreateLeaveManagementRequestDto, @CurrentUser() user: CurrentUserData) {
+    // Só o próprio ou ADMIN/RH/GESTOR podem submeter em nome de `dto.userId`.
+    assertCanAccess({}, dto.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     return this.svc.create(dto, user.id);
   }
 

@@ -2,13 +2,14 @@
 
 import { Module } from '@nestjs/common';
 import { LeaveManagementService } from './leave-management.service';
+import { LeaveOverviewService } from './leave-overview.service';
 import { LeaveManagementController } from './leave-management.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuditModule } from '../common/modules/audit.module';
 
 @Module({
   imports: [PrismaModule, AuditModule],
-  providers: [LeaveManagementService],
+  providers: [LeaveManagementService, LeaveOverviewService],
   controllers: [LeaveManagementController],
   exports: [LeaveManagementService],
 })

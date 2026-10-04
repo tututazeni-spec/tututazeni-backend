@@ -11,6 +11,7 @@ import {
   ValidateNested,
   Min,
   Max,
+  MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -124,6 +125,8 @@ export class CreateLeaveManagementRequestDto {
   @ApiPropertyOptional() @IsOptional() @IsString() reason?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() saveAsDraft?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsInt() substituteId?: number; // substituto
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(2000) @Max(2100) referenceYear?: number; // ano do saldo (férias)
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(120) contactDuringLeave?: string; // contacto alternativo
   @ApiPropertyOptional() @IsOptional() @IsArray() @IsString({ each: true }) attachments?: string[];
 }
 
@@ -174,4 +177,54 @@ export class CalendarFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) month?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() department?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() leaveTypeCode?: string;
+}
+
+export class OverviewFilterDto {
+  @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) unitId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() leaveTypeCode?: string;
+  @ApiPropertyOptional() @IsOptional() @IsEnum(LeaveStatus) status?: LeaveStatus;
+}
+
+export enum VacationPlanState {
+  NOT_STARTED = 'NOT_STARTED',
+  IN_PREPARATION = 'IN_PREPARATION',
+  SUBMITTED = 'SUBMITTED',
+  APPROVED = 'APPROVED',
+}
+
+export class VacationFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  @Min(2000)
+  @Max(2100)
+  year?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) unitId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
+  @ApiPropertyOptional({ enum: VacationPlanState })
+  @IsOptional()
+  @IsEnum(VacationPlanState)
+  planState?: VacationPlanState;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) @Min(1) page?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}
+
+export class DurationPreviewDto {
+  @ApiProperty() @IsString() leaveTypeCode!: string;
+  @ApiProperty() @IsDateString() startDate!: string;
+  @ApiProperty() @IsDateString() endDate!: string;
+  @ApiPropertyOptional() @IsOptional() @IsEnum(DurationMode) durationMode?: DurationMode;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Type(() => Number) hours?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
 }

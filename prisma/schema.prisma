@@ -9660,40 +9660,45 @@ enum LeaveDecision {
 }
 
 model LeaveRequest {
-  id              Int                 @id @default(autoincrement())
-  userId          Int
-  user            User                @relation(fields: [userId], references: [id])
+  id                 Int                 @id @default(autoincrement())
+  userId             Int
+  user               User                @relation(fields: [userId], references: [id])
   // `leaveType` (enum fixo de 10 valores) tornou-se opcional — só é
   // preenchido quando `leaveTypeCode` coincide literalmente com um dos 10
   // membros; caso contrário fica null (código customizado). `leaveTypeCode`
   // é agora obrigatório e é a chave real usada por todo o subsistema de
   // saldo/pedidos. Ver project-innova-leave-type-enum-mismatch.
-  leaveType       LeaveType?
-  leaveTypeCode   String
-  startDate       DateTime
-  endDate         DateTime
-  durationMode    DurationMode        @default(FULL_DAY)
-  hours           Float?
-  workDays        Float               @default(0)
-  calendarDays    Int                 @default(0)
-  reason          String?
-  status          LeaveStatus         @default(PENDING)
-  attachments     String[]
-  substituteId    Int?
-  finalApprovedAt DateTime?
-  approvals       LeaveApproval[]
-  documents       LeaveDocument[]
-  impactPreview   LeaveImpactPreview?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  reviewNotes     String?
-  reviewedById    Int?
-  reviewedAt      DateTime?
-  halfDay         Boolean             @default(false)
-  halfDayPeriod   DayPeriod?
+  leaveType          LeaveType?
+  leaveTypeCode      String
+  startDate          DateTime
+  endDate            DateTime
+  durationMode       DurationMode        @default(FULL_DAY)
+  hours              Float?
+  workDays           Float               @default(0)
+  calendarDays       Int                 @default(0)
+  reason             String?
+  status             LeaveStatus         @default(PENDING)
+  attachments        String[]
+  substituteId       Int?
+  finalApprovedAt    DateTime?
+  approvals          LeaveApproval[]
+  documents          LeaveDocument[]
+  impactPreview      LeaveImpactPreview?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  reviewNotes        String?
+  reviewedById       Int?
+  reviewedAt         DateTime?
+  halfDay            Boolean             @default(false)
+  halfDayPeriod      DayPeriod?
+  // Férias (docs/Modulo_Leave.md §3.2): ano a que pertence o saldo e contacto
+  // alternativo durante a ausência.
+  referenceYear      Int?
+  contactDuringLeave String?
 
   @@index([userId, status])
   @@index([startDate, endDate])
+  @@index([leaveTypeCode, status])
 }
 
 model LeaveApproval {

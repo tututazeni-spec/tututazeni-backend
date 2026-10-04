@@ -31,41 +31,10 @@ import {
   ApprovalAction,
   DurationMode,
 } from './leave-management.dto';
-
-// ─── Angola public holidays (configurable via DB in the future) ──────────────
-const ANGOLA_HOLIDAYS_2025: string[] = [
-  '2025-01-01',
-  '2025-02-04',
-  '2025-03-08',
-  '2025-04-04',
-  '2025-04-18',
-  '2025-05-01',
-  '2025-09-17',
-  '2025-11-02',
-  '2025-11-11',
-  '2025-12-25',
-];
+import { countWorkDays, countCalendarDays } from './leave-calendar.helper';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function isHoliday(date: Date, holidays: string[]): boolean {
-  return holidays.includes(date.toISOString().split('T')[0]);
-}
-
-function countWorkDays(start: Date, end: Date, holidays: string[] = ANGOLA_HOLIDAYS_2025): number {
-  let days = 0;
-  const cur = new Date(start);
-  while (cur <= end) {
-    const dow = cur.getDay();
-    if (dow !== 0 && dow !== 6 && !isHoliday(cur, holidays)) days++;
-    cur.setDate(cur.getDate() + 1);
-  }
-  return days;
-}
-
-function countCalendarDays(start: Date, end: Date): number {
-  return Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
-}
 // Ver project-innova-leave-type-enum-mismatch: LeaveTypeConfig.code é livre
 // (admin pode criar "SICK_SHORT", etc.), mas o enum fixo `LeaveType` só tem
 // 10 valores. `leaveTypeCode` é agora a chave real usada em todo este
@@ -336,6 +305,8 @@ export class LeaveManagementService {
         reason: dto.reason,
         status: initialStatus,
         substituteId: dto.substituteId,
+        referenceYear: dto.referenceYear ?? start.getFullYear(),
+        contactDuringLeave: dto.contactDuringLeave,
         attachments: dto.attachments ?? [],
         impactPreview: impact ? { create: impact } : undefined,
       },

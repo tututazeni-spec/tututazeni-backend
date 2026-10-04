@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { LeaveManagementController } from './leave-management.controller';
 import { LeaveManagementService } from './leave-management.service';
+import { LeaveOverviewService } from './leave-overview.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -29,6 +30,12 @@ const mockSvc = {
   processCarryOver: jest.fn().mockResolvedValue({}),
 };
 
+const mockOverview = {
+  getOverview: jest.fn().mockResolvedValue({}),
+  getVacations: jest.fn().mockResolvedValue({}),
+  previewDuration: jest.fn().mockResolvedValue({}),
+};
+
 const mockUser = { id: 1, email: 'test@innova.com', role: { name: 'ADMIN' } };
 
 describe('LeaveManagementController', () => {
@@ -38,7 +45,10 @@ describe('LeaveManagementController', () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [LeaveManagementController],
-      providers: [{ provide: LeaveManagementService, useValue: mockSvc }],
+      providers: [
+        { provide: LeaveManagementService, useValue: mockSvc },
+        { provide: LeaveOverviewService, useValue: mockOverview },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
@@ -163,6 +173,21 @@ describe('LeaveManagementController', () => {
     const dto = {} as any;
     await controller.create(dto, mockUser as any);
     expect(mockSvc.create).toHaveBeenCalledWith(dto, 1);
+  });
+
+  it('create → colaborador não pode submeter em nome de outro', async () => {
+    const employee = { id: 7, email: 'e@innova.com', role: { name: 'COLABORADOR' } };
+    await expect(controller.create({ userId: 8 } as any, employee as any)).rejects.toThrow();
+    expect(mockSvc.create).not.toHaveBeenCalled();
+  });
+
+  it('overview / vacations / duration-preview delegam em LeaveOverviewService', async () => {
+    await controller.getOverview({} as any, mockUser as any);
+    await controller.getVacations({} as any, mockUser as any);
+    await controller.previewDuration({} as any, mockUser as any);
+    expect(mockOverview.getOverview).toHaveBeenCalledWith({}, mockUser);
+    expect(mockOverview.getVacations).toHaveBeenCalledWith({}, mockUser);
+    expect(mockOverview.previewDuration).toHaveBeenCalledWith({}, mockUser);
   });
 
   it('approve → processApproval(id, userId, dto)', async () => {
