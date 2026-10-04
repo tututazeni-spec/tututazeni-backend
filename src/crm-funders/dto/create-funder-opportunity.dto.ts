@@ -9,6 +9,7 @@ import {
   Length,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { IsAllowedFileUrl } from '../../common/validators/is-allowed-file-url.validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
   FunderOpportunityDocumentType,
@@ -91,5 +92,6 @@ export class CreateOpportunityDocumentDto {
   @ApiProperty()
   @IsString()
   @Length(1, 2000)
+  @IsAllowedFileUrl()
   fileUrl: string;
 }

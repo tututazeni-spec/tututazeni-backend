@@ -2056,12 +2056,14 @@ export class CrmFundersService {
         // Tags: aparar, ignorar vazias e deduplicar sem diferenciar maiúsculas
         ...(tags && {
           tags: [
-            ...new Map(
-              tags
-                .map(t => t.trim())
-                .filter(Boolean)
-                .map(t => [t.toLowerCase(), t] as const),
-            ).values(),
+            ...tags
+              .map(t => t.trim())
+              .filter(Boolean)
+              .reduce(
+                (acc, t) => (acc.has(t.toLowerCase()) ? acc : acc.set(t.toLowerCase(), t)),
+                new Map<string, string>(),
+              )
+              .values(),
           ],
         }),
         updatedById: userId,

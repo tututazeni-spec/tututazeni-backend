@@ -22,7 +22,10 @@ export class UpdateFunderNotesDto {
   @IsString()
   observations?: string;
 
-  @ApiPropertyOptional({ type: [String], description: 'Substitui as tags (normalizadas, sem duplicados)' })
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Substitui as tags (normalizadas, sem duplicados)',
+  })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })

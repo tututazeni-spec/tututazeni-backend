@@ -102,7 +102,13 @@ describe('CrmFundersService — §16 documentos, §17 responsável, §18 notas, 
 
     it('lista só a última versão e marca validade vencida como EXPIRED', async () => {
       mockPrisma.funderDocument.findMany.mockResolvedValue([
-        { id: 'd2', name: 'Acordo', version: 2, status: 'VALID', validUntil: new Date('2020-01-01') },
+        {
+          id: 'd2',
+          name: 'Acordo',
+          version: 2,
+          status: 'VALID',
+          validUntil: new Date('2020-01-01'),
+        },
         { id: 'd1', name: 'Acordo', version: 1, status: 'VALID', validUntil: null },
         { id: 'd3', name: 'Orçamento', version: 1, status: 'VALID', validUntil: null },
       ]);
@@ -238,9 +244,7 @@ describe('CrmFundersService — §16 documentos, §17 responsável, §18 notas, 
       );
 
       await service.upsertConsent('fun-1', { emailAllowed: false }, 4);
-      expect(
-        mockPrisma.funderConsent.upsert.mock.calls[1][0].update.consentDate,
-      ).toBeUndefined();
+      expect(mockPrisma.funderConsent.upsert.mock.calls[1][0].update.consentDate).toBeUndefined();
     });
 
     it('record-info devolve criador e último editor', async () => {
