@@ -63,11 +63,14 @@ const mockPrisma = {
   funderInteraction: {
     create: jest.fn(),
     findMany: jest.fn(),
+    findFirst: jest.fn(),
     count: jest.fn(),
+    aggregate: jest.fn(),
   },
   funderReport: {
     create: jest.fn(),
     findUnique: jest.fn(),
+    findFirst: jest.fn().mockResolvedValue(null),
     update: jest.fn(),
     count: jest.fn(),
     findMany: jest.fn(),
@@ -293,10 +296,8 @@ describe('CrmFundersService', () => {
     });
 
     it('deve lançar BadRequestException se desembolso excede o grant', async () => {
-      mockPrisma.fundingGrant.findUnique.mockResolvedValue({
-        ...mockGrant,
-        disbursed: 4500000,
-      });
+      mockPrisma.fundingGrant.findUnique.mockResolvedValue(mockGrant);
+      mockPrisma.grantDisbursement.aggregate.mockResolvedValue({ _sum: { amount: 4500000 } });
       await expect(
         service.addDisbursement('grt-1', { amount: 600000, receivedAt: '2026-06-01' } as any, 1),
       ).rejects.toThrow(BadRequestException);
@@ -327,7 +328,11 @@ describe('CrmFundersService', () => {
         type: 'MEETING',
         user: { fullName: 'User Teste' },
       });
-      mockPrisma.funderInteraction.findMany.mockResolvedValue([]);
+      const last = new Date('2026-01-01');
+      mockPrisma.funderInteraction.findFirst
+        .mockResolvedValueOnce({ date: last })
+        .mockResolvedValueOnce(null);
+      mockPrisma.funderInteraction.aggregate.mockResolvedValue({ _avg: { satisfaction: null } });
       mockPrisma.funder.update.mockResolvedValue({});
       mockPrisma.auditLog.create.mockResolvedValue({});
 
@@ -339,7 +344,7 @@ describe('CrmFundersService', () => {
       expect(result.type).toBe('MEETING');
       expect(mockPrisma.funder.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ lastContactAt: expect.any(Date) }),
+          data: expect.objectContaining({ lastContactAt: last }),
         }),
       );
     });
