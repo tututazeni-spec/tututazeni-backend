@@ -49,6 +49,13 @@ export class AuditController {
     return this.svc.getOverview(days ? parseInt(days, 10) : 30);
   }
 
+  @Get('coverage')
+  @ApiOperation({ summary: 'Cobertura de auditoria por módulo (matriz §13) e estado da cadeia' })
+  @ApiQuery({ name: 'days', required: false, description: '1-365, por omissão 30' })
+  coverage(@Query('days') days?: string) {
+    return this.svc.getCoverage(days ? parseInt(days, 10) : 30);
+  }
+
   @Get('anomalies')
   @ApiOperation({
     summary: 'Resumo de anomalias (logins suspeitos, exportações em massa, deletes)',

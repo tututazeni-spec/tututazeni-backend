@@ -16,6 +16,7 @@ import {
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { InternalAuditStatus, InternalAuditType, RiskLevel } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
+import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 
 export const CHECK_STATUSES = ['PENDING', 'PASSED', 'FAILED', 'NOT_APPLICABLE'] as const;
 export const ACTION_STATUSES = ['OPEN', 'IN_PROGRESS', 'DONE'] as const;
@@ -203,6 +204,7 @@ export class AuditEvidenceDto {
   @IsOptional()
   @IsString()
   @MaxLength(1000)
+  @IsAllowedFileUrl()
   url?: string;
 
   @IsOptional()

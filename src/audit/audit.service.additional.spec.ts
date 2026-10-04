@@ -22,6 +22,8 @@ describe('AuditService — cadeia de hash (imutabilidade)', () => {
 
   beforeEach(async () => {
     mockPrisma = {
+      $transaction: jest.fn((fn: any) => fn(mockPrisma)),
+      $executeRaw: jest.fn().mockResolvedValue(1),
       auditLog: {
         create: jest.fn(dto => Promise.resolve({ id: 1, ...dto.data })),
         findFirst: jest.fn().mockResolvedValue(null),
@@ -85,6 +87,8 @@ describe('AuditService — severidade inferida e atalhos semânticos', () => {
 
   beforeEach(async () => {
     mockPrisma = {
+      $transaction: jest.fn((fn: any) => fn(mockPrisma)),
+      $executeRaw: jest.fn().mockResolvedValue(1),
       auditLog: {
         create: jest.fn(dto => Promise.resolve({ id: 1, ...dto.data })),
         findFirst: jest.fn().mockResolvedValue(null),
@@ -201,6 +205,8 @@ describe('AuditService — detecção de anomalias', () => {
 
   beforeEach(async () => {
     mockPrisma = {
+      $transaction: jest.fn((fn: any) => fn(mockPrisma)),
+      $executeRaw: jest.fn().mockResolvedValue(1),
       auditLog: {
         create: jest.fn(dto => Promise.resolve({ id: 1, ...dto.data })),
         findFirst: jest.fn().mockResolvedValue(null),
@@ -257,6 +263,8 @@ describe('AuditService — consulta, timeline, histórico e stats', () => {
 
   beforeEach(async () => {
     mockPrisma = {
+      $transaction: jest.fn((fn: any) => fn(mockPrisma)),
+      $executeRaw: jest.fn().mockResolvedValue(1),
       auditLog: {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
@@ -378,6 +386,8 @@ describe('AuditService — verificação de integridade da cadeia', () => {
 
   beforeEach(async () => {
     mockPrisma = {
+      $transaction: jest.fn((fn: any) => fn(mockPrisma)),
+      $executeRaw: jest.fn().mockResolvedValue(1),
       auditLog: { findMany: jest.fn() },
     };
     Object.defineProperty(mockPrisma, 'read', { get: () => mockPrisma, configurable: true });
@@ -520,6 +530,8 @@ describe('AuditService — detalhe do evento (§5)', () => {
 
   beforeEach(async () => {
     mockPrisma = {
+      $transaction: jest.fn((fn: any) => fn(mockPrisma)),
+      $executeRaw: jest.fn().mockResolvedValue(1),
       auditLog: {
         findUnique: jest.fn().mockResolvedValue(baseLog),
         findMany: jest.fn().mockResolvedValue([]),

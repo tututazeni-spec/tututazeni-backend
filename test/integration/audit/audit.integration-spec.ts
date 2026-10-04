@@ -6,6 +6,7 @@ import { getToken, INT_CREDENTIALS } from '../helpers/auth.helper';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import { purgeAuditLogs } from '../../../src/common/helpers/audit-chain';
 
 const TEST_DB_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/innova_test';
 
@@ -67,9 +68,7 @@ describe('Audit Integration', () => {
   });
 
   afterAll(async () => {
-    await (prisma as any).auditLog
-      .deleteMany({ where: { entity: 'IntegrationTestEntity' } })
-      .catch(() => undefined);
+    await purgeAuditLogs(prisma, { entity: 'IntegrationTestEntity' }).catch(() => undefined);
 
     await prisma.$disconnect();
     await pool.end();
@@ -183,25 +182,16 @@ describe('Audit Integration', () => {
         .expect(403);
     });
 
-    // NOTA: descoberta ao escrever este teste — a generalidade dos módulos de
-    // negócio (academic, career-plans, etc.) audita através de
-    // common/services/audit.service.ts, que NÃO preenche hash/previousHash.
-    // Como resultado, verifyIntegrity() reporta essas entradas como "broken"
-    // mesmo sem qualquer adulteração real: a cadeia de hash deste módulo não
-    // está de facto ligada à generalidade da auditoria da aplicação.
-    it('ADMIN verifica a integridade — reflecte que entradas fora da cadeia (sem hash) são reportadas como quebradas', async () => {
-      // verifyIntegrity() ordena por timestamp ASC e só verifica os primeiros
-      // `limit` registos (default 100). A BD de teste partilhada acumula
-      // muito mais do que isso ao longo do tempo, por isso o registo semeado
-      // por este teste (o mais recente) só entra na verificação com um limit
-      // suficientemente grande.
+    // Entradas fora da cadeia (sem hash — fixture semeada directamente, tal como
+    // os eventos gravados antes da cadeia partilhada) NÃO são adulteração e já
+    // não são reportadas como "broken" (modulo_audit.md §15.3).
+    it('ADMIN verifica a integridade — entradas fora da cadeia (sem hash) são ignoradas', async () => {
       const res = await request(app.getHttpServer())
         .get('/audit/integrity/verify?limit=1000000')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
       expect(res.body).toHaveProperty('checked');
-      expect(res.body.broken).toContain(logId);
-      expect(res.body.valid).toBe(false);
+      expect(res.body.broken).not.toContain(logId);
     });
   });
 
@@ -226,6 +216,44 @@ describe('Audit Integration', () => {
         .set('Authorization', `Bearer ${rhToken}`)
         .expect(200);
       expect(listRes.body.meta.total).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Cobertura por módulo (§13)', () => {
+    it('RH vê a matriz de cobertura e o estado da cadeia', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/audit/coverage?days=365')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.body.modules.length).toBeGreaterThan(20);
+      expect(res.body.chain).toHaveProperty('chained');
+      expect(res.body.responsibilities).toHaveLength(6);
+    });
+
+    it('EMPLOYEE não acede → 403', async () => {
+      await request(app.getHttpServer())
+        .get('/audit/coverage')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
+    });
+  });
+
+  // modulo_audit.md §15 — imutabilidade e cadeia ao nível da BD
+  describe('append-only e cadeia de hash (§15)', () => {
+    it('UPDATE e DELETE directos em AuditLog são rejeitados pelo trigger', async () => {
+      await expect(
+        (prisma as any).auditLog.update({ where: { id: logId }, data: { action: 'DELETE' } }),
+      ).rejects.toThrow(/append-only/);
+      await expect((prisma as any).auditLog.delete({ where: { id: logId } })).rejects.toThrow(
+        /append-only/,
+      );
+    });
+
+    it('a purga autorizada (purgeAuditLogs) continua a funcionar', async () => {
+      const tmp = await (prisma as any).auditLog.create({
+        data: { userId: employeeId, action: 'CREATE', entity: 'IntegrationTestEntity' },
+      });
+      expect(await purgeAuditLogs(prisma, { id: tmp.id })).toBe(1);
     });
   });
 });

@@ -6,6 +6,7 @@ import { getToken } from '../helpers/auth.helper';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import { purgeAuditLogs } from '../../../src/common/helpers/audit-chain';
 
 const TEST_DB_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/innova_test';
 const MARK = `IntTestSuccession${Date.now()}`;
@@ -358,7 +359,7 @@ describe('Succession Integration', () => {
 
     afterAll(async () => {
       if (seededLogIds.length) {
-        await prisma.auditLog.deleteMany({ where: { id: { in: seededLogIds } } }).catch(() => undefined);
+        await purgeAuditLogs(prisma, { id: { in: seededLogIds } }).catch(() => undefined);
       }
     });
 
@@ -371,7 +372,10 @@ describe('Succession Integration', () => {
       const ids = res.body.map((h: any) => h.id);
       expect(ids).toEqual(expect.arrayContaining(seededLogIds));
       const seeded = res.body.filter((h: any) => seededLogIds.includes(h.id));
-      expect(seeded.map((h: any) => h.entity).sort()).toEqual(['CriticalPosition', 'SuccessionPlan']);
+      expect(seeded.map((h: any) => h.entity).sort()).toEqual([
+        'CriticalPosition',
+        'SuccessionPlan',
+      ]);
       expect(seeded[0].user).toHaveProperty('fullName');
     });
 

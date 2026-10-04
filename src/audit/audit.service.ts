@@ -13,7 +13,18 @@ import {
 } from './audit.dto';
 import { sessionIdleTimeoutMs } from '../auth/auth.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
-import * as crypto from 'crypto';
+import { getRequestContext } from '../common/logging/request-context';
+import {
+  AUDIT_FALLBACK_MODULE,
+  AUDIT_MODULES,
+  AUDIT_SCHEMA_VERSION,
+  resolveAuditModule,
+} from '../common/helpers/audit-modules';
+import {
+  computeAuditHash,
+  GENESIS_HASH,
+  writeChainedAuditLog,
+} from '../common/helpers/audit-chain';
 
 // Shape mínimo de um Request Express usado por logCreate/logUpdate/logDelete
 // — só ip/headers são lidos, por isso não vale a pena importar o tipo real
@@ -29,64 +40,35 @@ export class AuditService {
 
   constructor(private prisma: PrismaService) {}
 
-  // ─── HASH CHAIN ───────────────────────────────────────────────────────────
-  // Cada log inclui hash do anterior — garante imutabilidade encadeada
-
-  private async buildHash(
-    userId: number | null,
-    action: string,
-    entity: string,
-    entityId: number | undefined,
-    timestamp: Date,
-    previousHash: string,
-  ): Promise<string> {
-    const payload = `${userId}|${action}|${entity}|${entityId ?? ''}|${timestamp.toISOString()}|${previousHash}`;
-    return crypto.createHash('sha256').update(payload).digest('hex');
-  }
-
-  private async getLastHash(): Promise<string> {
-    const last = await this.prisma.auditLog.findFirst({
-      orderBy: { timestamp: 'desc' },
-      select: { hash: true },
-    });
-    return last?.hash ?? 'GENESIS';
-  }
-
   // ─── LOG PRINCIPAL ────────────────────────────────────────────────────────
+  // A cadeia de hash vive em common/helpers/audit-chain.ts, partilhada com o
+  // caminho da fila (common/services/audit.service.ts).
 
   async log(dto: LogAuditDto) {
     try {
-      const now = new Date();
-      const prev = await this.getLastHash();
-      const hash = await this.buildHash(
-        dto.userId,
-        dto.action,
-        dto.entity,
-        dto.entityId,
-        now,
-        prev,
-      );
-
-      const entry = await this.prisma.auditLog.create({
-        data: {
-          userId: dto.userId,
-          action: dto.action,
-          entity: dto.entity,
-          entityId: dto.entityId,
-          entityName: dto.entityName,
-          before: dto.before ? JSON.stringify(dto.before) : undefined,
-          after: dto.after ? JSON.stringify(dto.after) : undefined,
-          changes: dto.changes ? JSON.stringify(dto.changes) : undefined,
-          status: dto.status ?? 'SUCCESS',
-          severity: dto.severity ?? this.inferSeverity(dto.action, dto.entity),
-          ip: dto.ip,
-          userAgent: dto.userAgent,
-          reason: dto.reason,
-          metadata: dto.metadata ? JSON.stringify(dto.metadata) : undefined,
-          hash,
-          previousHash: prev,
-          timestamp: now,
-        },
+      const ctx = getRequestContext();
+      const module = resolveAuditModule(dto.entity);
+      const entry = await writeChainedAuditLog(this.prisma, {
+        userId: dto.userId,
+        action: dto.action,
+        entity: dto.entity,
+        entityId: dto.entityId,
+        entityName: dto.entityName,
+        before: dto.before ? JSON.stringify(dto.before) : undefined,
+        after: dto.after ? JSON.stringify(dto.after) : undefined,
+        changes: dto.changes ? JSON.stringify(dto.changes) : undefined,
+        status: dto.status ?? 'SUCCESS',
+        severity: dto.severity ?? this.inferSeverity(dto.action, dto.entity),
+        ip: dto.ip,
+        userAgent: dto.userAgent,
+        reason: dto.reason,
+        metadata: dto.metadata ? JSON.stringify(dto.metadata) : undefined,
+        module,
+        eventType: `${module}.${dto.action}`,
+        actorType: dto.userId ? 'USER' : 'SYSTEM',
+        source: ctx.reqId ? 'API' : 'JOB',
+        correlationId: ctx.reqId,
+        schemaVersion: AUDIT_SCHEMA_VERSION,
       });
 
       // Detectar anomalias automaticamente
@@ -1056,13 +1038,76 @@ export class AuditService {
     };
   }
 
+  // ─── COBERTURA POR MÓDULO (modulo_audit.md §13/§14) ───────────────────────
+
+  /**
+   * Para cada módulo da matriz §13, quantos eventos reais chegaram ao Audit na janela.
+   * Módulos com 0 eventos são "sem cobertura observada" — ou nunca foram usados, ou não
+   * chamam o serviço de auditoria (a validar caso a caso).
+   */
+  async getCoverage(days = 30) {
+    const d = Math.min(Math.max(Number.isFinite(days) ? Math.trunc(days) : 30, 1), 365);
+    const since = new Date(Date.now() - d * 86_400_000);
+    const [byEntity, chained, total] = await Promise.all([
+      this.prisma.read.auditLog.groupBy({
+        by: ['entity'],
+        where: { timestamp: { gte: since } },
+        _count: { _all: true },
+        _max: { timestamp: true },
+      }),
+      this.prisma.read.auditLog.count({
+        where: { timestamp: { gte: since }, hash: { not: null } },
+      }),
+      this.prisma.read.auditLog.count({ where: { timestamp: { gte: since } } }),
+    ]);
+
+    const acc = new Map<string, { events: number; lastEventAt: Date | null }>();
+    for (const row of byEntity) {
+      const mod = resolveAuditModule(row.entity);
+      const cur = acc.get(mod) ?? { events: 0, lastEventAt: null };
+      cur.events += row._count._all;
+      const ts = row._max.timestamp;
+      if (ts && (!cur.lastEventAt || ts > cur.lastEventAt)) cur.lastEventAt = ts;
+      acc.set(mod, cur);
+    }
+
+    const modules = AUDIT_MODULES.map(module => ({
+      module,
+      events: acc.get(module)?.events ?? 0,
+      lastEventAt: acc.get(module)?.lastEventAt ?? null,
+      covered: (acc.get(module)?.events ?? 0) > 0,
+    }));
+    const other = acc.get(AUDIT_FALLBACK_MODULE);
+
+    return {
+      days: d,
+      modules,
+      uncovered: modules.filter(m => !m.covered).map(m => m.module),
+      unclassifiedEvents: other?.events ?? 0,
+      chain: { chained, unchained: total - chained, total },
+      // §14 — fronteiras entre Audit e as áreas vizinhas.
+      responsibilities: [
+        { area: 'Audit', scope: 'Ações, autoria, alterações, evidências e responsabilização' },
+        { area: 'History', scope: 'Histórico funcional de colaboradores, processos e entidades' },
+        { area: 'Logs técnicos', scope: 'Erros, exceções, desempenho, infraestrutura' },
+        { area: 'Notifications', scope: 'Comunicação de alertas aos destinatários' },
+        { area: 'Processes', scope: 'Execução e acompanhamento de fluxos de trabalho' },
+        { area: 'Automations', scope: 'Regras automáticas e ações desencadeadas por eventos' },
+      ],
+    };
+  }
+
   // ─── VERIFICAÇÃO DE INTEGRIDADE ───────────────────────────────────────────
 
   async verifyIntegrity(
     limit = 100,
   ): Promise<{ valid: boolean; broken: number[]; checked: number }> {
-    const logs = await this.prisma.read.auditLog.findMany({
-      orderBy: { timestamp: 'asc' },
+    // Só os registos encadeados (hash != null) fazem parte da cadeia; os anteriores à
+    // cadeia partilhada ficam de fora em vez de serem reportados como adulterados.
+    // Verifica os `limit` elos mais recentes, ligando cada um ao anterior.
+    const recent = await this.prisma.read.auditLog.findMany({
+      where: { hash: { not: null } },
+      orderBy: { id: 'desc' },
       take: limit,
       select: {
         id: true,
@@ -1075,23 +1120,25 @@ export class AuditService {
         previousHash: true,
       },
     });
+    const logs = [...recent].sort((a, b) => a.id - b.id);
 
     const broken: number[] = [];
-    let prev = 'GENESIS';
+    // O primeiro elo da janela só é verificado contra o seu próprio previousHash.
+    let prev: string | null = null;
 
     for (const log of logs) {
-      const expected = await this.buildHash(
+      const expected = computeAuditHash(
         log.userId,
         log.action,
         log.entity,
-        log.entityId ?? undefined,
+        log.entityId,
         new Date(log.timestamp),
-        log.previousHash ?? 'GENESIS',
+        log.previousHash ?? GENESIS_HASH,
       );
-      if (log.hash !== expected || log.previousHash !== prev) {
+      if (log.hash !== expected || (prev !== null && log.previousHash !== prev)) {
         broken.push(log.id);
       }
-      prev = log.hash ?? '';
+      prev = log.hash;
     }
 
     return { valid: broken.length === 0, broken, checked: logs.length };

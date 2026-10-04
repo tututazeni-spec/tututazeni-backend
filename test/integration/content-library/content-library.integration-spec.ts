@@ -6,6 +6,7 @@ import { getToken, INT_CREDENTIALS } from '../helpers/auth.helper';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import { purgeAuditLogs } from '../../../src/common/helpers/audit-chain';
 
 const TEST_DB_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/innova_test';
 const CONTENT_TITLE = 'Int Test Content — Introdução ao NestJS';
@@ -52,9 +53,9 @@ describe('Content Library Integration', () => {
 
   afterAll(async () => {
     if (contentId) {
-      await prisma.auditLog
-        .deleteMany({ where: { entity: 'ContentAsset', entityId: contentId } })
-        .catch(() => undefined);
+      await purgeAuditLogs(prisma, { entity: 'ContentAsset', entityId: contentId }).catch(
+        () => undefined,
+      );
       await prisma.contentAsset.deleteMany({ where: { id: contentId } }).catch(() => undefined);
     }
 

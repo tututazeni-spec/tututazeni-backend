@@ -7495,10 +7495,22 @@ model AuditLog {
   ip           String?
   userAgent    String?
   reason       String?
+  // modulo_audit.md §15 — contexto normalizado do evento
+  eventType     String? // ex: "Leave.APPROVE"
+  module        String? // módulo de origem (ver audit-modules.ts)
+  actorType     String  @default("USER") // USER|SYSTEM|INTEGRATION|SERVICE
+  source        String? // UI|API|INTEGRATION|AUTOMATION|JOB
+  correlationId String? // x-request-id do pedido
+  schemaVersion Int     @default(1)
 
   @@index([entity, entityId])
   @@index([userId])
   @@index([createdAt])
+  @@index([timestamp])
+  @@index([action])
+  @@index([severity])
+  @@index([module])
+  @@index([correlationId])
 }
 
 enum AutomationCategory {

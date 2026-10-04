@@ -3,6 +3,8 @@ import { AuditService } from './audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const mockPrisma = {
+  $transaction: jest.fn((fn: any) => fn(mockPrisma)),
+  $executeRaw: jest.fn().mockResolvedValue(1),
   auditLog: {
     create: jest.fn().mockResolvedValue({ id: 1, hash: 'abc123' }),
     findFirst: jest.fn().mockResolvedValue(null),
