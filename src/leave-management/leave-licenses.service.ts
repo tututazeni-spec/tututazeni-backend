@@ -237,27 +237,16 @@ export class LeaveLicensesService {
       dto.workDays <= (type.autoApproveUnderDays ?? 1);
     if (autoApprove) return { autoApprove: true, steps: [] };
 
-    const [target, policy] = await Promise.all([
-      this.prisma.read.user.findUnique({
-        where: { id: targetId },
-        select: { manager: { select: { id: true, fullName: true } } },
-      }),
-      this.leave.getApplicablePolicy(targetId),
-    ]);
-
-    const steps: Array<{
-      level: number;
-      role: 'GESTOR' | 'RH';
-      approver: { id: number; fullName: string };
-    }> = [];
-    if (target?.manager) steps.push({ level: 1, role: 'GESTOR', approver: target.manager });
-    if ((policy?.approvalLevels ?? 1) >= 2) {
-      const hr = await this.prisma.read.user.findFirst({
-        where: { role: { code: 'RH' } },
-        select: { id: true, fullName: true },
-      });
-      if (hr) steps.push({ level: 2, role: 'RH', approver: hr });
-    }
-    return { autoApprove: false, steps };
+    const { steps: resolved, slaDays } = await this.leave.resolveApprovalSteps(
+      targetId,
+      dto.leaveTypeCode,
+      dto.workDays ?? 0,
+    );
+    const steps = resolved.map(s => ({
+      level: s.level,
+      role: s.stage === 'HR' ? ('RH' as const) : ('GESTOR' as const),
+      approver: s.approver,
+    }));
+    return { autoApprove: false, steps, slaDays };
   }
 }

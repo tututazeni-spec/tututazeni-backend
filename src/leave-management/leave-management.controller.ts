@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   ParseIntPipe,
+  ParseEnumPipe,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
@@ -15,6 +16,9 @@ import { LeaveManagementService } from './leave-management.service';
 import { LeaveOverviewService } from './leave-overview.service';
 import { LeaveLicensesService } from './leave-licenses.service';
 import { LeaveAbsenceCalendarService } from './leave-absence-calendar.service';
+import { LeaveApprovalsService } from './leave-approvals.service';
+import { LeavePlanningService } from './leave-planning.service';
+import { LeaveReportsService } from './leave-reports.service';
 import {
   LeaveFilterDto,
   CalendarFilterDto,
@@ -32,6 +36,11 @@ import {
   LicenseFilterDto,
   ApprovalRouteDto,
   AbsenceCalendarFilterDto,
+  ApprovalListFilterDto,
+  ReassignApprovalDto,
+  PlanningFilterDto,
+  LeaveReportFilterDto,
+  LeaveReportKind,
 } from './leave-management.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -49,6 +58,9 @@ export class LeaveManagementController {
     private readonly overview: LeaveOverviewService,
     private readonly licenses: LeaveLicensesService,
     private readonly absenceCalendar: LeaveAbsenceCalendarService,
+    private readonly approvals: LeaveApprovalsService,
+    private readonly planning: LeavePlanningService,
+    private readonly reports: LeaveReportsService,
   ) {}
 
   // ── Leave Types ────────────────────────────────────────────────────
@@ -154,6 +166,80 @@ export class LeaveManagementController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.absenceCalendar.exportCsv(filters, user);
+  }
+
+  // ── §7 Aprovações ─────────────────────────────────────────────────
+
+  @Get('approvals')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({
+    summary: 'Etapas de aprovação (fila e histórico) com prazo, espera e reatribuições',
+  })
+  listApprovals(@Query() filters: ApprovalListFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.approvals.list(filters, user);
+  }
+
+  @Get('approvals/candidates')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Utilizadores que podem receber uma reatribuição/delegação' })
+  approvalCandidates(
+    @Query('search') search: string | undefined,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.approvals.candidates(search, user);
+  }
+
+  @Post('approvals/:approvalId/reassign')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Reatribuir uma etapa de aprovação (fica no histórico)' })
+  reassignApproval(
+    @Param('approvalId', ParseIntPipe) approvalId: number,
+    @Body() dto: ReassignApprovalDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.approvals.reassign(approvalId, dto, user);
+  }
+
+  // ── §8 Planeamento de Equipas ─────────────────────────────────────
+
+  @Get('planning')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR, Role.DIRECTOR, Role.LIDER)
+  @ApiOperation({
+    summary: 'Planeamento de equipas — disponibilidade, cobertura mínima, conflitos e alertas',
+  })
+  getPlanning(@Query() filters: PlanningFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.planning.getPlanning(filters, user);
+  }
+
+  // ── §9 Relatórios ─────────────────────────────────────────────────
+
+  @Get('reports')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Catálogo de relatórios do módulo Leave' })
+  listReports() {
+    return this.reports.catalog();
+  }
+
+  @Get('reports/:kind/export')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Exportar um relatório (CSV)' })
+  exportReport(
+    @Param('kind', new ParseEnumPipe(LeaveReportKind)) kind: LeaveReportKind,
+    @Query() filters: LeaveReportFilterDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.reports.exportCsv(kind, filters, user);
+  }
+
+  @Get('reports/:kind')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Executar um relatório' })
+  runReport(
+    @Param('kind', new ParseEnumPipe(LeaveReportKind)) kind: LeaveReportKind,
+    @Query() filters: LeaveReportFilterDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.reports.run(kind, filters, user);
   }
 
   @Get('analytics/absenteeism')

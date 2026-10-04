@@ -471,3 +471,73 @@ export class AbsenceCalendarFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() leaveTypeCode?: string;
 }
+
+// ─── §7 Aprovações ────────────────────────────────────────────────────────────
+
+export enum ApprovalListStatus {
+  PENDING = 'PENDING',
+  OVERDUE = 'OVERDUE',
+  DECIDED = 'DECIDED',
+  ALL = 'ALL',
+}
+
+export class ApprovalListFilterDto {
+  @ApiPropertyOptional({ enum: ApprovalListStatus })
+  @IsOptional()
+  @IsEnum(ApprovalListStatus)
+  status?: ApprovalListStatus;
+  @ApiPropertyOptional() @IsOptional() @IsString() leaveTypeCode?: string;
+  @ApiPropertyOptional({ enum: ['MANAGER', 'HR'] })
+  @IsOptional()
+  @IsIn(['MANAGER', 'HR'])
+  stage?: 'MANAGER' | 'HR';
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) search?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) @Min(1) page?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}
+
+export class ReassignApprovalDto {
+  @ApiProperty() @IsInt() toApproverId!: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) reason?: string;
+}
+
+// ─── §8 Planeamento de Equipas ────────────────────────────────────────────────
+
+export class PlanningFilterDto {
+  @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) unitId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+}
+
+// ─── §9 Relatórios ────────────────────────────────────────────────────────────
+
+export enum LeaveReportKind {
+  ANNUAL_VACATION_MAP = 'ANNUAL_VACATION_MAP',
+  ABSENCES_BY_DEPARTMENT = 'ABSENCES_BY_DEPARTMENT',
+  MONTHLY_ABSENTEEISM = 'MONTHLY_ABSENTEEISM',
+  JUSTIFIED_VS_UNJUSTIFIED = 'JUSTIFIED_VS_UNJUSTIFIED',
+  LICENSES_BY_TYPE = 'LICENSES_BY_TYPE',
+  PENDING_REQUESTS = 'PENDING_REQUESTS',
+  VACATION_BY_EMPLOYEE = 'VACATION_BY_EMPLOYEE',
+  OPERATIONAL_COVERAGE = 'OPERATIONAL_COVERAGE',
+  PAYROLL_IMPACT = 'PAYROLL_IMPACT',
+  REQUEST_AUDIT = 'REQUEST_AUDIT',
+}
+
+export class LeaveReportFilterDto {
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) @Min(2000) year?: number;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) unitId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() leaveTypeCode?: string;
+  /** Códigos (tipos de licença e/ou ocorrências) a contar no numerador do absentismo; vírgulas. */
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) includeCodes?: string;
+}

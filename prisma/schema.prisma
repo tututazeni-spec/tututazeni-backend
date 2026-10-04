@@ -9708,19 +9708,38 @@ model LeaveRequest {
 }
 
 model LeaveApproval {
-  id         Int            @id @default(autoincrement())
-  requestId  Int
-  request    LeaveRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  approverId Int
-  approver   User           @relation(fields: [approverId], references: [id])
-  level      Int            @default(1)
-  decision   LeaveDecision?
-  notes      String?
-  decidedAt  DateTime?
-  createdAt  DateTime       @default(now())
+  id            Int                         @id @default(autoincrement())
+  requestId     Int
+  request       LeaveRequest                @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  approverId    Int
+  approver      User                        @relation(fields: [approverId], references: [id])
+  level         Int                         @default(1)
+  decision      LeaveDecision?
+  notes         String?
+  decidedAt     DateTime?
+  createdAt     DateTime                    @default(now())
+  // §7: etapa do fluxo (MANAGER | HR), prazo para decisão e histórico de
+  // reatribuições/delegações.
+  stage         String                      @default("MANAGER")
+  dueAt         DateTime?
+  reassignments LeaveApprovalReassignment[]
 
   @@index([requestId])
   @@index([approverId, decidedAt])
+}
+
+model LeaveApprovalReassignment {
+  id             Int           @id @default(autoincrement())
+  approvalId     Int
+  approval       LeaveApproval @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  fromApproverId Int
+  toApproverId   Int
+  byUserId       Int
+  kind           String        @default("REASSIGN")
+  reason         String?
+  createdAt      DateTime      @default(now())
+
+  @@index([approvalId])
 }
 
 model LeaveBalance {
@@ -9803,22 +9822,30 @@ model LeaveTypeConfig {
   requiresDocument          Boolean  @default(false)
   isSensitive               Boolean  @default(false)
   requiresPayrollValidation Boolean  @default(false)
+  // §7: nº de níveis de aprovação deste tipo (null = o da política aplicável).
+  approvalLevels            Int?
+  // §9: se as horas deste tipo entram no numerador da taxa de absentismo.
+  countsAsAbsenteeism       Boolean  @default(true)
   createdAt                 DateTime @default(now())
 
   @@map("leave_type_configs")
 }
 
 model LeavePolicy {
-  id                Int      @id @default(autoincrement())
-  name              String
-  description       String?
-  department        String?
-  seniority         String?
-  approvalLevels    Int      @default(1)
-  maxAbsencePercent Int      @default(30)
-  blackoutPeriods   Json?
-  active            Boolean  @default(true)
-  createdAt         DateTime @default(now())
+  id                   Int      @id @default(autoincrement())
+  name                 String
+  description          String?
+  department           String?
+  seniority            String?
+  approvalLevels       Int      @default(1)
+  maxAbsencePercent    Int      @default(30)
+  blackoutPeriods      Json?
+  // §7: prazo (dias) para cada decisão e duração (dias úteis) a partir da qual
+  // o pedido exige também validação do RH.
+  decisionSlaDays      Int      @default(3)
+  hrValidationOverDays Int?
+  active               Boolean  @default(true)
+  createdAt            DateTime @default(now())
 
   @@map("leave_policies")
 }

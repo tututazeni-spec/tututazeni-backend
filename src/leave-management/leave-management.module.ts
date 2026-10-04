@@ -8,6 +8,9 @@ import { LeaveAbsencesController } from './leave-absences.controller';
 import { LeaveAbsencesService } from './leave-absences.service';
 import { LeaveLicensesService } from './leave-licenses.service';
 import { LeaveAbsenceCalendarService } from './leave-absence-calendar.service';
+import { LeaveApprovalsService } from './leave-approvals.service';
+import { LeavePlanningService } from './leave-planning.service';
+import { LeaveReportsService } from './leave-reports.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuditModule } from '../common/modules/audit.module';
 
@@ -19,6 +22,9 @@ import { AuditModule } from '../common/modules/audit.module';
     LeaveLicensesService,
     LeaveAbsencesService,
     LeaveAbsenceCalendarService,
+    LeaveApprovalsService,
+    LeavePlanningService,
+    LeaveReportsService,
   ],
   // LeaveAbsencesController primeiro: `GET /leave/absences` não pode ser
   // engolido por `GET /leave/:id`.

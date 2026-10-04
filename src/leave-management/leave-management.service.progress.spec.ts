@@ -153,6 +153,24 @@ describe('LeaveManagementService (progress)', () => {
       );
     });
 
+    it('deve exigir justificação numa recusa (BadRequestException)', async () => {
+      mockPrismaBase.leaveRequest.findUnique.mockResolvedValue(pendingRequest);
+      leaveApproval.findFirst.mockResolvedValue({ id: 7, level: 1 });
+      leaveApproval.count.mockResolvedValue(0);
+      await expect(service.processApproval(1, 5, { action: 'REJECT' } as any)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('deve bloquear a decisão do RH enquanto o gestor não decidiu', async () => {
+      mockPrismaBase.leaveRequest.findUnique.mockResolvedValue(pendingRequest);
+      leaveApproval.findFirst.mockResolvedValue({ id: 7, level: 2 });
+      leaveApproval.count.mockResolvedValueOnce(1); // etapa 1 ainda por decidir
+      await expect(service.processApproval(1, 5, { action: 'APPROVE' } as any)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
     it('deve processar REJECT — actualiza status e notifica', async () => {
       mockPrismaBase.leaveRequest.findUnique
         .mockResolvedValueOnce(pendingRequest) // primeira chamada findOne
@@ -181,7 +199,7 @@ describe('LeaveManagementService (progress)', () => {
         .mockResolvedValueOnce(pendingRequest);
       leaveApproval.findFirst.mockResolvedValue({ id: 8, level: 1 });
       leaveApproval.update.mockResolvedValue({});
-      leaveApproval.count.mockResolvedValue(0); // todos os níveis aprovaram
+      leaveApproval.count.mockResolvedValue(0); // sem etapas anteriores e todos os níveis aprovaram
       leaveBalance.findUnique.mockResolvedValue({ balance: 20 });
       leaveBalance.upsert.mockResolvedValue({ balance: 17 });
       mockPrismaBase.leaveBalanceHistory.create.mockResolvedValue({});
@@ -202,7 +220,8 @@ describe('LeaveManagementService (progress)', () => {
         .mockResolvedValueOnce(pendingRequest);
       leaveApproval.findFirst.mockResolvedValue({ id: 9, level: 1 });
       leaveApproval.update.mockResolvedValue({});
-      leaveApproval.count.mockResolvedValue(2); // ainda há aprovações pendentes
+      // 1ª chamada: etapas anteriores por decidir (0); 2ª: aprovações restantes (2)
+      leaveApproval.count.mockResolvedValueOnce(0).mockResolvedValueOnce(2);
 
       await service.processApproval(1, 5, { action: 'APPROVE' } as any);
 

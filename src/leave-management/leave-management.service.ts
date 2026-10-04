@@ -279,7 +279,14 @@ export class LeaveManagementService {
       },
       orderBy: { createdAt: 'asc' },
     });
-    return this.redactSensitive(rows, viewer);
+    // Só os pedidos em que a etapa deste aprovador já é accionável (as etapas
+    // anteriores estão decididas).
+    const actionable = rows.filter(r => {
+      const mine = r.approvals?.find(a => a.approverId === approverId && a.decidedAt === null);
+      if (!mine) return true;
+      return !r.approvals.some(a => a.level < mine.level && a.decidedAt === null);
+    });
+    return this.redactSensitive(actionable, viewer);
   }
 
   // ══════════════════════════════════════════════════════════════════
@@ -433,9 +440,21 @@ export class LeaveManagementService {
     });
     if (!approval) throw new ForbiddenException('Não tem permissão para aprovar este pedido');
 
+    // §7: as etapas são sequenciais — o RH só decide depois do gestor.
+    const earlierPending = await this.prisma.read.leaveApproval.count({
+      where: { requestId, level: { lt: approval.level }, decidedAt: null },
+    });
+    if (earlierPending > 0) {
+      throw new BadRequestException('Aguarda a decisão da etapa anterior');
+    }
+
+    if (dto.action === ApprovalAction.REJECT && !dto.notes?.trim()) {
+      throw new BadRequestException('A recusa exige uma justificação');
+    }
+
     if (dto.action === ApprovalAction.DELEGATE) {
       if (!dto.delegateToId) throw new BadRequestException('Indique o delegado');
-      return this.delegateApproval(approval.id, dto.delegateToId, dto.notes);
+      return this.delegateApproval(approval, dto.delegateToId, approverId, dto.notes);
     }
 
     // Registar decisão
@@ -968,37 +987,86 @@ export class LeaveManagementService {
     }
   }
 
+  /**
+   * Etapas de aprovação de um pedido (docs/Modulo_Leave.md §7): gestor directo
+   * e, quando o tipo/política o exigem (nº de níveis ou duração acima do
+   * limiar de validação RH), o RH. Partilhado entre a criação real do fluxo
+   * e a pré-visualização `GET /leave/approval-route`.
+   */
+  async resolveApprovalSteps(
+    userId: number,
+    leaveTypeCode: string,
+    workDays: number,
+    policy?: Prisma.LeavePolicyGetPayload<object> | null,
+  ) {
+    const [user, type, pol] = await Promise.all([
+      this.prisma.read.user.findUnique({
+        where: { id: userId },
+        select: { managerId: true, manager: { select: { id: true, fullName: true } } },
+      }),
+      this.prisma.read.leaveTypeConfig.findUnique({
+        where: { code: leaveTypeCode },
+        select: { approvalLevels: true },
+      }),
+      policy === undefined ? this.getApplicablePolicy(userId) : Promise.resolve(policy),
+    ]);
+
+    let levels = type?.approvalLevels ?? pol?.approvalLevels ?? 1;
+    if (pol?.hrValidationOverDays != null && workDays > pol.hrValidationOverDays) {
+      levels = Math.max(levels, 2);
+    }
+
+    const steps: Array<{
+      level: number;
+      stage: 'MANAGER' | 'HR';
+      approver: { id: number; fullName: string };
+    }> = [];
+    if (user?.manager && user.manager.id !== userId) {
+      steps.push({ level: 1, stage: 'MANAGER', approver: user.manager });
+    }
+    if (levels >= 2) {
+      const hr = await this.prisma.read.user.findFirst({
+        where: { role: { code: 'RH' }, id: { not: userId } },
+        select: { id: true, fullName: true },
+      });
+      if (hr && !steps.some(s => s.approver.id === hr.id)) {
+        steps.push({ level: 2, stage: 'HR', approver: hr });
+      }
+    }
+    return { steps, slaDays: pol?.decisionSlaDays ?? 3 };
+  }
+
   private async createApprovalFlow(
     request: { id: number; userId: number; leaveTypeCode: string; workDays: number },
     policy: Prisma.LeavePolicyGetPayload<object> | null,
   ) {
     const requestId = request.id;
-    const userId = request.userId;
-    const levels = policy?.approvalLevels ?? 1;
-    const user = await this.prisma.read.user.findUnique({ where: { id: userId } });
-    const managerId = user?.managerId;
+    const { steps, slaDays } = await this.resolveApprovalSteps(
+      request.userId,
+      request.leaveTypeCode,
+      request.workDays,
+      policy,
+    );
 
-    const approvals: { requestId: number; approverId: number; level: number }[] = [];
-
-    // Nível 1: gestor direto
-    if (managerId) approvals.push({ requestId, approverId: managerId, level: 1 });
-
-    // Nível 2+: RH (buscar por role)
-    if (levels >= 2) {
-      const hr = await this.prisma.read.user.findFirst({ where: { role: { code: 'RH' } } });
-      if (hr) approvals.push({ requestId, approverId: hr.id, level: 2 });
-    }
-
-    if (approvals.length === 0) {
+    if (steps.length === 0) {
       // Sem gestor configurado — auto-aprovar. `actorId = userId` porque não
       // existe aprovador humano que tenha tomado a decisão — quem accionou
       // este caminho foi o próprio requerente ao submeter o pedido.
-      await this.finalizeApproval(request, userId);
+      await this.finalizeApproval(request, request.userId);
     } else {
-      await this.prisma.leaveApproval.createMany({ data: approvals });
+      const dueAt = new Date(Date.now() + slaDays * 24 * 3600 * 1000);
+      await this.prisma.leaveApproval.createMany({
+        data: steps.map(s => ({
+          requestId,
+          approverId: s.approver.id,
+          level: s.level,
+          stage: s.stage,
+          dueAt,
+        })),
+      });
       // Notificar primeiro aprovador
       await this.notifyUser(
-        approvals[0].approverId,
+        steps[0].approver.id,
         'LEAVE_PENDING_APPROVAL',
         'Novo pedido de licença aguarda a sua aprovação',
       );
@@ -1018,11 +1086,39 @@ export class LeaveManagementService {
     }
   }
 
-  private async delegateApproval(approvalId: number, delegateToId: number, notes?: string) {
-    return this.prisma.leaveApproval.update({
-      where: { id: approvalId },
+  private async delegateApproval(
+    approval: { id: number; approverId: number },
+    delegateToId: number,
+    byUserId: number,
+    notes?: string,
+  ) {
+    const delegate = await this.prisma.read.user.findUnique({
+      where: { id: delegateToId },
+      select: { id: true },
+    });
+    if (!delegate) throw new NotFoundException('Delegado não encontrado');
+    if (delegateToId === approval.approverId)
+      throw new BadRequestException('O delegado tem de ser outro utilizador');
+    await this.prisma.leaveApprovalReassignment.create({
+      data: {
+        approvalId: approval.id,
+        fromApproverId: approval.approverId,
+        toApproverId: delegateToId,
+        byUserId,
+        kind: 'DELEGATE',
+        reason: notes ?? null,
+      },
+    });
+    const updated = await this.prisma.leaveApproval.update({
+      where: { id: approval.id },
       data: { approverId: delegateToId, notes: notes ?? 'Delegado', decidedAt: null },
     });
+    await this.notifyUser(
+      delegateToId,
+      'LEAVE_PENDING_APPROVAL',
+      'Foi-lhe delegada a aprovação de um pedido de licença',
+    );
+    return updated;
   }
 
   /**
