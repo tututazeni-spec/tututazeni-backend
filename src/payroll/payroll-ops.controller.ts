@@ -18,8 +18,8 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
-import { PayrollInsightsService } from './payroll-insights.service';
-import { PayrollPaymentsService } from './payroll-payments.service';
+import { PayrollInsightsService } from './reports/payroll-insights.service';
+import { PayrollPaymentsService } from './payments/payroll-payments.service';
 import {
   CreatePayrollPaymentDto,
   PayrollEmployeesFilterDto,

@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PayrollEngineService, PayrollContext } from './payroll-engine.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
 
 const angolaBrackets = [
   { min: 0, max: 70000, rate: 0, deduction: 0 },

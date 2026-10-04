@@ -2,9 +2,13 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { PayrollEngineService } from './payroll-engine.service';
-import type { PayrollContext, PayrollResult, PayrollLineItem } from './payroll-engine.service';
-import { money, assertNetInvariant } from './money.util';
+import { PayrollEngineService } from './taxes/payroll-engine.service';
+import type {
+  PayrollContext,
+  PayrollResult,
+  PayrollLineItem,
+} from './taxes/payroll-engine.service';
+import { money, assertNetInvariant } from './taxes/money.util';
 
 export interface PayrollInputs {
   absenceDays: number;

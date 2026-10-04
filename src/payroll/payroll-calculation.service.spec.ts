@@ -1,8 +1,8 @@
 import { Test } from '@nestjs/testing';
 import { PayrollCalculationService } from './payroll-calculation.service';
-import { PayrollEngineService } from './payroll-engine.service';
+import { PayrollEngineService } from './taxes/payroll-engine.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { money } from './money.util';
+import { money } from './taxes/money.util';
 
 const prismaMock = () => {
   const m: any = {

@@ -6,7 +6,7 @@ import {
   ConflictException,
   Logger,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma, PayslipAccessAction } from '@prisma/client';
 import {
   CreatePayslipDto,
@@ -19,11 +19,14 @@ import {
   ResolveDisputeDto,
 } from './payslips.dto';
 import { randomBytes } from 'crypto';
-import { assertCanAccess } from '../common/authz/ownership';
-import { Role } from '../auth/enums/role.enum';
-import { CurrentUserData } from '../common/types/current-user';
-import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
-import { createNotificationSafe } from '../common/helpers/notification.helper';
+import { assertCanAccess } from '../../common/authz/ownership';
+import { Role } from '../../auth/enums/role.enum';
+import { CurrentUserData } from '../../common/types/current-user';
+import {
+  calculatePagination,
+  buildPaginatedResponse,
+} from '../../common/helpers/pagination.helper';
+import { createNotificationSafe } from '../../common/helpers/notification.helper';
 
 // ─── Validação de editabilidade de recibos ─────────────────────────────────
 const LOCKED_PAYSLIP_STATUSES = new Set(['ISSUED', 'ACKNOWLEDGED', 'DISPUTED']);

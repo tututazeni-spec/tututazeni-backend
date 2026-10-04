@@ -20,8 +20,8 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { Request, Response } from 'express';
 
 import { PayslipsService, type AnnualExport, type AnnualExportField } from './payslips.service';
-import { EmployeeCompensationService } from './employee-compensation.service';
-import { PdfService } from '../pdf/pdf.service';
+import { EmployeeCompensationService } from '../remuneration/employee-compensation.service';
+import { PdfService } from '../../pdf/pdf.service';
 import { PayslipPdfService } from './payslip-pdf.service';
 import {
   CreatePayslipDto,
@@ -33,10 +33,10 @@ import {
   DisputeFilterDto,
   ResolveDisputeDto,
 } from './payslips.dto';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
-import { Role } from '../auth/enums/role.enum';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { CurrentUser, Roles, CurrentUserData } from '../../common/decorators';
+import { Role } from '../../auth/enums/role.enum';
 
 @ApiTags('Payslips')
 @ApiBearerAuth()

@@ -7,10 +7,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { AuditService } from '../common/services/audit.service';
-import { money } from './money.util';
-import { CreatePayrollPaymentDto, UpdatePaymentStatusDto } from './payroll.dto';
+import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../../common/services/audit.service';
+import { money } from '../taxes/money.util';
+import { CreatePayrollPaymentDto, UpdatePaymentStatusDto } from '../payroll.dto';
 
 type PaymentStatus = UpdatePaymentStatusDto['status'];
 

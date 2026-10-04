@@ -47,7 +47,7 @@ import { EventsModule } from './events/events.module';
 // MÓDULOS NOVOS — RH
 import { AttendanceModule } from './attendance/attendance.module';
 import { LeaveManagementModule } from './leave-management/leave-management.module';
-import { PayslipsModule } from './payslips/payslips.module';
+import { PayslipsModule } from './payroll/payroll.module';
 import { WorkDeclarationModule } from './work-declaration/work-declaration.module';
 import { DeclarationsModule } from './declarations/declarations.module';
 import { DocumentRepositoryModule } from './document-repository/document-repository.module';

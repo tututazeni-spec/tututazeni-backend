@@ -1,8 +1,8 @@
 // src/payslips/payslip-pdf.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { createHash } from 'crypto';
-import { PrismaService } from '../prisma/prisma.service';
-import { PdfService } from '../pdf/pdf.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { PdfService } from '../../pdf/pdf.service';
 
 interface PdfPayslipInput {
   employeeName: string;

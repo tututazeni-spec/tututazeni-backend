@@ -11,17 +11,17 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators';
-import { Role } from '../auth/enums/role.enum';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators';
+import { Role } from '../../auth/enums/role.enum';
 import { EmployeeCompensationService } from './employee-compensation.service';
 import {
   CompensationListFilterDto,
   CreateEmployeeCompensationDto,
   UpdateEmployeeCompensationDto,
   UpsertCompensationComponentsDto,
-} from './payroll.dto';
+} from '../payroll.dto';
 
 @ApiTags('Payroll Compensation')
 @ApiBearerAuth()

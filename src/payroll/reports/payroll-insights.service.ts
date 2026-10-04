@@ -4,14 +4,17 @@
 // nunca duplica dados de outros módulos (Users, Departments, Leave).
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
-import { money } from './money.util';
+import { PrismaService } from '../../prisma/prisma.service';
+import {
+  calculatePagination,
+  buildPaginatedResponse,
+} from '../../common/helpers/pagination.helper';
+import { money } from '../taxes/money.util';
 import {
   PayrollReportFilterDto,
   PayrollEmployeesFilterDto,
   UpsertTaxConfigDto,
-} from './payroll.dto';
+} from '../payroll.dto';
 
 const PERIOD_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 

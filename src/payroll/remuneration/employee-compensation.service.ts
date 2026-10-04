@@ -1,14 +1,17 @@
 // src/payslips/employee-compensation.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { buildPaginatedResponse, calculatePagination } from '../common/helpers/pagination.helper';
+import { PrismaService } from '../../prisma/prisma.service';
+import {
+  buildPaginatedResponse,
+  calculatePagination,
+} from '../../common/helpers/pagination.helper';
 import {
   CompensationListFilterDto,
   CreateEmployeeCompensationDto,
   UpdateEmployeeCompensationDto,
   UpsertCompensationComponentsDto,
-} from './payroll.dto';
+} from '../payroll.dto';
 
 @Injectable()
 export class EmployeeCompensationService {

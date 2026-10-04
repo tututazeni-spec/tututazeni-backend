@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PayrollEngineService } from './payroll-engine.service';
 import type { PayrollContext } from './payroll-engine.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import { money } from './money.util';
 
 const mockPrisma = {

@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { EmployeeCompensationService } from './employee-compensation.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
 
 describe('EmployeeCompensationService', () => {
   let svc: EmployeeCompensationService;

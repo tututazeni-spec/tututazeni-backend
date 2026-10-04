@@ -2,11 +2,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { PayslipsController } from './payslips.controller';
 import { PayslipsService } from './payslips.service';
-import { EmployeeCompensationService } from './employee-compensation.service';
-import { PdfService } from '../pdf/pdf.service';
+import { EmployeeCompensationService } from '../remuneration/employee-compensation.service';
+import { PdfService } from '../../pdf/pdf.service';
 import { PayslipPdfService } from './payslip-pdf.service';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 const annualExportFixture = {
   year: '2026',

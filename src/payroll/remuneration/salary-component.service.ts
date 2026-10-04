@@ -1,12 +1,12 @@
 // src/payslips/salary-component.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import {
   SalaryComponentFilterDto,
   CreateSalaryComponentDto,
   UpdateSalaryComponentDto,
-} from './payroll.dto';
+} from '../payroll.dto';
 
 @Injectable()
 export class SalaryComponentService {

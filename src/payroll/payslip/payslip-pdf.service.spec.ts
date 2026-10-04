@@ -1,5 +1,5 @@
 import { buildPdfInput } from './payslip-pdf.service';
-import { PdfService } from '../pdf/pdf.service';
+import { PdfService } from '../../pdf/pdf.service';
 
 const baseSlip = {
   userId: 3,

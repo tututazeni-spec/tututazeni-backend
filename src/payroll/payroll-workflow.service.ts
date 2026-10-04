@@ -11,8 +11,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PayrollCalculationService } from './payroll-calculation.service';
 import { AuditService } from '../common/services/audit.service';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
-import { assertPayslipEditable } from './payslips.service';
-import { PayslipPdfService } from './payslip-pdf.service';
+import { assertPayslipEditable } from './payslip/payslips.service';
+import { PayslipPdfService } from './payslip/payslip-pdf.service';
 import {
   CreatePayrollRunDto,
   RejectRunDto,
@@ -21,7 +21,7 @@ import {
   PayrollRunFilterDto,
 } from './payroll.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
-import { money } from './money.util';
+import { money } from './taxes/money.util';
 
 const EDIT_LOCKED = new Set(['APPROVED', 'PUBLISHED', 'CANCELLED']);
 

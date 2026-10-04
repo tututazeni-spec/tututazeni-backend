@@ -5,7 +5,7 @@ import { PayrollWorkflowService } from './payroll-workflow.service';
 import { PayrollCalculationService } from './payroll-calculation.service';
 import { AuditService } from '../common/services/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { PayslipPdfService } from './payslip-pdf.service';
+import { PayslipPdfService } from './payslip/payslip-pdf.service';
 
 describe('PayrollWorkflowService transitions', () => {
   let svc: PayrollWorkflowService;

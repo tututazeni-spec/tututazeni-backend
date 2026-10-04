@@ -14,7 +14,7 @@ import {
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { PayslipStatus, PayslipAccessAction, DisputeStatus } from '@prisma/client';
-import { BaseFilterDto } from '../common/dtos/pagination.dto';
+import { BaseFilterDto } from '../../common/dtos/pagination.dto';
 
 export { PayslipStatus, PayslipAccessAction, DisputeStatus };
 
