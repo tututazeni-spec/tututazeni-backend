@@ -34,6 +34,7 @@ import {
   ValidateAbsenceDto,
 } from './leave-management.dto';
 import { canSeeSensitive, leaveUserFilter, ORG_WIDE_ROLES, TEAM_ROLES } from './leave-scope.helper';
+import { LeaveSettingsService } from './leave-settings.service';
 
 const HOURS_PER_DAY = 8;
 /** Ocorrências que só fazem sentido com hora de início e de fim. */
@@ -110,6 +111,7 @@ export class LeaveAbsencesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly settings: LeaveSettingsService,
   ) {}
 
   // ══════════════════════════════════════════════════════════════════
@@ -470,6 +472,13 @@ export class LeaveAbsencesService {
     await this.assertInScope(viewer, userId);
     if (userId !== viewer.id && !this.isManagerLike(viewer))
       throw new ForbiddenException('Sem permissão para registar ausências de outros colaboradores');
+    if (userId !== viewer.id && !this.isOrg(viewer)) {
+      const cfg = await this.settings.current();
+      if (!cfg.managerCanRegisterAbsences)
+        throw new ForbiddenException(
+          'A política em vigor reserva o registo de ausências de outros colaboradores ao RH',
+        );
+    }
 
     const day = dayUtc(dto.date);
     if (TIMED_TYPES.has(dto.occurrenceType) && !(dto.startTime && dto.endTime))
@@ -613,6 +622,8 @@ export class LeaveAbsencesService {
   async validate(id: number, dto: ValidateAbsenceDto, viewer: CurrentUserData) {
     const a = await this.load(id, viewer);
     if (!this.isManagerLike(viewer)) throw new ForbiddenException('Sem permissão para validar');
+    if (!this.isOrg(viewer) && !(await this.settings.current()).managerCanValidateAbsences)
+      throw new ForbiddenException('A política em vigor reserva a validação de ausências ao RH');
     if (viewer.id === a.userId)
       throw new ForbiddenException('Não pode validar a sua própria justificação');
     if (a.occurrenceType === AbsenceOccurrenceType.HEALTH_ABSENCE && !this.isOrg(viewer))

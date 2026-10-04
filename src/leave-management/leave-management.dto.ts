@@ -541,3 +541,11 @@ export class LeaveReportFilterDto {
   /** Códigos (tipos de licença e/ou ocorrências) a contar no numerador do absentismo; vírgulas. */
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) includeCodes?: string;
 }
+
+export class CancelLeaveDto {
+  @ApiPropertyOptional({ description: 'Motivo do cancelamento (fica no histórico)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}

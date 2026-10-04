@@ -8,6 +8,9 @@ import { NotFoundException, BadRequestException, ForbiddenException } from '@nes
 import { LeaveManagementService } from './leave-management.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
+import { LeaveSettingsService } from './leave-settings.service';
+import { LeaveEffectsService } from './leave-effects.service';
+import { DEFAULT_LEAVE_SETTINGS } from './leave-settings.dto';
 
 // ─── Proxy pattern (igual ao spec base) ────────────────────────────────────────
 
@@ -64,7 +67,11 @@ const mockPrismaBase: any = {
   leaveBalanceHistory: {
     create: jest.fn().mockResolvedValue({}),
     findMany: jest.fn().mockResolvedValue([]),
+    findFirst: jest.fn().mockResolvedValue(null),
   },
+  // Saldos correm em transacção (tx = o próprio mock).
+  $transaction: jest.fn(async (cb: (tx: unknown) => unknown) => cb(mockPrismaProxy)),
+  $queryRaw: jest.fn().mockResolvedValue([]),
 };
 
 const mockPrismaProxy: any = new Proxy(mockPrismaBase, {
@@ -79,6 +86,17 @@ const mockPrismaProxy: any = new Proxy(mockPrismaBase, {
 });
 
 const mockAudit = { log: jest.fn().mockResolvedValue({}) };
+
+// ─── Dependências novas (§10/§11): configurações e efeitos nas integrações ─────
+const mockSettings = {
+  current: jest.fn().mockResolvedValue(DEFAULT_LEAVE_SETTINGS),
+  activeDelegateOf: jest.fn().mockResolvedValue(null),
+};
+const mockEffects = {
+  syncAttendanceOnApproval: jest.fn().mockResolvedValue({ created: 0 }),
+  emitApproved: jest.fn().mockResolvedValue(undefined),
+  removeAttendanceOnCancel: jest.fn().mockResolvedValue({ removed: 0 }),
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -111,6 +129,8 @@ describe('LeaveManagementService (progress)', () => {
         LeaveManagementService,
         { provide: PrismaService, useValue: mockPrismaProxy },
         { provide: AuditService, useValue: mockAudit },
+        { provide: LeaveSettingsService, useValue: mockSettings },
+        { provide: LeaveEffectsService, useValue: mockEffects },
       ],
     }).compile();
 
@@ -355,8 +375,8 @@ describe('LeaveManagementService (progress)', () => {
         { code: 'ANNUAL', annualLimit: 22, carryOverLimit: 5, allowCarryOver: true },
       ]);
       leaveBalance.findMany.mockResolvedValue([
-        { userId: 1, balance: 8, leaveType: 'ANNUAL' },
-        { userId: 2, balance: 2, leaveType: 'ANNUAL' },
+        { userId: 1, balance: 8, reserved: 0, leaveType: 'ANNUAL' },
+        { userId: 2, balance: 2, reserved: 0, leaveType: 'ANNUAL' },
       ]);
       leaveBalance.update.mockResolvedValue({});
 

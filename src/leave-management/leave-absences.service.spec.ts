@@ -62,7 +62,9 @@ describe('LeaveAbsencesService', () => {
       notificationLog: { create: jest.fn() },
       $transaction: jest.fn((ops: unknown[]) => Promise.all(ops)),
     };
-    svc = new LeaveAbsencesService(prisma, { log: jest.fn() } as never);
+    svc = new LeaveAbsencesService(prisma, { log: jest.fn() } as never, {
+      current: jest.fn().mockResolvedValue({ managerCanRegisterAbsences: true, managerCanValidateAbsences: true }),
+    } as never);
   });
 
   describe('create', () => {

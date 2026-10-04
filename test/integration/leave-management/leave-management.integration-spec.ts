@@ -438,4 +438,324 @@ describe('Leave Management Integration', () => {
       expect(Array.isArray(res.body)).toBe(true);
     });
   });
+
+  // ══════════════════════════════════════════════════════════════════
+  // §10-§13: saldos reservados, configurações versionadas, integrações
+  // ══════════════════════════════════════════════════════════════════
+  describe('Reservas de saldo, configurações e integrações (§10-§13)', () => {
+    const NOTE = 'INT-TEST ';
+    const createdRequestIds: number[] = [];
+    let rhId: number;
+    let reqA: number; // 3 dias úteis, fica PENDING e é recusado
+    let reqB: number; // 5 dias úteis, aprovado → ON_LEAVE
+    const balanceRow = () =>
+      prisma.leaveBalance.findUnique({
+        where: { userId_leaveTypeCode: { userId: employeeId, leaveTypeCode: LEAVE_TYPE_CODE } },
+      });
+    const submit = (startDate: string, endDate: string, extra: Record<string, unknown> = {}) =>
+      request(app.getHttpServer())
+        .post('/leave')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({ userId: employeeId, leaveTypeCode: LEAVE_TYPE_CODE, startDate, endDate, ...extra });
+
+    beforeAll(async () => {
+      rhId = (await prisma.user.findUnique({ where: { email: 'int.rh@innova-test.com' } }))!.id;
+      await prisma.leaveBalance.update({
+        where: { userId_leaveTypeCode: { userId: employeeId, leaveTypeCode: LEAVE_TYPE_CODE } },
+        data: { balance: 22, used: 0, reserved: 0 },
+      });
+    });
+
+    afterAll(async () => {
+      // filhos antes dos pais e sempre por requestId — nunca por userId
+      for (const id of createdRequestIds) {
+        await prisma.attendanceRecord
+          .deleteMany({ where: { leaveRequestId: id } })
+          .catch(() => undefined);
+        await prisma.leaveApproval.deleteMany({ where: { requestId: id } }).catch(() => undefined);
+        await prisma.leaveImpactPreview
+          .deleteMany({ where: { requestId: id } })
+          .catch(() => undefined);
+        await prisma.leaveRequest.deleteMany({ where: { id } }).catch(() => undefined);
+      }
+      await prisma.leaveSettingVersion
+        .deleteMany({ where: { changeNote: { startsWith: NOTE } } })
+        .catch(() => undefined);
+      await prisma.leaveHoliday
+        .deleteMany({ where: { name: { startsWith: NOTE } } })
+        .catch(() => undefined);
+      await prisma.leaveDelegation
+        .deleteMany({ where: { delegatorId: managerId } })
+        .catch(() => undefined);
+    });
+
+    it('submeter reserva os dias (saldo atribuído intacto) e numera o pedido', async () => {
+      const res = await submit('2031-05-12', '2031-05-14').expect(201); // seg-qua
+      reqA = res.body.id;
+      createdRequestIds.push(reqA);
+      expect(res.body.requestNumber).toMatch(/^LV-\d{4}-\d{6}$/);
+      expect(res.body.submittedAt).toBeTruthy();
+
+      const b = await balanceRow();
+      expect(b!.balance).toBe(22);
+      expect(b!.reserved).toBe(3);
+    });
+
+    it('o disponível desconta as reservas: pedido que já não cabe → 400', async () => {
+      const res = await submit('2031-06-02', '2031-06-27').expect(400); // 20 úteis > 19
+      expect(res.body.message).toMatch(/Saldo insuficiente/);
+    });
+
+    it('pedidos concorrentes não sobre-reservam o saldo', async () => {
+      const results = await Promise.all([
+        submit('2031-07-07', '2031-07-18'), // 10 úteis
+        submit('2031-08-04', '2031-08-15'), // 10 úteis
+        submit('2031-09-01', '2031-09-12'), // 10 úteis
+      ]);
+      for (const r of results) if (r.status === 201) createdRequestIds.push(r.body.id);
+      // 22 − 3 já reservados = 19 → só cabe um de 10
+      expect(results.filter(r => r.status === 201)).toHaveLength(1);
+      const b = await balanceRow();
+      expect(b!.reserved).toBe(13);
+      expect(b!.reserved).toBeLessThanOrEqual(b!.balance);
+    });
+
+    it('recusar exige justificação e liberta a reserva', async () => {
+      await request(app.getHttpServer())
+        .patch(`/leave/${reqA}/approve`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .send({ action: 'REJECT' })
+        .expect(400);
+
+      await request(app.getHttpServer())
+        .patch(`/leave/${reqA}/approve`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .send({ action: 'REJECT', notes: 'Equipa sem cobertura' })
+        .expect(200);
+
+      const b = await balanceRow();
+      expect(b!.reserved).toBe(10); // 13 − 3
+      expect(b!.balance).toBe(22);
+    });
+
+    it('aprovar converte reservado em gozado e sincroniza a assiduidade (sem duplicar)', async () => {
+      const res = await submit('2031-10-06', '2031-10-10').expect(201); // seg-sex
+      reqB = res.body.id;
+      createdRequestIds.push(reqB);
+      await request(app.getHttpServer())
+        .patch(`/leave/${reqB}/approve`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .send({ action: 'APPROVE' })
+        .expect(200);
+
+      const b = await balanceRow();
+      expect(b!.used).toBe(5);
+      expect(b!.balance).toBe(17);
+      expect(b!.reserved).toBe(10); // só o pedido concorrente vencedor continua reservado
+
+      const rows = await prisma.attendanceRecord.findMany({ where: { leaveRequestId: reqB } });
+      expect(rows).toHaveLength(5);
+      expect(rows.every(r => r.status === 'ON_LEAVE')).toBe(true);
+    });
+
+    it('cancelar o aprovado devolve saldo e remove os registos ON_LEAVE (RH regista quem)', async () => {
+      await request(app.getHttpServer())
+        .patch(`/leave/${reqB}/cancel`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ reason: 'Necessidade de serviço' })
+        .expect(200);
+
+      const r = await prisma.leaveRequest.findUnique({ where: { id: reqB } });
+      expect(r!.status).toBe('CANCELLED');
+      expect(r!.cancelledById).toBe(rhId);
+      expect(r!.cancelReason).toBe('Necessidade de serviço');
+      expect(r!.cancelledAt).toBeTruthy();
+      expect(await prisma.attendanceRecord.count({ where: { leaveRequestId: reqB } })).toBe(0);
+
+      const b = await balanceRow();
+      expect(b!.balance).toBe(22);
+      expect(b!.used).toBe(0);
+    });
+
+    it('outro utilizador não cancela pedidos alheios → 403/404', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/leave/${reqA}/cancel`)
+        .set('Authorization', `Bearer ${managerToken}`);
+      expect([403, 404]).toContain(res.status);
+    });
+
+    // ── Configurações versionadas ──────────────────────────────────
+    it('colaborador e gestor não acedem às configurações → 403', async () => {
+      await request(app.getHttpServer())
+        .get('/leave/settings')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
+      await request(app.getHttpServer())
+        .patch('/leave/settings')
+        .set('Authorization', `Bearer ${managerToken}`)
+        .send({ hoursPerDay: 7, changeNote: `${NOTE}x` })
+        .expect(403);
+    });
+
+    it('gravar exige motivo, valida entre campos e rejeita campos desconhecidos', async () => {
+      const patch = (body: Record<string, unknown>) =>
+        request(app.getHttpServer())
+          .patch('/leave/settings')
+          .set('Authorization', `Bearer ${rhToken}`)
+          .send(body);
+      await patch({ hoursPerDay: 7 }).expect(400);
+      await patch({ workWeekDays: [], changeNote: `${NOTE}vazia` }).expect(400);
+      await patch({ vacationWindowStart: '06-01', changeNote: `${NOTE}so inicio` }).expect(400);
+      await patch({ lixo: 1, changeNote: `${NOTE}lixo` }).expect(400);
+    });
+
+    it('nova versão fica no histórico com as chaves alteradas e entra em vigor', async () => {
+      const res = await request(app.getHttpServer())
+        .patch('/leave/settings')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ decisionSlaDays: 5, changeNote: `${NOTE}SLA 5 dias` })
+        .expect(200);
+      expect(res.body.settings.decisionSlaDays).toBe(5);
+
+      const hist = await request(app.getHttpServer())
+        .get('/leave/settings/history')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      const entry = hist.body.find((h: any) => h.changeNote === `${NOTE}SLA 5 dias`);
+      expect(entry.changedKeys).toEqual(['decisionSlaDays']);
+      expect(entry.createdById).toBe(rhId);
+      expect(entry.scheduled).toBe(false);
+
+      // repetir sem alterar nada é recusado
+      await request(app.getHttpServer())
+        .patch('/leave/settings')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ decisionSlaDays: 5, changeNote: `${NOTE}igual` })
+        .expect(400);
+    });
+
+    it('alteração agendada para o futuro não entra em vigor já', async () => {
+      const future = new Date(Date.now() + 40 * 86_400_000).toISOString().slice(0, 10);
+      const res = await request(app.getHttpServer())
+        .patch('/leave/settings')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ hoursPerDay: 6, effectiveFrom: future, changeNote: `${NOTE}jornada de 6h` })
+        .expect(200);
+      expect(res.body.settings.hoursPerDay).toBe(8);
+      expect(res.body.upcoming.changedKeys).toEqual(['hoursPerDay']);
+    });
+
+    // ── Feriados por localização ───────────────────────────────────
+    it('feriado personalizado reduz os dias úteis da duração', async () => {
+      const preview = () =>
+        request(app.getHttpServer())
+          .get('/leave/duration-preview')
+          .query({ leaveTypeCode: LEAVE_TYPE_CODE, startDate: '2031-11-17', endDate: '2031-11-21' })
+          .set('Authorization', `Bearer ${employeeToken}`)
+          .expect(200);
+      expect((await preview()).body.workDays).toBe(5);
+
+      await request(app.getHttpServer())
+        .post('/leave/settings/holidays')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ name: `${NOTE}Feriado`, date: '2031-11-19' })
+        .expect(201);
+      // duplicado na mesma data/localização
+      await request(app.getHttpServer())
+        .post('/leave/settings/holidays')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ name: `${NOTE}Outro`, date: '2031-11-19' })
+        .expect(409);
+
+      expect((await preview()).body.workDays).toBe(4);
+    });
+
+    // ── Delegação de aprovadores ───────────────────────────────────
+    it('com delegação activa a etapa vai para o substituto e fica no histórico', async () => {
+      const from = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+      const to = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+      const created = await request(app.getHttpServer())
+        .post('/leave/settings/delegations')
+        .set('Authorization', `Bearer ${managerToken}`)
+        .send({ delegateId: rhId, startDate: from, endDate: to, reason: 'Férias do gestor' })
+        .expect(201);
+      // sobreposição → 409
+      await request(app.getHttpServer())
+        .post('/leave/settings/delegations')
+        .set('Authorization', `Bearer ${managerToken}`)
+        .send({ delegateId: rhId, startDate: from, endDate: to })
+        .expect(409);
+
+      const res = await submit('2031-12-01', '2031-12-02').expect(201);
+      createdRequestIds.push(res.body.id);
+      const approval = await prisma.leaveApproval.findFirst({
+        where: { requestId: res.body.id },
+        include: { reassignments: true },
+      });
+      expect(approval!.approverId).toBe(rhId);
+      expect(approval!.reassignments[0]).toMatchObject({
+        fromApproverId: managerId,
+        toApproverId: rhId,
+        kind: 'DELEGATE',
+      });
+
+      await request(app.getHttpServer())
+        .delete(`/leave/settings/delegations/${created.body.id}`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .expect(200);
+    });
+
+    // ── Payroll ────────────────────────────────────────────────────
+    it('feed do Payroll: RH vê, colaborador não; só pedidos aprovados', async () => {
+      await request(app.getHttpServer())
+        .get('/leave/payroll-feed')
+        .query({ period: '2031-10' })
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
+      await request(app.getHttpServer())
+        .get('/leave/payroll-feed')
+        .query({ period: 'outubro' })
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(400);
+      const res = await request(app.getHttpServer())
+        .get('/leave/payroll-feed')
+        .query({ period: '2031-10' })
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      // reqB foi cancelado → não consta
+      expect(res.body.leaves.some((l: any) => l.requestId === reqB)).toBe(false);
+    });
+
+    // ── Transição de saldos ────────────────────────────────────────
+    it('transição de fim de ano guarda o transitado e é idempotente', async () => {
+      await prisma.leaveTypeConfig.update({
+        where: { code: LEAVE_TYPE_CODE },
+        data: { allowCarryOver: true, carryOverLimit: 5 },
+      });
+      await prisma.leaveBalance.update({
+        where: { userId_leaveTypeCode: { userId: employeeId, leaveTypeCode: LEAVE_TYPE_CODE } },
+        data: { balance: 9, reserved: 0, used: 0 },
+      });
+
+      const run = () =>
+        request(app.getHttpServer())
+          .post('/leave/balance/carry-over')
+          .query({ year: 2099 })
+          .set('Authorization', `Bearer ${rhToken}`)
+          .expect(201);
+      await run();
+      expect((await balanceRow())!.balance).toBe(27); // 22 anuais + min(9, 5)
+
+      await run(); // 2ª vez: nada muda
+      expect((await balanceRow())!.balance).toBe(27);
+
+      await prisma.leaveTypeConfig.update({
+        where: { code: LEAVE_TYPE_CODE },
+        data: { allowCarryOver: false, carryOverLimit: null },
+      });
+      await prisma.leaveBalanceHistory.deleteMany({
+        where: { userId: employeeId, kind: 'CARRY_OVER' },
+      });
+    });
+  });
 });

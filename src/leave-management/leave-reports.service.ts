@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CurrentUserData } from '../common/types/current-user';
 import {
   AbsenceJustificationStatus,
+  AbsenceOccurrenceType,
   LeaveReportFilterDto,
   LeaveReportKind,
   LeaveStatus,
@@ -20,6 +21,7 @@ import { countWorkDays } from './leave-calendar.helper';
 import { VACATION_CODE } from './leave-overview.service';
 import { LeavePlanningService } from './leave-planning.service';
 import { leaveUserFilter } from './leave-scope.helper';
+import { LeaveSettingsService } from './leave-settings.service';
 
 const HOURS_PER_DAY = 8;
 const MAX_ROWS = 1000;
@@ -145,6 +147,7 @@ export class LeaveReportsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly planning: LeavePlanningService,
+    private readonly settings: LeaveSettingsService,
   ) {}
 
   catalog() {
@@ -530,6 +533,7 @@ export class LeaveReportsService {
   }
 
   private async justifiedVsUnjustified(c: Ctx) {
+    const cfg = await this.settings.current();
     const absences = await this.prisma.read.absenceRecord.findMany({
       where: { user: c.userWhere, date: { gte: c.from, lte: c.to } },
       select: {
@@ -550,14 +554,17 @@ export class LeaveReportsService {
       PENDING: { n: 0, days: 0, hours: 0 },
     };
     for (const a of absences) {
+      // Categorias configuráveis (§10): decidem o que conta como justificada /
+      // injustificada enquanto a justificação ainda não foi decidida.
       const cat: keyof typeof labels =
         a.justificationStatus === 'VALIDATED'
           ? 'JUSTIFIED'
           : a.justificationStatus === 'REJECTED' ||
-              a.occurrenceType === 'UNJUSTIFIED_ABSENCE' ||
-              a.occurrenceType === 'NO_SHOW'
+              cfg.unjustifiedOccurrenceTypes.includes(a.occurrenceType as AbsenceOccurrenceType)
             ? 'UNJUSTIFIED'
-            : 'PENDING';
+            : cfg.justifiedOccurrenceTypes.includes(a.occurrenceType as AbsenceOccurrenceType)
+              ? 'JUSTIFIED'
+              : 'PENDING';
       agg[cat].n++;
       agg[cat].days += a.durationDays ?? 0;
       agg[cat].hours += a.durationHours ?? (a.durationDays ?? 1) * HOURS_PER_DAY;

@@ -11,11 +11,16 @@ import { LeaveAbsenceCalendarService } from './leave-absence-calendar.service';
 import { LeaveApprovalsService } from './leave-approvals.service';
 import { LeavePlanningService } from './leave-planning.service';
 import { LeaveReportsService } from './leave-reports.service';
+import { LeaveSettingsService } from './leave-settings.service';
+import { LeaveSettingsController } from './leave-settings.controller';
+import { LeaveEffectsService } from './leave-effects.service';
+import { LeaveRemindersService } from './leave-reminders.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuditModule } from '../common/modules/audit.module';
+import { AutomationModule } from '../automation/automation.module';
 
 @Module({
-  imports: [PrismaModule, AuditModule],
+  imports: [PrismaModule, AuditModule, AutomationModule],
   providers: [
     LeaveManagementService,
     LeaveOverviewService,
@@ -25,10 +30,13 @@ import { AuditModule } from '../common/modules/audit.module';
     LeaveApprovalsService,
     LeavePlanningService,
     LeaveReportsService,
+    LeaveSettingsService,
+    LeaveEffectsService,
+    LeaveRemindersService,
   ],
   // LeaveAbsencesController primeiro: `GET /leave/absences` não pode ser
   // engolido por `GET /leave/:id`.
-  controllers: [LeaveAbsencesController, LeaveManagementController],
-  exports: [LeaveManagementService],
+  controllers: [LeaveAbsencesController, LeaveSettingsController, LeaveManagementController],
+  exports: [LeaveManagementService, LeaveSettingsService],
 })
 export class LeaveManagementModule {}

@@ -15,7 +15,8 @@ import {
   CalendarView,
   LeaveStatus,
 } from './leave-management.dto';
-import { holidaysInRange } from './leave-calendar.helper';
+import { getWorkWeekDays, holidaysInRange } from './leave-calendar.helper';
+import { LeaveSettingsService } from './leave-settings.service';
 import { VACATION_CODE } from './leave-overview.service';
 import {
   canSeeSensitive,
@@ -26,7 +27,6 @@ import {
 } from './leave-scope.helper';
 
 const DAY_MS = 24 * 3600 * 1000;
-const DEFAULT_MAX_ABSENCE_PERCENT = 30;
 const MAX_LISTED = 200;
 const UNAVAILABLE = { code: 'UNAVAILABLE', name: 'Indisponível', color: '#94A3B8' };
 
@@ -45,7 +45,8 @@ const ABSENCE_LABELS: Record<string, string> = {
 
 const dayKey = (d: Date) => d.toISOString().slice(0, 10);
 const addDays = (d: Date, n: number) => new Date(d.getTime() + n * DAY_MS);
-const isWeekend = (d: Date) => d.getUTCDay() === 0 || d.getUTCDay() === 6;
+// Semana de trabalho configurável (§10) — dias fora dela contam como fim de semana.
+const isWeekend = (d: Date) => !getWorkWeekDays().includes(d.getUTCDay());
 
 function dayUtc(d: Date | string): Date {
   const iso = typeof d === 'string' ? d.slice(0, 10) : d.toISOString().slice(0, 10);
@@ -88,7 +89,10 @@ export interface CalendarEntry {
 
 @Injectable()
 export class LeaveAbsenceCalendarService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly settings: LeaveSettingsService,
+  ) {}
 
   async getCalendar(filters: AbsenceCalendarFilterDto, viewer: CurrentUserData) {
     const view = filters.view ?? CalendarView.MONTH;
@@ -219,7 +223,8 @@ export class LeaveAbsenceCalendarService {
     const holidayKeys = new Set(holidays.map(h => h.date));
     const deptName = new Map(departments.map(d => [d.id, d.name]));
     const defaultMax =
-      policies.find(p => !p.department)?.maxAbsencePercent ?? DEFAULT_MAX_ABSENCE_PERCENT;
+      policies.find(p => !p.department)?.maxAbsencePercent ??
+      (await this.settings.current()).defaultMaxAbsencePercent;
     const maxFor = (departmentId: number | null) => {
       const name = departmentId ? deptName.get(departmentId) : undefined;
       return (

@@ -50,11 +50,83 @@ function localDay(d: Date): string {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
-const holidayCache = new Map<number, Map<string, string>>();
+// ── Configuração em runtime (docs/Modulo_Leave.md §10) ──────────────────────
+// Feriados por localização e semana de trabalho são mantidos pelo RH na BD
+// (LeaveSettingsService). Estas funções são síncronas e usadas em dezenas de
+// sítios, por isso lêem de um registo em memória que o serviço actualiza ao
+// arrancar, a cada gravação e — para outras instâncias — por refresco em
+// segundo plano quando o registo fica mais velho que REFRESH_MS.
 
-/** Mapa data ISO (YYYY-MM-DD) → nome do feriado, para o ano indicado. */
-export function holidaysForYear(year: number): Map<string, string> {
-  const cached = holidayCache.get(year);
+export interface CustomHoliday {
+  /** YYYY-MM-DD; com `recurring` só conta o mês/dia. */
+  date: string;
+  name: string;
+  /** null = nacional. */
+  location: string | null;
+  recurring: boolean;
+  /** false = suprime o feriado de base nessa data (ex.: tolerância de ponto). */
+  active: boolean;
+}
+
+const DEFAULT_WORK_WEEK = [1, 2, 3, 4, 5];
+const REFRESH_MS = 60_000;
+
+let customHolidays: CustomHoliday[] = [];
+let workWeek = new Set<number>(DEFAULT_WORK_WEEK);
+let registryLoadedAt = 0;
+let registryLoader: (() => Promise<void>) | null = null;
+let registryLoading = false;
+
+export function configureLeaveCalendar(cfg: {
+  holidays?: CustomHoliday[];
+  workWeekDays?: number[];
+}): void {
+  if (cfg.holidays) customHolidays = cfg.holidays;
+  if (cfg.workWeekDays?.length) workWeek = new Set(cfg.workWeekDays);
+  registryLoadedAt = Date.now();
+  holidayCache.clear();
+}
+
+export function resetLeaveCalendar(): void {
+  customHolidays = [];
+  workWeek = new Set(DEFAULT_WORK_WEEK);
+  registryLoadedAt = 0;
+  registryLoader = null;
+  holidayCache.clear();
+}
+
+export function setLeaveCalendarLoader(loader: (() => Promise<void>) | null): void {
+  registryLoader = loader;
+}
+
+function refreshIfStale(): void {
+  if (!registryLoader || registryLoading || Date.now() - registryLoadedAt < REFRESH_MS) return;
+  registryLoading = true;
+  registryLoadedAt = Date.now(); // evita rajadas se o loader falhar
+  void registryLoader()
+    .catch(() => undefined)
+    .finally(() => {
+      registryLoading = false;
+    });
+}
+
+/** Dia da semana (0 = domingo) é dia útil na semana de trabalho configurada. */
+export function isWorkWeekday(date: Date): boolean {
+  return workWeek.has(date.getDay());
+}
+
+export function getWorkWeekDays(): number[] {
+  return [...workWeek].sort((x, y) => x - y);
+}
+
+const holidayCache = new Map<string, Map<string, string>>();
+
+/** Mapa data ISO (YYYY-MM-DD) → nome do feriado, para o ano (e localização) indicados. */
+export function holidaysForYear(year: number, location?: string | null): Map<string, string> {
+  refreshIfStale();
+  const loc = location?.trim().toLowerCase() || '';
+  const cacheKey = `${year}|${loc}`;
+  const cached = holidayCache.get(cacheKey);
   if (cached) return cached;
   const names: Record<string, string> = {
     '01-01': 'Ano Novo',
@@ -74,24 +146,33 @@ export function holidaysForYear(year: number): Map<string, string> {
   const shift = (days: number) => new Date(easter.getTime() + days * 86400000);
   map.set(isoDay(shift(-2)), 'Sexta-feira Santa');
   map.set(isoDay(shift(-47)), 'Carnaval');
-  holidayCache.set(year, map);
+
+  // Personalizados: nacionais (location null) e os da localização pedida.
+  for (const h of customHolidays) {
+    const hLoc = h.location?.trim().toLowerCase() || '';
+    if (hLoc && hLoc !== loc) continue;
+    const key = h.recurring ? `${year}-${h.date.slice(5, 10)}` : h.date.slice(0, 10);
+    if (!key.startsWith(`${year}-`)) continue;
+    if (h.active) map.set(key, h.name);
+    else map.delete(key);
+  }
+  holidayCache.set(cacheKey, map);
   return map;
 }
 
-export function holidayName(date: Date): string | undefined {
-  return holidaysForYear(date.getFullYear()).get(localDay(date));
+export function holidayName(date: Date, location?: string | null): string | undefined {
+  return holidaysForYear(date.getFullYear(), location).get(localDay(date));
 }
 
-export function isHoliday(date: Date): boolean {
-  return holidayName(date) !== undefined;
+export function isHoliday(date: Date, location?: string | null): boolean {
+  return holidayName(date, location) !== undefined;
 }
 
-export function countWorkDays(start: Date, end: Date): number {
+export function countWorkDays(start: Date, end: Date, location?: string | null): number {
   let days = 0;
   const cur = new Date(start);
   while (cur <= end) {
-    const dow = cur.getDay();
-    if (dow !== 0 && dow !== 6 && !isHoliday(cur)) days++;
+    if (isWorkWeekday(cur) && !isHoliday(cur, location)) days++;
     cur.setDate(cur.getDate() + 1);
   }
   return days;
@@ -102,13 +183,16 @@ export function countCalendarDays(start: Date, end: Date): number {
 }
 
 /** Feriados (em dias úteis) que caem dentro do intervalo. */
-export function holidaysInRange(start: Date, end: Date): Array<{ date: string; name: string }> {
+export function holidaysInRange(
+  start: Date,
+  end: Date,
+  location?: string | null,
+): Array<{ date: string; name: string }> {
   const out: Array<{ date: string; name: string }> = [];
   const cur = new Date(start);
   while (cur <= end) {
-    const name = holidayName(cur);
-    const dow = cur.getDay();
-    if (name && dow !== 0 && dow !== 6) out.push({ date: localDay(cur), name });
+    const name = holidayName(cur, location);
+    if (name && isWorkWeekday(cur)) out.push({ date: localDay(cur), name });
     cur.setDate(cur.getDate() + 1);
   }
   return out;

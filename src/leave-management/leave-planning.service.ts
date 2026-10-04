@@ -9,18 +9,19 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CurrentUserData } from '../common/types/current-user';
 import { isPrivileged } from '../common/authz/ownership';
 import { AbsenceJustificationStatus, LeaveStatus, PlanningFilterDto } from './leave-management.dto';
-import { holidaysInRange } from './leave-calendar.helper';
+import { getWorkWeekDays, holidaysInRange } from './leave-calendar.helper';
+import { LeaveSettingsService } from './leave-settings.service';
 import { VACATION_CODE } from './leave-overview.service';
 import { leaveScopeOf, leaveUserFilter, ORG_WIDE_ROLES } from './leave-scope.helper';
 
 const DAY_MS = 24 * 3600 * 1000;
 const MAX_RANGE_DAYS = 186;
-const DEFAULT_MAX_ABSENCE_PERCENT = 30;
 const MAX_LISTED = 100;
 
 const dayKey = (d: Date) => d.toISOString().slice(0, 10);
 const addDays = (d: Date, n: number) => new Date(d.getTime() + n * DAY_MS);
-const isWeekend = (d: Date) => d.getUTCDay() === 0 || d.getUTCDay() === 6;
+// Semana de trabalho configurável (§10) — dias fora dela contam como fim de semana.
+const isWeekend = (d: Date) => !getWorkWeekDays().includes(d.getUTCDay());
 const dayUtc = (d: Date | string) =>
   new Date(`${(typeof d === 'string' ? d : d.toISOString()).slice(0, 10)}T00:00:00.000Z`);
 
@@ -44,7 +45,10 @@ export function parseBlackouts(raw: unknown): BlackoutPeriod[] {
 
 @Injectable()
 export class LeavePlanningService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly settings: LeaveSettingsService,
+  ) {}
 
   async getPlanning(filters: PlanningFilterDto, viewer: CurrentUserData) {
     const now = new Date();
@@ -129,6 +133,7 @@ export class LeavePlanningService {
         this.prisma.read.leaveTypeConfig.findMany({ select: { code: true, name: true } }),
       ]);
 
+    const defaultMaxPercent = (await this.settings.current()).defaultMaxAbsencePercent;
     const typeName = new Map(types.map(t => [t.code, t.name]));
     const deptName = new Map(departments.map(d => [d.id, d.name]));
     const headcountOf = new Map(headcounts.map(h => [h.departmentId, h._count._all]));
@@ -139,7 +144,7 @@ export class LeavePlanningService {
       return policies.find(p => p.department && p.department === name) ?? globalPolicy;
     };
     const maxAbsentPercent = (departmentId: number | null) =>
-      policyFor(departmentId)?.maxAbsencePercent ?? DEFAULT_MAX_ABSENCE_PERCENT;
+      policyFor(departmentId)?.maxAbsencePercent ?? defaultMaxPercent;
     const blackoutsFor = (departmentId: number | null) => [
       ...parseBlackouts(globalPolicy?.blackoutPeriods),
       ...(() => {

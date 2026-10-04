@@ -19,6 +19,7 @@ import { LeaveAbsenceCalendarService } from './leave-absence-calendar.service';
 import { LeaveApprovalsService } from './leave-approvals.service';
 import { LeavePlanningService } from './leave-planning.service';
 import { LeaveReportsService } from './leave-reports.service';
+import { LeaveEffectsService } from './leave-effects.service';
 import {
   LeaveFilterDto,
   CalendarFilterDto,
@@ -41,7 +42,9 @@ import {
   PlanningFilterDto,
   LeaveReportFilterDto,
   LeaveReportKind,
+  CancelLeaveDto,
 } from './leave-management.dto';
+import { PayrollFeedFilterDto } from './leave-settings.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
@@ -61,6 +64,7 @@ export class LeaveManagementController {
     private readonly approvals: LeaveApprovalsService,
     private readonly planning: LeavePlanningService,
     private readonly reports: LeaveReportsService,
+    private readonly effects: LeaveEffectsService,
   ) {}
 
   // ── Leave Types ────────────────────────────────────────────────────
@@ -242,6 +246,15 @@ export class LeaveManagementController {
     return this.reports.run(kind, filters, user);
   }
 
+  @Get('payroll-feed')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary: 'Ausências validadas do mês para o processamento salarial (sem cálculo de descontos)',
+  })
+  payrollFeed(@Query() q: PayrollFeedFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.effects.payrollFeed(q.period, user.id);
+  }
+
   @Get('analytics/absenteeism')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Relatório de absenteísmo por período' })
@@ -353,8 +366,13 @@ export class LeaveManagementController {
 
   @Patch(':id/cancel')
   @ApiOperation({ summary: 'Cancelar pedido (devolve saldo se aprovado)' })
-  cancel(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
-    return this.svc.cancel(id, user.id);
+  cancel(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: CurrentUserData,
+    @Body() dto: CancelLeaveDto,
+  ) {
+    // ADMIN/RH cancelam em nome de qualquer colaborador; o serviço decide e regista quem.
+    return this.svc.cancel(id, user.id, { reason: dto?.reason, actor: user });
   }
 
   // ── Balance Management ────────────────────────────────────────────
@@ -397,7 +415,7 @@ export class LeaveManagementController {
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Processar carry-over de fim de ano' })
   @ApiQuery({ name: 'year', type: Number })
-  processCarryOver(@Query('year') year: string) {
-    return this.svc.processCarryOver(+year || new Date().getFullYear());
+  processCarryOver(@Query('year') year: string, @CurrentUser() user: CurrentUserData) {
+    return this.svc.processCarryOver(+year || new Date().getFullYear(), user.id);
   }
 }

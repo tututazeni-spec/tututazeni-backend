@@ -9,6 +9,7 @@ import { CurrentUserData } from '../common/types/current-user';
 import { buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { isPrivileged } from '../common/authz/ownership';
 import { leaveScopeOf, leaveUserFilter, ORG_WIDE_ROLES, TEAM_ROLES } from './leave-scope.helper';
+import { LeaveSettingsService } from './leave-settings.service';
 import {
   DurationPreviewDto,
   LeaveStatus,
@@ -28,7 +29,10 @@ function startOfDay(d: Date): Date {
 
 @Injectable()
 export class LeaveOverviewService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly settings: LeaveSettingsService,
+  ) {}
 
   private userFilter(
     user: CurrentUserData,
@@ -325,10 +329,25 @@ export class LeaveOverviewService {
     });
     if (!type) throw new NotFoundException(`Tipo de licença "${dto.leaveTypeCode}" não encontrado`);
 
+    // Mesma regra de contagem da submissão (§10): regra da empresa, horas por
+    // dia e feriados da localização do colaborador — o preview tem de bater
+    // certo com o que o pedido vai guardar.
+    const [cfg, target] = await Promise.all([
+      this.settings.current(),
+      this.prisma.read.user.findUnique({ where: { id: targetId }, select: { workLocation: true } }),
+    ]);
+    const workDaysOnly =
+      cfg.dayCountRule === 'WORK_DAYS'
+        ? true
+        : cfg.dayCountRule === 'CALENDAR_DAYS'
+          ? false
+          : type.countWorkDaysOnly;
     const calendarDays = countCalendarDays(start, end);
-    let workDays = type.countWorkDaysOnly ? countWorkDays(start, end) : calendarDays;
+    let workDays = workDaysOnly ? countWorkDays(start, end, target?.workLocation) : calendarDays;
     if (dto.durationMode === 'HALF_AM' || dto.durationMode === 'HALF_PM') workDays = 0.5;
-    if (dto.durationMode === 'HOURS' && dto.hours) workDays = +(dto.hours / 8).toFixed(2);
+    if (dto.durationMode === 'HOURS' && dto.hours) {
+      workDays = +(dto.hours / cfg.hoursPerDay).toFixed(2);
+    }
 
     const [balance, overlap] = await Promise.all([
       this.prisma.read.leaveBalance.findUnique({
@@ -348,10 +367,13 @@ export class LeaveOverviewService {
     return {
       workDays,
       calendarDays,
-      holidays: holidaysInRange(start, end),
-      countsWorkDaysOnly: type.countWorkDaysOnly,
-      availableBalance: balance?.balance ?? null,
-      exceedsBalance: !!type.annualLimit && workDays > (balance?.balance ?? 0),
+      holidays: holidaysInRange(start, end, target?.workLocation),
+      countsWorkDaysOnly: workDaysOnly,
+      // Disponível = atribuído − reservado por pedidos pendentes (§13).
+      availableBalance: balance ? balance.balance - balance.reserved : null,
+      reservedDays: balance?.reserved ?? 0,
+      exceedsBalance:
+        !!type.annualLimit && workDays > (balance ? balance.balance - balance.reserved : 0),
       selfOverlap: overlap,
     };
   }

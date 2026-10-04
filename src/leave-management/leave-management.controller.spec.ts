@@ -4,6 +4,10 @@ import { LeaveManagementService } from './leave-management.service';
 import { LeaveOverviewService } from './leave-overview.service';
 import { LeaveLicensesService } from './leave-licenses.service';
 import { LeaveAbsenceCalendarService } from './leave-absence-calendar.service';
+import { LeaveApprovalsService } from './leave-approvals.service';
+import { LeavePlanningService } from './leave-planning.service';
+import { LeaveReportsService } from './leave-reports.service';
+import { LeaveEffectsService } from './leave-effects.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -48,6 +52,8 @@ const mockAbsenceCalendar = {
   exportCsv: jest.fn().mockResolvedValue({}),
 };
 
+const mockEffects = { payrollFeed: jest.fn().mockResolvedValue({ leaves: [], absences: [] }) };
+
 const mockUser = { id: 1, email: 'test@innova.com', role: { name: 'ADMIN' } };
 
 describe('LeaveManagementController', () => {
@@ -62,6 +68,10 @@ describe('LeaveManagementController', () => {
         { provide: LeaveOverviewService, useValue: mockOverview },
         { provide: LeaveLicensesService, useValue: mockLicenses },
         { provide: LeaveAbsenceCalendarService, useValue: mockAbsenceCalendar },
+        { provide: LeaveApprovalsService, useValue: {} },
+        { provide: LeavePlanningService, useValue: {} },
+        { provide: LeaveReportsService, useValue: {} },
+        { provide: LeaveEffectsService, useValue: mockEffects },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -230,9 +240,12 @@ describe('LeaveManagementController', () => {
     expect(mockSvc.bulkApprove).toHaveBeenCalledWith(dto, 1);
   });
 
-  it('cancel → cancel(id, userId)', async () => {
-    await controller.cancel(5, mockUser as any);
-    expect(mockSvc.cancel).toHaveBeenCalledWith(5, 1);
+  it('cancel → cancel(id, userId, { reason, actor })', async () => {
+    await controller.cancel(5, mockUser as any, { reason: 'Mudança de planos' });
+    expect(mockSvc.cancel).toHaveBeenCalledWith(5, 1, {
+      reason: 'Mudança de planos',
+      actor: mockUser,
+    });
   });
 
   it('getBalance → getBalance(userId)', async () => {
@@ -257,8 +270,8 @@ describe('LeaveManagementController', () => {
     expect(mockSvc.initializeUserBalances).toHaveBeenCalledWith(5);
   });
 
-  it('processCarryOver → processCarryOver(year)', async () => {
-    await controller.processCarryOver('2024');
-    expect(mockSvc.processCarryOver).toHaveBeenCalledWith(2024);
+  it('processCarryOver → processCarryOver(year, actorId)', async () => {
+    await controller.processCarryOver('2024', mockUser as any);
+    expect(mockSvc.processCarryOver).toHaveBeenCalledWith(2024, 1);
   });
 });

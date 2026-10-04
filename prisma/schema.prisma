@@ -9701,6 +9701,12 @@ model LeaveRequest {
   createdById        Int?
   startTime          String?
   endTime            String?
+  // §12: nº legível, momento da submissão e quem/quando/porquê cancelou.
+  requestNumber      String?             @unique
+  submittedAt        DateTime?
+  cancelledAt        DateTime?
+  cancelledById      Int?
+  cancelReason       String?
 
   @@index([userId, status])
   @@index([startDate, endDate])
@@ -9753,6 +9759,9 @@ model LeaveBalance {
   leaveTypeCode String
   balance       Float      @default(0)
   used          Float      @default(0)
+  // §13: dias reservados por pedidos PENDING (ainda não gozados). Disponível =
+  // balance − reserved; na aprovação passam de reserved para used.
+  reserved      Float      @default(0)
   expiresAt     DateTime?
   updatedAt     DateTime   @updatedAt
 
@@ -9770,6 +9779,9 @@ model LeaveBalanceHistory {
   reason        String
   requestId     Int?
   updatedById   Int
+  // §12 (LeaveBalanceTransaction): ALLOCATION | RESERVATION | RELEASE | USAGE |
+  // ADJUSTMENT | REVERSAL | CARRY_OVER.
+  kind          String     @default("ADJUSTMENT")
   createdAt     DateTime   @default(now())
 
   @@index([userId, leaveType])
@@ -9848,6 +9860,55 @@ model LeavePolicy {
   createdAt            DateTime @default(now())
 
   @@map("leave_policies")
+}
+
+// Configurações do módulo Leave (docs/Modulo_Leave.md §10): cada gravação cria
+// uma versão imutável com data de entrada em vigor — a activa é a mais recente
+// com effectiveFrom <= agora. `values` segue a interface LeaveSettings.
+model LeaveSettingVersion {
+  id            Int      @id @default(autoincrement())
+  effectiveFrom DateTime
+  values        Json
+  changeNote    String?
+  createdById   Int
+  createdAt     DateTime @default(now())
+
+  @@index([effectiveFrom])
+  @@map("leave_setting_versions")
+}
+
+// Calendário de feriados por localização (null = nacional). `recurring` repete
+// o dia/mês todos os anos.
+model LeaveHoliday {
+  id          Int      @id @default(autoincrement())
+  name        String
+  date        DateTime @db.Date
+  location    String?
+  recurring   Boolean  @default(false)
+  active      Boolean  @default(true)
+  createdById Int?
+  createdAt   DateTime @default(now())
+
+  @@index([date])
+  @@index([location])
+  @@map("leave_holidays")
+}
+
+// Substituição temporária de um aprovador (§10 "regras de aprovação e
+// substituição"): durante o período, as novas etapas dele vão para o delegado.
+model LeaveDelegation {
+  id          Int      @id @default(autoincrement())
+  delegatorId Int
+  delegateId  Int
+  startDate   DateTime @db.Date
+  endDate     DateTime @db.Date
+  reason      String?
+  active      Boolean  @default(true)
+  createdById Int
+  createdAt   DateTime @default(now())
+
+  @@index([delegatorId, active])
+  @@map("leave_delegations")
 }
 
 enum AbsenceOccurrenceType {

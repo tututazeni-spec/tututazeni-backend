@@ -4,6 +4,9 @@ import { LeaveManagementService } from './leave-management.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { LeaveStatus } from './leave-management.dto';
+import { LeaveSettingsService } from './leave-settings.service';
+import { LeaveEffectsService } from './leave-effects.service';
+import { DEFAULT_LEAVE_SETTINGS } from './leave-settings.dto';
 
 const leaveTypeConfig = {
   findUnique: jest.fn(),
@@ -48,6 +51,9 @@ const mockPrisma = {
   user: { findUnique: jest.fn(), findMany: jest.fn(), count: jest.fn().mockResolvedValue(0) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
+  // Reservas de saldo correm em transacção (tx = o próprio mock).
+  $transaction: jest.fn(async (cb: (tx: unknown) => unknown) => cb(mockPrismaProxy)),
+  $queryRaw: jest.fn().mockResolvedValue([]),
 };
 
 const mockPrismaProxy: any = new Proxy(mockPrisma, {
@@ -63,6 +69,17 @@ const mockPrismaProxy: any = new Proxy(mockPrisma, {
 });
 
 const mockAudit = { log: jest.fn().mockResolvedValue({}) };
+
+// ─── Dependências novas (§10/§11): configurações e efeitos nas integrações ─────
+const mockSettings = {
+  current: jest.fn().mockResolvedValue(DEFAULT_LEAVE_SETTINGS),
+  activeDelegateOf: jest.fn().mockResolvedValue(null),
+};
+const mockEffects = {
+  syncAttendanceOnApproval: jest.fn().mockResolvedValue({ created: 0 }),
+  emitApproved: jest.fn().mockResolvedValue(undefined),
+  removeAttendanceOnCancel: jest.fn().mockResolvedValue({ removed: 0 }),
+};
 
 const baseLeaveRequest = {
   id: 1,
@@ -94,6 +111,8 @@ describe('LeaveManagementService', () => {
         LeaveManagementService,
         { provide: PrismaService, useValue: mockPrismaProxy },
         { provide: AuditService, useValue: mockAudit },
+        { provide: LeaveSettingsService, useValue: mockSettings },
+        { provide: LeaveEffectsService, useValue: mockEffects },
       ],
     }).compile();
     service = module.get<LeaveManagementService>(LeaveManagementService);
@@ -219,6 +238,7 @@ describe('LeaveManagementService', () => {
       leaveBalance.findFirst.mockResolvedValue({ balance: 20, userId: 1, leaveTypeCode: 'ANNUAL' });
       leavePolicy.findFirst.mockResolvedValue(null);
       mockPrisma.leaveRequest.create.mockResolvedValue(baseLeaveRequest);
+      mockPrisma.leaveRequest.update.mockResolvedValue(baseLeaveRequest);
 
       const result = await service.create(
         {
@@ -259,13 +279,15 @@ describe('LeaveManagementService', () => {
         leaveTypeCode: 'VACATION',
       });
       leavePolicy.findFirst.mockResolvedValue(null);
-      mockPrisma.leaveRequest.create.mockResolvedValue({
+      const created = {
         ...baseLeaveRequest,
         id: 42,
         leaveTypeCode: 'VACATION',
         workDays: 3,
         status: 'PENDING',
-      });
+      };
+      mockPrisma.leaveRequest.create.mockResolvedValue(created);
+      mockPrisma.leaveRequest.update.mockResolvedValue(created);
 
       await service.create(
         {
@@ -396,7 +418,12 @@ function makeLeaveService(leaveRequest: any) {
     auditLog: { create: jest.fn().mockResolvedValue({}) },
   };
   Object.defineProperty(prismaLocal, 'read', { get: () => prismaLocal, configurable: true });
-  return new LeaveManagementService(prismaLocal, { log: jest.fn() } as any);
+  return new LeaveManagementService(
+    prismaLocal,
+    { log: jest.fn() } as any,
+    mockSettings as any,
+    mockEffects as any,
+  );
 }
 
 describe('LeaveManagementService ownership (A3)', () => {
