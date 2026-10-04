@@ -315,7 +315,9 @@ export class HistoryHubService {
 
   /** Entradas genéricas de UserAuditLog (excepto as 3 que viram Movimentos). */
   private async collectUserAudit(ctx: ScopeCtx): Promise<RawEntry[]> {
-    const and: Prisma.UserAuditLogWhereInput[] = [{ action: { notIn: MOVEMENT_USER_ACTIONS } }];
+    const and: Prisma.UserAuditLogWhereInput[] = [
+      { action: { notIn: [...MOVEMENT_USER_ACTIONS, ...NOISE_ACTIONS] } },
+    ];
     const r = this.range(ctx);
     if (r) and.push({ createdAt: r });
     if (ctx.actorId) and.push({ performedById: ctx.actorId });
@@ -869,7 +871,7 @@ export class HistoryHubService {
       return [...audit, ...docs.map(d => this.documentToEntry(d))];
     }
     const [audit, userAudit, heads, movements, docs] = await Promise.all([
-      this.collectAudit(ctx, false),
+      this.collectAudit(ctx, true),
       this.collectUserAudit(ctx),
       this.collectHeadHistory(ctx),
       this.collectMovements(ctx),
@@ -1108,7 +1110,9 @@ export class HistoryHubService {
 
     const countEvents = async (r?: { gte: Date }) => {
       const parts = await Promise.all([
-        this.prisma.read.auditLog.count({ where: r ? { timestamp: r } : {} }),
+        this.prisma.read.auditLog.count({
+          where: { action: { notIn: NOISE_ACTIONS }, ...(r ? { timestamp: r } : {}) },
+        }),
         this.prisma.read.userAuditLog.count({ where: r ? { createdAt: r } : {} }),
         this.prisma.read.orgChangeLog.count({ where: r ? { effectiveDate: r } : {} }),
         this.prisma.read.departmentTransferLog.count({ where: r ? { transferredAt: r } : {} }),
