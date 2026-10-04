@@ -85,7 +85,7 @@ export const DEFAULT_POLICY: AuditPolicyValues = {
     GENERAL: 730,
   },
   archivePolicy: null,
-  viewRoles: ['ADMIN', 'RH'],
+  viewRoles: ['ADMIN', 'AUDITOR'],
   exportRoles: ['ADMIN'],
   maskSensitive: true,
   maskedFields: ['salary', 'iban', 'nib', 'nif', 'birthDate', 'address'],

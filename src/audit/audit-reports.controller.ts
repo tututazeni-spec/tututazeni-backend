@@ -19,12 +19,14 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { AuditReportsService } from './audit-reports.service';
+import { AuditService } from './audit.service';
 import { AuditExportsService } from './audit-exports.service';
 import { AuditPolicyService } from './audit-policy.service';
 import {
   AuditReportDto,
   AuditReportExportDto,
   ExportFilterDto,
+  GenerateEventEvidenceDto,
   UpdateExportDto,
   UploadEvidenceDto,
 } from './audit-reports.dto';
@@ -39,13 +41,14 @@ type Req_ = { ip?: string };
 @ApiTags('Audit — Relatórios, Exportações e Políticas')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.RH)
+@Roles(Role.ADMIN, Role.AUDITOR)
 @Controller('audit')
 export class AuditReportsController {
   constructor(
     private readonly reports: AuditReportsService,
     private readonly exportsSvc: AuditExportsService,
     private readonly policy: AuditPolicyService,
+    private readonly auditSvc: AuditService,
   ) {}
 
   private actor(user: CurrentUserData, req: Req_) {
@@ -107,6 +110,23 @@ export class AuditReportsController {
     @Req() req: Req_,
   ) {
     return this.exportsSvc.uploadEvidence(dto, this.actor(user, req), user.role?.name);
+  }
+
+  @Post('events/:id/evidence')
+  @ApiOperation({ summary: 'Gerar documento de evidência a partir de um evento de auditoria' })
+  async generateEvidence(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: GenerateEventEvidenceDto,
+    @CurrentUser() user: CurrentUserData,
+    @Req() req: Req_,
+  ) {
+    return this.exportsSvc.generateEventEvidence(
+      id,
+      dto,
+      this.actor(user, req),
+      user.role?.name,
+      await this.auditSvc.resolveScope(user),
+    );
   }
 
   @Post('exports/purge-expired')

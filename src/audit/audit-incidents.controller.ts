@@ -31,7 +31,7 @@ import { Role } from '../auth/enums/role.enum';
 @ApiTags('Audit — Incidentes')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.RH)
+@Roles(Role.ADMIN, Role.AUDITOR)
 @Controller('audit/incidents')
 export class AuditIncidentsController {
   constructor(private readonly svc: AuditIncidentsService) {}

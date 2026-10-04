@@ -16,7 +16,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from './audit.service';
 import type { AuditActor } from './audit-incidents.service';
 import { AuditPolicyService } from './audit-policy.service';
-import { ExportFilterDto, UpdateExportDto, UploadEvidenceDto } from './audit-reports.dto';
+import {
+  ExportFilterDto,
+  GenerateEventEvidenceDto,
+  UpdateExportDto,
+  UploadEvidenceDto,
+} from './audit-reports.dto';
 import { buildPaginatedResponse, calculatePagination } from '../common/helpers/pagination.helper';
 
 const DAY = 24 * 3600 * 1000;
@@ -354,6 +359,71 @@ export class AuditExportsService {
         auditId: dto.auditId,
         sha256: saved.sha256,
         sizeBytes: buffer.length,
+      },
+    });
+    return saved;
+  }
+
+  /**
+   * §17 «Gerar evidência» — documento JSON com o evento (valores sensíveis já ocultados para o
+   * perfil), a posição na cadeia de hashes e quem/quando o gerou. Referencia o evento original.
+   */
+  async generateEventEvidence(
+    eventId: number,
+    dto: GenerateEventEvidenceDto,
+    actor: AuditActor,
+    role?: string | null,
+    scope?: Prisma.AuditLogWhereInput | null,
+  ) {
+    await this.assertCan('export', role);
+    if (dto.incidentId) {
+      const ok = await this.prisma.securityIncident.count({ where: { id: dto.incidentId } });
+      if (!ok) throw new NotFoundException('Incidente não encontrado');
+    }
+    if (dto.auditId) {
+      const ok = await this.prisma.internalAudit.count({ where: { id: dto.auditId } });
+      if (!ok) throw new NotFoundException('Auditoria não encontrada');
+    }
+    const event = await this.audit.getEventDetail(eventId, role, scope);
+    const chain = await this.prisma.read.auditLog.findUnique({
+      where: { id: eventId },
+      select: { hash: true, previousHash: true },
+    });
+    const document = {
+      type: 'AUDIT_EVENT_EVIDENCE',
+      generatedAt: new Date().toISOString(),
+      generatedById: actor.id,
+      reference: { auditLogId: eventId, code: event.code },
+      chain: { hash: chain?.hash ?? null, previousHash: chain?.previousHash ?? null },
+      event,
+    };
+    const buffer = Buffer.from(JSON.stringify(document, null, 2), 'utf8');
+    const saved = await this.saveFile({
+      kind: 'EVIDENCE',
+      fileName: `evidencia-${event.code}.json`,
+      mimeType: 'application/json',
+      format: 'other',
+      incidentId: dto.incidentId,
+      auditId: dto.auditId,
+      buffer,
+      recordCount: 1,
+      confidentiality: dto.confidentiality ?? 'RESTRICTED',
+      createdById: actor.id,
+    });
+    await this.audit.log({
+      userId: actor.id,
+      action: 'CREATE',
+      entity: 'AuditExport',
+      entityId: saved.id,
+      entityName: saved.code,
+      severity: 'MEDIUM',
+      ip: actor.ip,
+      metadata: {
+        kind: 'EVIDENCE',
+        auditLogId: eventId,
+        incidentId: dto.incidentId,
+        auditId: dto.auditId,
+        sha256: saved.sha256,
       },
     });
     return saved;

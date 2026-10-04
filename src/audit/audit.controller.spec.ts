@@ -1,10 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuditController } from './audit.controller';
 import { AuditService } from './audit.service';
+import { AuditHealthService } from './audit-health.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
 const mockSvc = {
+  resolveScope: jest.fn().mockResolvedValue(null),
   findAll: jest.fn().mockResolvedValue([]),
   getStats: jest.fn().mockResolvedValue({}),
   getAnomalySummary: jest.fn().mockResolvedValue({}),
@@ -24,7 +26,10 @@ describe('AuditController', () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuditController],
-      providers: [{ provide: AuditService, useValue: mockSvc }],
+      providers: [
+        { provide: AuditService, useValue: mockSvc },
+        { provide: AuditHealthService, useValue: { getHealth: jest.fn() } },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
@@ -36,8 +41,9 @@ describe('AuditController', () => {
 
   it('findAll → chama svc.findAll', async () => {
     const filters = {} as any;
-    await controller.findAll(filters);
-    expect(mockSvc.findAll).toHaveBeenCalledWith(filters);
+    await controller.findAll(filters, mockUser as any);
+    expect(mockSvc.resolveScope).toHaveBeenCalledWith(mockUser);
+    expect(mockSvc.findAll).toHaveBeenCalledWith(filters, null);
   });
 
   it('stats → chama svc.getStats', async () => {
@@ -51,18 +57,18 @@ describe('AuditController', () => {
   });
 
   it('findOne → chama svc.findOne', async () => {
-    await controller.findOne(1);
-    expect(mockSvc.findOne).toHaveBeenCalledWith(1);
+    await controller.findOne(1, mockUser as any);
+    expect(mockSvc.findOne).toHaveBeenCalledWith(1, null);
   });
 
   it('timeline → chama svc.getTimeline', async () => {
-    await controller.timeline('User', 5);
-    expect(mockSvc.getTimeline).toHaveBeenCalledWith('User', 5);
+    await controller.timeline('User', 5, mockUser as any);
+    expect(mockSvc.getTimeline).toHaveBeenCalledWith('User', 5, null);
   });
 
   it('userHistory → chama svc.getUserHistory', async () => {
-    await controller.userHistory(2);
-    expect(mockSvc.getUserHistory).toHaveBeenCalledWith(2);
+    await controller.userHistory(2, mockUser as any);
+    expect(mockSvc.getUserHistory).toHaveBeenCalledWith(2, null, 'ADMIN');
   });
 
   it('verify → chama svc.verifyIntegrity com limit default', async () => {

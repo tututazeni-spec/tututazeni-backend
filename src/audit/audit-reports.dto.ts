@@ -212,6 +212,25 @@ export class UploadEvidenceDto {
   retentionDays?: number;
 }
 
+export class GenerateEventEvidenceDto {
+  @ApiPropertyOptional({ description: 'Incidente de segurança a que a evidência fica associada' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  incidentId?: number;
+
+  @ApiPropertyOptional({ description: 'Auditoria interna a que a evidência fica associada' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  auditId?: number;
+
+  @ApiPropertyOptional({ enum: CONFIDENTIALITY_LEVELS })
+  @IsOptional()
+  @IsIn(CONFIDENTIALITY_LEVELS)
+  confidentiality?: (typeof CONFIDENTIALITY_LEVELS)[number];
+}
+
 export class UpdateExportDto {
   @ApiPropertyOptional({ enum: CONFIDENTIALITY_LEVELS })
   @IsOptional()

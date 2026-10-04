@@ -2,7 +2,12 @@
 // Aba «Auditorias e Inspeções» (docs/modulo_audit.md §9): auditorias internas
 // formais com verificações, evidências, constatações, ações corretivas e
 // aprovação final. A aprovação do relatório fica registada como evento de auditoria.
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InternalAuditStatus, Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -111,10 +116,33 @@ export class AuditInternalService {
 
   // ── Consulta ──────────────────────────────────────────────────────────────
 
-  async list(filters: InternalAuditFilterDto) {
+  /** §16 — o AUDITOR só vê/gere as auditorias em que é responsável, equipa ou criador. */
+  private auditorScope(viewer?: { id: number; role?: { name?: string | null } | null }) {
+    if (!viewer || viewer.role?.name !== 'AUDITOR') return undefined;
+    return {
+      OR: [
+        { leadAuditorId: viewer.id },
+        { createdById: viewer.id },
+        { teamIds: { has: viewer.id } },
+      ],
+    } satisfies Prisma.InternalAuditWhereInput;
+  }
+
+  async assertAccess(id: number, viewer: { id: number; role?: { name?: string | null } | null }) {
+    const scope = this.auditorScope(viewer);
+    if (!scope) return;
+    const ok = await this.prisma.read.internalAudit.count({ where: { id, ...scope } });
+    if (!ok) throw new ForbiddenException('Auditoria fora do seu mandato');
+  }
+
+  async list(
+    filters: InternalAuditFilterDto,
+    viewer?: { id: number; role?: { name?: string | null } | null },
+  ) {
     const { page = 1, limit = 20, status, type, search } = filters;
     const { skip, take } = calculatePagination(page, limit);
-    const where: Prisma.InternalAuditWhereInput = {};
+    const scope = this.auditorScope(viewer);
+    const where: Prisma.InternalAuditWhereInput = scope ? { AND: [scope] } : {};
     if (status) where.status = status;
     if (type) where.type = type;
     const term = search?.trim();
@@ -135,7 +163,11 @@ export class AuditInternalService {
         },
       }),
       this.prisma.read.internalAudit.count({ where }),
-      this.prisma.read.internalAudit.groupBy({ by: ['status'], _count: true }),
+      this.prisma.read.internalAudit.groupBy({
+        by: ['status'],
+        where: scope,
+        _count: true,
+      }),
     ]);
     const users = await this.usersById(rows.map(r => r.leadAuditorId));
     const data = rows.map(({ _count, ...r }) => ({

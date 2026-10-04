@@ -533,7 +533,7 @@ describe('AuditService — detalhe do evento (§5)', () => {
       $transaction: jest.fn((fn: any) => fn(mockPrisma)),
       $executeRaw: jest.fn().mockResolvedValue(1),
       auditLog: {
-        findUnique: jest.fn().mockResolvedValue(baseLog),
+        findFirst: jest.fn().mockResolvedValue(baseLog),
         findMany: jest.fn().mockResolvedValue([]),
       },
     };
@@ -555,7 +555,7 @@ describe('AuditService — detalhe do evento (§5)', () => {
   });
 
   it('oculta valores de entidades sensíveis a quem não é ADMIN', async () => {
-    mockPrisma.auditLog.findUnique.mockResolvedValue({ ...baseLog, entity: 'Payslip' });
+    mockPrisma.auditLog.findFirst.mockResolvedValue({ ...baseLog, entity: 'Payslip' });
     const rh = await service.getEventDetail(125, 'RH');
     expect(rh.masked).toBe(true);
     expect(rh.after).toEqual({ department: '••• oculto' });
@@ -565,7 +565,7 @@ describe('AuditService — detalhe do evento (§5)', () => {
   });
 
   it('lança NotFoundException se o evento não existe', async () => {
-    mockPrisma.auditLog.findUnique.mockResolvedValue(null);
+    mockPrisma.auditLog.findFirst.mockResolvedValue(null);
     await expect(service.getEventDetail(1)).rejects.toThrow('não encontrado');
   });
 });

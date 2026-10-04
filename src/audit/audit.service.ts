@@ -25,6 +25,7 @@ import {
   GENESIS_HASH,
   writeChainedAuditLog,
 } from '../common/helpers/audit-chain';
+import { AuditViewer, resolveAuditScope, withScope } from './audit-scope';
 
 // Shape mínimo de um Request Express usado por logCreate/logUpdate/logDelete
 // — só ip/headers são lidos, por isso não vale a pena importar o tipo real
@@ -362,10 +363,15 @@ export class AuditService {
     },
   } satisfies Prisma.AuditLogInclude;
 
-  async findAll(filters: AuditFilterDto) {
+  /** §16 — âmbito de consulta do perfil (null = global); 403 para perfis fora da matriz. */
+  resolveScope(viewer: AuditViewer): Promise<Prisma.AuditLogWhereInput | null> {
+    return resolveAuditScope(viewer, this.prisma.read);
+  }
+
+  async findAll(filters: AuditFilterDto, scope?: Prisma.AuditLogWhereInput | null) {
     const { page = 1, limit = 50 } = filters;
     const { skip, take } = calculatePagination(page, limit);
-    const where = this.buildWhere(filters);
+    const where = withScope(this.buildWhere(filters), scope);
 
     const [data, total] = await Promise.all([
       this.prisma.read.auditLog.findMany({
@@ -409,18 +415,18 @@ export class AuditService {
     };
   }
 
-  async findOne(id: number) {
-    return this.prisma.read.auditLog.findUnique({
-      where: { id },
+  async findOne(id: number, scope?: Prisma.AuditLogWhereInput | null) {
+    return this.prisma.read.auditLog.findFirst({
+      where: withScope({ id }, scope),
       include: { user: { select: { id: true, fullName: true, email: true } } },
     });
   }
 
   // ─── TIMELINE POR RECURSO ─────────────────────────────────────────────────
 
-  async getTimeline(entity: string, entityId: number) {
+  async getTimeline(entity: string, entityId: number, scope?: Prisma.AuditLogWhereInput | null) {
     const logs = await this.prisma.read.auditLog.findMany({
-      where: { entity: { contains: entity, mode: 'insensitive' }, entityId },
+      where: withScope({ entity: { contains: entity, mode: 'insensitive' }, entityId }, scope),
       include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
       orderBy: { timestamp: 'asc' },
       take: 200,
@@ -445,18 +451,26 @@ export class AuditService {
 
   // ─── HISTÓRICO DO UTILIZADOR ──────────────────────────────────────────────
 
-  async getUserHistory(userId: number) {
+  async getUserHistory(
+    userId: number,
+    scope?: Prisma.AuditLogWhereInput | null,
+    viewerRole?: string | null,
+  ) {
+    // O histórico funcional (HistoryRecord) não tem módulo; fora da consulta global só o RH o vê.
+    const canSeeHistory = !scope || viewerRole === 'RH';
     const [auditLogs, historyRecords] = await Promise.all([
       this.prisma.read.auditLog.findMany({
-        where: { userId },
+        where: withScope({ userId }, scope),
         orderBy: { timestamp: 'desc' },
         take: 100,
       }),
-      this.prisma.read.historyRecord.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-      }),
+      !canSeeHistory
+        ? Promise.resolve([])
+        : this.prisma.read.historyRecord.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'desc' },
+            take: 50,
+          }),
     ]);
     return { auditLogs, historyRecords };
   }
@@ -693,9 +707,13 @@ export class AuditService {
    * segredos de before/after/changes/metadata e oculta os valores de entidades
    * sensíveis a quem não é ADMIN. Não altera nem apaga nada.
    */
-  async getEventDetail(id: number, viewerRole?: string | null) {
-    const log = await this.prisma.read.auditLog.findUnique({
-      where: { id },
+  async getEventDetail(
+    id: number,
+    viewerRole?: string | null,
+    scope?: Prisma.AuditLogWhereInput | null,
+  ) {
+    const log = await this.prisma.read.auditLog.findFirst({
+      where: withScope({ id }, scope),
       include: AuditService.USER_INCLUDE,
     });
     if (!log) throw new NotFoundException(`Evento de auditoria ${id} não encontrado`);
@@ -728,7 +746,10 @@ export class AuditService {
     const [sameRecord, sameActor] = await Promise.all([
       log.entityId != null
         ? this.prisma.read.auditLog.findMany({
-            where: { entity: log.entity, entityId: log.entityId, id: { not: log.id } },
+            where: withScope(
+              { entity: log.entity, entityId: log.entityId, id: { not: log.id } },
+              scope,
+            ),
             orderBy: { timestamp: 'desc' },
             take: 10,
             include: AuditService.USER_INCLUDE,
@@ -736,14 +757,17 @@ export class AuditService {
         : Promise.resolve([]),
       log.userId != null
         ? this.prisma.read.auditLog.findMany({
-            where: {
-              userId: log.userId,
-              id: { not: log.id },
-              timestamp: {
-                gte: new Date(ts.getTime() - around),
-                lte: new Date(ts.getTime() + around),
+            where: withScope(
+              {
+                userId: log.userId,
+                id: { not: log.id },
+                timestamp: {
+                  gte: new Date(ts.getTime() - around),
+                  lte: new Date(ts.getTime() + around),
+                },
               },
-            },
+              scope,
+            ),
             orderBy: { timestamp: 'asc' },
             take: 10,
             include: AuditService.USER_INCLUDE,
@@ -1316,10 +1340,14 @@ export class AuditService {
       });
   }
 
-  async getChanges(filters: ChangesFilterDto, viewerRole?: string | null) {
+  async getChanges(
+    filters: ChangesFilterDto,
+    viewerRole?: string | null,
+    scope?: Prisma.AuditLogWhereInput | null,
+  ) {
     const { page = 1, limit = 20 } = filters;
     const { skip, take } = calculatePagination(page, limit);
-    const where = this.changeWhere(filters);
+    const where = withScope(this.changeWhere(filters), scope);
     const [rows, total] = await Promise.all([
       this.prisma.read.auditLog.findMany({
         where,
@@ -1362,13 +1390,20 @@ export class AuditService {
     return buildPaginatedResponse(data, total, page, limit);
   }
 
-  async getChangesSummary(days = 30, viewerRole?: string | null) {
+  async getChangesSummary(
+    days = 30,
+    viewerRole?: string | null,
+    scope?: Prisma.AuditLogWhereInput | null,
+  ) {
     void viewerRole;
     const safeDays = Math.min(Math.max(Math.trunc(days) || 30, 1), 365);
     const since = new Date();
     since.setHours(0, 0, 0, 0);
     since.setDate(since.getDate() - (safeDays - 1));
-    const where = this.changeWhere({ from: since.toISOString() } as ChangesFilterDto);
+    const where = withScope(
+      this.changeWhere({ from: since.toISOString() } as ChangesFilterDto),
+      scope,
+    );
 
     const [total, failed, byEntity, byAction, authors] = await Promise.all([
       this.prisma.read.auditLog.count({ where }),
