@@ -289,7 +289,7 @@ export class HistoryService {
         entity: dto.entity,
         entityId: dto.entityId,
         changes: dto.description,
-        reason: dto.metadata,
+        metadata: dto.metadata,
       },
     });
     return enrichEntry(entry);
@@ -412,7 +412,7 @@ export class HistoryService {
       events.push({
         id: `enroll-${e.id}`,
         source: 'ENROLLMENT',
-        timestamp: e.enrolledAt,
+        timestamp: completed ? (e.completedAt ?? e.enrolledAt) : e.enrolledAt,
         category: EventCategory.LEARNING,
         module: EventModule.LMS,
         impactScore: completed ? 70 : 40,
@@ -474,7 +474,7 @@ export class HistoryService {
       events.push({
         id: `plan-${p.id}`,
         source: 'DEVELOPMENT_PLAN',
-        timestamp: p.createdAt,
+        timestamp: p.status === 'COMPLETED' ? (p.completedAt ?? p.createdAt) : p.createdAt,
         category: EventCategory.CAREER,
         module: EventModule.TALENT,
         impactScore: 65,
@@ -773,21 +773,22 @@ export class HistoryService {
     });
 
     const [anniversaries, expiring] = await Promise.all([
-      // Anniversaries based on createdAt (proxy for hire date)
+      // Aniversários só com a data de admissão real (hireDate) — nunca
+      // createdAt, que é a data de criação do registo no sistema.
       this.prisma.user
         .findMany({
-          where: { active: true },
+          where: { active: true, hireDate: { not: null } },
           select: {
             id: true,
             fullName: true,
             avatarUrl: true,
-            createdAt: true,
+            hireDate: true,
             department: { select: { name: true } },
           },
         })
         .then(users =>
           users
-            .filter(u => new Date(u.createdAt).getMonth() + 1 === month)
+            .filter(u => u.hireDate && new Date(u.hireDate).getMonth() + 1 === month)
             .map(u => ({
               type: 'ANNIVERSARY',
               icon: '🎉',
@@ -795,8 +796,8 @@ export class HistoryService {
               fullName: u.fullName,
               avatarUrl: u.avatarUrl,
               dept: u.department?.name,
-              years: now.getFullYear() - new Date(u.createdAt).getFullYear(),
-              date: u.createdAt,
+              years: now.getFullYear() - new Date(u.hireDate as Date).getFullYear(),
+              date: u.hireDate,
             }))
             .filter(u => u.years > 0)
             .sort((a, b) => b.years - a.years),
