@@ -228,7 +228,11 @@ describe('PayrollCalculationService.calculatePayslip', () => {
     prisma.read.employeeCompensation.findFirst.mockResolvedValue({
       baseSalary: 100000,
       foodAllowance: 25000,
-      components: [{ componentCode: 'PREMIO', value: 1000 }],
+      components: [
+        { componentCode: 'PREMIO', value: 1000 },
+        { componentCode: 'BONUS_ANUAL', value: 2000 },
+        { componentCode: 'HORAS_NOCTURNAS', value: 300 },
+      ],
     });
     await svc.calculatePayslip(
       {
@@ -262,7 +266,8 @@ describe('PayrollCalculationService.calculatePayslip', () => {
       skipOtherDeductions: true,
     });
     expect(ctx.bonusAmount).toBeUndefined();
-    expect(ctx.extraComponents).toEqual([]);
+    // prémios/bónus saem; componentes não classificadas continuam a entrar
+    expect(ctx.extraComponents.map((c: any) => c.code)).toEqual(['HORAS_NOCTURNAS']);
   });
 
   it('sem opções, mantém o comportamento por omissão (tudo incluído)', async () => {

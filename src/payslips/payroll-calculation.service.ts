@@ -133,6 +133,13 @@ export class PayrollCalculationService {
     return keys;
   }
 
+  /** Prémios e bónus identificam-se pelo código da componente; as restantes entram sempre. */
+  private componentAllowed(code: string, opts: PayrollRunOptions): boolean {
+    if (/BONUS|BONI|COMISS|COMMISSION/i.test(code)) return opts.includeBonuses;
+    if (/PREMI|PRIZE|AWARD/i.test(code)) return opts.includePrizes;
+    return true;
+  }
+
   async gatherInputs(userId: number, period: string): Promise<PayrollInputs> {
     const { start, end } = this.monthRange(period);
     const workingDaysInMonth = this.workingDaysInMonth(period);
@@ -207,7 +214,6 @@ export class PayrollCalculationService {
     const opts = resolveRunOptions(run.scope);
     // Faltas só descontam se estiverem incluídas E se "aplicar faltas" estiver activo.
     const useAbsences = opts.includeAbsences && opts.applyFaults;
-    const useExtras = opts.includePrizes || opts.includeBonuses;
 
     const ctx: PayrollContext = {
       userId: user.id,
@@ -222,16 +228,18 @@ export class PayrollCalculationService {
       absenceDays: useAbsences ? (overrides.absenceDays ?? inputs.absenceDays) : 0,
       overtimeHours: opts.includeOvertime ? (overrides.overtimeHours ?? inputs.overtimeHours) : 0,
       workingDaysInMonth: inputs.workingDaysInMonth,
-      bonusAmount: useExtras ? overrides.bonusAmount : undefined,
+      bonusAmount: opts.includeBonuses ? overrides.bonusAmount : undefined,
       advanceDeduction: opts.applyDiscounts ? overrides.advanceDeduction : undefined,
       skipInss: !opts.calculateInss,
       skipIrt: !opts.calculateIrt,
       skipOtherDeductions: !opts.applyDeductions,
-      extraComponents: (useExtras ? (compensation?.components ?? []) : []).map(c => ({
-        code: c.componentCode,
-        value: c.value,
-        isTaxable: true,
-      })),
+      extraComponents: (compensation?.components ?? [])
+        .filter(c => this.componentAllowed(c.componentCode, opts))
+        .map(c => ({
+          code: c.componentCode,
+          value: c.value,
+          isTaxable: true,
+        })),
     };
 
     const result = await this.engine.calculate(ctx, run.period);
