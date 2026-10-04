@@ -8,10 +8,18 @@ import {
   Param,
   Query,
   ParseIntPipe,
+  ParseEnumPipe,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { LeaveManagementService } from './leave-management.service';
+import { LeaveOverviewService } from './leave-overview.service';
+import { LeaveLicensesService } from './leave-licenses.service';
+import { LeaveAbsenceCalendarService } from './leave-absence-calendar.service';
+import { LeaveApprovalsService } from './leave-approvals.service';
+import { LeavePlanningService } from './leave-planning.service';
+import { LeaveReportsService } from './leave-reports.service';
+import { LeaveEffectsService } from './leave-effects.service';
 import {
   LeaveFilterDto,
   CalendarFilterDto,
@@ -23,7 +31,20 @@ import {
   UpdateBalanceDto,
   AccrueBalanceDto,
   CreateLeavePolicyDto,
+  OverviewFilterDto,
+  VacationFilterDto,
+  DurationPreviewDto,
+  LicenseFilterDto,
+  ApprovalRouteDto,
+  AbsenceCalendarFilterDto,
+  ApprovalListFilterDto,
+  ReassignApprovalDto,
+  PlanningFilterDto,
+  LeaveReportFilterDto,
+  LeaveReportKind,
+  CancelLeaveDto,
 } from './leave-management.dto';
+import { PayrollFeedFilterDto } from './leave-settings.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
@@ -35,7 +56,16 @@ import { assertCanAccess } from '../common/authz/ownership';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('leave')
 export class LeaveManagementController {
-  constructor(private readonly svc: LeaveManagementService) {}
+  constructor(
+    private readonly svc: LeaveManagementService,
+    private readonly overview: LeaveOverviewService,
+    private readonly licenses: LeaveLicensesService,
+    private readonly absenceCalendar: LeaveAbsenceCalendarService,
+    private readonly approvals: LeaveApprovalsService,
+    private readonly planning: LeavePlanningService,
+    private readonly reports: LeaveReportsService,
+    private readonly effects: LeaveEffectsService,
+  ) {}
 
   // ── Leave Types ────────────────────────────────────────────────────
 
@@ -86,6 +116,145 @@ export class LeaveManagementController {
     return this.svc.getDashboard(department);
   }
 
+  @Get('overview')
+  @ApiOperation({
+    summary: 'Visão Geral — cards e gráficos de férias/ausências, âmbito conforme o perfil',
+  })
+  getOverview(@Query() filters: OverviewFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.overview.getOverview(filters, user);
+  }
+
+  @Get('vacations')
+  @ApiOperation({ summary: 'Aba Férias — saldos e plano anual por colaborador' })
+  getVacations(@Query() filters: VacationFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.overview.getVacations(filters, user);
+  }
+
+  @Get('duration-preview')
+  @ApiOperation({ summary: 'Duração, feriados, saldo e sobreposição antes de submeter' })
+  previewDuration(@Query() dto: DurationPreviewDto, @CurrentUser() user: CurrentUserData) {
+    return this.overview.previewDuration(dto, user);
+  }
+
+  @Get('licenses')
+  @ApiOperation({
+    summary:
+      'Aba Licenças — tabela com privacidade por perfil (motivo/comprovativos sensíveis ocultos)',
+  })
+  getLicenses(@Query() filters: LicenseFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.licenses.list(filters, user);
+  }
+
+  @Get('approval-route')
+  @ApiOperation({ summary: 'Encaminhamento de aprovação previsto antes de submeter' })
+  getApprovalRoute(@Query() dto: ApprovalRouteDto, @CurrentUser() user: CurrentUserData) {
+    return this.licenses.approvalRoute(dto, user);
+  }
+
+  @Get('absence-calendar')
+  @ApiOperation({
+    summary: 'Calendário de ausências (dia/semana/mês/ano) com cobertura e sobreposições',
+  })
+  getAbsenceCalendar(
+    @Query() filters: AbsenceCalendarFilterDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.absenceCalendar.getCalendar(filters, user);
+  }
+
+  @Get('absence-calendar/export')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR, Role.DIRECTOR, Role.LIDER)
+  @ApiOperation({ summary: 'Exportar o calendário de ausências (CSV)' })
+  exportAbsenceCalendar(
+    @Query() filters: AbsenceCalendarFilterDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.absenceCalendar.exportCsv(filters, user);
+  }
+
+  // ── §7 Aprovações ─────────────────────────────────────────────────
+
+  @Get('approvals')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({
+    summary: 'Etapas de aprovação (fila e histórico) com prazo, espera e reatribuições',
+  })
+  listApprovals(@Query() filters: ApprovalListFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.approvals.list(filters, user);
+  }
+
+  @Get('approvals/candidates')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Utilizadores que podem receber uma reatribuição/delegação' })
+  approvalCandidates(
+    @Query('search') search: string | undefined,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.approvals.candidates(search, user);
+  }
+
+  @Post('approvals/:approvalId/reassign')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Reatribuir uma etapa de aprovação (fica no histórico)' })
+  reassignApproval(
+    @Param('approvalId', ParseIntPipe) approvalId: number,
+    @Body() dto: ReassignApprovalDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.approvals.reassign(approvalId, dto, user);
+  }
+
+  // ── §8 Planeamento de Equipas ─────────────────────────────────────
+
+  @Get('planning')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR, Role.DIRECTOR, Role.LIDER)
+  @ApiOperation({
+    summary: 'Planeamento de equipas — disponibilidade, cobertura mínima, conflitos e alertas',
+  })
+  getPlanning(@Query() filters: PlanningFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.planning.getPlanning(filters, user);
+  }
+
+  // ── §9 Relatórios ─────────────────────────────────────────────────
+
+  @Get('reports')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Catálogo de relatórios do módulo Leave' })
+  listReports() {
+    return this.reports.catalog();
+  }
+
+  @Get('reports/:kind/export')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Exportar um relatório (CSV)' })
+  exportReport(
+    @Param('kind', new ParseEnumPipe(LeaveReportKind)) kind: LeaveReportKind,
+    @Query() filters: LeaveReportFilterDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.reports.exportCsv(kind, filters, user);
+  }
+
+  @Get('reports/:kind')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Executar um relatório' })
+  runReport(
+    @Param('kind', new ParseEnumPipe(LeaveReportKind)) kind: LeaveReportKind,
+    @Query() filters: LeaveReportFilterDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.reports.run(kind, filters, user);
+  }
+
+  @Get('payroll-feed')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary: 'Ausências validadas do mês para o processamento salarial (sem cálculo de descontos)',
+  })
+  payrollFeed(@Query() q: PayrollFeedFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.effects.payrollFeed(q.period, user.id);
+  }
+
   @Get('analytics/absenteeism')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Relatório de absenteísmo por período' })
@@ -131,7 +300,7 @@ export class LeaveManagementController {
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Pedidos pendentes de aprovação do utilizador actual' })
   getPendingApprovals(@CurrentUser() user: CurrentUserData) {
-    return this.svc.getPendingApprovals(user.id);
+    return this.svc.getPendingApprovals(user.id, user);
   }
 
   // ── My Requests & Balance ─────────────────────────────────────────
@@ -139,7 +308,7 @@ export class LeaveManagementController {
   @Get('my')
   @ApiOperation({ summary: 'Meus pedidos de licença' })
   myRequests(@CurrentUser() user: CurrentUserData, @Query() filters: LeaveFilterDto) {
-    return this.svc.findAll({ ...filters, userId: user.id });
+    return this.svc.findAll({ ...filters, userId: user.id }, user);
   }
 
   @Get('my/balance')
@@ -159,8 +328,8 @@ export class LeaveManagementController {
   @Get()
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar todos os pedidos com filtros' })
-  findAll(@Query() filters: LeaveFilterDto) {
-    return this.svc.findAll(filters);
+  findAll(@Query() filters: LeaveFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.findAll(filters, user);
   }
 
   @Get(':id')
@@ -172,6 +341,8 @@ export class LeaveManagementController {
   @Post()
   @ApiOperation({ summary: 'Submeter pedido de licença (suporta rascunho, meios dias, horas)' })
   create(@Body() dto: CreateLeaveManagementRequestDto, @CurrentUser() user: CurrentUserData) {
+    // Só o próprio ou ADMIN/RH/GESTOR podem submeter em nome de `dto.userId`.
+    assertCanAccess({}, dto.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     return this.svc.create(dto, user.id);
   }
 
@@ -195,8 +366,13 @@ export class LeaveManagementController {
 
   @Patch(':id/cancel')
   @ApiOperation({ summary: 'Cancelar pedido (devolve saldo se aprovado)' })
-  cancel(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
-    return this.svc.cancel(id, user.id);
+  cancel(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: CurrentUserData,
+    @Body() dto: CancelLeaveDto,
+  ) {
+    // ADMIN/RH cancelam em nome de qualquer colaborador; o serviço decide e regista quem.
+    return this.svc.cancel(id, user.id, { reason: dto?.reason, actor: user });
   }
 
   // ── Balance Management ────────────────────────────────────────────
@@ -239,7 +415,7 @@ export class LeaveManagementController {
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Processar carry-over de fim de ano' })
   @ApiQuery({ name: 'year', type: Number })
-  processCarryOver(@Query('year') year: string) {
-    return this.svc.processCarryOver(+year || new Date().getFullYear());
+  processCarryOver(@Query('year') year: string, @CurrentUser() user: CurrentUserData) {
+    return this.svc.processCarryOver(+year || new Date().getFullYear(), user.id);
   }
 }

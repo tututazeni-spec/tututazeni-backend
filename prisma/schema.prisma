@@ -743,6 +743,7 @@ model User {
   eventParticipations       EventParticipant[]
   eventFeedbacks            EventFeedback[]
   attendanceRecords         AttendanceRecord[]        @relation("UserAttendanceRecords")
+  absenceRecords            AbsenceRecord[]           @relation("UserAbsenceRecords")
   createdVacancies          InternalVacancy[]         @relation("VacancyCreator")
   managedVacancies          InternalVacancy[]         @relation("VacancyResponsibleManager")
   vacancyApplications       InternalApplication[]
@@ -6388,23 +6389,75 @@ model PayrollRun {
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
-  payGroup           String?
-  scope              Json?
-  taxYear            Int?
-  totalNet           Float?
-  totalDeductions    Float?
-  totalEmployerCost  Float?
-  employeeCount      Int?
-  exceptionsCount    Int?
-  errorCount         Int?
-  submittedAt        DateTime?
-  submittedById      Int?
-  publishedAt        DateTime?
-  publishedById      Int?
-  rejectionReason    String?
-  cancellationReason String?
+  payGroup            String?
+  scope               Json?
+  taxYear             Int?
+  totalNet            Float?
+  totalDeductions     Float?
+  totalEmployerCost   Float?
+  employeeCount       Int?
+  exceptionsCount     Int?
+  errorCount          Int?
+  submittedAt         DateTime?
+  submittedById       Int?
+  publishedAt         DateTime?
+  publishedById       Int?
+  rejectionReason     String?
+  cancellationReason  String?
+  expectedPaymentDate DateTime?
+  payments            PayrollPayment[]
+  closure             PayrollClosure?
 
   @@index([period, status])
+}
+
+enum PayrollPaymentStatus {
+  PENDING
+  PREPARED
+  SENT_TO_BANK
+  PROCESSED
+  PAID
+  FAILED
+  CANCELLED
+}
+
+// Passagem da folha processada para pagamento (docs/payroll.md §7).
+model PayrollPayment {
+  id                  Int                  @id @default(autoincrement())
+  runId               Int
+  run                 PayrollRun           @relation(fields: [runId], references: [id])
+  bankName            String?
+  paymentAccount      String?
+  employeeCount       Int
+  totalAmount         Float
+  expectedDate        DateTime?
+  effectiveDate       DateTime?
+  status              PayrollPaymentStatus @default(PENDING)
+  reference           String?
+  bankFileGeneratedAt DateTime?
+  errorMessage        String?
+  responsibleId       Int?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  @@index([runId])
+  @@index([status])
+}
+
+// Fecho salarial (docs/payroll.md §8): validação RH + financeira, depois
+// fecho definitivo. Run fechado fica imutável para edições normais.
+model PayrollClosure {
+  id                   Int        @id @default(autoincrement())
+  runId                Int        @unique
+  run                  PayrollRun @relation(fields: [runId], references: [id])
+  hrValidatedAt        DateTime?
+  hrValidatedById      Int?
+  financeValidatedAt   DateTime?
+  financeValidatedById Int?
+  closedAt             DateTime?
+  closedById           Int?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
 }
 
 model WorkDeclaration {
@@ -9660,56 +9713,91 @@ enum LeaveDecision {
 }
 
 model LeaveRequest {
-  id              Int                 @id @default(autoincrement())
-  userId          Int
-  user            User                @relation(fields: [userId], references: [id])
+  id                 Int                 @id @default(autoincrement())
+  userId             Int
+  user               User                @relation(fields: [userId], references: [id])
   // `leaveType` (enum fixo de 10 valores) tornou-se opcional — só é
   // preenchido quando `leaveTypeCode` coincide literalmente com um dos 10
   // membros; caso contrário fica null (código customizado). `leaveTypeCode`
   // é agora obrigatório e é a chave real usada por todo o subsistema de
   // saldo/pedidos. Ver project-innova-leave-type-enum-mismatch.
-  leaveType       LeaveType?
-  leaveTypeCode   String
-  startDate       DateTime
-  endDate         DateTime
-  durationMode    DurationMode        @default(FULL_DAY)
-  hours           Float?
-  workDays        Float               @default(0)
-  calendarDays    Int                 @default(0)
-  reason          String?
-  status          LeaveStatus         @default(PENDING)
-  attachments     String[]
-  substituteId    Int?
-  finalApprovedAt DateTime?
-  approvals       LeaveApproval[]
-  documents       LeaveDocument[]
-  impactPreview   LeaveImpactPreview?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  reviewNotes     String?
-  reviewedById    Int?
-  reviewedAt      DateTime?
-  halfDay         Boolean             @default(false)
-  halfDayPeriod   DayPeriod?
+  leaveType          LeaveType?
+  leaveTypeCode      String
+  startDate          DateTime
+  endDate            DateTime
+  durationMode       DurationMode        @default(FULL_DAY)
+  hours              Float?
+  workDays           Float               @default(0)
+  calendarDays       Int                 @default(0)
+  reason             String?
+  status             LeaveStatus         @default(PENDING)
+  attachments        String[]
+  substituteId       Int?
+  finalApprovedAt    DateTime?
+  approvals          LeaveApproval[]
+  documents          LeaveDocument[]
+  impactPreview      LeaveImpactPreview?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  reviewNotes        String?
+  reviewedById       Int?
+  reviewedAt         DateTime?
+  halfDay            Boolean             @default(false)
+  halfDayPeriod      DayPeriod?
+  // Férias (docs/Modulo_Leave.md §3.2): ano a que pertence o saldo e contacto
+  // alternativo durante a ausência.
+  referenceYear      Int?
+  contactDuringLeave String?
+  // Licenças (§4): quem registou o pedido (≠ userId quando é feito em nome do
+  // colaborador) e janela horária opcional para licenças de poucas horas.
+  createdById        Int?
+  startTime          String?
+  endTime            String?
+  // §12: nº legível, momento da submissão e quem/quando/porquê cancelou.
+  requestNumber      String?             @unique
+  submittedAt        DateTime?
+  cancelledAt        DateTime?
+  cancelledById      Int?
+  cancelReason       String?
 
   @@index([userId, status])
   @@index([startDate, endDate])
+  @@index([leaveTypeCode, status])
 }
 
 model LeaveApproval {
-  id         Int            @id @default(autoincrement())
-  requestId  Int
-  request    LeaveRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  approverId Int
-  approver   User           @relation(fields: [approverId], references: [id])
-  level      Int            @default(1)
-  decision   LeaveDecision?
-  notes      String?
-  decidedAt  DateTime?
-  createdAt  DateTime       @default(now())
+  id            Int                         @id @default(autoincrement())
+  requestId     Int
+  request       LeaveRequest                @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  approverId    Int
+  approver      User                        @relation(fields: [approverId], references: [id])
+  level         Int                         @default(1)
+  decision      LeaveDecision?
+  notes         String?
+  decidedAt     DateTime?
+  createdAt     DateTime                    @default(now())
+  // §7: etapa do fluxo (MANAGER | HR), prazo para decisão e histórico de
+  // reatribuições/delegações.
+  stage         String                      @default("MANAGER")
+  dueAt         DateTime?
+  reassignments LeaveApprovalReassignment[]
 
   @@index([requestId])
   @@index([approverId, decidedAt])
+}
+
+model LeaveApprovalReassignment {
+  id             Int           @id @default(autoincrement())
+  approvalId     Int
+  approval       LeaveApproval @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  fromApproverId Int
+  toApproverId   Int
+  byUserId       Int
+  kind           String        @default("REASSIGN")
+  reason         String?
+  createdAt      DateTime      @default(now())
+
+  @@index([approvalId])
 }
 
 model LeaveBalance {
@@ -9723,6 +9811,9 @@ model LeaveBalance {
   leaveTypeCode String
   balance       Float      @default(0)
   used          Float      @default(0)
+  // §13: dias reservados por pedidos PENDING (ainda não gozados). Disponível =
+  // balance − reserved; na aprovação passam de reserved para used.
+  reserved      Float      @default(0)
   expiresAt     DateTime?
   updatedAt     DateTime   @updatedAt
 
@@ -9740,6 +9831,9 @@ model LeaveBalanceHistory {
   reason        String
   requestId     Int?
   updatedById   Int
+  // §12 (LeaveBalanceTransaction): ALLOCATION | RESERVATION | RELEASE | USAGE |
+  // ADJUSTMENT | REVERSAL | CARRY_OVER.
+  kind          String     @default("ADJUSTMENT")
   createdAt     DateTime   @default(now())
 
   @@index([userId, leaveType])
@@ -9754,6 +9848,8 @@ model LeaveDocument {
   fileUrl      String
   mimeType     String?
   uploadedById Int
+  // Comprovativos de tipos sensíveis (saúde, etc.) só o titular e o RH abrem.
+  isSensitive  Boolean      @default(false)
   createdAt    DateTime     @default(now())
 }
 
@@ -9768,41 +9864,194 @@ model LeaveImpactPreview {
 }
 
 model LeaveTypeConfig {
-  id                   Int      @id @default(autoincrement())
-  code                 String   @unique
-  name                 String
-  description          String?
-  color                String?
-  icon                 String?
-  isPaid               Boolean  @default(true)
-  annualLimit          Int?
-  allowCarryOver       Boolean  @default(false)
-  carryOverLimit       Int?
-  countWorkDaysOnly    Boolean  @default(true)
-  autoApprove          Boolean  @default(false)
-  autoApproveUnderDays Int?
-  minNoticeDays        Int?
-  maxConsecutiveDays   Int?
-  active               Boolean  @default(true)
-  category             String?
-  createdAt            DateTime @default(now())
+  id                        Int      @id @default(autoincrement())
+  code                      String   @unique
+  name                      String
+  description               String?
+  color                     String?
+  icon                      String?
+  isPaid                    Boolean  @default(true)
+  annualLimit               Int?
+  allowCarryOver            Boolean  @default(false)
+  carryOverLimit            Int?
+  countWorkDaysOnly         Boolean  @default(true)
+  autoApprove               Boolean  @default(false)
+  autoApproveUnderDays      Int?
+  minNoticeDays             Int?
+  maxConsecutiveDays        Int?
+  active                    Boolean  @default(true)
+  category                  String?
+  // Licenças (§4): documento comprovativo obrigatório, dados sensíveis
+  // (saúde — o gestor não vê motivo/anexos) e sinalização para o Payroll.
+  requiresDocument          Boolean  @default(false)
+  isSensitive               Boolean  @default(false)
+  requiresPayrollValidation Boolean  @default(false)
+  // §7: nº de níveis de aprovação deste tipo (null = o da política aplicável).
+  approvalLevels            Int?
+  // §9: se as horas deste tipo entram no numerador da taxa de absentismo.
+  countsAsAbsenteeism       Boolean  @default(true)
+  createdAt                 DateTime @default(now())
 
   @@map("leave_type_configs")
 }
 
 model LeavePolicy {
-  id                Int      @id @default(autoincrement())
-  name              String
-  description       String?
-  department        String?
-  seniority         String?
-  approvalLevels    Int      @default(1)
-  maxAbsencePercent Int      @default(30)
-  blackoutPeriods   Json?
-  active            Boolean  @default(true)
-  createdAt         DateTime @default(now())
+  id                   Int      @id @default(autoincrement())
+  name                 String
+  description          String?
+  department           String?
+  seniority            String?
+  approvalLevels       Int      @default(1)
+  maxAbsencePercent    Int      @default(30)
+  blackoutPeriods      Json?
+  // §7: prazo (dias) para cada decisão e duração (dias úteis) a partir da qual
+  // o pedido exige também validação do RH.
+  decisionSlaDays      Int      @default(3)
+  hrValidationOverDays Int?
+  active               Boolean  @default(true)
+  createdAt            DateTime @default(now())
 
   @@map("leave_policies")
+}
+
+// Configurações do módulo Leave (docs/Modulo_Leave.md §10): cada gravação cria
+// uma versão imutável com data de entrada em vigor — a activa é a mais recente
+// com effectiveFrom <= agora. `values` segue a interface LeaveSettings.
+model LeaveSettingVersion {
+  id            Int      @id @default(autoincrement())
+  effectiveFrom DateTime
+  values        Json
+  changeNote    String?
+  createdById   Int
+  createdAt     DateTime @default(now())
+
+  @@index([effectiveFrom])
+  @@map("leave_setting_versions")
+}
+
+// Calendário de feriados por localização (null = nacional). `recurring` repete
+// o dia/mês todos os anos.
+model LeaveHoliday {
+  id          Int      @id @default(autoincrement())
+  name        String
+  date        DateTime @db.Date
+  location    String?
+  recurring   Boolean  @default(false)
+  active      Boolean  @default(true)
+  createdById Int?
+  createdAt   DateTime @default(now())
+
+  @@index([date])
+  @@index([location])
+  @@map("leave_holidays")
+}
+
+// Substituição temporária de um aprovador (§10 "regras de aprovação e
+// substituição"): durante o período, as novas etapas dele vão para o delegado.
+model LeaveDelegation {
+  id          Int      @id @default(autoincrement())
+  delegatorId Int
+  delegateId  Int
+  startDate   DateTime @db.Date
+  endDate     DateTime @db.Date
+  reason      String?
+  active      Boolean  @default(true)
+  createdById Int
+  createdAt   DateTime @default(now())
+
+  @@index([delegatorId, active])
+  @@map("leave_delegations")
+}
+
+enum AbsenceOccurrenceType {
+  JUSTIFIED_ABSENCE
+  UNJUSTIFIED_ABSENCE
+  LATE
+  EARLY_DEPARTURE
+  PARTIAL_ABSENCE
+  HEALTH_ABSENCE
+  AUTHORIZED_ABSENCE
+  PERSONAL_ABSENCE
+  NO_SHOW
+  OTHER
+}
+
+enum AbsenceSource {
+  MANUAL
+  ATTENDANCE
+  INTEGRATION
+}
+
+enum AbsenceJustificationStatus {
+  TO_JUSTIFY
+  SUBMITTED
+  VALIDATED
+  REJECTED
+}
+
+// Gestão de Ausências (docs/Modulo_Leave.md §5): faltas e ocorrências
+// pontuais, separadas dos pedidos (LeaveRequest). `attendanceRecordId`
+// associa o registo existente em Attendance em vez de criar uma segunda
+// ocorrência independente (único por registo de assiduidade).
+model AbsenceRecord {
+  id                  Int                        @id @default(autoincrement())
+  userId              Int
+  user                User                       @relation("UserAbsenceRecords", fields: [userId], references: [id])
+  date                DateTime
+  startTime           String?
+  endTime             String?
+  durationDays        Float                      @default(1)
+  durationHours       Float?
+  occurrenceType      AbsenceOccurrenceType
+  customCategory      String?
+  justification       String?
+  source              AbsenceSource              @default(MANUAL)
+  justificationStatus AbsenceJustificationStatus @default(TO_JUSTIFY)
+  validatorId         Int?
+  validatedAt         DateTime?
+  validationNotes     String?
+  attendanceRecordId  Int?                       @unique
+  forwardedToId       Int?
+  forwardedAt         DateTime?
+  sentToHrAt          DateTime?
+  createdById         Int
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  attachments         AbsenceAttachment[]
+  revisions           AbsenceRevision[]
+
+  @@index([userId, date])
+  @@index([date])
+  @@index([justificationStatus])
+  @@map("absence_records")
+}
+
+model AbsenceAttachment {
+  id           Int           @id @default(autoincrement())
+  absenceId    Int
+  absence      AbsenceRecord @relation(fields: [absenceId], references: [id], onDelete: Cascade)
+  name         String
+  fileUrl      String
+  mimeType     String?
+  isSensitive  Boolean       @default(false)
+  uploadedById Int
+  createdAt    DateTime      @default(now())
+
+  @@index([absenceId])
+  @@map("absence_attachments")
+}
+
+model AbsenceRevision {
+  id          Int           @id @default(autoincrement())
+  absenceId   Int
+  absence     AbsenceRecord @relation(fields: [absenceId], references: [id], onDelete: Cascade)
+  changedById Int
+  reason      String
+  changes     Json
+  createdAt   DateTime      @default(now())
+
+  @@index([absenceId])
+  @@map("absence_revisions")
 }
 
 enum JustificationStatus {

@@ -2883,10 +2883,14 @@ export class AutomationService {
   }
 
   private async sendLeaveReminders(): Promise<Record<string, unknown>> {
-    // leaveRequest model doesn't exist → fallback to HistoryRecord
-    const pending = await this.prisma.historyRecord
-      .count({
-        where: { action: 'LEAVE_REQUEST', description: { contains: '"status":"PENDING"' } },
+    // Aprovações de licenças pendentes há 3+ dias (LeaveApproval é a fonte real;
+    // a leitura anterior de HistoryRecord 'LEAVE_REQUEST' nunca encontrava nada).
+    const cutoff = new Date(Date.now() - 3 * 86400000);
+    const stale = await this.prisma.read.leaveApproval
+      .findMany({
+        where: { decidedAt: null, createdAt: { lte: cutoff }, request: { status: 'PENDING' } },
+        select: { approverId: true, requestId: true },
+        take: 500,
       })
       .catch(e => {
         this.logger.warn({
@@ -2894,9 +2898,31 @@ export class AutomationService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao contar pedidos de ausência pendentes',
         });
-        return 0;
+        return [] as Array<{ approverId: number; requestId: number }>;
       });
-    return { pending, message: `${pending} pedido(s) de ausência pendentes` };
+
+    const perApprover = new Map<number, number>();
+    for (const a of stale) perApprover.set(a.approverId, (perApprover.get(a.approverId) ?? 0) + 1);
+    let notified = 0;
+    for (const [userId, n] of perApprover) {
+      const ok = await this.prisma.notificationLog
+        .create({
+          data: {
+            userId,
+            type: 'LEAVE_PENDING_REMINDER',
+            message: `Tem ${n} pedido(s) de licença à espera de decisão há mais de 3 dias`,
+            metadata: JSON.stringify({ pending: n }),
+          },
+        })
+        .then(() => true)
+        .catch(() => false);
+      if (ok) notified++;
+    }
+    return {
+      pending: stale.length,
+      notified,
+      message: `${stale.length} pedido(s) de ausência pendentes há 3+ dias`,
+    };
   }
 
   private async sendEnrollmentReminders(): Promise<Record<string, unknown>> {

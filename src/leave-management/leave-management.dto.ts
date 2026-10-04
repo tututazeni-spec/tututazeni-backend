@@ -11,10 +11,15 @@ import {
   ValidateNested,
   Min,
   Max,
+  MaxLength,
+  Matches,
+  ArrayMaxSize,
+  IsIn,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
+import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -114,6 +119,15 @@ export class CreateLeavePolicyDto {
 
 // ─── Leave Requests ───────────────────────────────────────────────────────────
 
+const HH_MM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Comprovativo por referência (HTTPS) — mesma convenção do onboarding. */
+export class LeaveDocumentInputDto {
+  @ApiProperty() @IsString() @MaxLength(200) name!: string;
+  @ApiProperty() @IsString() @IsAllowedFileUrl() @MaxLength(2000) fileUrl!: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) mimeType?: string;
+}
+
 export class CreateLeaveManagementRequestDto {
   @ApiProperty() @IsInt() userId!: number;
   @ApiProperty() @IsString() leaveTypeCode!: string;
@@ -124,7 +138,24 @@ export class CreateLeaveManagementRequestDto {
   @ApiPropertyOptional() @IsOptional() @IsString() reason?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() saveAsDraft?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsInt() substituteId?: number; // substituto
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(2000) @Max(2100) referenceYear?: number; // ano do saldo (férias)
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(120) contactDuringLeave?: string; // contacto alternativo
   @ApiPropertyOptional() @IsOptional() @IsArray() @IsString({ each: true }) attachments?: string[];
+  @ApiPropertyOptional({ description: 'HH:mm — licenças de poucas horas' })
+  @IsOptional()
+  @Matches(HH_MM, { message: 'startTime deve ter o formato HH:mm' })
+  startTime?: string;
+  @ApiPropertyOptional({ description: 'HH:mm' })
+  @IsOptional()
+  @Matches(HH_MM, { message: 'endTime deve ter o formato HH:mm' })
+  endTime?: string;
+  @ApiPropertyOptional({ type: [LeaveDocumentInputDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => LeaveDocumentInputDto)
+  documents?: LeaveDocumentInputDto[];
 }
 
 // ─── Approvals ────────────────────────────────────────────────────────────────
@@ -174,4 +205,347 @@ export class CalendarFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) month?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() department?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() leaveTypeCode?: string;
+}
+
+export class OverviewFilterDto {
+  @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) unitId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() leaveTypeCode?: string;
+  @ApiPropertyOptional() @IsOptional() @IsEnum(LeaveStatus) status?: LeaveStatus;
+}
+
+export enum VacationPlanState {
+  NOT_STARTED = 'NOT_STARTED',
+  IN_PREPARATION = 'IN_PREPARATION',
+  SUBMITTED = 'SUBMITTED',
+  APPROVED = 'APPROVED',
+}
+
+export class VacationFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  @Min(2000)
+  @Max(2100)
+  year?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) unitId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
+  @ApiPropertyOptional({ enum: VacationPlanState })
+  @IsOptional()
+  @IsEnum(VacationPlanState)
+  planState?: VacationPlanState;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) @Min(1) page?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}
+
+export class DurationPreviewDto {
+  @ApiProperty() @IsString() leaveTypeCode!: string;
+  @ApiProperty() @IsDateString() startDate!: string;
+  @ApiProperty() @IsDateString() endDate!: string;
+  @ApiPropertyOptional() @IsOptional() @IsEnum(DurationMode) durationMode?: DurationMode;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Type(() => Number) hours?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
+}
+
+// ─── §4 Licenças ──────────────────────────────────────────────────────────────
+
+/** Fase da licença: o estado do pedido + "em curso"/"concluída" derivados das datas. */
+export enum LicensePhase {
+  DRAFT = 'DRAFT',
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+}
+
+export class LicenseFilterDto {
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) unitId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() leaveTypeCode?: string;
+  @ApiPropertyOptional({ enum: LicensePhase })
+  @IsOptional()
+  @IsEnum(LicensePhase)
+  phase?: LicensePhase;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) search?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) @Min(1) page?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}
+
+export class ApprovalRouteDto {
+  @ApiProperty() @IsString() leaveTypeCode!: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Type(() => Number) workDays?: number;
+}
+
+// ─── §5 Gestão de Ausências ───────────────────────────────────────────────────
+
+export enum AbsenceOccurrenceType {
+  JUSTIFIED_ABSENCE = 'JUSTIFIED_ABSENCE',
+  UNJUSTIFIED_ABSENCE = 'UNJUSTIFIED_ABSENCE',
+  LATE = 'LATE',
+  EARLY_DEPARTURE = 'EARLY_DEPARTURE',
+  PARTIAL_ABSENCE = 'PARTIAL_ABSENCE',
+  HEALTH_ABSENCE = 'HEALTH_ABSENCE',
+  AUTHORIZED_ABSENCE = 'AUTHORIZED_ABSENCE',
+  PERSONAL_ABSENCE = 'PERSONAL_ABSENCE',
+  NO_SHOW = 'NO_SHOW',
+  OTHER = 'OTHER',
+}
+
+export enum AbsenceSource {
+  MANUAL = 'MANUAL',
+  ATTENDANCE = 'ATTENDANCE',
+  INTEGRATION = 'INTEGRATION',
+}
+
+export enum AbsenceJustificationStatus {
+  TO_JUSTIFY = 'TO_JUSTIFY',
+  SUBMITTED = 'SUBMITTED',
+  VALIDATED = 'VALIDATED',
+  REJECTED = 'REJECTED',
+}
+
+export class AbsenceFilterDto {
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) unitId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+  @ApiPropertyOptional({ enum: AbsenceOccurrenceType })
+  @IsOptional()
+  @IsEnum(AbsenceOccurrenceType)
+  occurrenceType?: AbsenceOccurrenceType;
+  @ApiPropertyOptional({ enum: AbsenceJustificationStatus })
+  @IsOptional()
+  @IsEnum(AbsenceJustificationStatus)
+  justificationStatus?: AbsenceJustificationStatus;
+  @ApiPropertyOptional({ enum: AbsenceSource })
+  @IsOptional()
+  @IsEnum(AbsenceSource)
+  source?: AbsenceSource;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) search?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) @Min(1) page?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}
+
+export class CreateAbsenceDto {
+  @ApiPropertyOptional({ description: 'Omitido → o próprio utilizador' })
+  @IsOptional()
+  @IsInt()
+  userId?: number;
+  @ApiProperty() @IsDateString() date!: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Matches(HH_MM, { message: 'startTime deve ter o formato HH:mm' })
+  startTime?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Matches(HH_MM, { message: 'endTime deve ter o formato HH:mm' })
+  endTime?: string;
+  @ApiProperty({ enum: AbsenceOccurrenceType })
+  @IsEnum(AbsenceOccurrenceType)
+  occurrenceType!: AbsenceOccurrenceType;
+  @ApiPropertyOptional({ description: 'Rótulo livre quando occurrenceType = OTHER' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  customCategory?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) justification?: string;
+  @ApiPropertyOptional({ type: [LeaveDocumentInputDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => LeaveDocumentInputDto)
+  attachments?: LeaveDocumentInputDto[];
+}
+
+export class SubmitJustificationDto {
+  @ApiProperty() @IsString() @MaxLength(2000) justification!: string;
+  @ApiPropertyOptional({ type: [LeaveDocumentInputDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => LeaveDocumentInputDto)
+  attachments?: LeaveDocumentInputDto[];
+}
+
+export class ValidateAbsenceDto {
+  @ApiProperty({ enum: ['VALIDATE', 'REJECT'] }) @IsIn(['VALIDATE', 'REJECT']) decision!:
+    'VALIDATE' | 'REJECT';
+  @ApiPropertyOptional({ description: 'Obrigatório ao recusar' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  notes?: string;
+}
+
+export class AddAbsenceAttachmentDto extends LeaveDocumentInputDto {}
+
+export class CorrectAbsenceDto {
+  @ApiProperty({ description: 'Motivo da correcção — fica na auditoria' })
+  @IsString()
+  @MaxLength(1000)
+  reason!: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() date?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Matches(HH_MM, { message: 'startTime deve ter o formato HH:mm' })
+  startTime?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Matches(HH_MM, { message: 'endTime deve ter o formato HH:mm' })
+  endTime?: string;
+  @ApiPropertyOptional({ enum: AbsenceOccurrenceType })
+  @IsOptional()
+  @IsEnum(AbsenceOccurrenceType)
+  occurrenceType?: AbsenceOccurrenceType;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) customCategory?: string;
+}
+
+export class ForwardAbsenceDto {
+  @ApiPropertyOptional({ description: 'Omitido → gestor directo do colaborador' })
+  @IsOptional()
+  @IsInt()
+  toUserId?: number;
+}
+
+export class SyncAttendanceDto {
+  @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+}
+
+// ─── §6 Calendário de Ausências ───────────────────────────────────────────────
+
+export enum CalendarView {
+  DAY = 'day',
+  WEEK = 'week',
+  MONTH = 'month',
+  YEAR = 'year',
+}
+
+export class AbsenceCalendarFilterDto {
+  @ApiPropertyOptional({ enum: CalendarView })
+  @IsOptional()
+  @IsEnum(CalendarView)
+  view?: CalendarView;
+  @ApiPropertyOptional({ description: 'Data âncora da vista (YYYY-MM-DD); omitido → hoje' })
+  @IsOptional()
+  @IsDateString()
+  date?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) unitId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+  @ApiPropertyOptional({ description: 'Equipa = colaboradores deste gestor' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  managerId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() leaveTypeCode?: string;
+}
+
+// ─── §7 Aprovações ────────────────────────────────────────────────────────────
+
+export enum ApprovalListStatus {
+  PENDING = 'PENDING',
+  OVERDUE = 'OVERDUE',
+  DECIDED = 'DECIDED',
+  ALL = 'ALL',
+}
+
+export class ApprovalListFilterDto {
+  @ApiPropertyOptional({ enum: ApprovalListStatus })
+  @IsOptional()
+  @IsEnum(ApprovalListStatus)
+  status?: ApprovalListStatus;
+  @ApiPropertyOptional() @IsOptional() @IsString() leaveTypeCode?: string;
+  @ApiPropertyOptional({ enum: ['MANAGER', 'HR'] })
+  @IsOptional()
+  @IsIn(['MANAGER', 'HR'])
+  stage?: 'MANAGER' | 'HR';
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) search?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) @Min(1) page?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}
+
+export class ReassignApprovalDto {
+  @ApiProperty() @IsInt() toApproverId!: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) reason?: string;
+}
+
+// ─── §8 Planeamento de Equipas ────────────────────────────────────────────────
+
+export class PlanningFilterDto {
+  @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) unitId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+}
+
+// ─── §9 Relatórios ────────────────────────────────────────────────────────────
+
+export enum LeaveReportKind {
+  ANNUAL_VACATION_MAP = 'ANNUAL_VACATION_MAP',
+  ABSENCES_BY_DEPARTMENT = 'ABSENCES_BY_DEPARTMENT',
+  MONTHLY_ABSENTEEISM = 'MONTHLY_ABSENTEEISM',
+  JUSTIFIED_VS_UNJUSTIFIED = 'JUSTIFIED_VS_UNJUSTIFIED',
+  LICENSES_BY_TYPE = 'LICENSES_BY_TYPE',
+  PENDING_REQUESTS = 'PENDING_REQUESTS',
+  VACATION_BY_EMPLOYEE = 'VACATION_BY_EMPLOYEE',
+  OPERATIONAL_COVERAGE = 'OPERATIONAL_COVERAGE',
+  PAYROLL_IMPACT = 'PAYROLL_IMPACT',
+  REQUEST_AUDIT = 'REQUEST_AUDIT',
+}
+
+export class LeaveReportFilterDto {
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) @Min(2000) year?: number;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) unitId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() leaveTypeCode?: string;
+  /** Códigos (tipos de licença e/ou ocorrências) a contar no numerador do absentismo; vírgulas. */
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) includeCodes?: string;
+}
+
+export class CancelLeaveDto {
+  @ApiPropertyOptional({ description: 'Motivo do cancelamento (fica no histórico)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
 }

@@ -505,15 +505,9 @@ export class AttendanceService {
       notes: dto.reviewNotes,
     });
 
-    // processApproval só devolve um LeaveApproval no ramo DELEGATE, que este
-    // fluxo nunca aciona (action é sempre APPROVE/REJECT) — nesses dois ramos
-    // retorna findOne(requestId), i.e. um LeaveRequest (ou null se entretanto
-    // desaparecer).
-    const reviewed = updated as Prisma.LeaveRequestGetPayload<object> | null;
-    if (reviewed?.status === LeaveStatus.APPROVED) {
-      await this.createLeaveAttendanceRecords(reviewed);
-    }
-
+    // Os registos ON_LEAVE da assiduidade são criados por LeaveManagementService
+    // (LeaveEffectsService) na aprovação final — um único responsável, sem
+    // duplicar registos (docs/Modulo_Leave.md §11/§13).
     return updated;
   }
 
@@ -995,33 +989,6 @@ export class AttendanceService {
       });
       throw new BadRequestException('Localização fora da área permitida para check-in');
     }
-  }
-
-  private async createLeaveAttendanceRecords(leave: Prisma.LeaveRequestGetPayload<object>) {
-    const dates: Date[] = [];
-    const cur = new Date(leave.startDate);
-    const end = new Date(leave.endDate);
-
-    while (cur <= end) {
-      const dow = cur.getDay();
-      if (dow !== 0 && dow !== 6) dates.push(new Date(cur));
-      cur.setDate(cur.getDate() + 1);
-    }
-
-    await this.prisma.attendanceRecord.createMany({
-      data: dates.map(d => ({
-        userId: leave.userId,
-        date: d,
-        status: AttendanceStatus.ON_LEAVE,
-        context: AttendanceContext.WORK,
-        method: CheckInMethod.MANUAL,
-        workMinutes: 0,
-        hoursWorked: 0,
-        notes: `Licença: ${leave.leaveType}`,
-        leaveRequestId: leave.id,
-      })),
-      skipDuplicates: true,
-    });
   }
 
   private countWorkdays(from: Date, to: Date): number {
