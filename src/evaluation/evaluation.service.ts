@@ -44,6 +44,7 @@ import {
   EvaluationReportFilterDto,
 } from './evaluation.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { writeChainedAuditLog } from '../common/helpers/audit-chain';
 
 // EvalModel usa códigos curtos ('90'/'360', contrato da API) — EvalCampaignModel
 // é o enum real do Prisma ('DEG_90'/'DEG_360'). Mapeados nos dois sentidos aqui.
@@ -1823,29 +1824,25 @@ export class EvaluationService {
     // alteração feita na calibração deve ficar registada em auditoria",
     // incluindo a justificação). metadata.cycleId permite filtrar o
     // histórico por ciclo em getCalibrationHistory().
-    await this.prisma.auditLog
-      .create({
-        data: {
-          userId: calibratedById,
-          action: 'CALIBRATION',
-          entity: 'PerformanceEvaluation',
-          entityId: dto.evaluatedId,
-          before: previousScore !== null ? String(previousScore) : undefined,
-          after: String(dto.calibratedScore),
-          reason: dto.calibrationNote,
-          metadata: JSON.stringify({ cycleId }),
-        },
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          action: 'EVALUATION_CALIBRATE_AUDIT_LOG',
-          cycleId,
-          evaluatedId: dto.evaluatedId,
-          calibratedById,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao registar auditoria de calibração de score',
-        });
+    await writeChainedAuditLog(this.prisma, {
+      userId: calibratedById,
+      action: 'CALIBRATION',
+      entity: 'PerformanceEvaluation',
+      entityId: dto.evaluatedId,
+      before: previousScore !== null ? String(previousScore) : undefined,
+      after: String(dto.calibratedScore),
+      reason: dto.calibrationNote,
+      metadata: JSON.stringify({ cycleId }),
+    }).catch((e: unknown) => {
+      this.logger.warn({
+        action: 'EVALUATION_CALIBRATE_AUDIT_LOG',
+        cycleId,
+        evaluatedId: dto.evaluatedId,
+        calibratedById,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao registar auditoria de calibração de score',
       });
+    });
 
     await this.prisma.notificationLog
       .create({

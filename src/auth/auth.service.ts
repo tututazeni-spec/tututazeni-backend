@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto, RegisterDto, ChangePasswordDto } from './auth.dto';
 import { BCRYPT_COST_FACTOR } from '../common/config/security.config';
 import { withFlatPermissions } from '../common/utils/role-permissions';
+import { writeChainedAuditLog } from '../common/helpers/audit-chain';
 
 // A10-24: um refresh token não usado há mais tempo do que isto é tratado
 // como sessão inactiva — a cadeia é revogada mesmo que o token em si ainda
@@ -59,18 +60,16 @@ export class AuthService {
   }): void {
     Promise.resolve()
       .then(() =>
-        this.prisma.auditLog.create({
-          data: {
-            userId: data.userId ?? null,
-            action: data.action,
-            entity: data.entity,
-            entityId: data.entityId,
-            status: data.status,
-            severity: data.severity,
-            ip: data.ctx?.ip,
-            userAgent: data.ctx?.userAgent?.slice(0, 300),
-            metadata: data.metadata ? JSON.stringify(data.metadata) : undefined,
-          },
+        writeChainedAuditLog(this.prisma, {
+          userId: data.userId ?? null,
+          action: data.action,
+          entity: data.entity,
+          entityId: data.entityId,
+          status: data.status,
+          severity: data.severity,
+          ip: data.ctx?.ip,
+          userAgent: data.ctx?.userAgent?.slice(0, 300),
+          metadata: data.metadata ? JSON.stringify(data.metadata) : undefined,
         }),
       )
       .catch((err: unknown) =>
@@ -131,26 +130,22 @@ export class AuthService {
     await this.persistRefreshToken(user.id, tokens.refreshToken);
 
     // fire-and-forget — não bloqueia a resposta de login
-    this.prisma.auditLog
-      .create({
-        data: {
-          userId: user.id,
-          action: 'LOGIN',
-          entity: 'User',
-          entityId: user.id,
-          ip: ctx?.ip,
-          userAgent: ctx?.userAgent?.slice(0, 300),
-        },
-      })
-      .catch((err: unknown) =>
-        this.logger.warn({
-          userId: user.id,
-          action: 'LOGIN',
-          entity: 'User',
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao registar audit log de login',
-        }),
-      );
+    writeChainedAuditLog(this.prisma, {
+      userId: user.id,
+      action: 'LOGIN',
+      entity: 'User',
+      entityId: user.id,
+      ip: ctx?.ip,
+      userAgent: ctx?.userAgent?.slice(0, 300),
+    }).catch((err: unknown) =>
+      this.logger.warn({
+        userId: user.id,
+        action: 'LOGIN',
+        entity: 'User',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao registar audit log de login',
+      }),
+    );
 
     // Também na UserAuditLog — é essa tabela que alimenta o separador
     // "Histórico & Auditoria" do módulo Users (docs/modulo_users.md Ponto 6,
@@ -230,10 +225,15 @@ export class AuthService {
         where: { userId, revokedAt: null },
         data: { revokedAt: now },
       }),
-      this.prisma.auditLog.create({
-        data: { userId, action: 'CHANGE_PASSWORD', entity: 'User', entityId: userId },
-      }),
     ]);
+
+    await writeChainedAuditLog(this.prisma, {
+      userId,
+      action: 'CHANGE_PASSWORD',
+      entity: 'User',
+      entityId: userId,
+      severity: 'MEDIUM',
+    });
 
     return { message: 'Senha alterada com sucesso. Sessão terminada, inicia sessão novamente.' };
   }

@@ -2,6 +2,8 @@
 import * as crypto from 'crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { getRequestContext } from '../logging/request-context';
+import { AUDIT_SCHEMA_VERSION, resolveAuditModule } from './audit-modules';
 
 export const GENESIS_HASH = 'GENESIS';
 // Chave arbitrária estável do advisory lock que serializa a cadeia entre processos/instâncias.
@@ -28,6 +30,30 @@ export async function writeChainedAuditLog(
   prisma: PrismaService,
   data: Omit<Prisma.AuditLogUncheckedCreateInput, 'hash' | 'previousHash' | 'timestamp'>,
 ) {
+  // Chamadores directos (auth, roles, integrações, automações…) não passam pelo
+  // AuditService comum; completa aqui módulo/eventType/origem/correlação para que
+  // todos os eventos apareçam classificados (modulo_audit.md §13, §15).
+  const ctx = getRequestContext();
+  const module = data.module ?? resolveAuditModule(data.entity);
+  // `userId: 0` (placeholder antigo) viola a FK para User e perdia o evento em silêncio:
+  // usa o autor do pedido em curso, ou nulo (evento de sistema) quando não há.
+  const ctxUserId = ctx.userId == null ? null : Number(ctx.userId);
+  const userId =
+    data.userId === 0 || data.userId === undefined
+      ? Number.isFinite(ctxUserId) && ctxUserId !== 0
+        ? ctxUserId
+        : null
+      : data.userId;
+  const enriched = {
+    ...data,
+    userId,
+    module,
+    eventType: data.eventType ?? `${module}.${data.action}`,
+    actorType: data.actorType ?? (userId == null ? 'SYSTEM' : 'USER'),
+    source: data.source ?? (ctx.reqId ? 'API' : 'JOB'),
+    correlationId: data.correlationId ?? ctx.reqId,
+    schemaVersion: data.schemaVersion ?? AUDIT_SCHEMA_VERSION,
+  };
   return prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${CHAIN_LOCK_KEY})`;
     const last = await tx.auditLog.findFirst({
@@ -38,14 +64,14 @@ export async function writeChainedAuditLog(
     const previousHash = last?.hash ?? GENESIS_HASH;
     const timestamp = new Date();
     const hash = computeAuditHash(
-      data.userId,
-      data.action,
-      data.entity,
-      data.entityId,
+      enriched.userId,
+      enriched.action,
+      enriched.entity,
+      enriched.entityId,
       timestamp,
       previousHash,
     );
-    return tx.auditLog.create({ data: { ...data, hash, previousHash, timestamp } });
+    return tx.auditLog.create({ data: { ...enriched, hash, previousHash, timestamp } });
   });
 }
 
