@@ -279,3 +279,209 @@ export class UpsertCompensationComponentsDto {
   @Type(() => CompensationComponentItemDto)
   items: CompensationComponentItemDto[];
 }
+
+// ─── Insights / Relatórios (docs/payroll.md §3, §5, §9) ─────────────────────
+
+export class PayrollEmployeesFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional({ description: 'Pesquisa por nome ou nº de colaborador' })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  departmentId?: number;
+}
+
+export class PayrollReportFilterDto {
+  @ApiPropertyOptional({ example: '2026-09' })
+  @IsOptional()
+  @IsString()
+  period?: string;
+
+  @ApiPropertyOptional({ example: 2026 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  year?: number;
+
+  @ApiPropertyOptional({ example: 9 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  month?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  unitId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  positionId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  userId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
+}
+
+export class SocialSecurityConfigDto {
+  @ApiProperty({ example: 0.03 })
+  @IsNumber()
+  @Min(0)
+  employeeRate: number;
+
+  @ApiProperty({ example: 0.08 })
+  @IsNumber()
+  @Min(0)
+  employerRate: number;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  ceiling?: number | null;
+}
+
+export class IrtBracketDto {
+  @ApiProperty()
+  @IsNumber()
+  @Min(0)
+  min: number;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsNumber()
+  max?: number | null;
+
+  @ApiProperty({ example: 0.1 })
+  @IsNumber()
+  @Min(0)
+  rate: number;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsNumber()
+  deduction?: number | null;
+}
+
+export class UpsertTaxConfigDto {
+  @ApiProperty({ example: 2026 })
+  @IsInt()
+  taxYear: number;
+
+  @ApiPropertyOptional({ example: 'AO' })
+  @IsOptional()
+  @IsString()
+  countryCode?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  currency?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  locale?: string;
+
+  @ApiProperty()
+  @IsNumber()
+  @Min(0)
+  minimumWage: number;
+
+  @ApiProperty({ type: SocialSecurityConfigDto })
+  @ValidateNested()
+  @Type(() => SocialSecurityConfigDto)
+  socialSecurity: SocialSecurityConfigDto;
+
+  @ApiProperty({ type: [IrtBracketDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => IrtBracketDto)
+  irtBrackets: IrtBracketDto[];
+}
+
+// ─── Pagamentos / Fecho (docs/payroll.md §7, §8) ────────────────────────────
+
+export const PAYMENT_STATUSES = [
+  'PENDING',
+  'PREPARED',
+  'SENT_TO_BANK',
+  'PROCESSED',
+  'PAID',
+  'FAILED',
+  'CANCELLED',
+] as const;
+
+export class CreatePayrollPaymentDto {
+  @ApiProperty()
+  @IsInt()
+  runId: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  bankName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  paymentAccount?: string;
+
+  @ApiPropertyOptional({ example: '2026-09-28' })
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  expectedDate?: string;
+}
+
+export class UpdatePaymentStatusDto {
+  @ApiProperty({ enum: PAYMENT_STATUSES })
+  @IsEnum(PAYMENT_STATUSES)
+  status: (typeof PAYMENT_STATUSES)[number];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  reference?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  errorMessage?: string;
+
+  @ApiPropertyOptional({ example: '2026-09-28' })
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  effectiveDate?: string;
+}

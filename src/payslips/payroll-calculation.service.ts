@@ -413,79 +413,87 @@ export class PayrollCalculationService {
     let exceptionsCount = 0,
       errorCount = 0;
 
-    await this.prisma.$transaction(async tx => {
-      await (tx as unknown as PrismaService).payslipItem.deleteMany({
-        where: { payslip: { runId, status: 'DRAFT' } },
-      });
-      await (tx as unknown as PrismaService).payslip.deleteMany({
-        where: { runId, status: 'DRAFT' },
-      });
+    await this.prisma.$transaction(
+      async tx => {
+        await (tx as unknown as PrismaService).payslipItem.deleteMany({
+          where: { payslip: { runId, status: 'DRAFT' } },
+        });
+        await (tx as unknown as PrismaService).payslip.deleteMany({
+          where: { runId, status: 'DRAFT' },
+        });
 
-      for (const user of targets) {
-        const calc = await this.calculatePayslip(
-          { countryCode: run.countryCode, taxYear: run.taxYear, period: run.period },
-          user,
-        );
+        for (const user of targets) {
+          const calc = await this.calculatePayslip(
+            { countryCode: run.countryCode, taxYear: run.taxYear, period: run.period },
+            user,
+          );
 
-        const exceptions = await this.reassessExceptions(
-          {
-            id: runId,
-            countryCode: run.countryCode,
-            taxYear: run.taxYear,
-            period: run.period,
-          },
-          user,
-          calc.result,
-          { minimumWage, usedFallbackConfig },
-        );
-        const hasError = exceptions.some(e => e.severity === 'ERROR');
-        exceptionsCount += exceptions.length;
-        if (hasError) errorCount += 1;
+          const exceptions = await this.reassessExceptions(
+            {
+              id: runId,
+              countryCode: run.countryCode,
+              taxYear: run.taxYear,
+              period: run.period,
+            },
+            user,
+            calc.result,
+            { minimumWage, usedFallbackConfig },
+          );
+          const hasError = exceptions.some(e => e.severity === 'ERROR');
+          exceptionsCount += exceptions.length;
+          if (hasError) errorCount += 1;
 
-        try {
-          const created = await (tx as unknown as PrismaService).payslip.create({
-            data: {
-              ...calc.data,
-              runId,
-              hasExceptions: exceptions.length > 0,
-              exceptions: exceptions.length
-                ? (exceptions as unknown as Prisma.InputJsonValue)
-                : undefined,
-            } as unknown as Prisma.PayslipUncheckedCreateInput,
-          });
-          if (calc.items.length) {
-            await (tx as unknown as PrismaService).payslipItem.createMany({
-              data: calc.items.map(i => ({ ...i, payslipId: created.id })),
+          try {
+            const created = await (tx as unknown as PrismaService).payslip.create({
+              data: {
+                ...calc.data,
+                runId,
+                hasExceptions: exceptions.length > 0,
+                exceptions: exceptions.length
+                  ? (exceptions as unknown as Prisma.InputJsonValue)
+                  : undefined,
+              } as unknown as Prisma.PayslipUncheckedCreateInput,
             });
+            if (calc.items.length) {
+              await (tx as unknown as PrismaService).payslipItem.createMany({
+                data: calc.items.map(i => ({ ...i, payslipId: created.id })),
+              });
+            }
+          } catch (e) {
+            if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+              errorCount += 1;
+              exceptionsCount += 1;
+              continue;
+            }
+            throw e;
           }
-        } catch (e) {
-          if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-            errorCount += 1;
-            exceptionsCount += 1;
-            continue;
-          }
-          throw e;
+
+          totalGross += calc.data.grossSalary as number;
+          totalNet += calc.data.netSalary as number;
+          totalDeductions += calc.data.totalDeductions as number;
+          totalEmployerCost += calc.data.totalEmployerCost as number;
         }
 
-        totalGross += calc.data.grossSalary as number;
-        totalNet += calc.data.netSalary as number;
-        totalDeductions += calc.data.totalDeductions as number;
-        totalEmployerCost += calc.data.totalEmployerCost as number;
-      }
-
-      await (tx as unknown as PrismaService).payrollRun.update({
-        where: { id: runId },
-        data: {
-          employeeCount: targets.length,
-          exceptionsCount,
-          errorCount,
-          totalGross: money(totalGross),
-          totalNet: money(totalNet),
-          totalDeductions: money(totalDeductions),
-          totalEmployerCost: money(totalEmployerCost),
-        },
-      });
-    });
+        await (tx as unknown as PrismaService).payrollRun.update({
+          where: { id: runId },
+          data: {
+            employeeCount: targets.length,
+            exceptionsCount,
+            errorCount,
+            totalGross: money(totalGross),
+            totalNet: money(totalNet),
+            totalDeductions: money(totalDeductions),
+            totalEmployerCost: money(totalEmployerCost),
+          },
+        });
+      },
+      {
+        // Calcula todos os colaboradores do run numa só transacção; o default (5s)
+        // expira logo com algumas centenas de utilizadores.
+        timeout: 10 * 60_000,
+        maxWait: 10_000,
+      },
+    );
 
     return {
       employeeCount: targets.length,

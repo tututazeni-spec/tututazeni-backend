@@ -6389,23 +6389,75 @@ model PayrollRun {
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
-  payGroup           String?
-  scope              Json?
-  taxYear            Int?
-  totalNet           Float?
-  totalDeductions    Float?
-  totalEmployerCost  Float?
-  employeeCount      Int?
-  exceptionsCount    Int?
-  errorCount         Int?
-  submittedAt        DateTime?
-  submittedById      Int?
-  publishedAt        DateTime?
-  publishedById      Int?
-  rejectionReason    String?
-  cancellationReason String?
+  payGroup            String?
+  scope               Json?
+  taxYear             Int?
+  totalNet            Float?
+  totalDeductions     Float?
+  totalEmployerCost   Float?
+  employeeCount       Int?
+  exceptionsCount     Int?
+  errorCount          Int?
+  submittedAt         DateTime?
+  submittedById       Int?
+  publishedAt         DateTime?
+  publishedById       Int?
+  rejectionReason     String?
+  cancellationReason  String?
+  expectedPaymentDate DateTime?
+  payments            PayrollPayment[]
+  closure             PayrollClosure?
 
   @@index([period, status])
+}
+
+enum PayrollPaymentStatus {
+  PENDING
+  PREPARED
+  SENT_TO_BANK
+  PROCESSED
+  PAID
+  FAILED
+  CANCELLED
+}
+
+// Passagem da folha processada para pagamento (docs/payroll.md §7).
+model PayrollPayment {
+  id                  Int                  @id @default(autoincrement())
+  runId               Int
+  run                 PayrollRun           @relation(fields: [runId], references: [id])
+  bankName            String?
+  paymentAccount      String?
+  employeeCount       Int
+  totalAmount         Float
+  expectedDate        DateTime?
+  effectiveDate       DateTime?
+  status              PayrollPaymentStatus @default(PENDING)
+  reference           String?
+  bankFileGeneratedAt DateTime?
+  errorMessage        String?
+  responsibleId       Int?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  @@index([runId])
+  @@index([status])
+}
+
+// Fecho salarial (docs/payroll.md §8): validação RH + financeira, depois
+// fecho definitivo. Run fechado fica imutável para edições normais.
+model PayrollClosure {
+  id                   Int        @id @default(autoincrement())
+  runId                Int        @unique
+  run                  PayrollRun @relation(fields: [runId], references: [id])
+  hrValidatedAt        DateTime?
+  hrValidatedById      Int?
+  financeValidatedAt   DateTime?
+  financeValidatedById Int?
+  closedAt             DateTime?
+  closedById           Int?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
 }
 
 model WorkDeclaration {

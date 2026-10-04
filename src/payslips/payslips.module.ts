@@ -10,6 +10,9 @@ import { SalaryComponentService } from './salary-component.service';
 import { SalaryComponentController } from './salary-component.controller';
 import { EmployeeCompensationService } from './employee-compensation.service';
 import { EmployeeCompensationController } from './employee-compensation.controller';
+import { PayrollInsightsService } from './payroll-insights.service';
+import { PayrollPaymentsService } from './payroll-payments.service';
+import { PayrollOpsController } from './payroll-ops.controller';
 import { PayslipPdfService } from './payslip-pdf.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuditModule } from '../common/modules/audit.module';
@@ -24,12 +27,15 @@ import { AuditModule } from '../common/modules/audit.module';
     SalaryComponentService,
     EmployeeCompensationService,
     PayslipPdfService,
+    PayrollInsightsService,
+    PayrollPaymentsService,
   ],
   controllers: [
     PayslipsController,
     PayrollRunController,
     SalaryComponentController,
     EmployeeCompensationController,
+    PayrollOpsController,
   ],
   exports: [
     PayslipsService,

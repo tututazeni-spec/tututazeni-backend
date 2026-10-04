@@ -30,6 +30,7 @@ describe('PayrollWorkflowService transitions', () => {
 
   beforeEach(async () => {
     prisma = {
+      payrollClosure: { findUnique: jest.fn().mockResolvedValue(null) },
       payrollRun: {
         findUnique: jest.fn(),
         create: jest.fn().mockResolvedValue(run()),
@@ -195,6 +196,13 @@ describe('PayrollWorkflowService transitions', () => {
     );
     prisma.payrollRun.findUnique.mockResolvedValue(run({ status: 'PUBLISHED' }));
     await expect(svc.cancel(1, 7, { reason: 'x' })).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('cancel: folha fechada -> 409 mesmo estando APPROVED', async () => {
+    prisma.payrollRun.findUnique.mockResolvedValue(run({ status: 'APPROVED' }));
+    prisma.payrollClosure.findUnique.mockResolvedValue({ closedAt: new Date() });
+    await expect(svc.cancel(1, 7, { reason: 'x' })).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.payrollRun.update).not.toHaveBeenCalled();
   });
 });
 

@@ -300,6 +300,12 @@ export class PayrollWorkflowService {
 
   async cancel(runId: number, actorId: number, dto: CancelRunDto) {
     const run = await this.loadRun(runId);
+    // Folha fechada (docs/payroll.md §8) fica protegida contra alterações normais.
+    const closure = await this.prisma.payrollClosure.findUnique({
+      where: { runId },
+      select: { closedAt: true },
+    });
+    if (closure?.closedAt) throw new ConflictException('Folha fechada — cancelamento bloqueado.');
     if (run.status === 'PUBLISHED') {
       throw new ConflictException('Run publicado não pode ser cancelado.');
     }
