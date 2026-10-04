@@ -265,6 +265,7 @@ describe('AuditService — consulta, timeline, histórico e stats', () => {
         groupBy: jest.fn().mockResolvedValue([]),
         create: jest.fn(dto => Promise.resolve({ id: 1, ...dto.data })),
       },
+      auditPolicy: { findUnique: jest.fn().mockResolvedValue(null) },
       historyRecord: { findMany: jest.fn().mockResolvedValue([]) },
       notificationLog: { create: jest.fn().mockResolvedValue({}) },
     };

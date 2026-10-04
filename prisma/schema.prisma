@@ -15014,3 +15014,71 @@ model InternalAuditAction {
   @@index([auditId])
   @@index([findingId])
 }
+
+// ── Auditoria: Exportações e Evidências + Políticas (docs/modulo_audit.md §10-12) ──
+// Registo singleton (id = 1) com as regras de auditoria. Alterações são auditadas.
+model AuditPolicy {
+  id                 Int      @id @default(1)
+  requiredEvents     String[]
+  coveredModules     String[]
+  severityRules      Json? // { "<ACÇÃO ou prefixo>": "LOW|MEDIUM|HIGH|CRITICAL" }
+  alertRules         Json? // limites de deteção: { failedLoginsPerHour, exportsPerHour, deletesPerDay, ... }
+  retentionDays      Json? // prazo por categoria: { ACCESS, DATA_CHANGES, SECURITY, PAYROLL, EXPORTS, GENERAL }
+  archivePolicy      String?  @db.Text
+  viewRoles          String[]
+  exportRoles        String[]
+  maskSensitive      Boolean  @default(true)
+  maskedFields       String[]
+  backupDestination  String?
+  backupFrequency    String?
+  serviceEnabled     Boolean  @default(true)
+  failureAlertEmails String[]
+  updatedById        Int?
+  updatedAt          DateTime @updatedAt
+}
+
+// Ficheiro de auditoria (relatório exportado) ou evidência de investigação.
+// O conteúdo fica na BD e só sai por endpoint autenticado — nunca por link público.
+model AuditExport {
+  id               Int                 @id @default(autoincrement())
+  code             String              @unique
+  kind             String // REPORT | EVIDENCE
+  fileName         String
+  mimeType         String
+  format           String // csv | xlsx | pdf | other
+  reportType       String?
+  incidentId       Int?
+  auditId          Int?
+  periodFrom       DateTime?
+  periodTo         DateTime?
+  filters          Json?
+  recordCount      Int                 @default(0)
+  sizeBytes        Int                 @default(0)
+  confidentiality  String              @default("CONFIDENTIAL") // INTERNAL | CONFIDENTIAL | RESTRICTED
+  sha256           String
+  retentionUntil   DateTime
+  status           String              @default("ACTIVE") // ACTIVE | EXPIRED | PURGED
+  result           String              @default("SUCCESS") // SUCCESS | FAILED
+  createdById      Int?
+  createdAt        DateTime            @default(now())
+  content          Bytes?
+  accesses         AuditExportAccess[]
+
+  @@index([kind])
+  @@index([createdAt])
+  @@index([retentionUntil])
+  @@index([incidentId])
+  @@index([auditId])
+}
+
+model AuditExportAccess {
+  id        Int         @id @default(autoincrement())
+  exportId  Int
+  export    AuditExport @relation(fields: [exportId], references: [id], onDelete: Cascade)
+  userId    Int?
+  action    String // VIEW | DOWNLOAD | DENIED
+  ip        String?
+  createdAt DateTime    @default(now())
+
+  @@index([exportId])
+}

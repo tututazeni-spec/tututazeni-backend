@@ -318,7 +318,7 @@ export class AuditService {
   // ─── CONSULTA ─────────────────────────────────────────────────────────────
 
   /** Filtros comuns de AuditLog (aba "Registos de Auditoria" e "Acessos"). */
-  private buildWhere(filters: AuditFilterDto): Prisma.AuditLogWhereInput {
+  buildWhere(filters: AuditFilterDto): Prisma.AuditLogWhereInput {
     const {
       userId,
       entity,
@@ -702,7 +702,7 @@ export class AuditService {
     return maskValues && value !== null && value !== undefined ? AuditService.MASK : value;
   }
 
-  private eventCode(id: number, ts: Date): string {
+  eventCode(id: number, ts: Date): string {
     return `AUD-${ts.getUTCFullYear()}-${String(id).padStart(6, '0')}`;
   }
 
@@ -821,7 +821,7 @@ export class AuditService {
   ];
   private static readonly PASSWORD_ACTIONS = ['CHANGE_PASSWORD', 'PASSWORD_RESET'];
 
-  private accessWhere(type: AccessEventType | undefined): Prisma.AuditLogWhereInput {
+  accessWhere(type: AccessEventType | undefined): Prisma.AuditLogWhereInput {
     switch (type) {
       case 'LOGIN':
         return { action: 'LOGIN' };
@@ -1135,25 +1135,37 @@ export class AuditService {
     const hour1 = new Date(Date.now() - 1 * 3600 * 1000);
     const hour24 = new Date(Date.now() - 24 * 3600 * 1000);
 
+    // Limites de deteção configuráveis em «Políticas e Retenção» (§12).
+    const policy = await this.prisma.read.auditPolicy.findUnique({
+      where: { id: 1 },
+      select: { alertRules: true },
+    });
+    const rules = (
+      policy?.alertRules && typeof policy.alertRules === 'object' ? policy.alertRules : {}
+    ) as Record<string, number>;
+    const failedMin = rules.failedLoginsPerHour ?? 3;
+    const exportsMin = rules.exportsPerHour ?? 3;
+    const deletesMin = rules.deletesPerDay ?? 5;
+
     const [failedLogins, massExports, massDeletes] = await Promise.all([
       this.prisma.read.auditLog.groupBy({
         by: ['userId'],
         where: { action: 'FAILED', timestamp: { gte: hour1 } },
         _count: true,
-        having: { userId: { _count: { gte: 3 } } },
+        having: { userId: { _count: { gte: failedMin } } },
         orderBy: { _count: { userId: 'desc' } },
       }),
       this.prisma.read.auditLog.groupBy({
         by: ['userId'],
         where: { action: 'EXPORT', timestamp: { gte: hour1 } },
         _count: true,
-        having: { userId: { _count: { gte: 3 } } },
+        having: { userId: { _count: { gte: exportsMin } } },
       }),
       this.prisma.read.auditLog.groupBy({
         by: ['userId'],
         where: { action: 'DELETE', timestamp: { gte: hour24 } },
         _count: true,
-        having: { userId: { _count: { gte: 5 } } },
+        having: { userId: { _count: { gte: deletesMin } } },
       }),
     ]);
 
@@ -1188,7 +1200,7 @@ export class AuditService {
   private static readonly SENSITIVE_FIELD =
     /salar|wage|remunera|iban|nib|nif|bank|tax|ssn|birth|nascimento|address|morada/i;
 
-  private changeWhere(filters: ChangesFilterDto): Prisma.AuditLogWhereInput {
+  changeWhere(filters: ChangesFilterDto): Prisma.AuditLogWhereInput {
     const base = this.buildWhere(filters);
     const and: Prisma.AuditLogWhereInput[] = Array.isArray(base.AND)
       ? [...base.AND]
@@ -1211,7 +1223,7 @@ export class AuditService {
   }
 
   /** Alterações campo a campo de um registo de auditoria, com ocultação por permissão. */
-  private fieldChanges(
+  fieldChanges(
     log: Pick<AuditLog, 'entity' | 'changes' | 'before' | 'after'>,
     viewerRole?: string | null,
   ): Array<{ field: string; from: unknown; to: unknown; masked: boolean }> {
