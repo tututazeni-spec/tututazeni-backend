@@ -15169,6 +15169,8 @@ model ScalabilityInfraSettings {
   lastRecoveryTestOk      Boolean?
   // Previsões (§19)
   dbCapacityGb            Float?
+  // Custos (§21)
+  costCurrency            String    @default("EUR")
 
   @@map("scalability_infra_settings")
 }
@@ -15205,4 +15207,73 @@ model ScalabilityIncident {
   @@index([status, occurredAt])
   @@index([component])
   @@map("scalability_incidents")
+}
+
+// modulo_scalability.md §20: registo e acompanhamento de testes de carga.
+// A INNOVA não executa o teste — regista a configuração e os resultados medidos
+// (Artillery/k6/…); o veredicto é do responsável, com uma sugestão derivada dos limiares.
+enum ScalabilityLoadTestStatus {
+  PLANNED
+  RUNNING
+  COMPLETED
+  CANCELLED
+}
+
+enum ScalabilityLoadTestVerdict {
+  APPROVED
+  APPROVED_WITH_NOTES
+  FAILED
+}
+
+model ScalabilityLoadTest {
+  id             String                      @id @default(cuid())
+  name           String
+  type           String // LOAD | STRESS | SPIKE | ENDURANCE | VOLUME | FAILOVER
+  status         ScalabilityLoadTestStatus   @default(PLANNED)
+  environment    String // LOCAL | STAGING | PRODUCTION
+  appVersion     String?
+  scenario       String?                     @db.Text
+  modules        String[]                    @default([])
+  simulatedUsers Int?
+  targetRps      Int?
+  durationSec    Int?
+  scheduledAt    DateTime?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  // Resultados
+  throughputRps  Float?
+  p95Ms          Int?
+  p99Ms          Int?
+  errorRate      Float?
+  cpuPeak        Float?
+  ramPeak        Float?
+  dbPeakConn     Int?
+  queuePeak      Int?
+  peakConcurrent Int?
+  verdict        ScalabilityLoadTestVerdict?
+  observations   String?                     @db.Text
+  createdById    Int?
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+
+  @@index([status, createdAt])
+  @@index([type])
+  @@map("scalability_load_tests")
+}
+
+// modulo_scalability.md §21: custo mensal de infraestrutura por categoria,
+// introduzido pelo administrador (a aplicação não vê facturas de cloud).
+model ScalabilityCostEntry {
+  id          String   @id @default(cuid())
+  month       String // YYYY-MM
+  category    String // DATABASE | STORAGE | COMPUTE | TRAFFIC | BACKUPS | EXTERNAL
+  amount      Float
+  note        String?
+  updatedById Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([month, category])
+  @@index([month])
+  @@map("scalability_cost_entries")
 }

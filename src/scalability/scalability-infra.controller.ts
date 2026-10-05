@@ -1,6 +1,6 @@
 // modulo_scalability.md §7-9 — rotas das abas API & Backend e Base de Dados.
 
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { FrontendPerfSampleDto } from './frontend-perf.dto';
 import { ScalabilityCapacityService } from './scalability-capacity.service';
@@ -10,7 +10,15 @@ import {
   UpdateForecastSettingsDto,
   UpdateResilienceDto,
 } from './scalability-capacity.dto';
+import { ScalabilityAlertsService } from './scalability-alerts.service';
+import { ScalabilityCostsService, SaveCostsDto } from './scalability-costs.service';
 import { ScalabilityForecastService } from './scalability-forecast.service';
+import { ScalabilityLoadTestsService } from './scalability-loadtests.service';
+import {
+  CreateLoadTestDto,
+  ListLoadTestsQueryDto,
+  UpdateLoadTestDto,
+} from './scalability-loadtests.dto';
 import { ScalabilityIncidentsService } from './scalability-incidents.service';
 import {
   CreateIncidentDto,
@@ -41,6 +49,9 @@ export class ScalabilityInfraController {
     private readonly capacity: ScalabilityCapacityService,
     private readonly incidents: ScalabilityIncidentsService,
     private readonly forecasts: ScalabilityForecastService,
+    private readonly loadTests: ScalabilityLoadTestsService,
+    private readonly costs: ScalabilityCostsService,
+    private readonly alertRules: ScalabilityAlertsService,
   ) {}
 
   @Get('api-metrics')
@@ -185,5 +196,59 @@ export class ScalabilityInfraController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.forecasts.updateForecastSettings(dto.dbCapacityGb ?? null, Number(user.id));
+  }
+  @Get('load-tests')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: 'Aba Testes de Carga: lista, resumo e limiares' })
+  listLoadTests(@Query() q: ListLoadTestsQueryDto) {
+    return this.loadTests.list(q);
+  }
+
+  @Post('load-tests')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Regista um teste de carga (registado no Audit)' })
+  createLoadTest(@Body() dto: CreateLoadTestDto, @CurrentUser() user: CurrentUserData) {
+    return this.loadTests.create(dto, Number(user.id));
+  }
+
+  @Patch('load-tests/:id')
+  @Roles(Role.ADMIN)
+  @ApiOperation({
+    summary: 'Actualiza estado/resultados/veredicto de um teste (registado no Audit)',
+  })
+  updateLoadTest(
+    @Param('id') id: string,
+    @Body() dto: UpdateLoadTestDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.loadTests.update(id, dto, Number(user.id));
+  }
+
+  @Get('costs')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: 'Aba Custos: indicadores, histórico e previsão por escalão' })
+  getCosts() {
+    return this.costs.getCosts();
+  }
+
+  @Put('costs')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Guarda os custos de um mês por categoria (registado no Audit)' })
+  saveCosts(@Body() dto: SaveCostsDto, @CurrentUser() user: CurrentUserData) {
+    return this.costs.saveCosts(dto, Number(user.id));
+  }
+
+  @Get('alert-rules')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: 'Aba Alertas: regras automáticas por grupo e estado actual' })
+  getAlertRules() {
+    return this.alertRules.getOverview();
+  }
+
+  @Post('alert-rules/evaluate')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Avalia já as regras de alerta (cria/resolve alertas)' })
+  evaluateAlertRules() {
+    return this.alertRules.evaluateAndRaise();
   }
 }
