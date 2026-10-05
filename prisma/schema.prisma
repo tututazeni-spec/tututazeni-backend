@@ -15094,3 +15094,16 @@ model AuditExportAccess {
 
   @@index([exportId])
 }
+
+// modulo_scalability.md §8-9: histórico do tamanho da BD (uma amostra por hora)
+// para crescimento diário/mensal/anual, "tabelas que mais crescem" e previsão.
+model DatabaseSizeSample {
+  id         String   @id @default(cuid())
+  capturedAt DateTime @default(now())
+  sizeBytes  BigInt
+  // Top tabelas por tamanho total: [{ name, bytes }]
+  tables     Json?
+
+  @@index([capturedAt])
+  @@map("database_size_samples")
+}

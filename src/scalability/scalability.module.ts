@@ -8,6 +8,8 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScalabilityService } from './scalability.service';
 import { ScalabilityController } from './scalability.controller';
+import { ScalabilityInfraService } from './scalability-infra.service';
+import { ScalabilityInfraController } from './scalability-infra.controller';
 import { ScalabilityEventListeners } from './scalability.events';
 import { PrismaModule } from '../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -29,8 +31,8 @@ import { ApiIntegrationModule } from '../api-integration/api-integration.module'
       verboseMemoryLeak: true,
     }),
   ],
-  controllers: [ScalabilityController],
-  providers: [ScalabilityService, ScalabilityEventListeners],
+  controllers: [ScalabilityController, ScalabilityInfraController],
+  providers: [ScalabilityService, ScalabilityInfraService, ScalabilityEventListeners],
   exports: [ScalabilityService],
 })
 export class ScalabilityModule {}
