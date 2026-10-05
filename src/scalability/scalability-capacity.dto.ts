@@ -6,6 +6,7 @@ import {
   IsBoolean,
   IsDateString,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   Max,
@@ -59,4 +60,9 @@ export class UpdateResilienceDto {
   @IsOptional() @IsDateString() lastBackupAt?: string;
   @IsOptional() @IsDateString() lastRecoveryTestAt?: string;
   @IsOptional() @IsBoolean() lastRecoveryTestOk?: boolean;
+}
+
+export class UpdateForecastSettingsDto {
+  // null limpa o valor (sem capacidade definida não há data de esgotamento da BD)
+  @IsOptional() @IsNumber() @Max(1_000_000) @Min(0.1) dbCapacityGb?: number | null;
 }

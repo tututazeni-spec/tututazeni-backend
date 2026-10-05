@@ -13,6 +13,8 @@ import { ScalabilityInfraService } from './scalability-infra.service';
 import { ScalabilityInfraController } from './scalability-infra.controller';
 import { ScalabilityQueuesService } from './scalability-queues.service';
 import { ScalabilityCapacityService } from './scalability-capacity.service';
+import { ScalabilityIncidentsService } from './scalability-incidents.service';
+import { ScalabilityForecastService } from './scalability-forecast.service';
 import { ScalabilityStorageService } from './scalability-storage.service';
 import { ScalabilityIntegrationsPerfService } from './scalability-integrations-perf.service';
 import { ScalabilityEventListeners } from './scalability.events';
@@ -50,6 +52,8 @@ import { ApiIntegrationModule } from '../api-integration/api-integration.module'
     ScalabilityStorageService,
     ScalabilityIntegrationsPerfService,
     ScalabilityCapacityService,
+    ScalabilityIncidentsService,
+    ScalabilityForecastService,
     ScalabilityEventListeners,
   ],
   exports: [ScalabilityService],

@@ -15167,6 +15167,42 @@ model ScalabilityInfraSettings {
   lastBackupAt            DateTime?
   lastRecoveryTestAt      DateTime?
   lastRecoveryTestOk      Boolean?
+  // Previsões (§19)
+  dbCapacityGb            Float?
 
   @@map("scalability_infra_settings")
+}
+
+// modulo_scalability.md §18: incidentes de capacidade (sobrecarga, API lenta, BD saturada…).
+enum ScalabilityIncidentStatus {
+  OPEN
+  INVESTIGATING
+  MITIGATING
+  RESOLVED
+  CLOSED
+}
+
+model ScalabilityIncident {
+  id            String                    @id @default(cuid())
+  title         String
+  category      String // OVERLOAD | SLOW_API | DB_SATURATED | STORAGE_FULL | QUEUE_CONGESTED | TIMEOUT | MEMORY_LEAK | HIGH_CPU | SCALING_FAILURE | DEGRADATION
+  component     String // API | DATABASE | STORAGE | QUEUE | FRONTEND | INTEGRATIONS | INFRASTRUCTURE
+  severity      AlertSeverity
+  status        ScalabilityIncidentStatus @default(OPEN)
+  occurredAt    DateTime                  @default(now())
+  impact        String?                   @db.Text
+  affectedUsers Int?
+  rootCause     String?                   @db.Text
+  actionTaken   String?                   @db.Text
+  postMortem    String?                   @db.Text
+  ownerId       Int?
+  createdById   Int?
+  resolvedAt    DateTime?
+  closedAt      DateTime?
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  @@index([status, occurredAt])
+  @@index([component])
+  @@map("scalability_incidents")
 }

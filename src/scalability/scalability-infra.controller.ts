@@ -1,14 +1,22 @@
 // modulo_scalability.md §7-9 — rotas das abas API & Backend e Base de Dados.
 
-import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { FrontendPerfSampleDto } from './frontend-perf.dto';
 import { ScalabilityCapacityService } from './scalability-capacity.service';
 import {
   UpdateAutoScalingDto,
   UpdateCapacityLimitsDto,
+  UpdateForecastSettingsDto,
   UpdateResilienceDto,
 } from './scalability-capacity.dto';
+import { ScalabilityForecastService } from './scalability-forecast.service';
+import { ScalabilityIncidentsService } from './scalability-incidents.service';
+import {
+  CreateIncidentDto,
+  ListIncidentsQueryDto,
+  UpdateIncidentDto,
+} from './scalability-incidents.dto';
 import { ScalabilityInfraService } from './scalability-infra.service';
 import { ScalabilityIntegrationsPerfService } from './scalability-integrations-perf.service';
 import { ScalabilityQueuesService } from './scalability-queues.service';
@@ -31,6 +39,8 @@ export class ScalabilityInfraController {
     private readonly storage: ScalabilityStorageService,
     private readonly integrationsPerf: ScalabilityIntegrationsPerfService,
     private readonly capacity: ScalabilityCapacityService,
+    private readonly incidents: ScalabilityIncidentsService,
+    private readonly forecasts: ScalabilityForecastService,
   ) {}
 
   @Get('api-metrics')
@@ -133,5 +143,47 @@ export class ScalabilityInfraController {
   @ApiOperation({ summary: 'Actualiza objectivos RPO/RTO e factos de infra (registado no Audit)' })
   updateResilience(@Body() dto: UpdateResilienceDto, @CurrentUser() user: CurrentUserData) {
     return this.capacity.updateResilience(dto, Number(user.id));
+  }
+
+  @Get('incidents')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: 'Aba Incidentes de Capacidade: lista e resumo' })
+  listIncidents(@Query() q: ListIncidentsQueryDto) {
+    return this.incidents.list(q);
+  }
+
+  @Post('incidents')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Regista um incidente de capacidade (registado no Audit)' })
+  createIncident(@Body() dto: CreateIncidentDto, @CurrentUser() user: CurrentUserData) {
+    return this.incidents.create(dto, Number(user.id));
+  }
+
+  @Patch('incidents/:id')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Actualiza um incidente / muda o estado (registado no Audit)' })
+  updateIncident(
+    @Param('id') id: string,
+    @Body() dto: UpdateIncidentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.incidents.update(id, dto, Number(user.id));
+  }
+
+  @Get('forecasts')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: 'Aba Previsões: crescimento projectado e datas de esgotamento' })
+  getForecasts() {
+    return this.forecasts.getForecasts();
+  }
+
+  @Patch('forecast-settings')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Define a capacidade da BD usada nas previsões (registado no Audit)' })
+  updateForecastSettings(
+    @Body() dto: UpdateForecastSettingsDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.forecasts.updateForecastSettings(dto.dbCapacityGb ?? null, Number(user.id));
   }
 }
