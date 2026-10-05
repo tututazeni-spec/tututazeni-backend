@@ -1269,7 +1269,7 @@ export class AuditService {
 
   /** Campos cujo valor só ADMIN vê (pessoais/salariais/bancários), em qualquer entidade. */
   private static readonly SENSITIVE_FIELD =
-    /salar|wage|remunera|iban|nib|nif|bank|tax|ssn|birth|nascimento|address|morada/i;
+    /salar|wage|remunera|iban|\bnib\b|\bnif\b|bank|tax|ssn|birth|nascimento|address|morada/i;
 
   changeWhere(filters: ChangesFilterDto): Prisma.AuditLogWhereInput {
     const base = this.buildWhere(filters);

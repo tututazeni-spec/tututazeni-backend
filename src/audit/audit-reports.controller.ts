@@ -36,7 +36,9 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, CurrentUserData, Roles } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
-type Req_ = { ip?: string };
+interface Req_ {
+  ip?: string;
+}
 
 @ApiTags('Audit — Relatórios, Exportações e Políticas')
 @ApiBearerAuth()
