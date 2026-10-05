@@ -448,6 +448,7 @@ export class ScalabilityDashboardDto {
     plan: string;
     maxUsers: number;
     activeUsersCount: number;
+    registeredUsersCount: number;
     storageUsedGb: number;
     maxStorageGb: number;
   };
@@ -459,6 +460,7 @@ export class ScalabilityDashboardDto {
     requestsPerMinute: number;
     cpuUsagePercent: number;
     memoryUsagePercent: number;
+    dbUsagePercent: number;
   };
   integrations: {
     total: number;

@@ -1132,7 +1132,11 @@ export class ScalabilityService {
       }),
     ]);
 
-    const activeUsers = await this.prisma.read.user.count();
+    const [registeredUsers, activeUsers, dbUsagePercent] = await Promise.all([
+      this.prisma.read.user.count(),
+      this.prisma.read.user.count({ where: { active: true } }),
+      this.getDbConnectionUsagePercent(),
+    ]);
     const activeIntegrations = integrations
       .filter(i => i.status === 'ACTIVE')
       .reduce((s, i) => s + i._count.id, 0);
@@ -1179,6 +1183,7 @@ export class ScalabilityService {
         plan: tenant.plan,
         maxUsers: tenant.maxUsers,
         activeUsersCount: activeUsers,
+        registeredUsersCount: registeredUsers,
         storageUsedGb: latestMetric?.storageUsedGb ?? 0,
         maxStorageGb: tenant.maxStorageGb,
       },
@@ -1190,6 +1195,7 @@ export class ScalabilityService {
         requestsPerMinute: latestMetric?.requestsPerMinute ?? 0,
         cpuUsagePercent: latestMetric?.cpuUsagePercent ?? 0,
         memoryUsagePercent: latestMetric?.memoryUsagePercent ?? 0,
+        dbUsagePercent,
       },
       integrations: {
         total: integrations.reduce((s, i) => s + i._count.id, 0),
@@ -1217,6 +1223,24 @@ export class ScalabilityService {
         latencyTarget: slas?.maxLatencyMs ?? 2000,
       },
     };
+  }
+
+  // Utilização da base de dados = ligações abertas / max_connections do Postgres.
+  // Best-effort: se a consulta falhar, devolve 0 em vez de partir o dashboard.
+  private async getDbConnectionUsagePercent(): Promise<number> {
+    try {
+      const rows = await this.prisma.$queryRaw<{ used: number; max: number }[]>`
+        SELECT
+          (SELECT count(*)::int FROM pg_stat_activity) AS used,
+          current_setting('max_connections')::int AS max`;
+      const { used, max } = rows[0] ?? { used: 0, max: 0 };
+      return max > 0 ? Math.round((used / max) * 1000) / 10 : 0;
+    } catch (err: unknown) {
+      this.logger.warn(
+        `Não foi possível ler a utilização da BD: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return 0;
+    }
   }
 
   // ============================================================
