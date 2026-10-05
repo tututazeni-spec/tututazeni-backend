@@ -15129,3 +15129,44 @@ model FrontendPerfSample {
   @@index([path, createdAt])
   @@map("frontend_perf_samples")
 }
+
+// modulo_scalability.md §15-17: definições de infra (singleton id="default") —
+// limites de capacidade, política de auto scaling e factos de resiliência que a
+// aplicação não consegue descobrir sozinha.
+model ScalabilityInfraSettings {
+  id                      String    @id @default("default")
+  updatedAt               DateTime  @updatedAt
+  updatedById             Int?
+  // Capacidade (§15)
+  maxConcurrentUsers      Int       @default(5000)
+  maxApiRps               Int       @default(800)
+  // Auto scaling (§16)
+  asEnabled               Boolean   @default(false)
+  asMinInstances          Int       @default(2)
+  asMaxInstances          Int       @default(6)
+  asTargetCpu             Int       @default(60)
+  asTargetMemory          Int       @default(70)
+  asRequestsPerInstance   Int       @default(400)
+  asScaleUpThreshold      Int       @default(70)
+  asScaleUpMinutes        Int       @default(5)
+  asScaleDownThreshold    Int       @default(30)
+  asScaleDownMinutes      Int       @default(15)
+  asCooldownMinutes       Int       @default(10)
+  asScheduledJson         String? // JSON: [{name, cron, minInstances, maxInstances}]
+  asEmergencyEnabled      Boolean   @default(false)
+  asEmergencyMaxInstances Int       @default(10)
+  // Resiliência (§17)
+  rpoMinutes              Int       @default(1440)
+  rtoMinutes              Int       @default(240)
+  apiReplicas             Int       @default(1)
+  dbReplication           Boolean   @default(false)
+  failoverEnabled         Boolean   @default(false)
+  loadBalancer            Boolean   @default(false)
+  cdnEnabled              Boolean   @default(false)
+  drPlanDocumented        Boolean   @default(false)
+  lastBackupAt            DateTime?
+  lastRecoveryTestAt      DateTime?
+  lastRecoveryTestOk      Boolean?
+
+  @@map("scalability_infra_settings")
+}
