@@ -48,6 +48,7 @@ import {
   ScalabilityReportType,
 } from './scalability-reports.service';
 import { ScalabilitySettingsService } from './scalability-settings.service';
+import { ScalabilityModulesService } from './scalability-modules.service';
 import { ReportExportQueryDto } from './scalability-reports.dto';
 import { UpdateScalabilitySettingsDto as UpdateScalabilityDto } from './scalability-settings.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -75,6 +76,7 @@ export class ScalabilityInfraController {
     private readonly alertRules: ScalabilityAlertsService,
     private readonly reports: ScalabilityReportsService,
     private readonly settings: ScalabilitySettingsService,
+    private readonly modules: ScalabilityModulesService,
   ) {}
 
   @Get('api-metrics')
@@ -273,6 +275,30 @@ export class ScalabilityInfraController {
   @ApiOperation({ summary: 'Avalia já as regras de alerta (cria/resolve alertas)' })
   evaluateAlertRules() {
     return this.alertRules.evaluateAndRaise();
+  }
+
+  @Get('module-usage')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: '§25: volume e crescimento por módulo da INNOVA' })
+  getModuleUsage() {
+    return this.modules.getModuleUsage();
+  }
+
+  @Get('technical-integrations')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({
+    summary:
+      '§26: estado da integração com Audit, Processes, Automations, Notifications, Analytics',
+  })
+  getTechnicalIntegrations() {
+    return this.modules.getTechnicalIntegrations();
+  }
+
+  @Get('capacity-summary')
+  @Roles(Role.ADMIN, Role.AUDITOR, Role.DIRECTOR)
+  @ApiOperation({ summary: '§26: resumo de capacidade consumível por Analytics/Executive Reports' })
+  getCapacitySummary() {
+    return this.modules.getCapacitySummary();
   }
 
   // §23 Relatórios e §24 Configurações — acesso por perfil configurável (ADMIN sempre);
