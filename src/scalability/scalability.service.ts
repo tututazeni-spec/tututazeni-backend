@@ -1314,12 +1314,26 @@ export class ScalabilityService {
         select: { createdAt: true, active: true },
       }),
     ]);
+    // Utilizadores com actividade autenticada em cada mês (rotação de
+    // RefreshToken — o melhor sinal de actividade disponível, como nas sessões).
+    const monthlyActive = await Promise.all(
+      Array.from({ length: 12 }, (_, k) => {
+        const i = 11 - k;
+        return this.prisma.refreshToken
+          .groupBy({
+            by: ['userId'],
+            where: { createdAt: { gte: monthStart(i), lt: monthStart(i - 1) } },
+          })
+          .then((rows) => rows.length);
+      }),
+    );
     let registered = baseRegistered;
     let active = baseActive;
     const userGrowth: {
       month: string;
       registered: number;
       active: number;
+      activeInMonth: number;
       newUsers: number;
     }[] = [];
     for (let i = 11; i >= 0; i--) {
@@ -1332,6 +1346,7 @@ export class ScalabilityService {
         month: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`,
         registered,
         active,
+        activeInMonth: monthlyActive[11 - i],
         newUsers: inMonth.length,
       });
     }
