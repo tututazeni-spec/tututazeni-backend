@@ -69,6 +69,14 @@ export class ScalabilityController {
     return this.service.getDashboard(tenantId);
   }
 
+  @Get('overview-charts')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: 'Séries dos gráficos da Visão Geral (utilização, crescimento, previsão)' })
+  async getOverviewCharts() {
+    const tenantId = await this.service.resolveTenantId();
+    return this.service.getOverviewCharts(tenantId);
+  }
+
   @Get('dashboard/:tenantId')
   @Roles(Role.ADMIN, Role.AUDITOR)
   @ApiOperation({ summary: 'Dashboard de escalabilidade do tenant' })

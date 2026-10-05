@@ -1265,6 +1265,96 @@ export class ScalabilityService {
   }
 
   /**
+   * Dados dos gráficos da Visão Geral (modulo_scalability.md §5):
+   * - timeline: métricas das últimas 24h agregadas por hora (média; sessões em pico)
+   * - userGrowth: 12 meses — registados/activos acumulados e novos no mês
+   * - forecast: meses até os utilizadores registados atingirem 80% da licença
+   *   (maxUsers), pelo crescimento médio dos últimos 3 meses
+   */
+  async getOverviewCharts(tenantId: string) {
+    const tenant = await this.findTenantOrFail(tenantId);
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const metrics = await this.prisma.scalabilityMetric.findMany({
+      where: { tenantId, capturedAt: { gte: since } },
+      orderBy: { capturedAt: 'asc' },
+      select: {
+        capturedAt: true,
+        cpuUsagePercent: true,
+        memoryUsagePercent: true,
+        requestsPerMinute: true,
+        concurrentSessions: true,
+        avgLatencyMs: true,
+      },
+    });
+    const buckets = new Map<string, typeof metrics>();
+    for (const m of metrics) {
+      const key = new Date(Math.floor(m.capturedAt.getTime() / 3_600_000) * 3_600_000).toISOString();
+      const arr = buckets.get(key) ?? [];
+      arr.push(m);
+      buckets.set(key, arr);
+    }
+    const timeline = [...buckets.entries()].map(([at, rows]) => ({
+      at,
+      cpuUsagePercent: this.round1(this.avg(rows.map((r) => r.cpuUsagePercent))),
+      memoryUsagePercent: this.round1(this.avg(rows.map((r) => r.memoryUsagePercent))),
+      requestsPerMinute: Math.round(this.avg(rows.map((r) => r.requestsPerMinute))),
+      concurrentSessions: Math.max(...rows.map((r) => r.concurrentSessions)),
+      avgLatencyMs: Math.round(this.avg(rows.map((r) => r.avgLatencyMs))),
+    }));
+
+    const now = new Date();
+    const monthStart = (offset: number) =>
+      new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const firstMonth = monthStart(11);
+    const [baseRegistered, baseActive, created] = await Promise.all([
+      this.prisma.read.user.count({ where: { createdAt: { lt: firstMonth } } }),
+      this.prisma.read.user.count({ where: { createdAt: { lt: firstMonth }, active: true } }),
+      this.prisma.read.user.findMany({
+        where: { createdAt: { gte: firstMonth } },
+        select: { createdAt: true, active: true },
+      }),
+    ]);
+    let registered = baseRegistered;
+    let active = baseActive;
+    const userGrowth: {
+      month: string;
+      registered: number;
+      active: number;
+      newUsers: number;
+    }[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const start = monthStart(i);
+      const end = monthStart(i - 1);
+      const inMonth = created.filter((u) => u.createdAt >= start && u.createdAt < end);
+      registered += inMonth.length;
+      active += inMonth.filter((u) => u.active).length;
+      userGrowth.push({
+        month: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`,
+        registered,
+        active,
+        newUsers: inMonth.length,
+      });
+    }
+
+    const target = Math.round(tenant.maxUsers * 0.8);
+    const last3 = userGrowth.slice(-3);
+    const monthlyGrowth = last3.length ? last3.reduce((s, g) => s + g.newUsers, 0) / last3.length : 0;
+    const current = userGrowth[userGrowth.length - 1]?.registered ?? 0;
+    const forecast = {
+      thresholdPercent: 80,
+      targetUsers: target,
+      monthlyGrowth: this.round1(monthlyGrowth),
+      alreadyReached: current >= target,
+      monthsToThreshold:
+        current >= target || monthlyGrowth <= 0
+          ? null
+          : Math.ceil((target - current) / monthlyGrowth),
+    };
+
+    return { timeline, userGrowth, forecast };
+  }
+
+  /**
    * Estimativa de utilizadores simultâneos que a infraestrutura suporta.
    *
    * MEASURED — extrapola das últimas 24h: para cada amostra com carga real
@@ -1369,6 +1459,10 @@ export class ScalabilityService {
     };
     const hours = map[window] ?? 24;
     return new Date(now.getTime() - hours * 60 * 60 * 1000);
+  }
+
+  private round1(v: number): number {
+    return Math.round(v * 10) / 10;
   }
 
   private avg(arr: number[]): number {
