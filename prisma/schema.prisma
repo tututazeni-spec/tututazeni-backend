@@ -7475,33 +7475,33 @@ model NotificationTemplate {
 }
 
 model AuditLog {
-  id           Int         @id @default(autoincrement())
-  userId       Int?
-  action       String // CREATE|UPDATE|DELETE|LOGIN|EXPORT|SEND|READ|APPROVE|REJECT|DENIED|FAILED
-  entity       String // ex: User, PDI, Course, Payslip
-  entityId     Int?
-  metadata     String?     @db.Text // JSON extra
-  hash         String? // SHA-256 deste registo
-  previousHash String? // SHA-256 do registo anterior
-  timestamp    DateTime    @default(now())
-  createdAt    DateTime    @default(now())
-  user         User?       @relation(fields: [userId], references: [id])
-  entityName   String?
-  before       String?
-  after        String?
-  changes      String?
-  status       AuditStatus @default(SUCCESS)
-  severity     RiskLevel   @default(LOW)
-  ip           String?
-  userAgent    String?
-  reason       String?
+  id            Int         @id @default(autoincrement())
+  userId        Int?
+  action        String // CREATE|UPDATE|DELETE|LOGIN|EXPORT|SEND|READ|APPROVE|REJECT|DENIED|FAILED
+  entity        String // ex: User, PDI, Course, Payslip
+  entityId      Int?
+  metadata      String?     @db.Text // JSON extra
+  hash          String? // SHA-256 deste registo
+  previousHash  String? // SHA-256 do registo anterior
+  timestamp     DateTime    @default(now())
+  createdAt     DateTime    @default(now())
+  user          User?       @relation(fields: [userId], references: [id])
+  entityName    String?
+  before        String?
+  after         String?
+  changes       String?
+  status        AuditStatus @default(SUCCESS)
+  severity      RiskLevel   @default(LOW)
+  ip            String?
+  userAgent     String?
+  reason        String?
   // modulo_audit.md §15 — contexto normalizado do evento
   eventType     String? // ex: "Leave.APPROVE"
   module        String? // módulo de origem (ver audit-modules.ts)
-  actorType     String  @default("USER") // USER|SYSTEM|INTEGRATION|SERVICE
+  actorType     String      @default("USER") // USER|SYSTEM|INTEGRATION|SERVICE
   source        String? // UI|API|INTEGRATION|AUTOMATION|JOB
   correlationId String? // x-request-id do pedido
-  schemaVersion Int     @default(1)
+  schemaVersion Int         @default(1)
 
   @@index([entity, entityId])
   @@index([userId])
@@ -15052,29 +15052,29 @@ model AuditPolicy {
 // Ficheiro de auditoria (relatório exportado) ou evidência de investigação.
 // O conteúdo fica na BD e só sai por endpoint autenticado — nunca por link público.
 model AuditExport {
-  id               Int                 @id @default(autoincrement())
-  code             String              @unique
-  kind             String // REPORT | EVIDENCE
-  fileName         String
-  mimeType         String
-  format           String // csv | xlsx | pdf | other
-  reportType       String?
-  incidentId       Int?
-  auditId          Int?
-  periodFrom       DateTime?
-  periodTo         DateTime?
-  filters          Json?
-  recordCount      Int                 @default(0)
-  sizeBytes        Int                 @default(0)
-  confidentiality  String              @default("CONFIDENTIAL") // INTERNAL | CONFIDENTIAL | RESTRICTED
-  sha256           String
-  retentionUntil   DateTime
-  status           String              @default("ACTIVE") // ACTIVE | EXPIRED | PURGED
-  result           String              @default("SUCCESS") // SUCCESS | FAILED
-  createdById      Int?
-  createdAt        DateTime            @default(now())
-  content          Bytes?
-  accesses         AuditExportAccess[]
+  id              Int                 @id @default(autoincrement())
+  code            String              @unique
+  kind            String // REPORT | EVIDENCE
+  fileName        String
+  mimeType        String
+  format          String // csv | xlsx | pdf | other
+  reportType      String?
+  incidentId      Int?
+  auditId         Int?
+  periodFrom      DateTime?
+  periodTo        DateTime?
+  filters         Json?
+  recordCount     Int                 @default(0)
+  sizeBytes       Int                 @default(0)
+  confidentiality String              @default("CONFIDENTIAL") // INTERNAL | CONFIDENTIAL | RESTRICTED
+  sha256          String
+  retentionUntil  DateTime
+  status          String              @default("ACTIVE") // ACTIVE | EXPIRED | PURGED
+  result          String              @default("SUCCESS") // SUCCESS | FAILED
+  createdById     Int?
+  createdAt       DateTime            @default(now())
+  content         Bytes?
+  accesses        AuditExportAccess[]
 
   @@index([kind])
   @@index([createdAt])
@@ -15283,4 +15283,60 @@ model ScalabilityCostEntry {
   @@unique([month, category])
   @@index([month])
   @@map("scalability_cost_entries")
+}
+
+// modulo_scalability.md §27/§28: histórico durável (as amostras de filas e de
+// performance por endpoint viviam só em memória). Separado do Audit (§28.2).
+model ScalabilityQueueMetric {
+  id              String   @id @default(cuid())
+  capturedAt      DateTime @default(now())
+  queue           String
+  pending         Int      @default(0)
+  processing      Int      @default(0)
+  failed          Int      @default(0)
+  throughput      Float    @default(0) // jobs/min
+  avgProcessingMs Float?
+
+  @@index([queue, capturedAt])
+  @@index([capturedAt])
+  @@map("scalability_queue_metrics")
+}
+
+model ScalabilityEndpointMetric {
+  id         String   @id @default(cuid())
+  capturedAt DateTime @default(now())
+  service    String   @default("api")
+  endpoint   String // "METHOD /route"
+  p50Ms      Float
+  p95Ms      Float
+  p99Ms      Float
+  throughput Float    @default(0) // pedidos/s no intervalo
+  errorRate  Float    @default(0) // % no intervalo
+
+  @@index([endpoint, capturedAt])
+  @@index([capturedAt])
+  @@map("scalability_endpoint_metrics")
+}
+
+// Downsampling de ScalabilityMetric (§28.1): 1 linha por hora, mantida mais tempo que as amostras brutas.
+model ScalabilityMetricHourly {
+  id             String   @id @default(cuid())
+  hour           DateTime @unique
+  samples        Int
+  avgCpu         Float
+  maxCpu         Float
+  avgMemory      Float
+  maxMemory      Float
+  avgDisk        Float
+  maxActiveUsers Int
+  maxConcurrent  Int
+  avgLatencyMs   Float
+  maxP95Ms       Int
+  maxP99Ms       Int
+  avgRpm         Float
+  maxRpm         Int
+  avgErrorRate   Float
+  maxStorageGb   Float
+
+  @@map("scalability_metrics_hourly")
 }

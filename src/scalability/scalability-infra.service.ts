@@ -161,6 +161,50 @@ export class ScalabilityInfraService {
   // §7 API & Backend
   // ============================================================
 
+  /** §27 PerformanceMetric: contagens acumuladas e percentis por endpoint (para o histórico). */
+  async endpointAggregates() {
+    const values = await this.histogram('http_request_duration_seconds');
+    const byRoute = new Map<string, RouteAgg>();
+    for (const v of values) {
+      const { method, route, status_code, le } = v.labels;
+      if (route === 'unknown') continue;
+      const key = `${method} ${route}`;
+      let agg = byRoute.get(key);
+      if (!agg) {
+        agg = {
+          method: String(method),
+          route: String(route),
+          count: 0,
+          sum: 0,
+          c4xx: 0,
+          c5xx: 0,
+          timeouts: 0,
+          buckets: new Map(),
+        };
+        byRoute.set(key, agg);
+      }
+      const status = Number(status_code);
+      if (v.metricName === 'http_request_duration_seconds_count') {
+        agg.count += v.value;
+        if (status >= 500) agg.c5xx += v.value;
+        else if (status >= 400) agg.c4xx += v.value;
+      } else if (v.metricName === 'http_request_duration_seconds_bucket') {
+        const bound = le === '+Inf' ? Infinity : Number(le);
+        agg.buckets.set(bound, (agg.buckets.get(bound) ?? 0) + v.value);
+      }
+    }
+    return [...byRoute.entries()]
+      .filter(([, a]) => a.count > 0)
+      .map(([endpoint, a]) => ({
+        endpoint,
+        count: a.count,
+        errors: a.c4xx + a.c5xx,
+        p50Ms: this.ms(this.quantile(0.5, a.buckets, a.count)),
+        p95Ms: this.ms(this.quantile(0.95, a.buckets, a.count)),
+        p99Ms: this.ms(this.quantile(0.99, a.buckets, a.count)),
+      }));
+  }
+
   async getApiMetrics() {
     const values = await this.histogram('http_request_duration_seconds');
     const byRoute = new Map<string, RouteAgg>();

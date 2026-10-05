@@ -16,6 +16,7 @@ import {
 import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { FrontendPerfSampleDto } from './frontend-perf.dto';
+import { ScalabilityHistoryService } from './scalability-history.service';
 import { ScalabilityCapacityService } from './scalability-capacity.service';
 import {
   UpdateAutoScalingDto,
@@ -77,6 +78,7 @@ export class ScalabilityInfraController {
     private readonly reports: ScalabilityReportsService,
     private readonly settings: ScalabilitySettingsService,
     private readonly modules: ScalabilityModulesService,
+    private readonly history: ScalabilityHistoryService,
   ) {}
 
   @Get('api-metrics')
@@ -275,6 +277,34 @@ export class ScalabilityInfraController {
   @ApiOperation({ summary: 'Avalia já as regras de alerta (cria/resolve alertas)' })
   evaluateAlertRules() {
     return this.alertRules.evaluateAndRaise();
+  }
+
+  @Get('history/queues')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: '§27 QueueMetric: histórico persistido das filas' })
+  getQueueHistory(@Query('hours') hours?: string, @Query('queue') queue?: string) {
+    return this.history.getQueueHistory(Number(hours) || 24, queue);
+  }
+
+  @Get('history/endpoints')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: '§27 PerformanceMetric: p50/p95/p99 por endpoint ao longo do tempo' })
+  getEndpointHistory(@Query('hours') hours?: string, @Query('endpoint') endpoint?: string) {
+    return this.history.getEndpointHistory(Number(hours) || 24, endpoint);
+  }
+
+  @Get('history/hourly')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: '§28: métricas agregadas por hora (downsampling)' })
+  getHourlyHistory(@Query('days') days?: string) {
+    return this.history.getHourlyHistory(Number(days) || 30);
+  }
+
+  @Get('history/retention')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: '§28: estado de retenção e downsampling' })
+  getRetentionStatus() {
+    return this.history.getRetentionStatus();
   }
 
   @Get('module-usage')

@@ -216,6 +216,21 @@ export class ScalabilityQueuesService {
     }
   }
 
+  /** §27 QueueMetric: estado actual por fila Bull, para persistir no histórico. */
+  async snapshotForHistory() {
+    if (!this.queuesEnabled) return [];
+    const now = Date.now();
+    const stats = await Promise.all(this.defs.map(d => this.queueStats(d, now)));
+    return stats.map(q => ({
+      queue: q.key,
+      pending: q.queueSize,
+      processing: q.active,
+      failed: q.failed,
+      throughput: q.throughputPerMin,
+      avgProcessingMs: q.avgDurationMs,
+    }));
+  }
+
   async getQueueMetrics() {
     const now = Date.now();
     const dbJobs = await this.dbJobs();
