@@ -4,6 +4,8 @@ import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { FrontendPerfSampleDto } from './frontend-perf.dto';
 import { ScalabilityInfraService } from './scalability-infra.service';
+import { ScalabilityQueuesService } from './scalability-queues.service';
+import { ScalabilityStorageService } from './scalability-storage.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -14,7 +16,11 @@ import { Role } from '../auth/enums/role.enum';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('scalability')
 export class ScalabilityInfraController {
-  constructor(private readonly infra: ScalabilityInfraService) {}
+  constructor(
+    private readonly infra: ScalabilityInfraService,
+    private readonly queues: ScalabilityQueuesService,
+    private readonly storage: ScalabilityStorageService,
+  ) {}
 
   @Get('api-metrics')
   @Roles(Role.ADMIN, Role.AUDITOR)
@@ -44,5 +50,19 @@ export class ScalabilityInfraController {
   @ApiOperation({ summary: 'Aba Conte√∫do & CDN: Web Vitals, bundle, cache e p√°ginas cr√≠ticas' })
   getFrontendMetrics() {
     return this.infra.getFrontendMetrics();
+  }
+
+  @Get('queue-metrics')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: 'Aba Filas & Jobs: estado das filas, throughput e queue depth' })
+  getQueueMetrics() {
+    return this.queues.getQueueMetrics();
+  }
+
+  @Get('storage-metrics')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: 'Aba Storage: utilizaÁ„o por mÛdulo, tipo, unidade e crescimento' })
+  getStorageMetrics() {
+    return this.storage.getStorageMetrics();
   }
 }

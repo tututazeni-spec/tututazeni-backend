@@ -4,12 +4,15 @@
 // ============================================================
 
 import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bull';
 import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScalabilityService } from './scalability.service';
 import { ScalabilityController } from './scalability.controller';
 import { ScalabilityInfraService } from './scalability-infra.service';
 import { ScalabilityInfraController } from './scalability-infra.controller';
+import { ScalabilityQueuesService } from './scalability-queues.service';
+import { ScalabilityStorageService } from './scalability-storage.service';
 import { ScalabilityEventListeners } from './scalability.events';
 import { PrismaModule } from '../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -22,6 +25,12 @@ import { ApiIntegrationModule } from '../api-integration/api-integration.module'
     NotificationsModule,
     AuditModule,
     ApiIntegrationModule,
+    BullModule.registerQueue(
+      { name: 'audit' },
+      { name: 'email' },
+      { name: 'notifications' },
+      { name: 'webhooks' },
+    ),
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot({
       // Wildcard events para padrões como 'integration.*'
@@ -32,7 +41,13 @@ import { ApiIntegrationModule } from '../api-integration/api-integration.module'
     }),
   ],
   controllers: [ScalabilityController, ScalabilityInfraController],
-  providers: [ScalabilityService, ScalabilityInfraService, ScalabilityEventListeners],
+  providers: [
+    ScalabilityService,
+    ScalabilityInfraService,
+    ScalabilityQueuesService,
+    ScalabilityStorageService,
+    ScalabilityEventListeners,
+  ],
   exports: [ScalabilityService],
 })
 export class ScalabilityModule {}
