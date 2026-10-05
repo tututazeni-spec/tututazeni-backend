@@ -4,14 +4,20 @@
 // ============================================================
 
 import {
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Optional,
 } from '@nestjs/common';
 import * as os from 'os';
 import { Prisma, AuthType } from '@prisma/client';
+import {
+  TRAFFIC_METRICS_SOURCE,
+  TrafficMetricsSource,
+} from './traffic-metrics.source';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../common/services/audit.service';
@@ -110,6 +116,10 @@ export class ScalabilityService {
     private readonly audit: AuditService,
     private readonly events: EventEmitter2,
     private readonly apiIntegration: ApiIntegrationService,
+    // Opcional: preenchido pelo módulo Monitoring quando existir.
+    @Optional()
+    @Inject(TRAFFIC_METRICS_SOURCE)
+    private readonly trafficSource?: TrafficMetricsSource,
   ) {}
 
   // ============================================================
@@ -881,6 +891,22 @@ export class ScalabilityService {
     return Math.round((1 - (cur.idle - prev.idle) / dTotal) * 1000) / 10;
   }
 
+  // Lê a fonte de tráfego se existir; uma falha nela nunca impede a captura
+  // de CPU/memória/sessões.
+  private async readTrafficMetrics(): Promise<Partial<SystemMetricsSnapshot>> {
+    if (!this.trafficSource) return {};
+    try {
+      return await this.trafficSource.getTrafficMetrics();
+    } catch (err: unknown) {
+      this.logger.warn({
+        action: 'READ_TRAFFIC_METRICS',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao ler métricas de tráfego da fonte de monitorização',
+      });
+      return {};
+    }
+  }
+
   private async collectSystemSnapshot(): Promise<SystemMetricsSnapshot> {
     const since = new Date(Date.now() - ScalabilityService.SESSION_WINDOW_MS);
     const [activeUsers, sessionGroups] = await Promise.all([
@@ -890,6 +916,7 @@ export class ScalabilityService {
         where: { createdAt: { gte: since }, revokedAt: null },
       }),
     ]);
+    const traffic = await this.readTrafficMetrics();
     const memTotal = os.totalmem();
     return {
       activeUsers,
@@ -897,8 +924,7 @@ export class ScalabilityService {
       cpuUsagePercent: this.sampleCpuPercent(),
       memoryUsagePercent:
         Math.round(((memTotal - os.freemem()) / memTotal) * 1000) / 10,
-      // Sem integração Prometheus/CloudWatch: disco, latência, pedidos/min e
-      // erros continuam sem fonte (0) — ver docs/modulo_scalability.md §7.
+      // Sem fonte de tráfego (módulo Monitoring) estes campos ficam a 0.
       diskUsagePercent: 0,
       avgLatencyMs: 0,
       p95LatencyMs: 0,
@@ -910,6 +936,7 @@ export class ScalabilityService {
       bandwidthMbps: 0,
       videoStreamCount: 0,
       apiCallsPerMin: 0,
+      ...traffic,
     };
   }
 
@@ -1366,7 +1393,12 @@ export class ScalabilityService {
           : Math.ceil((target - current) / monthlyGrowth),
     };
 
-    return { timeline, userGrowth, forecast };
+    return {
+      timeline,
+      userGrowth,
+      forecast,
+      trafficSourceConnected: !!this.trafficSource,
+    };
   }
 
   /**
