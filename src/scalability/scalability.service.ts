@@ -1402,6 +1402,181 @@ export class ScalabilityService {
   }
 
   /**
+   * Aba Utilizadores & Carga (modulo_scalability.md §6).
+   *
+   * - Utilizadores activos diários/mensais: utilizadores distintos com
+   *   RefreshToken criado nas últimas 24h / 30 dias (mesmo sinal de actividade
+   *   do overview-charts).
+   * - Sessões por utilizador: logins ≈ tokens criados em 30d menos os que são
+   *   rotações (tokens que substituíram outro, via replacedById).
+   * - Duração média da sessão e Web/mobile: não existe esse dado (sem
+   *   registo de dispositivo nem fim de sessão) — devolvidos a null.
+   * - Requests por utilizador: requestsPerMinute ÷ sessões simultâneas das
+   *   últimas 24h; null enquanto não houver fonte de tráfego (Monitoring).
+   */
+  async getUsersLoad(tenantId: string) {
+    await this.findTenantOrFail(tenantId);
+    const now = Date.now();
+    const day = 24 * 60 * 60 * 1000;
+    const since24h = new Date(now - day);
+    const since30d = new Date(now - 30 * day);
+    const since365d = new Date(now - 365 * day);
+
+    const [
+      total,
+      activeUsers,
+      dailyRows,
+      monthlyRows,
+      tokens30d,
+      rotated30d,
+      newDay,
+      newMonth,
+      newYear,
+      metrics24h,
+      historicPeak,
+      latestMetric,
+    ] = await Promise.all([
+      this.prisma.read.user.count(),
+      this.prisma.read.user.count({ where: { active: true } }),
+      this.prisma.refreshToken.groupBy({
+        by: ['userId'],
+        where: { createdAt: { gte: since24h } },
+      }),
+      this.prisma.refreshToken.groupBy({
+        by: ['userId'],
+        where: { createdAt: { gte: since30d } },
+      }),
+      this.prisma.refreshToken.count({ where: { createdAt: { gte: since30d } } }),
+      this.prisma.refreshToken.count({
+        where: { createdAt: { gte: since30d }, replacedById: { not: null } },
+      }),
+      this.prisma.read.user.count({ where: { createdAt: { gte: since24h } } }),
+      this.prisma.read.user.count({ where: { createdAt: { gte: since30d } } }),
+      this.prisma.read.user.count({ where: { createdAt: { gte: since365d } } }),
+      this.prisma.scalabilityMetric.findMany({
+        where: { tenantId, capturedAt: { gte: since24h } },
+        orderBy: { capturedAt: 'asc' },
+        select: { capturedAt: true, concurrentSessions: true, requestsPerMinute: true },
+      }),
+      this.prisma.scalabilityMetric.aggregate({
+        where: { tenantId },
+        _max: { concurrentSessions: true },
+      }),
+      this.prisma.scalabilityMetric.findFirst({
+        where: { tenantId },
+        orderBy: { capturedAt: 'desc' },
+        select: { concurrentSessions: true },
+      }),
+    ]);
+
+    const sessions = metrics24h.map((m) => m.concurrentSessions);
+    const withTraffic = metrics24h.filter(
+      (m) => m.requestsPerMinute > 0 && m.concurrentSessions > 0,
+    );
+    const requestsPerUserPerMin = withTraffic.length
+      ? this.round1(
+          this.avg(withTraffic.map((m) => m.requestsPerMinute / m.concurrentSessions)),
+        )
+      : null;
+
+    const buckets = new Map<number, number>();
+    for (const m of metrics24h) {
+      const k = Math.floor(m.capturedAt.getTime() / 3_600_000) * 3_600_000;
+      buckets.set(k, Math.max(buckets.get(k) ?? 0, m.concurrentSessions));
+    }
+    const concurrentTimeline = [...buckets.entries()].map(([k, peak]) => ({
+      at: new Date(k).toISOString(),
+      peak,
+    }));
+
+    const monthlyIds = new Set(monthlyRows.map((r) => r.userId));
+    const people = await this.prisma.read.user.findMany({
+      where: { active: true },
+      select: {
+        id: true,
+        departmentId: true,
+        positionId: true,
+        unitId: true,
+        roleId: true,
+        workLocation: true,
+        contractType: true,
+      },
+    });
+    const [departments, positions, units, roles] = await Promise.all([
+      this.prisma.department.findMany({ select: { id: true, name: true } }),
+      this.prisma.position.findMany({ select: { id: true, name: true } }),
+      this.prisma.unit.findMany({ select: { id: true, name: true } }),
+      this.prisma.role.findMany({ select: { id: true, name: true } }),
+    ]);
+    const names = (rows: { id: number; name: string }[]) =>
+      new Map(rows.map((r) => [r.id, r.name]));
+    const segment = (
+      key: (u: (typeof people)[number]) => string | number | null,
+      label?: Map<number, string>,
+    ) => {
+      const acc = new Map<string, { users: number; activeMonthly: number }>();
+      for (const u of people) {
+        const raw = key(u);
+        const name =
+          raw === null || raw === ''
+            ? 'Sem atribuição'
+            : typeof raw === 'number'
+              ? (label?.get(raw) ?? `#${raw}`)
+              : raw;
+        const row = acc.get(name) ?? { users: 0, activeMonthly: 0 };
+        row.users += 1;
+        if (monthlyIds.has(u.id)) row.activeMonthly += 1;
+        acc.set(name, row);
+      }
+      return [...acc.entries()]
+        .map(([name, v]) => ({ name, ...v }))
+        .sort((a, b) => b.users - a.users)
+        .slice(0, 15);
+    };
+
+    const pct = (n: number) => (total > 0 ? this.round1((n / total) * 100) : 0);
+    return {
+      totals: {
+        total,
+        active: activeUsers,
+        activeDaily: dailyRows.length,
+        activeMonthly: monthlyRows.length,
+      },
+      concurrent: {
+        current: latestMetric?.concurrentSessions ?? 0,
+        peak24h: sessions.length ? Math.max(...sessions) : 0,
+        historicPeak: historicPeak._max.concurrentSessions ?? 0,
+        avg24h: sessions.length ? this.round1(this.avg(sessions)) : 0,
+        min24h: sessions.length ? Math.min(...sessions) : 0,
+        max24h: sessions.length ? Math.max(...sessions) : 0,
+        timeline: concurrentTimeline,
+      },
+      sessions: {
+        avgPerUser30d: monthlyRows.length
+          ? this.round1(Math.max(tokens30d - rotated30d, 0) / monthlyRows.length)
+          : 0,
+        avgDurationMinutes: null as number | null,
+        requestsPerUserPerMin,
+      },
+      growth: {
+        daily: { newUsers: newDay, percent: pct(newDay) },
+        monthly: { newUsers: newMonth, percent: pct(newMonth) },
+        yearly: { newUsers: newYear, percent: pct(newYear) },
+      },
+      segmentation: {
+        department: segment((u) => u.departmentId, names(departments)),
+        position: segment((u) => u.positionId, names(positions)),
+        unit: segment((u) => u.unitId, names(units)),
+        role: segment((u) => u.roleId, names(roles)),
+        location: segment((u) => u.workLocation),
+        userType: segment((u) => u.contractType),
+        platform: null as null | { web: number; mobile: number },
+      },
+      trafficSourceConnected: !!this.trafficSource,
+    };
+  }
+
+  /**
    * Estimativa de utilizadores simultâneos que a infraestrutura suporta.
    *
    * MEASURED — extrapola das últimas 24h: para cada amostra com carga real
