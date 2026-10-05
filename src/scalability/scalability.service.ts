@@ -10,6 +10,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
+import * as os from 'os';
 import { Prisma, AuthType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -841,7 +842,11 @@ export class ScalabilityService {
       // Aqui: simular ou buscar de endpoint de health interno
       const snapshot = await this.collectSystemSnapshot();
 
-      await this.prisma.scalabilityMetric.create({ data: snapshot });
+      // O dashboard filtra por tenantId — sem ele nenhuma métrica era lida.
+      const tenantId = await this.resolveTenantId().catch(() => undefined);
+      await this.prisma.scalabilityMetric.create({
+        data: { ...snapshot, ...(tenantId ? { tenantId } : {}) },
+      });
 
       // Verificar thresholds para gerar alertas
       await this.evaluateAlertThresholds(snapshot);
@@ -854,14 +859,46 @@ export class ScalabilityService {
     }
   }
 
+  // Janela em que um refresh token recém-emitido conta o utilizador como
+  // "em sessão" — não há registo de sessões; a rotação de RefreshToken é o
+  // melhor sinal de actividade autenticada disponível.
+  private static readonly SESSION_WINDOW_MS = 15 * 60 * 1000;
+  private lastCpuSample: { idle: number; total: number } | null = null;
+
+  private sampleCpuPercent(): number {
+    const cpus = os.cpus();
+    const cur = cpus.reduce(
+      (a, c) => {
+        const t = Object.values(c.times).reduce((s, v) => s + v, 0);
+        return { idle: a.idle + c.times.idle, total: a.total + t };
+      },
+      { idle: 0, total: 0 },
+    );
+    const prev = this.lastCpuSample ?? { idle: 0, total: 0 };
+    this.lastCpuSample = cur;
+    const dTotal = cur.total - prev.total;
+    if (dTotal <= 0) return 0;
+    return Math.round((1 - (cur.idle - prev.idle) / dTotal) * 1000) / 10;
+  }
+
   private async collectSystemSnapshot(): Promise<SystemMetricsSnapshot> {
-    // Em produção: buscar via API interna de infraestrutura
-    // Placeholder que pode ser substituído por integração real com Prometheus/CloudWatch
+    const since = new Date(Date.now() - ScalabilityService.SESSION_WINDOW_MS);
+    const [activeUsers, sessionGroups] = await Promise.all([
+      this.prisma.read.user.count({ where: { active: true } }),
+      this.prisma.refreshToken.groupBy({
+        by: ['userId'],
+        where: { createdAt: { gte: since }, revokedAt: null },
+      }),
+    ]);
+    const memTotal = os.totalmem();
     return {
-      activeUsers: 0,
-      concurrentSessions: 0,
-      cpuUsagePercent: 0,
-      memoryUsagePercent: 0,
+      activeUsers,
+      concurrentSessions: sessionGroups.length,
+      cpuUsagePercent: this.sampleCpuPercent(),
+      memoryUsagePercent:
+        Math.round(((memTotal - os.freemem()) / memTotal) * 1000) / 10,
+      // Sem integração Prometheus/CloudWatch: disco, latência, pedidos/min e
+      // erros continuam sem fonte (0) — ver docs/modulo_scalability.md §7.
       diskUsagePercent: 0,
       avgLatencyMs: 0,
       p95LatencyMs: 0,
@@ -1132,6 +1169,7 @@ export class ScalabilityService {
       }),
     ]);
 
+    const capacityEstimate = await this.estimateConcurrentCapacity(tenantId);
     const [registeredUsers, activeUsers, dbUsagePercent] = await Promise.all([
       this.prisma.read.user.count(),
       this.prisma.read.user.count({ where: { active: true } }),
@@ -1197,6 +1235,7 @@ export class ScalabilityService {
         memoryUsagePercent: latestMetric?.memoryUsagePercent ?? 0,
         dbUsagePercent,
       },
+      capacityEstimate,
       integrations: {
         total: integrations.reduce((s, i) => s + i._count.id, 0),
         active: activeIntegrations,
@@ -1222,6 +1261,55 @@ export class ScalabilityService {
         avgLatencyMs: latencyNow,
         latencyTarget: slas?.maxLatencyMs ?? 2000,
       },
+    };
+  }
+
+  /**
+   * Estimativa de utilizadores simultâneos que a infraestrutura suporta.
+   *
+   * MEASURED — extrapola das últimas 24h: para cada amostra com carga real
+   * (≥5 sessões e CPU ≥20%) capacidade = sessões ÷ CPU; devolve a mediana.
+   * Só o CPU entra: a memória tem uma base fixa alta que não cresce com os
+   * utilizadores e faria a extrapolação subestimar brutalmente.
+   *
+   * MODEL — sem carga suficiente, aplica a lei de Little ao pool de ligações
+   * da BD (gargalo habitual de NestJS+Prisma): cada utilizador faz 1 pedido
+   * por THINK_TIME_S e cada pedido segura uma ligação SERVICE_TIME_MS, logo
+   * utilizadores ≈ pool × THINK_TIME_S×1000 ÷ SERVICE_TIME_MS. Os pressupostos
+   * vão na resposta para a UI os mostrar; é uma estimativa teórica, não medida.
+   */
+  private async estimateConcurrentCapacity(tenantId: string): Promise<{
+    concurrentUsers: number;
+    method: 'MEASURED' | 'MODEL';
+    basis: string;
+  }> {
+    const samples = await this.prisma.scalabilityMetric.findMany({
+      where: {
+        tenantId,
+        capturedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        concurrentSessions: { gte: 5 },
+        cpuUsagePercent: { gte: 20 },
+      },
+      select: { concurrentSessions: true, cpuUsagePercent: true },
+    });
+    if (samples.length >= 10) {
+      const caps = samples
+        .map((s) => s.concurrentSessions / (Math.min(s.cpuUsagePercent, 100) / 100))
+        .sort((a, b) => a - b);
+      return {
+        concurrentUsers: Math.round(caps[Math.floor(caps.length / 2)]),
+        method: 'MEASURED',
+        basis: `Mediana de ${samples.length} amostras das últimas 24h (sessões ÷ CPU).`,
+      };
+    }
+
+    const THINK_TIME_S = 10;
+    const SERVICE_TIME_MS = 50;
+    const pool = parseInt(process.env.DB_POOL_MAX || '50', 10);
+    return {
+      concurrentUsers: Math.round((pool * THINK_TIME_S * 1000) / SERVICE_TIME_MS),
+      method: 'MODEL',
+      basis: `Modelo teórico: pool de ${pool} ligações à BD, 1 pedido por utilizador a cada ${THINK_TIME_S}s, ${SERVICE_TIME_MS}ms por pedido. Passa a valor medido quando houver carga real.`,
     };
   }
 

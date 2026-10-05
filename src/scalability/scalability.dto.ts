@@ -462,6 +462,11 @@ export class ScalabilityDashboardDto {
     memoryUsagePercent: number;
     dbUsagePercent: number;
   };
+  capacityEstimate: {
+    concurrentUsers: number;
+    method: 'MEASURED' | 'MODEL';
+    basis: string;
+  };
   integrations: {
     total: number;
     active: number;
