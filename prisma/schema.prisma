@@ -15107,3 +15107,25 @@ model DatabaseSizeSample {
   @@index([capturedAt])
   @@map("database_size_samples")
 }
+
+// modulo_scalability.md §10: uma linha por visualização de página (RUM).
+model FrontendPerfSample {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  path       String
+  ttfbMs     Float?
+  fcpMs      Float?
+  lcpMs      Float?
+  inpMs      Float?
+  loadMs     Float?
+  jsBytes    Int      @default(0)
+  cssBytes   Int      @default(0)
+  imageBytes Int      @default(0)
+  requests   Int      @default(0)
+  cacheHits  Int      @default(0)
+  errors     Int      @default(0)
+
+  @@index([createdAt])
+  @@index([path, createdAt])
+  @@map("frontend_perf_samples")
+}

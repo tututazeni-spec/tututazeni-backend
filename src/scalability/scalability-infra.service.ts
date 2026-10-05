@@ -9,6 +9,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { register } from 'prom-client';
 import { PrismaService } from '../prisma/prisma.service';
+import { FrontendPerfSampleDto } from './frontend-perf.dto';
 
 interface HistogramValue {
   labels: Record<string, string | number>;
@@ -39,6 +40,20 @@ interface CountSample {
 const WINDOW_MS = 5 * 60 * 1000;
 const SLOW_REQUEST_S = 1;
 
+// §10 — páginas críticas (prefixo de rota → rótulo).
+const CRITICAL_PAGES: { label: string; prefix: string }[] = [
+  { label: 'Dashboard', prefix: '/dashboard' },
+  { label: 'Dashboard RH', prefix: '/dashboard-rh' },
+  { label: 'Analytics', prefix: '/analytics' },
+  { label: 'Reports', prefix: '/reports' },
+  { label: 'Payroll', prefix: '/payroll' },
+  { label: 'Training', prefix: '/trainings' },
+  { label: 'Users', prefix: '/users' },
+  { label: 'Courses', prefix: '/courses' },
+];
+const FRONTEND_WINDOW_H = 24;
+const SLOW_PAGE_LCP_MS = 2500;
+
 @Injectable()
 export class ScalabilityInfraService {
   private readonly logger = new Logger(ScalabilityInfraService.name);
@@ -53,9 +68,11 @@ export class ScalabilityInfraService {
   private async histogram(name: string): Promise<HistogramValue[]> {
     const metric = register.getSingleMetric(name);
     if (!metric) return [];
-    const data = await (metric as unknown as {
-      get: () => Promise<{ values: HistogramValue[] }>;
-    }).get();
+    const data = await (
+      metric as unknown as {
+        get: () => Promise<{ values: HistogramValue[] }>;
+      }
+    ).get();
     return data.values;
   }
 
@@ -98,7 +115,7 @@ export class ScalabilityInfraService {
     }
     const prismaVals = await this.histogram('prisma_query_duration_seconds');
     const queries = prismaVals
-      .filter((v) => v.metricName === 'prisma_query_duration_seconds_count')
+      .filter(v => v.metricName === 'prisma_query_duration_seconds_count')
       .reduce((s, v) => s + v.value, 0);
     let txs = 0;
     let blksRead = 0;
@@ -118,15 +135,12 @@ export class ScalabilityInfraService {
   private pushSample(s: CountSample) {
     this.samples.push(s);
     const cutoff = s.at - 60 * 60 * 1000;
-    this.samples = this.samples.filter((x) => x.at >= cutoff);
+    this.samples = this.samples.filter(x => x.at >= cutoff);
   }
 
   /** Taxa por segundo entre a amostra mais antiga dentro da janela e a actual. */
-  private rate(
-    now: CountSample,
-    pick: (s: CountSample) => number,
-  ): number | null {
-    const base = this.samples.find((s) => now.at - s.at <= WINDOW_MS && s.at < now.at);
+  private rate(now: CountSample, pick: (s: CountSample) => number): number | null {
+    const base = this.samples.find(s => now.at - s.at <= WINDOW_MS && s.at < now.at);
     if (!base) return null;
     const dt = (now.at - base.at) / 1000;
     const delta = pick(now) - pick(base);
@@ -191,8 +205,8 @@ export class ScalabilityInfraService {
       buckets: new Map<number, number>(),
     };
     const endpoints = [...byRoute.values()]
-      .filter((a) => a.count > 0 && a.route !== 'unknown')
-      .map((a) => {
+      .filter(a => a.count > 0 && a.route !== 'unknown')
+      .map(a => {
         const p95 = this.quantile(0.95, a.buckets, a.count);
         const underSlow = a.buckets.get(SLOW_REQUEST_S) ?? a.count;
         const errorRate = ((a.c4xx + a.c5xx) / a.count) * 100;
@@ -227,9 +241,9 @@ export class ScalabilityInfraService {
     }
 
     const now = await this.countersNow();
-    const rps = this.rate(now, (s) => s.requests);
+    const rps = this.rate(now, s => s.requests);
     this.pushSample(now);
-    const errRps = this.rate(now, (s) => s.errors5xx);
+    const errRps = this.rate(now, s => s.errors5xx);
 
     return {
       sinceProcessStartSeconds: Math.round(process.uptime()),
@@ -273,7 +287,9 @@ export class ScalabilityInfraService {
     try {
       await this.recordSizeSample();
     } catch (err: unknown) {
-      this.logger.warn(`Falha a amostrar tamanho da BD: ${err instanceof Error ? err.message : err}`);
+      this.logger.warn(
+        `Falha a amostrar tamanho da BD: ${err instanceof Error ? err.message : err}`,
+      );
     }
   }
 
@@ -286,7 +302,7 @@ export class ScalabilityInfraService {
     await this.prisma.databaseSizeSample.create({
       data: {
         sizeBytes: size.bytes,
-        tables: tables.map((t) => ({ name: t.name, bytes: Number(t.bytes) })),
+        tables: tables.map(t => ({ name: t.name, bytes: Number(t.bytes) })),
       },
     });
   }
@@ -373,9 +389,9 @@ export class ScalabilityInfraService {
     ]);
 
     const now = await this.countersNow();
-    const txPerSec = this.rate(now, (s) => s.txs);
-    const queriesPerSec = this.rate(now, (s) => s.queries);
-    const blksReadPerSec = this.rate(now, (s) => s.blksRead);
+    const txPerSec = this.rate(now, s => s.txs);
+    const queriesPerSec = this.rate(now, s => s.queries);
+    const blksReadPerSec = this.rate(now, s => s.blksRead);
     this.pushSample(now);
 
     // Prisma: duração agregada de todas as queries da aplicação desde o arranque.
@@ -411,7 +427,7 @@ export class ScalabilityInfraService {
     const windowGrowth = (days: number) => {
       if (!latest) return null;
       const from = latest.capturedAt.getTime() - days * 86_400_000;
-      const base = samples.find((s) => s.capturedAt.getTime() >= from);
+      const base = samples.find(s => s.capturedAt.getTime() >= from);
       if (!base || base === latest) return null;
       const covered = (latest.capturedAt.getTime() - base.capturedAt.getTime()) / 86_400_000;
       return {
@@ -442,8 +458,7 @@ export class ScalabilityInfraService {
     if (first && latest && first !== latest) {
       const days = (latest.capturedAt.getTime() - first.capturedAt.getTime()) / 86_400_000;
       if (days >= 1) {
-        const perMonth =
-          ((Number(latest.sizeBytes) - Number(first.sizeBytes)) / GB / days) * 30;
+        const perMonth = ((Number(latest.sizeBytes) - Number(first.sizeBytes)) / GB / days) * 30;
         const currentGb = toGb(Number(latest.sizeBytes));
         forecast = {
           currentGb,
@@ -457,16 +472,17 @@ export class ScalabilityInfraService {
     // Tabelas que mais crescem: diferença entre a amostra mais antiga e a última.
     type TableSize = { name: string; bytes: number };
     const tableMap = (s?: { tables: unknown }) =>
-      new Map(((s?.tables as TableSize[] | null) ?? []).map((t) => [t.name, t.bytes]));
+      new Map(((s?.tables as TableSize[] | null) ?? []).map(t => [t.name, t.bytes]));
     const firstTables = tableMap(first);
     const growingTables =
       first && latest && first !== latest
         ? [...tableMap(latest).entries()]
             .map(([name, bytes]) => ({
               name,
-              growthMb: Math.round(((bytes - (firstTables.get(name) ?? 0)) / 1024 ** 2) * 100) / 100,
+              growthMb:
+                Math.round(((bytes - (firstTables.get(name) ?? 0)) / 1024 ** 2) * 100) / 100,
             }))
-            .filter((t) => t.growthMb > 0)
+            .filter(t => t.growthMb > 0)
             .sort((a, b) => b.growthMb - a.growthMb)
             .slice(0, 10)
         : [];
@@ -504,7 +520,7 @@ export class ScalabilityInfraService {
       slowQueries: slow
         ? {
             source: 'pg_stat_statements' as const,
-            rows: slow.map((q) => ({
+            rows: slow.map(q => ({
               query: q.query,
               calls: Number(q.calls),
               meanMs: this.round1(q.mean_ms),
@@ -515,13 +531,13 @@ export class ScalabilityInfraService {
       indexes: {
         total: indexes[0]?.total ?? 0,
         unusedCount: unusedIdx.length,
-        unused: unusedIdx.map((i) => ({
+        unused: unusedIdx.map(i => ({
           table: i.table,
           index: i.index,
           sizeMb: Math.round((Number(i.bytes) / 1024 ** 2) * 100) / 100,
         })),
       },
-      largestTables: tables.map((t) => ({
+      largestTables: tables.map(t => ({
         name: t.name,
         sizeMb: Math.round((Number(t.bytes) / 1024 ** 2) * 100) / 100,
         rows: Number(t.rows),
@@ -535,6 +551,159 @@ export class ScalabilityInfraService {
         growingTables,
         samples: samples.length,
       },
+    };
+  }
+
+  // ============================================================
+  // §10 Frontend & CDN
+  // ============================================================
+
+  /** Normaliza o path (ids/uuids → :id) para agrupar páginas semelhantes. */
+  private normalizePagePath(raw: string): string {
+    const path = raw.split(/[?#]/)[0] || '/';
+    return path
+      .replace(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '/:id')
+      .replace(/\/\d+/g, '/:id')
+      .slice(0, 200);
+  }
+
+  async recordFrontendSample(dto: FrontendPerfSampleDto) {
+    await this.prisma.frontendPerfSample.create({
+      data: { ...dto, path: this.normalizePagePath(dto.path) },
+    });
+    return { ok: true };
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async purgeFrontendSamples() {
+    try {
+      await this.prisma.frontendPerfSample.deleteMany({
+        where: { createdAt: { lt: new Date(Date.now() - 30 * 86_400_000) } },
+      });
+    } catch (err: unknown) {
+      this.logger.warn(
+        `Falha a limpar amostras de frontend: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
+  async getFrontendMetrics() {
+    const since = new Date(Date.now() - FRONTEND_WINDOW_H * 3_600_000);
+    const rows = await this.prisma.frontendPerfSample.findMany({
+      where: { createdAt: { gte: since } },
+      orderBy: { createdAt: 'desc' },
+      take: 20_000,
+    });
+
+    const nums = (list: typeof rows, pick: (r: (typeof rows)[number]) => number | null) =>
+      list.map(pick).filter((v): v is number => v !== null && v !== undefined);
+    // Web Vitals reportam-se ao percentil 75.
+    const p = (values: number[], q: number): number | null => {
+      if (!values.length) return null;
+      const sorted = [...values].sort((a, b) => a - b);
+      return this.round1(sorted[Math.min(sorted.length - 1, Math.ceil(q * sorted.length) - 1)]);
+    };
+    const avg = (values: number[]): number | null =>
+      values.length ? this.round1(values.reduce((s, v) => s + v, 0) / values.length) : null;
+    const kb = (bytes: number | null) => (bytes === null ? null : this.round1(bytes / 1024));
+
+    const vitals = {
+      pageLoadMs: p(
+        nums(rows, r => r.loadMs),
+        0.75,
+      ),
+      fcpMs: p(
+        nums(rows, r => r.fcpMs),
+        0.75,
+      ),
+      lcpMs: p(
+        nums(rows, r => r.lcpMs),
+        0.75,
+      ),
+      inpMs: p(
+        nums(rows, r => r.inpMs),
+        0.75,
+      ),
+      ttfbMs: p(
+        nums(rows, r => r.ttfbMs),
+        0.75,
+      ),
+    };
+
+    const totalRequests = rows.reduce((s, r) => s + r.requests, 0);
+    const totalHits = rows.reduce((s, r) => s + r.cacheHits, 0);
+    const totalErrors = rows.reduce((s, r) => s + r.errors, 0);
+    const withErrors = rows.filter(r => r.errors > 0).length;
+
+    const resources = {
+      jsKb: kb(avg(nums(rows, r => r.jsBytes))),
+      cssKb: kb(avg(nums(rows, r => r.cssBytes))),
+      imagesKb: kb(avg(nums(rows, r => r.imageBytes))),
+      requestsPerPage: avg(nums(rows, r => r.requests)),
+      cacheHitRatio: totalRequests > 0 ? this.round1((totalHits / totalRequests) * 100) : null,
+    };
+
+    const byPath = new Map<string, typeof rows>();
+    for (const r of rows) {
+      const list = byPath.get(r.path) ?? [];
+      list.push(r);
+      byPath.set(r.path, list);
+    }
+    const summarise = (list: typeof rows) => {
+      const lcp = p(
+        nums(list, r => r.lcpMs),
+        0.75,
+      );
+      const load = p(
+        nums(list, r => r.loadMs),
+        0.75,
+      );
+      const status: 'OK' | 'ATENCAO' | 'CRITICO' =
+        (lcp ?? 0) > 4000 || (load ?? 0) > 6000
+          ? 'CRITICO'
+          : (lcp ?? 0) > SLOW_PAGE_LCP_MS || (load ?? 0) > 3500
+            ? 'ATENCAO'
+            : 'OK';
+      return {
+        views: list.length,
+        loadMs: load,
+        lcpMs: lcp,
+        ttfbMs: p(
+          nums(list, r => r.ttfbMs),
+          0.75,
+        ),
+        errors: list.reduce((s, r) => s + r.errors, 0),
+        status,
+      };
+    };
+
+    const matchesPrefix = (path: string, prefix: string) =>
+      path === prefix || path.startsWith(`${prefix}/`);
+    // Fronteira por "/" — /dashboard-rh não conta para /dashboard.
+    const criticalPages = CRITICAL_PAGES.map(({ label, prefix }) => {
+      const list = rows.filter(r => matchesPrefix(r.path, prefix));
+      return { page: label, path: prefix, ...summarise(list), hasData: list.length > 0 };
+    });
+
+    const pages = [...byPath.entries()]
+      .map(([path, list]) => ({ path, ...summarise(list) }))
+      .sort((a, b) => (b.lcpMs ?? b.loadMs ?? 0) - (a.lcpMs ?? a.loadMs ?? 0))
+      .slice(0, 20);
+
+    return {
+      windowHours: FRONTEND_WINDOW_H,
+      samples: rows.length,
+      percentile: 'p75' as const,
+      vitals,
+      resources,
+      errors: {
+        total: totalErrors,
+        pagesWithErrors: withErrors,
+        errorRate: rows.length ? this.round1((withErrors / rows.length) * 100) : 0,
+      },
+      criticalPages,
+      slowPages: pages.filter(pg => pg.status !== 'OK' && pg.views >= 3).slice(0, 10),
+      pages,
     };
   }
 }
