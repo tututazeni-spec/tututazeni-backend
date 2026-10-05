@@ -514,7 +514,10 @@ export class ScalabilityInfraService {
     }
 
     // Tabelas que mais crescem: diferença entre a amostra mais antiga e a última.
-    type TableSize = { name: string; bytes: number };
+    interface TableSize {
+      name: string;
+      bytes: number;
+    }
     const tableMap = (s?: { tables: unknown }) =>
       new Map(((s?.tables as TableSize[] | null) ?? []).map(t => [t.name, t.bytes]));
     const firstTables = tableMap(first);

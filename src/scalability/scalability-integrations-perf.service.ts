@@ -96,7 +96,7 @@ export class ScalabilityIntegrationsPerfService {
     const rows = integrations.map(i => {
       const list = logsBy.get(i.id) ?? [];
       const finished = list.filter(l => l.finishedAt);
-      const durations = finished.map(l => (l.finishedAt as Date).getTime() - l.startedAt.getTime());
+      const durations = finished.map(l => l.finishedAt.getTime() - l.startedAt.getTime());
       const failed = list.filter(l => l.status === 'FAILED').length;
       const partial = list.filter(l => l.status === 'PARTIAL').length;
       let retries = 0;
@@ -145,7 +145,7 @@ export class ScalabilityIntegrationsPerfService {
     const totalErrors = rows.reduce((s, r) => s + r.errors, 0);
     const allDurations = logs
       .filter(l => l.finishedAt)
-      .map(l => (l.finishedAt as Date).getTime() - l.startedAt.getTime());
+      .map(l => l.finishedAt.getTime() - l.startedAt.getTime());
     const webhooks = queueMetrics?.queues.find(q => q.key === 'webhooks');
 
     return {
@@ -247,7 +247,12 @@ export class ScalabilityIntegrationsPerfService {
       slowEndpoints: (api?.endpoints ?? [])
         .filter(e => e.status !== 'OK')
         .slice(0, 10)
-        .map(e => ({ endpoint: e.endpoint, p95Ms: e.p95Ms, errorRate: e.errorRate, status: e.status })),
+        .map(e => ({
+          endpoint: e.endpoint,
+          p95Ms: e.p95Ms,
+          errorRate: e.errorRate,
+          status: e.status,
+        })),
       thresholds: THRESHOLDS,
     };
   }

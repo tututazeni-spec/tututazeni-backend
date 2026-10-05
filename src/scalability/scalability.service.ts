@@ -14,10 +14,7 @@ import {
 } from '@nestjs/common';
 import * as os from 'os';
 import { Prisma, AuthType } from '@prisma/client';
-import {
-  TRAFFIC_METRICS_SOURCE,
-  TrafficMetricsSource,
-} from './traffic-metrics.source';
+import { TRAFFIC_METRICS_SOURCE, TrafficMetricsSource } from './traffic-metrics.source';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../common/services/audit.service';
@@ -304,7 +301,7 @@ export class ScalabilityService {
 
     const data: Prisma.IntegrationConfigUncheckedCreateInput = {
       ...rest,
-      authType: dto.authType as AuthType | undefined,
+      authType: dto.authType,
       credentialsJson: safeCredentials,
       endpoint: dto.baseUrl ?? '',
       config: dto.configJson ? JSON.parse(dto.configJson) : {},
@@ -354,7 +351,7 @@ export class ScalabilityService {
     // só `authType` precisa de cast pontual (ver nota acima).
     const data: Prisma.IntegrationConfigUncheckedUpdateInput = {
       ...rest,
-      authType: dto.authType as AuthType | undefined,
+      authType: dto.authType,
       credentialsJson: safeCredentials ?? existing.credentialsJson,
       ...(dto.baseUrl !== undefined && { endpoint: dto.baseUrl }),
       ...(dto.configJson !== undefined && { config: JSON.parse(dto.configJson) }),
@@ -936,8 +933,7 @@ export class ScalabilityService {
       activeUsers,
       concurrentSessions: sessionGroups.length,
       cpuUsagePercent: this.sampleCpuPercent(),
-      memoryUsagePercent:
-        Math.round(((memTotal - os.freemem()) / memTotal) * 1000) / 10,
+      memoryUsagePercent: Math.round(((memTotal - os.freemem()) / memTotal) * 1000) / 10,
       // Sem fonte de tráfego (módulo Monitoring) estes campos ficam a 0.
       diskUsagePercent: 0,
       avgLatencyMs: 0,
@@ -1329,23 +1325,24 @@ export class ScalabilityService {
     });
     const buckets = new Map<string, typeof metrics>();
     for (const m of metrics) {
-      const key = new Date(Math.floor(m.capturedAt.getTime() / 3_600_000) * 3_600_000).toISOString();
+      const key = new Date(
+        Math.floor(m.capturedAt.getTime() / 3_600_000) * 3_600_000,
+      ).toISOString();
       const arr = buckets.get(key) ?? [];
       arr.push(m);
       buckets.set(key, arr);
     }
     const timeline = [...buckets.entries()].map(([at, rows]) => ({
       at,
-      cpuUsagePercent: this.round1(this.avg(rows.map((r) => r.cpuUsagePercent))),
-      memoryUsagePercent: this.round1(this.avg(rows.map((r) => r.memoryUsagePercent))),
-      requestsPerMinute: Math.round(this.avg(rows.map((r) => r.requestsPerMinute))),
-      concurrentSessions: Math.max(...rows.map((r) => r.concurrentSessions)),
-      avgLatencyMs: Math.round(this.avg(rows.map((r) => r.avgLatencyMs))),
+      cpuUsagePercent: this.round1(this.avg(rows.map(r => r.cpuUsagePercent))),
+      memoryUsagePercent: this.round1(this.avg(rows.map(r => r.memoryUsagePercent))),
+      requestsPerMinute: Math.round(this.avg(rows.map(r => r.requestsPerMinute))),
+      concurrentSessions: Math.max(...rows.map(r => r.concurrentSessions)),
+      avgLatencyMs: Math.round(this.avg(rows.map(r => r.avgLatencyMs))),
     }));
 
     const now = new Date();
-    const monthStart = (offset: number) =>
-      new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const monthStart = (offset: number) => new Date(now.getFullYear(), now.getMonth() - offset, 1);
     const firstMonth = monthStart(11);
     const [baseRegistered, baseActive, created] = await Promise.all([
       this.prisma.read.user.count({ where: { createdAt: { lt: firstMonth } } }),
@@ -1365,7 +1362,7 @@ export class ScalabilityService {
             by: ['userId'],
             where: { createdAt: { gte: monthStart(i), lt: monthStart(i - 1) } },
           })
-          .then((rows) => rows.length);
+          .then(rows => rows.length);
       }),
     );
     let registered = baseRegistered;
@@ -1380,9 +1377,9 @@ export class ScalabilityService {
     for (let i = 11; i >= 0; i--) {
       const start = monthStart(i);
       const end = monthStart(i - 1);
-      const inMonth = created.filter((u) => u.createdAt >= start && u.createdAt < end);
+      const inMonth = created.filter(u => u.createdAt >= start && u.createdAt < end);
       registered += inMonth.length;
-      active += inMonth.filter((u) => u.active).length;
+      active += inMonth.filter(u => u.active).length;
       userGrowth.push({
         month: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`,
         registered,
@@ -1394,7 +1391,9 @@ export class ScalabilityService {
 
     const target = Math.round(tenant.maxUsers * 0.8);
     const last3 = userGrowth.slice(-3);
-    const monthlyGrowth = last3.length ? last3.reduce((s, g) => s + g.newUsers, 0) / last3.length : 0;
+    const monthlyGrowth = last3.length
+      ? last3.reduce((s, g) => s + g.newUsers, 0) / last3.length
+      : 0;
     const current = userGrowth[userGrowth.length - 1]?.registered ?? 0;
     const forecast = {
       thresholdPercent: 80,
@@ -1483,14 +1482,10 @@ export class ScalabilityService {
       }),
     ]);
 
-    const sessions = metrics24h.map((m) => m.concurrentSessions);
-    const withTraffic = metrics24h.filter(
-      (m) => m.requestsPerMinute > 0 && m.concurrentSessions > 0,
-    );
+    const sessions = metrics24h.map(m => m.concurrentSessions);
+    const withTraffic = metrics24h.filter(m => m.requestsPerMinute > 0 && m.concurrentSessions > 0);
     const requestsPerUserPerMin = withTraffic.length
-      ? this.round1(
-          this.avg(withTraffic.map((m) => m.requestsPerMinute / m.concurrentSessions)),
-        )
+      ? this.round1(this.avg(withTraffic.map(m => m.requestsPerMinute / m.concurrentSessions)))
       : null;
 
     const buckets = new Map<number, number>();
@@ -1503,7 +1498,7 @@ export class ScalabilityService {
       peak,
     }));
 
-    const monthlyIds = new Set(monthlyRows.map((r) => r.userId));
+    const monthlyIds = new Set(monthlyRows.map(r => r.userId));
     const people = await this.prisma.read.user.findMany({
       where: { active: true },
       select: {
@@ -1522,8 +1517,7 @@ export class ScalabilityService {
       this.prisma.unit.findMany({ select: { id: true, name: true } }),
       this.prisma.role.findMany({ select: { id: true, name: true } }),
     ]);
-    const names = (rows: { id: number; name: string }[]) =>
-      new Map(rows.map((r) => [r.id, r.name]));
+    const names = (rows: { id: number; name: string }[]) => new Map(rows.map(r => [r.id, r.name]));
     const segment = (
       key: (u: (typeof people)[number]) => string | number | null,
       label?: Map<number, string>,
@@ -1578,12 +1572,12 @@ export class ScalabilityService {
         yearly: { newUsers: newYear, percent: pct(newYear) },
       },
       segmentation: {
-        department: segment((u) => u.departmentId, names(departments)),
-        position: segment((u) => u.positionId, names(positions)),
-        unit: segment((u) => u.unitId, names(units)),
-        role: segment((u) => u.roleId, names(roles)),
-        location: segment((u) => u.workLocation),
-        userType: segment((u) => u.contractType),
+        department: segment(u => u.departmentId, names(departments)),
+        position: segment(u => u.positionId, names(positions)),
+        unit: segment(u => u.unitId, names(units)),
+        role: segment(u => u.roleId, names(roles)),
+        location: segment(u => u.workLocation),
+        userType: segment(u => u.contractType),
         platform: null as null | { web: number; mobile: number },
       },
       trafficSourceConnected: !!this.trafficSource,
@@ -1620,7 +1614,7 @@ export class ScalabilityService {
     });
     if (samples.length >= 10) {
       const caps = samples
-        .map((s) => s.concurrentSessions / (Math.min(s.cpuUsagePercent, 100) / 100))
+        .map(s => s.concurrentSessions / (Math.min(s.cpuUsagePercent, 100) / 100))
         .sort((a, b) => a - b);
       return {
         concurrentUsers: Math.round(caps[Math.floor(caps.length / 2)]),
