@@ -13,6 +13,7 @@ import { ScalabilityInfraService } from './scalability-infra.service';
 import { ScalabilityInfraController } from './scalability-infra.controller';
 import { ScalabilityQueuesService } from './scalability-queues.service';
 import { ScalabilityStorageService } from './scalability-storage.service';
+import { ScalabilityIntegrationsPerfService } from './scalability-integrations-perf.service';
 import { ScalabilityEventListeners } from './scalability.events';
 import { PrismaModule } from '../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -46,6 +47,7 @@ import { ApiIntegrationModule } from '../api-integration/api-integration.module'
     ScalabilityInfraService,
     ScalabilityQueuesService,
     ScalabilityStorageService,
+    ScalabilityIntegrationsPerfService,
     ScalabilityEventListeners,
   ],
   exports: [ScalabilityService],

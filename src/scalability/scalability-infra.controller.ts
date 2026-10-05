@@ -4,6 +4,7 @@ import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { FrontendPerfSampleDto } from './frontend-perf.dto';
 import { ScalabilityInfraService } from './scalability-infra.service';
+import { ScalabilityIntegrationsPerfService } from './scalability-integrations-perf.service';
 import { ScalabilityQueuesService } from './scalability-queues.service';
 import { ScalabilityStorageService } from './scalability-storage.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -20,6 +21,7 @@ export class ScalabilityInfraController {
     private readonly infra: ScalabilityInfraService,
     private readonly queues: ScalabilityQueuesService,
     private readonly storage: ScalabilityStorageService,
+    private readonly integrationsPerf: ScalabilityIntegrationsPerfService,
   ) {}
 
   @Get('api-metrics')
@@ -61,8 +63,24 @@ export class ScalabilityInfraController {
 
   @Get('storage-metrics')
   @Roles(Role.ADMIN, Role.AUDITOR)
-  @ApiOperation({ summary: 'Aba Storage: utiliza��o por m�dulo, tipo, unidade e crescimento' })
+  @ApiOperation({ summary: 'Aba Storage: utiliza��o por m�dulo, tipo, unidade e crescimento' })
   getStorageMetrics() {
     return this.storage.getStorageMetrics();
+  }
+
+  @Get('integration-metrics')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({
+    summary: 'Aba Integrações: requests, erros, latência, retries e jobs por integração',
+  })
+  getIntegrationMetrics() {
+    return this.integrationsPerf.getIntegrationMetrics();
+  }
+
+  @Get('performance-metrics')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: 'Aba Performance: KPIs transversais com classificação' })
+  getPerformanceMetrics() {
+    return this.integrationsPerf.getPerformanceMetrics();
   }
 }
