@@ -17,6 +17,7 @@ import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { FrontendPerfSampleDto } from './frontend-perf.dto';
 import { ScalabilityWhatIfService, WhatIfDto } from './scalability-whatif.service';
+import { ScalabilityRecommendationsService } from './scalability-recommendations.service';
 import { ScalabilityHistoryService } from './scalability-history.service';
 import { ScalabilityCapacityService } from './scalability-capacity.service';
 import {
@@ -81,6 +82,7 @@ export class ScalabilityInfraController {
     private readonly modules: ScalabilityModulesService,
     private readonly history: ScalabilityHistoryService,
     private readonly whatIf: ScalabilityWhatIfService,
+    private readonly recommendations: ScalabilityRecommendationsService,
   ) {}
 
   @Get('api-metrics')
@@ -307,6 +309,13 @@ export class ScalabilityInfraController {
   @ApiOperation({ summary: '§28: estado de retenção e downsampling' })
   getRetentionStatus() {
     return this.history.getRetentionStatus();
+  }
+
+  @Get('recommendations')
+  @Roles(Role.ADMIN, Role.AUDITOR, Role.DIRECTOR)
+  @ApiOperation({ summary: '§29 P2: recomendações de infraestrutura baseadas no histórico' })
+  getRecommendations(@Query('days') days?: string) {
+    return this.recommendations.getRecommendations(Number(days) || 14);
   }
 
   @Post('what-if')

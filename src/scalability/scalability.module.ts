@@ -22,6 +22,7 @@ import { ScalabilityReportsService } from './scalability-reports.service';
 import { ScalabilitySettingsService } from './scalability-settings.service';
 import { ScalabilityModulesService } from './scalability-modules.service';
 import { ScalabilityWhatIfService } from './scalability-whatif.service';
+import { ScalabilityRecommendationsService } from './scalability-recommendations.service';
 import { ScalabilityHistoryService } from './scalability-history.service';
 import { ScalabilityStorageService } from './scalability-storage.service';
 import { ScalabilityIntegrationsPerfService } from './scalability-integrations-perf.service';
@@ -60,6 +61,7 @@ import { ApiIntegrationModule } from '../api-integration/api-integration.module'
     ScalabilityStorageService,
     ScalabilityHistoryService,
     ScalabilityWhatIfService,
+    ScalabilityRecommendationsService,
     ScalabilityIntegrationsPerfService,
     ScalabilityCapacityService,
     ScalabilityIncidentsService,
