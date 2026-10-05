@@ -23,6 +23,7 @@ import {
   parseHistory,
 } from './automation-tasks.util';
 import { toCsv } from './automation-csv.util';
+import { writeChainedAuditLog } from '../common/helpers/audit-chain';
 
 type TaskRow = Prisma.AutomationTaskGetPayload<object>;
 
@@ -484,13 +485,11 @@ export class AutomationTasksService {
 
   private async audit(userId: number, action: string, t: TaskRow, extra: Record<string, unknown>) {
     try {
-      await this.prisma.auditLog.create({
-        data: {
-          userId,
-          action,
-          entity: 'AutomationTask',
-          changes: JSON.stringify({ taskId: t.id, ruleId: t.ruleId, title: t.title, ...extra }),
-        },
+      await writeChainedAuditLog(this.prisma, {
+        userId,
+        action,
+        entity: 'AutomationTask',
+        changes: JSON.stringify({ taskId: t.id, ruleId: t.ruleId, title: t.title, ...extra }),
       });
     } catch (e: unknown) {
       this.logger.warn({

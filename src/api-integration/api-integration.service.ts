@@ -17,6 +17,7 @@ import {
 import * as crypto from 'crypto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
+import { writeChainedAuditLog } from '../common/helpers/audit-chain';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -250,25 +251,21 @@ export class ApiIntegrationService {
 
     const integration = await this.prisma.integrationConfig.create({ data });
 
-    await this.prisma.auditLog
-      .create({
-        data: {
-          userId: 0,
-          action: 'INTEGRATION_CREATED',
-          entity: 'IntegrationConfig',
-          entityId: integration.id,
-          changes: JSON.stringify({ name: dto.name, type: dto.type }),
-        },
-      })
-      .catch((err: unknown) =>
-        this.logger.warn({
-          integrationId: integration.id,
-          integrationType: dto.type,
-          action: 'INTEGRATION_CREATED',
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao registar audit log de criação de integração',
-        }),
-      );
+    await writeChainedAuditLog(this.prisma, {
+      userId: 0,
+      action: 'INTEGRATION_CREATED',
+      entity: 'IntegrationConfig',
+      entityId: integration.id,
+      changes: JSON.stringify({ name: dto.name, type: dto.type }),
+    }).catch((err: unknown) =>
+      this.logger.warn({
+        integrationId: integration.id,
+        integrationType: dto.type,
+        action: 'INTEGRATION_CREATED',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao registar audit log de criação de integração',
+      }),
+    );
 
     return integration;
   }
@@ -333,24 +330,20 @@ export class ApiIntegrationService {
       data: { active: !i.active },
     });
 
-    await this.prisma.auditLog
-      .create({
-        data: {
-          userId: 0,
-          action: i.active ? 'INTEGRATION_DISABLED' : 'INTEGRATION_ENABLED',
-          entity: 'IntegrationConfig',
-          entityId: id,
-          changes: JSON.stringify({ active: !i.active }),
-        },
-      })
-      .catch((err: unknown) =>
-        this.logger.warn({
-          integrationId: id,
-          action: i.active ? 'INTEGRATION_DISABLED' : 'INTEGRATION_ENABLED',
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao registar audit log de toggle de integração',
-        }),
-      );
+    await writeChainedAuditLog(this.prisma, {
+      userId: 0,
+      action: i.active ? 'INTEGRATION_DISABLED' : 'INTEGRATION_ENABLED',
+      entity: 'IntegrationConfig',
+      entityId: id,
+      changes: JSON.stringify({ active: !i.active }),
+    }).catch((err: unknown) =>
+      this.logger.warn({
+        integrationId: id,
+        action: i.active ? 'INTEGRATION_DISABLED' : 'INTEGRATION_ENABLED',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao registar audit log de toggle de integração',
+      }),
+    );
 
     return updated;
   }
@@ -555,25 +548,21 @@ export class ApiIntegrationService {
       };
     });
 
-    await this.prisma.auditLog
-      .create({
-        data: {
-          userId: createdById,
-          action: 'API_KEY_CREATED',
-          entity: 'ApiKey',
-          entityId: null,
-          changes: JSON.stringify({ name: dto.name, scopes: dto.scopes }),
-        },
-      })
-      .catch((err: unknown) =>
-        this.logger.warn({
-          createdById,
-          keyName: dto.name,
-          action: 'API_KEY_CREATED',
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao registar audit log de criação de API key',
-        }),
-      );
+    await writeChainedAuditLog(this.prisma, {
+      userId: createdById,
+      action: 'API_KEY_CREATED',
+      entity: 'ApiKey',
+      entityId: null,
+      changes: JSON.stringify({ name: dto.name, scopes: dto.scopes }),
+    }).catch((err: unknown) =>
+      this.logger.warn({
+        createdById,
+        keyName: dto.name,
+        action: 'API_KEY_CREATED',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao registar audit log de criação de API key',
+      }),
+    );
 
     // Return the raw key ONCE — never stored in plain text
     return { ...apiKey, key: rawKey, message: '⚠️ Guarda esta chave — não será exibida novamente' };
@@ -622,19 +611,20 @@ export class ApiIntegrationService {
           msg: 'Falha ao revogar API key',
         }),
       );
-    await this.prisma.auditLog
-      .create({
-        data: { userId, action: 'API_KEY_REVOKED', entity: 'ApiKey', entityId: keyId },
-      })
-      .catch((err: unknown) =>
-        this.logger.warn({
-          keyId,
-          userId,
-          action: 'API_KEY_REVOKED',
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao registar audit log de revogação de API key',
-        }),
-      );
+    await writeChainedAuditLog(this.prisma, {
+      userId,
+      action: 'API_KEY_REVOKED',
+      entity: 'ApiKey',
+      entityId: keyId,
+    }).catch((err: unknown) =>
+      this.logger.warn({
+        keyId,
+        userId,
+        action: 'API_KEY_REVOKED',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao registar audit log de revogação de API key',
+      }),
+    );
     return { message: 'API Key revogada' };
   }
 
@@ -657,19 +647,20 @@ export class ApiIntegrationService {
         }),
       );
 
-    await this.prisma.auditLog
-      .create({
-        data: { userId, action: 'API_KEY_ROTATED', entity: 'ApiKey', entityId: keyId },
-      })
-      .catch((err: unknown) =>
-        this.logger.warn({
-          keyId,
-          userId,
-          action: 'API_KEY_ROTATED',
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao registar audit log de rotação de API key',
-        }),
-      );
+    await writeChainedAuditLog(this.prisma, {
+      userId,
+      action: 'API_KEY_ROTATED',
+      entity: 'ApiKey',
+      entityId: keyId,
+    }).catch((err: unknown) =>
+      this.logger.warn({
+        keyId,
+        userId,
+        action: 'API_KEY_ROTATED',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao registar audit log de rotação de API key',
+      }),
+    );
 
     return { key: rawKey, message: '⚠️ Nova chave gerada — guarda antes de fechar' };
   }

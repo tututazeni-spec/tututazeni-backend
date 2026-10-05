@@ -65,6 +65,15 @@ const baseRole = {
   _count: { users: 10 },
 };
 
+// A escrita encadeada (SHA-256 + advisory lock) é testada em audit-chain; aqui só
+// interessa o que cada serviço regista, por isso delega no mock de prisma.auditLog.
+jest.mock('../common/helpers/audit-chain', () => ({
+  writeChainedAuditLog: (
+    prisma: { auditLog: { create: (a: unknown) => unknown } },
+    data: unknown,
+  ) => prisma.auditLog.create({ data }),
+}));
+
 describe('RolesPermissionsService', () => {
   let service: RolesPermissionsService;
 

@@ -62,6 +62,7 @@ import { AutomationFailuresService } from './automation-failures.service';
 import { AutomationConnectionsService } from './automation-connections.service';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
+import { writeChainedAuditLog } from '../common/helpers/audit-chain';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -935,24 +936,20 @@ export class AutomationService {
       data: { ...this.buildRuleData(dto, createdById), tenantId },
     });
 
-    await this.prisma.auditLog
-      .create({
-        data: {
-          userId: createdById > 0 ? createdById : undefined,
-          action: 'AUTOMATION_RULE_CREATED',
-          entity: 'AutomationRule',
-          entityId: rule.id,
-          changes: JSON.stringify({ name: dto.name, trigger: dto.trigger, action: dto.action }),
-        },
-      })
-      .catch(e => {
-        this.logger.warn({
-          ruleId: rule.id,
-          action: 'AUDIT_LOG_AUTOMATION_RULE_CREATED',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao registar audit log de criação de regra de automação',
-        });
+    await writeChainedAuditLog(this.prisma, {
+      userId: createdById > 0 ? createdById : undefined,
+      action: 'AUTOMATION_RULE_CREATED',
+      entity: 'AutomationRule',
+      entityId: rule.id,
+      changes: JSON.stringify({ name: dto.name, trigger: dto.trigger, action: dto.action }),
+    }).catch(e => {
+      this.logger.warn({
+        ruleId: rule.id,
+        action: 'AUDIT_LOG_AUTOMATION_RULE_CREATED',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao registar audit log de criação de regra de automação',
       });
+    });
 
     return rule;
   }
@@ -1669,14 +1666,12 @@ export class AutomationService {
       after: diff?.after ?? changes,
     });
     try {
-      await this.prisma.auditLog.create({
-        data: {
-          userId: typeof changes.userId === 'number' ? changes.userId : undefined,
-          action,
-          entity: 'AutomationRule',
-          entityId: ruleId,
-          changes: JSON.stringify(changes),
-        },
+      await writeChainedAuditLog(this.prisma, {
+        userId: typeof changes.userId === 'number' ? changes.userId : undefined,
+        action,
+        entity: 'AutomationRule',
+        entityId: ruleId,
+        changes: JSON.stringify(changes),
       });
     } catch (e: unknown) {
       this.logger.warn({

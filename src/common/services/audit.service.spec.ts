@@ -4,7 +4,14 @@ import { ConfigService } from '@nestjs/config';
 import { AuditService } from './audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
-const mockPrisma = { auditLog: { create: jest.fn().mockResolvedValue({ id: 1 }) } };
+const mockPrisma: any = {
+  auditLog: {
+    create: jest.fn().mockResolvedValue({ id: 1 }),
+    findFirst: jest.fn().mockResolvedValue(null),
+  },
+  $transaction: jest.fn((fn: any) => fn(mockPrisma)),
+  $executeRaw: jest.fn().mockResolvedValue(1),
+};
 const mockQueue = { add: jest.fn().mockResolvedValue(undefined) };
 let queueEnabledValue = 'true';
 const mockConfig = {

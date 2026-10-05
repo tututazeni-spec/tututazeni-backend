@@ -7,6 +7,7 @@ import { getToken, INT_CREDENTIALS } from '../helpers/auth.helper';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import { purgeAuditLogs } from '../../../src/common/helpers/audit-chain';
 
 const TEST_DB_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/innova_test';
 
@@ -226,9 +227,9 @@ describe('Payroll Workflow Integration', () => {
     await (prisma as any).employeeCompensation
       .deleteMany({ where: { userId: { in: testUserIds } } })
       .catch(() => undefined);
-    await (prisma as any).auditLog
-      .deleteMany({ where: { entity: 'PayrollRun', entityId: { in: runIds } } })
-      .catch(() => undefined);
+    await purgeAuditLogs(prisma, { entity: 'PayrollRun', entityId: { in: runIds } }).catch(
+      () => undefined,
+    );
     await prisma.notificationLog
       .deleteMany({ where: { userId: { in: testUserIds }, type: 'PAYSLIP_ISSUED' } })
       .catch(() => undefined);

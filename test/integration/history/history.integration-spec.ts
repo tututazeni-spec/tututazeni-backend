@@ -6,6 +6,7 @@ import { getToken } from '../helpers/auth.helper';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import { purgeAuditLogs } from '../../../src/common/helpers/audit-chain';
 
 const TEST_DB_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/innova_test';
 
@@ -62,7 +63,7 @@ describe('History & Timeline Integration', () => {
   });
 
   afterAll(async () => {
-    await prisma.auditLog.deleteMany({ where: { id: createdEventId } }).catch(() => undefined);
+    await purgeAuditLogs(prisma, { id: createdEventId }).catch(() => undefined);
     await prisma.user
       .update({ where: { id: employeeId }, data: { managerId: originalManagerId } })
       .catch(() => undefined);

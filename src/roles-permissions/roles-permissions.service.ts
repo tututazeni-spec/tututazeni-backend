@@ -13,6 +13,7 @@ import {
   RoleTemplateDto,
 } from './roles-permissions.dto';
 import { ROLE_DEFAULTS, BUILTIN_PERMISSIONS } from './role-defaults';
+import { writeChainedAuditLog } from '../common/helpers/audit-chain';
 
 // ─── Cache de permissões efectivas por utilizador (Redis via CacheService) —
 // migrado de acl.service.ts na Fase D. Um Map em memória do processo dava
@@ -146,24 +147,20 @@ export class RolesPermissionsService {
 
     const role = await this.findOne(created.id);
 
-    await this.prisma.auditLog
-      .create({
-        data: {
-          userId: 0,
-          action: 'ROLE_CREATED',
-          entity: 'Role',
-          entityId: role.id,
-          changes: JSON.stringify({ name: role.name }),
-        },
-      })
-      .catch(e =>
-        this.logger.warn({
-          roleId: role.id,
-          action: 'ROLE_CREATED',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao registar auditoria de criação de role',
-        }),
-      );
+    await writeChainedAuditLog(this.prisma, {
+      userId: 0,
+      action: 'ROLE_CREATED',
+      entity: 'Role',
+      entityId: role.id,
+      changes: JSON.stringify({ name: role.name }),
+    }).catch(e =>
+      this.logger.warn({
+        roleId: role.id,
+        action: 'ROLE_CREATED',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao registar auditoria de criação de role',
+      }),
+    );
 
     return role;
   }
@@ -187,24 +184,20 @@ export class RolesPermissionsService {
     }
     const updated = await this.findOne(id);
 
-    await this.prisma.auditLog
-      .create({
-        data: {
-          userId: 0,
-          action: 'ROLE_UPDATED',
-          entity: 'Role',
-          entityId: id,
-          changes: JSON.stringify(dto),
-        },
-      })
-      .catch(e =>
-        this.logger.warn({
-          roleId: id,
-          action: 'ROLE_UPDATED',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao registar auditoria de actualização de role',
-        }),
-      );
+    await writeChainedAuditLog(this.prisma, {
+      userId: 0,
+      action: 'ROLE_UPDATED',
+      entity: 'Role',
+      entityId: id,
+      changes: JSON.stringify(dto),
+    }).catch(e =>
+      this.logger.warn({
+        roleId: id,
+        action: 'ROLE_UPDATED',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao registar auditoria de actualização de role',
+      }),
+    );
 
     return updated;
   }
@@ -223,24 +216,20 @@ export class RolesPermissionsService {
     // antes de remover, ao contrário do design anterior de FK single-owner.
 
     await this.prisma.role.delete({ where: { id } });
-    await this.prisma.auditLog
-      .create({
-        data: {
-          userId: 0,
-          action: 'ROLE_DELETED',
-          entity: 'Role',
-          entityId: id,
-          changes: JSON.stringify({ name: role.name }),
-        },
-      })
-      .catch(e =>
-        this.logger.warn({
-          roleId: id,
-          action: 'ROLE_DELETED',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao registar auditoria de remoção de role',
-        }),
-      );
+    await writeChainedAuditLog(this.prisma, {
+      userId: 0,
+      action: 'ROLE_DELETED',
+      entity: 'Role',
+      entityId: id,
+      changes: JSON.stringify({ name: role.name }),
+    }).catch(e =>
+      this.logger.warn({
+        roleId: id,
+        action: 'ROLE_DELETED',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao registar auditoria de remoção de role',
+      }),
+    );
 
     return { message: 'Role removido com sucesso', roleName: role.name };
   }
@@ -301,25 +290,21 @@ export class RolesPermissionsService {
         }),
       );
 
-    await this.prisma.auditLog
-      .create({
-        data: {
-          userId,
-          action: 'ROLE_ASSIGNED',
-          entity: 'User',
-          entityId: userId,
-          changes: JSON.stringify({ roleId }),
-        },
-      })
-      .catch(e =>
-        this.logger.warn({
-          userId,
-          roleId,
-          action: 'ROLE_ASSIGNED',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao registar auditoria de atribuição de role',
-        }),
-      );
+    await writeChainedAuditLog(this.prisma, {
+      userId,
+      action: 'ROLE_ASSIGNED',
+      entity: 'User',
+      entityId: userId,
+      changes: JSON.stringify({ roleId }),
+    }).catch(e =>
+      this.logger.warn({
+        userId,
+        roleId,
+        action: 'ROLE_ASSIGNED',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao registar auditoria de atribuição de role',
+      }),
+    );
 
     return { message: `Role "${user.role?.name}" atribuído a ${user.fullName}`, user };
   }
@@ -343,25 +328,21 @@ export class RolesPermissionsService {
     });
     await this.cache.del(permKey(dto.userId));
 
-    await this.prisma.auditLog
-      .create({
-        data: {
-          userId: dto.userId,
-          action: 'ROLE_ASSIGNED',
-          entity: 'User',
-          entityId: dto.userId,
-          changes: JSON.stringify({ roleId: dto.roleId }),
-        },
-      })
-      .catch(e => {
-        this.logger.warn({
-          userId: dto.userId,
-          action: 'ROLE_ASSIGNED',
-          entityId: dto.userId,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao escrever audit log de atribuição de role',
-        });
+    await writeChainedAuditLog(this.prisma, {
+      userId: dto.userId,
+      action: 'ROLE_ASSIGNED',
+      entity: 'User',
+      entityId: dto.userId,
+      changes: JSON.stringify({ roleId: dto.roleId }),
+    }).catch(e => {
+      this.logger.warn({
+        userId: dto.userId,
+        action: 'ROLE_ASSIGNED',
+        entityId: dto.userId,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao escrever audit log de atribuição de role',
       });
+    });
 
     await this.prisma.notificationLog
       .create({

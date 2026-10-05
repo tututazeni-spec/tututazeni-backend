@@ -4,6 +4,15 @@ import { JwtService } from '@nestjs/jwt';
 import { AuthService, sessionIdleTimeoutMs } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 
+// A escrita encadeada (SHA-256 + advisory lock) é testada em audit-chain; aqui só
+// interessa o que cada serviço regista, por isso delega no mock de prisma.auditLog.
+jest.mock('../common/helpers/audit-chain', () => ({
+  writeChainedAuditLog: (
+    prisma: { auditLog: { create: (a: unknown) => unknown } },
+    data: unknown,
+  ) => prisma.auditLog.create({ data }),
+}));
+
 describe('sessionIdleTimeoutMs', () => {
   it('devolve 25 minutos por omissão quando a env var não está definida', () => {
     expect(sessionIdleTimeoutMs(undefined)).toBe(1_500_000);
@@ -117,6 +126,41 @@ describe('AuthService', () => {
       await expect(service.login({ email: 'x@x.com', password: 'pass' })).rejects.toThrow(
         UnauthorizedException,
       );
+    });
+
+    it('regista FAILED em AuditLog com IP/UA e sem palavra-passe (utilizador desconhecido)', async () => {
+      mockPrisma.auditLog.create.mockClear();
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      await expect(
+        service.login(
+          { email: 'x@x.com', password: 'segredo' },
+          { ip: '10.0.0.9', userAgent: 'jest' },
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+      await new Promise(r => setImmediate(r));
+      const data = mockPrisma.auditLog.create.mock.calls[0][0].data;
+      expect(data).toMatchObject({
+        userId: null,
+        action: 'FAILED',
+        entity: 'Auth',
+        status: 'FAILED',
+        ip: '10.0.0.9',
+      });
+      expect(JSON.stringify(data)).not.toContain('segredo');
+      expect(JSON.parse(data.metadata)).toEqual({ reason: 'UNKNOWN_USER', email: 'x@x.com' });
+    });
+
+    it('regista FAILED com o userId quando a palavra-passe está errada', async () => {
+      mockPrisma.auditLog.create.mockClear();
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+      mockPrisma.user.findUnique.mockResolvedValue(baseUser);
+      await expect(service.login({ email: 'test@innova.com', password: 'x' })).rejects.toThrow(
+        UnauthorizedException,
+      );
+      await new Promise(r => setImmediate(r));
+      const data = mockPrisma.auditLog.create.mock.calls[0][0].data;
+      expect(data).toMatchObject({ userId: baseUser.id, action: 'FAILED' });
+      expect(JSON.parse(data.metadata).reason).toBe('BAD_PASSWORD');
     });
 
     it('deve lançar UnauthorizedException se conta inactiva', async () => {

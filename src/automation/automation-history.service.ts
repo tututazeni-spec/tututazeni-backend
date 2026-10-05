@@ -12,6 +12,7 @@ import { toCsv } from './automation-csv.util';
 import { AutomationAuditService } from './automation-audit.service';
 import { moduleOfTrigger } from './automation-events.catalog';
 import type { ActionResult, FlowStepLog } from './automation.service';
+import { writeChainedAuditLog } from '../common/helpers/audit-chain';
 
 type ExecRow = Prisma.AutomationExecutionGetPayload<object>;
 
@@ -341,14 +342,12 @@ export class AutomationHistoryService {
         },
       });
     }
-    await this.prisma.auditLog.create({
-      data: {
-        userId,
-        action: 'AUTOMATION_EXECUTION_CANCELLED',
-        entity: 'AutomationRule',
-        entityId: e.ruleId,
-        changes: JSON.stringify({ executionId: id, reason: reason ?? null }),
-      },
+    await writeChainedAuditLog(this.prisma, {
+      userId,
+      action: 'AUTOMATION_EXECUTION_CANCELLED',
+      entity: 'AutomationRule',
+      entityId: e.ruleId,
+      changes: JSON.stringify({ executionId: id, reason: reason ?? null }),
     });
     await this.audit?.record({
       entity: 'RULE',
