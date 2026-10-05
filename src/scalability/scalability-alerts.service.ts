@@ -16,9 +16,16 @@ import { ScalabilityCapacityService } from './scalability-capacity.service';
 import { ScalabilityForecastService } from './scalability-forecast.service';
 import { ScalabilityInfraService } from './scalability-infra.service';
 import { ScalabilityQueuesService } from './scalability-queues.service';
+import {
+  activeWindow,
+  AlertThresholds,
+  parseJson,
+  parseWindows,
+  resolveThresholds,
+} from './scalability-settings.util';
 
 export type AlertGroup = 'CAPACITY' | 'PERFORMANCE' | 'GROWTH' | 'RESILIENCE';
-export type RuleState = 'OK' | 'TRIGGERED' | 'UNAVAILABLE';
+export type RuleState = 'OK' | 'TRIGGERED' | 'UNAVAILABLE' | 'DISABLED';
 
 export interface RuleResult {
   /** valor medido (null se indisponível) */
@@ -29,7 +36,7 @@ export interface RuleResult {
   unavailableReason?: string;
 }
 
-interface RuleDef {
+export interface RuleDef {
   key: string;
   group: AlertGroup;
   label: string;
@@ -55,194 +62,181 @@ interface Snapshot {
   resilience: Map<string, { status: string; detail: string }> | null;
 }
 
-const T = {
-  cpu: 85,
-  ram: 90,
-  storage: 85,
-  dbConnections: 80,
-  queuePending: 1000,
-  p95Ms: 1500,
-  p99Ms: 3000,
-  errorRate: 1,
-  slowEndpoints: 1,
-  slowQueryShare: 5,
-  growthFactor: 2,
-  storageGrowthFactor: 1.5,
-  usersNearLimitMonths: 3,
-} as const;
-
-const RULES: RuleDef[] = [
-  {
-    key: 'cap_cpu',
-    group: 'CAPACITY',
-    label: 'CPU acima do limite',
-    category: 'PERFORMANCE',
-    severity: 'CRITICAL',
-    threshold: T.cpu,
-    unit: '%',
-    condition: `> ${T.cpu}%`,
-  },
-  {
-    key: 'cap_ram',
-    group: 'CAPACITY',
-    label: 'RAM acima do limite',
-    category: 'PERFORMANCE',
-    severity: 'CRITICAL',
-    threshold: T.ram,
-    unit: '%',
-    condition: `> ${T.ram}%`,
-  },
-  {
-    key: 'cap_storage',
-    group: 'CAPACITY',
-    label: 'Storage acima do limite',
-    category: 'STORAGE',
-    severity: 'WARNING',
-    threshold: T.storage,
-    unit: '%',
-    condition: `> ${T.storage}% do plano`,
-  },
-  {
-    key: 'cap_db_conn',
-    group: 'CAPACITY',
-    label: 'Ligações à BD acima do limite',
-    category: 'PERFORMANCE',
-    severity: 'CRITICAL',
-    threshold: T.dbConnections,
-    unit: '%',
-    condition: `> ${T.dbConnections}% de max_connections`,
-  },
-  {
-    key: 'cap_queue',
-    group: 'CAPACITY',
-    label: 'Fila acima do limite',
-    category: 'AUTOMATION',
-    severity: 'WARNING',
-    threshold: T.queuePending,
-    unit: 'jobs',
-    condition: `> ${T.queuePending} jobs pendentes`,
-  },
-  {
-    key: 'perf_p95',
-    group: 'PERFORMANCE',
-    label: 'P95 elevado',
-    category: 'PERFORMANCE',
-    severity: 'WARNING',
-    threshold: T.p95Ms,
-    unit: 'ms',
-    condition: `> ${T.p95Ms} ms`,
-  },
-  {
-    key: 'perf_p99',
-    group: 'PERFORMANCE',
-    label: 'P99 elevado',
-    category: 'PERFORMANCE',
-    severity: 'WARNING',
-    threshold: T.p99Ms,
-    unit: 'ms',
-    condition: `> ${T.p99Ms} ms`,
-  },
-  {
-    key: 'perf_errors',
-    group: 'PERFORMANCE',
-    label: 'Error rate elevado',
-    category: 'SLA_BREACH',
-    severity: 'CRITICAL',
-    threshold: T.errorRate,
-    unit: '%',
-    condition: `erros 5xx > ${T.errorRate}%`,
-  },
-  {
-    key: 'perf_api_slow',
-    group: 'PERFORMANCE',
-    label: 'API lenta',
-    category: 'PERFORMANCE',
-    severity: 'WARNING',
-    threshold: T.slowEndpoints,
-    unit: 'endpoints',
-    condition: 'endpoint(s) em estado crítico',
-  },
-  {
-    key: 'perf_slow_queries',
-    group: 'PERFORMANCE',
-    label: 'Queries lentas',
-    category: 'PERFORMANCE',
-    severity: 'WARNING',
-    threshold: T.slowQueryShare,
-    unit: '%',
-    condition: `> ${T.slowQueryShare}% das queries > 500 ms`,
-  },
-  {
-    key: 'growth_users',
-    group: 'GROWTH',
-    label: 'Crescimento inesperado de utilizadores',
-    category: 'PERFORMANCE',
-    severity: 'WARNING',
-    threshold: T.growthFactor,
-    unit: '×',
-    condition: `último mês > ${T.growthFactor}× a média anterior`,
-  },
-  {
-    key: 'growth_storage',
-    group: 'GROWTH',
-    label: 'Storage a crescer acima do previsto',
-    category: 'STORAGE',
-    severity: 'WARNING',
-    threshold: T.storageGrowthFactor,
-    unit: '×',
-    condition: `último mês > ${T.storageGrowthFactor}× a média anterior`,
-  },
-  {
-    key: 'growth_users_limit',
-    group: 'GROWTH',
-    label: 'Utilizadores a aproximar-se do limite',
-    category: 'PERFORMANCE',
-    severity: 'WARNING',
-    threshold: T.usersNearLimitMonths,
-    unit: 'meses',
-    condition: `80% do plano em ≤ ${T.usersNearLimitMonths} meses`,
-  },
-  {
-    key: 'res_backup',
-    group: 'RESILIENCE',
-    label: 'Backup falhado / fora do RPO',
-    category: 'SLA_BREACH',
-    severity: 'CRITICAL',
-    threshold: null,
-    unit: '',
-    condition: 'último backup mais antigo que o RPO',
-  },
-  {
-    key: 'res_replication',
-    group: 'RESILIENCE',
-    label: 'Replicação interrompida',
-    category: 'SLA_BREACH',
-    severity: 'CRITICAL',
-    threshold: null,
-    unit: '',
-    condition: 'replicação declarada sem réplicas ligadas',
-  },
-  {
-    key: 'res_health',
-    group: 'RESILIENCE',
-    label: 'Health check falhado',
-    category: 'SLA_BREACH',
-    severity: 'CRITICAL',
-    threshold: null,
-    unit: '',
-    condition: 'BD não responde',
-  },
-  {
-    key: 'res_instance',
-    group: 'RESILIENCE',
-    label: 'Instância indisponível',
-    category: 'SLA_BREACH',
-    severity: 'CRITICAL',
-    threshold: null,
-    unit: '',
-    condition: 'instância da API não responde',
-  },
-];
+/** Definição das regras com os limiares efectivos (padrão + configuração §24). */
+export function buildRules(T: AlertThresholds): RuleDef[] {
+  return [
+    {
+      key: 'cap_cpu',
+      group: 'CAPACITY',
+      label: 'CPU acima do limite',
+      category: 'PERFORMANCE',
+      severity: 'CRITICAL',
+      threshold: T.cpu,
+      unit: '%',
+      condition: `> ${T.cpu}%`,
+    },
+    {
+      key: 'cap_ram',
+      group: 'CAPACITY',
+      label: 'RAM acima do limite',
+      category: 'PERFORMANCE',
+      severity: 'CRITICAL',
+      threshold: T.ram,
+      unit: '%',
+      condition: `> ${T.ram}%`,
+    },
+    {
+      key: 'cap_storage',
+      group: 'CAPACITY',
+      label: 'Storage acima do limite',
+      category: 'STORAGE',
+      severity: 'WARNING',
+      threshold: T.storage,
+      unit: '%',
+      condition: `> ${T.storage}% do plano`,
+    },
+    {
+      key: 'cap_db_conn',
+      group: 'CAPACITY',
+      label: 'Ligações à BD acima do limite',
+      category: 'PERFORMANCE',
+      severity: 'CRITICAL',
+      threshold: T.dbConnections,
+      unit: '%',
+      condition: `> ${T.dbConnections}% de max_connections`,
+    },
+    {
+      key: 'cap_queue',
+      group: 'CAPACITY',
+      label: 'Fila acima do limite',
+      category: 'AUTOMATION',
+      severity: 'WARNING',
+      threshold: T.queuePending,
+      unit: 'jobs',
+      condition: `> ${T.queuePending} jobs pendentes`,
+    },
+    {
+      key: 'perf_p95',
+      group: 'PERFORMANCE',
+      label: 'P95 elevado',
+      category: 'PERFORMANCE',
+      severity: 'WARNING',
+      threshold: T.p95Ms,
+      unit: 'ms',
+      condition: `> ${T.p95Ms} ms`,
+    },
+    {
+      key: 'perf_p99',
+      group: 'PERFORMANCE',
+      label: 'P99 elevado',
+      category: 'PERFORMANCE',
+      severity: 'WARNING',
+      threshold: T.p99Ms,
+      unit: 'ms',
+      condition: `> ${T.p99Ms} ms`,
+    },
+    {
+      key: 'perf_errors',
+      group: 'PERFORMANCE',
+      label: 'Error rate elevado',
+      category: 'SLA_BREACH',
+      severity: 'CRITICAL',
+      threshold: T.errorRate,
+      unit: '%',
+      condition: `erros 5xx > ${T.errorRate}%`,
+    },
+    {
+      key: 'perf_api_slow',
+      group: 'PERFORMANCE',
+      label: 'API lenta',
+      category: 'PERFORMANCE',
+      severity: 'WARNING',
+      threshold: T.slowEndpoints,
+      unit: 'endpoints',
+      condition: 'endpoint(s) em estado crítico',
+    },
+    {
+      key: 'perf_slow_queries',
+      group: 'PERFORMANCE',
+      label: 'Queries lentas',
+      category: 'PERFORMANCE',
+      severity: 'WARNING',
+      threshold: T.slowQueryShare,
+      unit: '%',
+      condition: `> ${T.slowQueryShare}% das queries > 500 ms`,
+    },
+    {
+      key: 'growth_users',
+      group: 'GROWTH',
+      label: 'Crescimento inesperado de utilizadores',
+      category: 'PERFORMANCE',
+      severity: 'WARNING',
+      threshold: T.growthFactor,
+      unit: '×',
+      condition: `último mês > ${T.growthFactor}× a média anterior`,
+    },
+    {
+      key: 'growth_storage',
+      group: 'GROWTH',
+      label: 'Storage a crescer acima do previsto',
+      category: 'STORAGE',
+      severity: 'WARNING',
+      threshold: T.storageGrowthFactor,
+      unit: '×',
+      condition: `último mês > ${T.storageGrowthFactor}× a média anterior`,
+    },
+    {
+      key: 'growth_users_limit',
+      group: 'GROWTH',
+      label: 'Utilizadores a aproximar-se do limite',
+      category: 'PERFORMANCE',
+      severity: 'WARNING',
+      threshold: T.usersNearLimitMonths,
+      unit: 'meses',
+      condition: `80% do plano em ≤ ${T.usersNearLimitMonths} meses`,
+    },
+    {
+      key: 'res_backup',
+      group: 'RESILIENCE',
+      label: 'Backup falhado / fora do RPO',
+      category: 'SLA_BREACH',
+      severity: 'CRITICAL',
+      threshold: null,
+      unit: '',
+      condition: 'último backup mais antigo que o RPO',
+    },
+    {
+      key: 'res_replication',
+      group: 'RESILIENCE',
+      label: 'Replicação interrompida',
+      category: 'SLA_BREACH',
+      severity: 'CRITICAL',
+      threshold: null,
+      unit: '',
+      condition: 'replicação declarada sem réplicas ligadas',
+    },
+    {
+      key: 'res_health',
+      group: 'RESILIENCE',
+      label: 'Health check falhado',
+      category: 'SLA_BREACH',
+      severity: 'CRITICAL',
+      threshold: null,
+      unit: '',
+      condition: 'BD não responde',
+    },
+    {
+      key: 'res_instance',
+      group: 'RESILIENCE',
+      label: 'Instância indisponível',
+      category: 'SLA_BREACH',
+      severity: 'CRITICAL',
+      threshold: null,
+      unit: '',
+      condition: 'instância da API não responde',
+    },
+  ];
+}
 
 const na = (reason: string): RuleResult => ({
   value: null,
@@ -275,6 +269,17 @@ export class ScalabilityAlertsService {
     private readonly queues: ScalabilityQueuesService,
     private readonly forecasts: ScalabilityForecastService,
   ) {}
+
+  private async loadConfig() {
+    const row = await this.prisma.scalabilityInfraSettings.findUnique({ where: { id: 'default' } });
+    const T = resolveThresholds(row?.thresholdsJson);
+    return {
+      T,
+      rules: buildRules(T),
+      disabled: new Set(parseJson<string[]>(row?.disabledRulesJson, [])),
+      window: activeWindow(parseWindows(row?.maintenanceWindowsJson)),
+    };
+  }
 
   private async snapshot(): Promise<Snapshot> {
     const [latest, cap, queue, api, db, fc, res] = await Promise.all([
@@ -329,7 +334,7 @@ export class ScalabilityAlertsService {
     };
   }
 
-  private evaluateRule(r: RuleDef, s: Snapshot): RuleResult {
+  private evaluateRule(r: RuleDef, s: Snapshot, T: AlertThresholds): RuleResult {
     const over = (value: number | null, limit: number, unit: string, src: string): RuleResult =>
       value === null
         ? na(`Sem dados: ${src}`)
@@ -454,14 +459,20 @@ export class ScalabilityAlertsService {
   }
 
   async getOverview() {
-    const [snap, open] = await Promise.all([this.snapshot(), this.openByRule()]);
-    const rules = RULES.map(r => {
-      const res = this.evaluateRule(r, snap);
-      const state: RuleState = res.unavailableReason
-        ? 'UNAVAILABLE'
-        : res.triggered
-          ? 'TRIGGERED'
-          : 'OK';
+    const [snap, open, cfg] = await Promise.all([
+      this.snapshot(),
+      this.openByRule(),
+      this.loadConfig(),
+    ]);
+    const rules = cfg.rules.map(r => {
+      const res = this.evaluateRule(r, snap, cfg.T);
+      const state: RuleState = cfg.disabled.has(r.key)
+        ? 'DISABLED'
+        : res.unavailableReason
+          ? 'UNAVAILABLE'
+          : res.triggered
+            ? 'TRIGGERED'
+            : 'OK';
       return {
         key: r.key,
         group: r.group,
@@ -502,14 +513,20 @@ export class ScalabilityAlertsService {
 
   /** Cria alertas para regras disparadas e resolve os que deixaram de disparar. */
   async evaluateAndRaise() {
-    const [snap, open] = await Promise.all([this.snapshot(), this.openByRule()]);
+    const [snap, open, cfg] = await Promise.all([
+      this.snapshot(),
+      this.openByRule(),
+      this.loadConfig(),
+    ]);
     let raised = 0;
     let resolved = 0;
-    for (const r of RULES) {
-      const res = this.evaluateRule(r, snap);
+    for (const r of cfg.rules) {
+      if (cfg.disabled.has(r.key)) continue; // regra desactivada em Configurações
+      const res = this.evaluateRule(r, snap, cfg.T);
       if (res.unavailableReason) continue; // sem dados: não cria nem resolve
       const existing = open.get(r.key);
-      if (res.triggered && !existing) {
+      // Janela de manutenção: não cria alertas novos (resolver continua permitido).
+      if (res.triggered && !existing && !cfg.window) {
         const alert = await this.prisma.systemAlert.create({
           data: {
             severity: r.severity,

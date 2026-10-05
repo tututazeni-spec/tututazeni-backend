@@ -18,6 +18,8 @@ import { ScalabilityForecastService } from './scalability-forecast.service';
 import { ScalabilityLoadTestsService } from './scalability-loadtests.service';
 import { ScalabilityCostsService } from './scalability-costs.service';
 import { ScalabilityAlertsService } from './scalability-alerts.service';
+import { ScalabilityReportsService } from './scalability-reports.service';
+import { ScalabilitySettingsService } from './scalability-settings.service';
 import { ScalabilityStorageService } from './scalability-storage.service';
 import { ScalabilityIntegrationsPerfService } from './scalability-integrations-perf.service';
 import { ScalabilityEventListeners } from './scalability.events';
@@ -60,6 +62,8 @@ import { ApiIntegrationModule } from '../api-integration/api-integration.module'
     ScalabilityLoadTestsService,
     ScalabilityCostsService,
     ScalabilityAlertsService,
+    ScalabilityReportsService,
+    ScalabilitySettingsService,
     ScalabilityEventListeners,
   ],
   exports: [ScalabilityService],

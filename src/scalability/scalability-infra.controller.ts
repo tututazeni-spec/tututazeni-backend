@@ -1,6 +1,19 @@
 // modulo_scalability.md §7-9 — rotas das abas API & Backend e Base de Dados.
 
-import { Body, Controller, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Res,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { FrontendPerfSampleDto } from './frontend-perf.dto';
 import { ScalabilityCapacityService } from './scalability-capacity.service';
@@ -29,10 +42,18 @@ import { ScalabilityInfraService } from './scalability-infra.service';
 import { ScalabilityIntegrationsPerfService } from './scalability-integrations-perf.service';
 import { ScalabilityQueuesService } from './scalability-queues.service';
 import { ScalabilityStorageService } from './scalability-storage.service';
+import {
+  ReportFormat,
+  ScalabilityReportsService,
+  ScalabilityReportType,
+} from './scalability-reports.service';
+import { ScalabilitySettingsService } from './scalability-settings.service';
+import { ReportExportQueryDto } from './scalability-reports.dto';
+import { UpdateScalabilitySettingsDto as UpdateScalabilityDto } from './scalability-settings.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
-import { Role } from '../auth/enums/role.enum';
+import { AUTHENTICATED_ROLES, Role } from '../auth/enums/role.enum';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CurrentUserData } from '../common/types/current-user';
 
@@ -52,6 +73,8 @@ export class ScalabilityInfraController {
     private readonly loadTests: ScalabilityLoadTestsService,
     private readonly costs: ScalabilityCostsService,
     private readonly alertRules: ScalabilityAlertsService,
+    private readonly reports: ScalabilityReportsService,
+    private readonly settings: ScalabilitySettingsService,
   ) {}
 
   @Get('api-metrics')
@@ -250,5 +273,60 @@ export class ScalabilityInfraController {
   @ApiOperation({ summary: 'Avalia já as regras de alerta (cria/resolve alertas)' })
   evaluateAlertRules() {
     return this.alertRules.evaluateAndRaise();
+  }
+
+  // §23 Relatórios e §24 Configurações — acesso por perfil configurável (ADMIN sempre);
+  // o RolesGuard só exige sessão válida, a lista de perfis autorizados é verificada no serviço.
+  @Get('reports')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Aba Relatórios: catálogo de relatórios e formatos' })
+  async listReports(@CurrentUser() user: CurrentUserData) {
+    await this.settings.assertCanAccess(user);
+    return this.reports.catalog();
+  }
+
+  @Get('reports/:type')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Pré-visualiza um relatório (resumo + tabelas)' })
+  async previewReport(@Param('type') type: string, @CurrentUser() user: CurrentUserData) {
+    await this.settings.assertCanAccess(user);
+    return this.reports.build(type as ScalabilityReportType);
+  }
+
+  @Get('reports/:type/export')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Exporta um relatório em csv | xlsx | pdf (registado no Audit)' })
+  async exportReport(
+    @Param('type') type: string,
+    @Query() q: ReportExportQueryDto,
+    @CurrentUser() user: CurrentUserData,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    await this.settings.assertCanAccess(user);
+    const out = await this.reports.export(
+      type as ScalabilityReportType,
+      q.format as ReportFormat,
+      Number(user.id),
+    );
+    res.set({
+      'Content-Type': out.mimeType,
+      'Content-Disposition': `attachment; filename="${out.fileName}"`,
+    });
+    return new StreamableFile(out.buffer);
+  }
+
+  @Get('settings')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Aba Configurações: limites, regras, janelas, retenção, perfis' })
+  async getSettings(@CurrentUser() user: CurrentUserData) {
+    await this.settings.assertCanAccess(user);
+    return this.settings.getSettings();
+  }
+
+  @Patch('settings')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Actualiza as configurações do módulo (registado no Audit)' })
+  updateSettings(@Body() dto: UpdateScalabilityDto, @CurrentUser() user: CurrentUserData) {
+    return this.settings.update(dto, Number(user.id));
   }
 }

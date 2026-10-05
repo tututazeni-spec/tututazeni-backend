@@ -15171,6 +15171,13 @@ model ScalabilityInfraSettings {
   dbCapacityGb            Float?
   // Custos (§21)
   costCurrency            String    @default("EUR")
+  // Configurações (§24)
+  thresholdsJson          String? // JSON: limiares das regras de alerta que diferem do padrão
+  disabledRulesJson       String? // JSON: string[] de chaves de regras desactivadas
+  maintenanceWindowsJson  String? // JSON: [{id, name, startsAt, endsAt, note}]
+  metricRetentionDays     Int       @default(90)
+  collectionIntervalMin   Int       @default(1)
+  authorizedRolesJson     String? // JSON: string[] de perfis (além de ADMIN) com acesso a Relatórios/Configurações
 
   @@map("scalability_infra_settings")
 }

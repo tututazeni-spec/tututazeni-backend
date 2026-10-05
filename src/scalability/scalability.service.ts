@@ -848,6 +848,20 @@ export class ScalabilityService {
   @Cron(CronExpression.EVERY_MINUTE)
   async captureSystemMetrics() {
     try {
+      // §24 — frequência de recolha configurável (o cron corre sempre ao minuto).
+      const cfg = await this.prisma.scalabilityInfraSettings.findUnique({
+        where: { id: 'default' },
+        select: { collectionIntervalMin: true },
+      });
+      const every = cfg?.collectionIntervalMin ?? 1;
+      if (every > 1) {
+        const last = await this.prisma.scalabilityMetric.findFirst({
+          orderBy: { capturedAt: 'desc' },
+          select: { capturedAt: true },
+        });
+        // margem de 30 s para a deriva do cron
+        if (last && Date.now() - last.capturedAt.getTime() < every * 60_000 - 30_000) return;
+      }
       // Em produção: integrar com CloudWatch / Azure Monitor / Prometheus
       // Aqui: simular ou buscar de endpoint de health interno
       const snapshot = await this.collectSystemSnapshot();
