@@ -12,6 +12,9 @@ import { MonitoringPerformanceService } from './monitoring-performance.service';
 import { MonitoringAlertsService } from './monitoring-alerts.service';
 import { MonitoringIncidentsService } from './monitoring-incidents.service';
 import { MonitoringHealthService } from './monitoring-health.service';
+import { MonitoringJobsService } from './monitoring-jobs.service';
+import { MonitoringSlaService } from './monitoring-sla.service';
+import { MonitoringHistoryService } from './monitoring-history.service';
 
 @Module({
   imports: [
@@ -35,6 +38,9 @@ import { MonitoringHealthService } from './monitoring-health.service';
     MonitoringAlertsService,
     MonitoringIncidentsService,
     MonitoringHealthService,
+    MonitoringJobsService,
+    MonitoringSlaService,
+    MonitoringHistoryService,
   ],
   exports: [MonitoringModulesService],
 })

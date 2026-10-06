@@ -1,14 +1,16 @@
-// modulo_monitoring.md §1-9 — Visão Geral, Módulos, Processos, Automações, Integrações,
-// Performance, Alertas, Incidentes e Health Check.
+// modulo_monitoring.md §1-12 — Visão Geral, Módulos, Processos, Automações, Integrações,
+// Performance, Alertas, Incidentes, Health Check, Jobs, SLA e Histórico.
 // Leitura para perfis técnicos/de gestão; as ações (alertas e incidentes) só para ADMIN. Acesso restrito a perfis técnicos/de gestão (o módulo não aparece
 // para colaboradores comuns — ver recomendação no documento).
 
 import {
   Body,
   Controller,
+  DefaultValuePipe,
   Get,
   Param,
   ParseEnumPipe,
+  ParseIntPipe,
   Patch,
   Post,
   Query,
@@ -42,6 +44,9 @@ import {
   ListMonitoringIncidentsQueryDto,
 } from './monitoring-incidents.dto';
 import { MonitoringHealthService } from './monitoring-health.service';
+import { JOB_STATES, JobState, MonitoringJobsService } from './monitoring-jobs.service';
+import { MonitoringSlaService } from './monitoring-sla.service';
+import { HISTORY_KINDS, HistoryKind, MonitoringHistoryService } from './monitoring-history.service';
 
 @ApiTags('Monitoring')
 @ApiBearerAuth()
@@ -59,6 +64,9 @@ export class MonitoringController {
     private readonly alerts: MonitoringAlertsService,
     private readonly incidents: MonitoringIncidentsService,
     private readonly health: MonitoringHealthService,
+    private readonly jobs: MonitoringJobsService,
+    private readonly sla: MonitoringSlaService,
+    private readonly history: MonitoringHistoryService,
   ) {}
 
   @Get('overview')
@@ -200,5 +208,39 @@ export class MonitoringController {
   })
   getHealth(@Query('fresh') fresh?: string) {
     return this.health.getHealth(fresh === 'true');
+  }
+
+  // ── §10 Jobs & Background Tasks ───────────────────────────────────────────
+
+  @Get('jobs')
+  @ApiOperation({
+    summary: 'Jobs: executados, em execução, falhados, agendados, duração, retries e crons',
+  })
+  getJobs(@Query('state', new ParseEnumPipe(JOB_STATES, { optional: true })) state?: JobState) {
+    return this.jobs.getJobs(state);
+  }
+
+  // ── §11 SLA & SLO ─────────────────────────────────────────────────────────
+
+  @Get('sla')
+  @ApiOperation({
+    summary: 'SLA/SLO: objectivo vs actual, indisponibilidade, violações, serviços em risco',
+  })
+  getSla(@Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number) {
+    return this.sla.getSla(days);
+  }
+
+  // ── §12 Histórico de Monitorização ────────────────────────────────────────
+
+  @Get('history')
+  @ApiOperation({
+    summary: 'Histórico: linha do tempo de ocorrências e séries diárias (não duplica o Audit)',
+  })
+  getHistory(
+    @Query('days', new DefaultValuePipe(7), ParseIntPipe) days: number,
+    @Query('limit', new DefaultValuePipe(100), ParseIntPipe) limit: number,
+    @Query('kind', new ParseEnumPipe(HISTORY_KINDS, { optional: true })) kind?: HistoryKind,
+  ) {
+    return this.history.getHistory({ days, limit, kind });
   }
 }
