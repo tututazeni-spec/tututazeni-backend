@@ -8459,6 +8459,8 @@ model TenantConfig {
   certificateSettingsJson  String?
   privacySettingsJson      String?
   moduleFlagsJson          String?
+  // ─── Email (docs/modulo_settings.md §12) — templates e assinatura ───
+  emailSettingsJson        String?
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
   integrations             IntegrationConfig[]

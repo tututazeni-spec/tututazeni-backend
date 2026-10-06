@@ -24,17 +24,23 @@ import { IntegrationSettingsService } from './integration-settings.service';
 import { CertificateSettingsService } from './certificate-settings.service';
 import { PrivacySettingsService } from './privacy-settings.service';
 import { LicenseSettingsService } from './license-settings.service';
+import { AuditDataSettingsService } from './audit-data-settings.service';
+import { AuthSettingsService } from './auth-settings.service';
+import { EmailSettingsService } from './email-settings.service';
 import {
   CreateCertificateTemplateDto,
   CreateDataSubjectRequestDto,
   DisableTwoFactorDto,
   PublishConsentTextDto,
   SetDepartmentScopeDto,
+  TestEmailTemplateDto,
   TestSmtpDto,
   TwoFactorCodeDto,
+  UpdateAuthSettingsDto,
   UpdateCertificateSettingsDto,
   UpdateCertificateTemplateDto,
   UpdateDataSubjectRequestDto,
+  UpdateEmailSettingsDto,
   UpdateIntegrationSettingsDto,
   UpdateModuleFlagsDto,
   UpdateNotificationSettingsDto,
@@ -57,6 +63,9 @@ export class SettingsController {
     private readonly certificates: CertificateSettingsService,
     private readonly privacy: PrivacySettingsService,
     private readonly license: LicenseSettingsService,
+    private readonly auditData: AuditDataSettingsService,
+    private readonly authSettings: AuthSettingsService,
+    private readonly emailSettings: EmailSettingsService,
   ) {}
 
   // Qualquer utilizador autenticado: nome da plataforma, logo e formatos.
@@ -460,5 +469,69 @@ export class SettingsController {
   @ApiOperation({ summary: 'Activar/desactivar módulos (feature flags)' })
   updateModuleFlags(@Body() dto: UpdateModuleFlagsDto, @CurrentUser() admin: CurrentUserData) {
     return this.license.updateModules(dto, admin.id);
+  }
+
+  // ─── §10 Auditoria e Dados ────────────────────────────────────────────────
+  // Consulta/edição detalhada em /audit/* (módulo próprio) — este endpoint é só
+  // o resumo consumido pelo separador de Definições.
+
+  @Get('audit')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: 'Resumo: saúde da auditoria, backups, política e exportações' })
+  auditOverview() {
+    return this.auditData.overview();
+  }
+
+  // ─── §11 Autenticação / SSO ───────────────────────────────────────────────
+
+  @Get('auth')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'SSO (Google/Microsoft/OIDC), LDAP/Active Directory e domínio autorizado' })
+  authSettingsView() {
+    return this.authSettings.get();
+  }
+
+  @Put('auth')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Actualizar SSO e LDAP/AD' })
+  updateAuthSettings(@Body() dto: UpdateAuthSettingsDto, @CurrentUser() admin: CurrentUserData) {
+    return this.authSettings.update(dto, admin.id);
+  }
+
+  @Post('auth/test-oidc')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Testar a descoberta OIDC do fornecedor de SSO guardado' })
+  testOidc() {
+    return this.authSettings.testOidc();
+  }
+
+  @Post('auth/test-ldap')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Testar a ligação ao servidor LDAP/AD guardado' })
+  testLdap() {
+    return this.authSettings.testLdap();
+  }
+
+  // ─── §12 Email ────────────────────────────────────────────────────────────
+
+  @Get('email')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'SMTP, assinatura e templates dos emails do sistema' })
+  emailSettingsView() {
+    return this.emailSettings.get();
+  }
+
+  @Put('email')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Actualizar assinatura, templates e/ou SMTP' })
+  updateEmailSettings(@Body() dto: UpdateEmailSettingsDto, @CurrentUser() admin: CurrentUserData) {
+    return this.emailSettings.update(dto, admin.id);
+  }
+
+  @Post('email/test')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Enviar um template com dados de exemplo para validar o resultado' })
+  testEmailTemplate(@Body() dto: TestEmailTemplateDto, @CurrentUser() admin: CurrentUserData) {
+    return this.emailSettings.testTemplate(dto.key, dto.to, admin.id);
   }
 }

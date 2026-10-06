@@ -24,6 +24,8 @@ import { EmptyStringToUndefined } from '../common/transformers/empty-string-to-u
 import { POLICY_REQUIRED_FIELD_OPTIONS } from './user-policy';
 import { TWO_FACTOR_MODES } from './security-policy';
 import { ISIS_MODULE_OPTIONS } from './integration-settings';
+import { OIDC_PROVIDERS } from './auth-settings';
+import { EMAIL_TEMPLATE_KEYS } from './email-settings';
 
 const DATE_FORMATS = ['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'] as const;
 const TIME_FORMATS = ['24h', '12h'] as const;
@@ -598,4 +600,147 @@ export class UpdateModuleFlagsDto {
   })
   @IsObject()
   modules!: Partial<Record<PermissionSubject, boolean>>;
+}
+
+// ─── §11 Autenticação / SSO ───────────────────────────────────────────────────
+
+class OidcSettingsDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(255) clientId?: string;
+
+  @ApiPropertyOptional({ description: 'Só é gravado se enviado; nunca é devolvido' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  clientSecret?: string;
+
+  @ApiPropertyOptional({ description: 'Só MICROSOFT — tenant do Azure AD ("common" = qualquer conta)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  tenantId?: string;
+
+  @ApiPropertyOptional({ description: 'Só OIDC genérico — emissor do fornecedor', example: 'https://idp.empresa.ao' })
+  @IsOptional()
+  @IsUrl()
+  issuer?: string;
+}
+
+class LdapSettingsDto {
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() enabled?: boolean;
+
+  @ApiPropertyOptional({ example: 'ldaps://ad.empresa.ao:636' })
+  @IsOptional()
+  @Matches(/^ldaps?:\/\/\S+$/, { message: 'URL LDAP inválido (ex.: ldaps://ad.empresa.ao:636)' })
+  url?: string;
+
+  @ApiPropertyOptional({ example: 'CN=innova-svc,OU=Service Accounts,DC=empresa,DC=ao' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  bindDn?: string;
+
+  @ApiPropertyOptional({ description: 'Só é gravada se enviada; nunca é devolvida' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  bindPassword?: string;
+
+  @ApiPropertyOptional({ example: 'DC=empresa,DC=ao' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  baseDn?: string;
+
+  @ApiPropertyOptional({ description: '{{email}} é substituído pelo email introduzido no login' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  userFilter?: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(64) emailAttribute?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(64) nameAttribute?: string;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() startTls?: boolean;
+}
+
+export class UpdateAuthSettingsDto {
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() ssoEnabled?: boolean;
+
+  @ApiPropertyOptional({ enum: [...OIDC_PROVIDERS, null] })
+  @IsOptional()
+  @IsIn([...OIDC_PROVIDERS, null])
+  ssoProvider?: 'GOOGLE' | 'MICROSOFT' | 'OIDC' | null;
+
+  @ApiPropertyOptional({ type: OidcSettingsDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => OidcSettingsDto)
+  oidc?: OidcSettingsDto;
+
+  @ApiPropertyOptional({ type: LdapSettingsDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LdapSettingsDto)
+  ldap?: LdapSettingsDto;
+
+  @ApiPropertyOptional({ description: 'Bloqueia o login por password para quem não seja ADMIN' })
+  @IsOptional()
+  @IsBoolean()
+  enforceSsoOnly?: boolean;
+}
+
+export class LdapLoginDto {
+  @ApiProperty() @IsEmail() email!: string;
+  @ApiProperty() @IsString() @IsNotEmpty() password!: string;
+}
+
+// ─── §12 Email ────────────────────────────────────────────────────────────────
+
+class EmailTemplateDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(255) subject?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(4000) body?: string;
+}
+
+class EmailTemplatesDto {
+  @ApiPropertyOptional({ type: EmailTemplateDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => EmailTemplateDto)
+  PASSWORD_RESET?: EmailTemplateDto;
+
+  @ApiPropertyOptional({ type: EmailTemplateDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => EmailTemplateDto)
+  USER_INVITE?: EmailTemplateDto;
+}
+
+export class UpdateEmailSettingsDto {
+  @ApiPropertyOptional({ description: 'Acrescentada ao fim de todos os emails transaccionais' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  signature?: string;
+
+  @ApiPropertyOptional({ type: EmailTemplatesDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => EmailTemplatesDto)
+  templates?: EmailTemplatesDto;
+
+  @ApiPropertyOptional({ type: SmtpSettingsDto, description: 'Delegado para as definições de Integrações (§6)' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SmtpSettingsDto)
+  smtp?: SmtpSettingsDto;
+}
+
+export class TestEmailTemplateDto {
+  @ApiPropertyOptional({ enum: EMAIL_TEMPLATE_KEYS })
+  @IsIn(EMAIL_TEMPLATE_KEYS)
+  key!: 'PASSWORD_RESET' | 'USER_INVITE';
+
+  @ApiPropertyOptional({ description: 'Destinatário do email de teste (por omissão, o do admin)' })
+  @IsOptional()
+  @IsEmail()
+  to?: string;
 }

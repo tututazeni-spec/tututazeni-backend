@@ -9,9 +9,11 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { SecuritySettingsService } from '../settings/security-settings.service';
+import { AuthSettingsService } from '../settings/auth-settings.service';
 import { isPasswordExpired, isTwoFactorRequired } from '../settings/security-policy';
 import { verifyTotp } from '../settings/totp';
 import { decryptSecret } from '../automation/automation-connections.service';
@@ -51,7 +53,29 @@ export class AuthService {
     // Optional: specs sem SettingsModule continuam a montar o serviço.
     @Optional() private readonly settings?: SettingsService,
     @Optional() private readonly security?: SecuritySettingsService,
+    @Optional() private readonly authSettings?: AuthSettingsService,
   ) {}
+
+  /** Mesmo include/omit usado para autenticar — reutilizado pelo SSO/LDAP (sso-auth.service.ts). */
+  static readonly USER_WITH_ROLE_INCLUDE = {
+    role: { include: { rolePermissions: { include: { permission: true } } } },
+  } satisfies Prisma.UserInclude;
+
+  async findUserWithRoleByEmail(email: string) {
+    return this.prisma.user.findUnique({
+      where: { email },
+      include: AuthService.USER_WITH_ROLE_INCLUDE,
+      omit: { password: false, twoFactorSecret: false },
+    });
+  }
+
+  createUser(data: Prisma.UserUncheckedCreateInput) {
+    return this.prisma.user.create({
+      data,
+      include: AuthService.USER_WITH_ROLE_INCLUDE,
+      omit: { password: false, twoFactorSecret: false },
+    });
+  }
 
   /**
    * Regista um evento de acesso em AuditLog sem nunca afectar o fluxo de
@@ -118,19 +142,29 @@ export class AuthService {
     // vem de GET /auth/me ou do JwtStrategy nos pedidos seguintes.
     // NOTA: lê do PRIMARY (this.prisma), nunca da réplica — a validação de
     // credenciais tem de ver sempre a password mais recente (read-after-write).
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-      include: {
-        role: { include: { rolePermissions: { include: { permission: true } } } },
-      },
-      // password é omitido por omissão (src/prisma/prisma.service.ts) — precisamos
-      // dele aqui para o bcrypt.compare abaixo.
-      // twoFactorSecret também é omitido por omissão — preciso dele para validar o TOTP.
-      omit: { password: false, twoFactorSecret: false },
-    });
+    const user = await this.findUserWithRoleByEmail(dto.email);
 
     if (!user) throw this.failedLogin('UNKNOWN_USER', dto.email, null, ctx);
     if (!user.active) throw this.failedLogin('ACCOUNT_DISABLED', dto.email, user.id, ctx);
+
+    // Definições §11: organização pode obrigar autenticação externa (SSO/LDAP)
+    // para todos menos ADMIN (acesso de emergência caso o IdP fique indisponível).
+    if (this.authSettings) {
+      const auth = await this.authSettings.getInternal();
+      if (auth.enforceSsoOnly && (auth.ssoEnabled || auth.ldap.enabled) && user.role?.name !== 'ADMIN') {
+        this.recordAccessEvent({
+          userId: user.id,
+          action: 'FAILED',
+          entity: 'Auth',
+          entityId: user.id,
+          status: 'DENIED',
+          severity: 'LOW',
+          ctx,
+          metadata: { reason: 'SSO_ENFORCED', email: dto.email },
+        });
+        throw new UnauthorizedException('Esta organização exige autenticação SSO/LDAP');
+      }
+    }
 
     // Definições §4: conta bloqueada por tentativas falhadas (antes do bcrypt —
     // poupa CPU e impede força bruta durante o bloqueio).
@@ -215,17 +249,33 @@ export class AuthService {
       !user.twoFactorEnabled &&
       isTwoFactorRequired(securityPolicy, user.role?.name === 'ADMIN' || user.role?.name === 'RH');
 
-    const tokens = await this.generateTokens(
-      user.id,
-      user.email,
-      securityPolicy?.accessTokenMinutes,
-    );
-    await this.persistRefreshToken(
-      user.id,
-      tokens.refreshToken,
-      ctx,
-      securityPolicy?.refreshTokenDays,
-    );
+    return this.issueSessionForUser(user, ctx, {
+      mustChangePassword,
+      twoFactorSetupRequired,
+      accessTokenMinutes: securityPolicy?.accessTokenMinutes,
+      refreshTokenDays: securityPolicy?.refreshTokenDays,
+    });
+  }
+
+  /**
+   * Emite tokens + regista o login para um utilizador já autenticado por outra
+   * via (SSO/LDAP — src/auth/sso-auth.service.ts) ou pelo próprio login() por
+   * password. Partilhado para que ambos os caminhos fiquem sempre consistentes
+   * (mesma geração/persistência de tokens, mesmo rasto de auditoria).
+   */
+  async issueSessionForUser(
+    user: NonNullable<Awaited<ReturnType<AuthService['findUserWithRoleByEmail']>>>,
+    ctx: AuthRequestContext | undefined,
+    opts: {
+      mustChangePassword?: boolean;
+      twoFactorSetupRequired?: boolean;
+      accessTokenMinutes?: number;
+      refreshTokenDays?: number;
+      method?: 'SSO' | 'LDAP';
+    } = {},
+  ) {
+    const tokens = await this.generateTokens(user.id, user.email, opts.accessTokenMinutes);
+    await this.persistRefreshToken(user.id, tokens.refreshToken, ctx, opts.refreshTokenDays);
 
     // fire-and-forget — não bloqueia a resposta de login
     writeChainedAuditLog(this.prisma, {
@@ -235,6 +285,7 @@ export class AuthService {
       entityId: user.id,
       ip: ctx?.ip,
       userAgent: ctx?.userAgent?.slice(0, 300),
+      metadata: opts.method ? JSON.stringify({ method: opts.method }) : undefined,
     }).catch((err: unknown) =>
       this.logger.warn({
         userId: user.id,
@@ -261,7 +312,12 @@ export class AuthService {
 
     const { password: _, twoFactorSecret: __, ...rest } = user;
     const safeUser = { ...rest, role: withFlatPermissions(user.role) };
-    return { user: safeUser, ...tokens, mustChangePassword, twoFactorSetupRequired };
+    return {
+      user: safeUser,
+      ...tokens,
+      mustChangePassword: opts.mustChangePassword ?? false,
+      twoFactorSetupRequired: opts.twoFactorSetupRequired ?? false,
+    };
   }
 
   async register(dto: RegisterDto) {

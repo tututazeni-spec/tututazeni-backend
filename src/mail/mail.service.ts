@@ -3,6 +3,7 @@ import * as nodemailer from 'nodemailer';
 import type Mail from 'nodemailer/lib/mailer';
 import { sanitizeForLog } from '../common/logging/sanitize';
 import { IntegrationSettingsService } from '../settings/integration-settings.service';
+import { EmailSettingsService } from '../settings/email-settings.service';
 
 @Injectable()
 export class MailService implements OnModuleInit {
@@ -16,7 +17,11 @@ export class MailService implements OnModuleInit {
   } | null = null;
 
   // Definições §6: o SMTP guardado nas definições tem prioridade sobre as variáveis de ambiente.
-  constructor(@Optional() private readonly orgIntegrations?: IntegrationSettingsService) {}
+  // Definições §12: templates e assinatura, com fallback para o texto fixo abaixo.
+  constructor(
+    @Optional() private readonly orgIntegrations?: IntegrationSettingsService,
+    @Optional() private readonly emailSettings?: EmailSettingsService,
+  ) {}
 
   private async resolveTransport(): Promise<{
     transporter: nodemailer.Transporter | null;
@@ -67,18 +72,24 @@ export class MailService implements OnModuleInit {
   }
 
   async sendPasswordReset(email: string, token: string): Promise<void> {
+    const resetLink = `${process.env.APP_URL ?? ''}/auth/reset-password?token=${token}`;
+    const rendered = await this.emailSettings
+      ?.render('PASSWORD_RESET', { resetLink })
+      .catch(() => null);
     await this.send({
       to: email,
-      subject: 'INNOVA — Recuperação de password',
-      text: [
-        'Recebemos um pedido de recuperação de password.',
-        '',
-        `Use este link para redefinir a sua password: ${process.env.APP_URL ?? ''}/auth/reset-password?token=${token}`,
-        '',
-        'Se não solicitou este pedido, ignore este email.',
-        '',
-        '-- Sistema INNOVA',
-      ].join('\n'),
+      subject: rendered?.subject ?? 'INNOVA — Recuperação de password',
+      text:
+        rendered?.text ??
+        [
+          'Recebemos um pedido de recuperação de password.',
+          '',
+          `Use este link para redefinir a sua password: ${resetLink}`,
+          '',
+          'Se não solicitou este pedido, ignore este email.',
+          '',
+          '-- Sistema INNOVA',
+        ].join('\n'),
     });
   }
 
@@ -88,21 +99,26 @@ export class MailService implements OnModuleInit {
     tempPassword: string,
     expiryDays?: number,
   ): Promise<void> {
+    const rendered = await this.emailSettings
+      ?.render('USER_INVITE', { fullName, email, tempPassword, expiryDays: expiryDays ?? '' })
+      .catch(() => null);
     await this.send({
       to: email,
-      subject: 'Bem-vindo ao INNOVA — acesso à sua conta',
-      text: [
-        `Olá ${fullName},`,
-        '',
-        'A sua conta foi criada no sistema INNOVA.',
-        `Email: ${email}`,
-        `Password temporária: ${tempPassword}`,
-        '',
-        'Por favor aceda e altere a sua password no primeiro login.',
-        ...(expiryDays ? [`Este convite é válido por ${expiryDays} dias.`] : []),
-        '',
-        '-- Sistema INNOVA',
-      ].join('\n'),
+      subject: rendered?.subject ?? 'Bem-vindo ao INNOVA — acesso à sua conta',
+      text:
+        rendered?.text ??
+        [
+          `Olá ${fullName},`,
+          '',
+          'A sua conta foi criada no sistema INNOVA.',
+          `Email: ${email}`,
+          `Password temporária: ${tempPassword}`,
+          '',
+          'Por favor aceda e altere a sua password no primeiro login.',
+          ...(expiryDays ? [`Este convite é válido por ${expiryDays} dias.`] : []),
+          '',
+          '-- Sistema INNOVA',
+        ].join('\n'),
     });
   }
 

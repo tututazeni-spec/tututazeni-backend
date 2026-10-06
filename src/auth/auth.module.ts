@@ -9,6 +9,8 @@ import { RefreshTokenStrategy } from './refresh-token.strategy';
 import { MailModule } from '../mail/mail.module';
 import { PasswordResetService } from './password-reset.service';
 import { SettingsModule } from '../settings/settings.module';
+import { SsoController } from './sso.controller';
+import { SsoAuthService } from './sso-auth.service';
 
 @Module({
   imports: [
@@ -24,8 +26,8 @@ import { SettingsModule } from '../settings/settings.module';
     MailModule,
     SettingsModule,
   ],
-  providers: [AuthService, JwtStrategy, RefreshTokenStrategy, PasswordResetService],
-  controllers: [AuthController],
+  providers: [AuthService, JwtStrategy, RefreshTokenStrategy, PasswordResetService, SsoAuthService],
+  controllers: [AuthController, SsoController],
   exports: [AuthService],
 })
 export class AuthModule {}
