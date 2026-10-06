@@ -7,7 +7,7 @@
 // Separado do Audit (§28.2): aqui mede-se o sistema, não quem fez o quê.
 
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { ScalabilityInfraService } from './scalability-infra.service';
 import { ScalabilityQueuesService } from './scalability-queues.service';
@@ -73,7 +73,7 @@ export class ScalabilityHistoryService {
     this.logger.warn(`${what}: ${err instanceof Error ? err.message : err}`);
   }
 
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  @Cron('25 */5 * * * *')
   async recordQueueMetrics() {
     try {
       const snap = await this.queues.snapshotForHistory();
@@ -84,7 +84,7 @@ export class ScalabilityHistoryService {
     }
   }
 
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  @Cron('55 */5 * * * *')
   async recordEndpointMetrics() {
     try {
       const now = Date.now();

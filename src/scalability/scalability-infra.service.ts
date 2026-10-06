@@ -351,7 +351,31 @@ export class ScalabilityInfraService {
     });
   }
 
-  async getDatabaseMetrics() {
+  private warnedNoPgss = false;
+  private readonly catalogCache = new Map<string, { at: number; value: Promise<unknown> }>();
+  private dbMetricsCache: {
+    at: number;
+    value: ReturnType<ScalabilityInfraService['computeDatabaseMetrics']>;
+  } | null = null;
+
+  /**
+   * Partilha o resultado entre chamadores simultâneos (alertas do Monitoring,
+   * alertas do Scalability, performance, controller): as queries a pg_stat_*
+   * são caras e antes corriam duplicadas no mesmo tick de cron.
+   */
+  getDatabaseMetrics() {
+    const now = Date.now();
+    if (!this.dbMetricsCache || now - this.dbMetricsCache.at > 30_000) {
+      const value = this.computeDatabaseMetrics();
+      this.dbMetricsCache = { at: now, value };
+      value.catch(() => {
+        this.dbMetricsCache = null;
+      });
+    }
+    return this.dbMetricsCache.value;
+  }
+
+  private async computeDatabaseMetrics() {
     // Garante pelo menos uma amostra recente (o cron é horário).
     const last = await this.prisma.databaseSizeSample.findFirst({
       orderBy: { capturedAt: 'desc' },
@@ -365,9 +389,27 @@ export class ScalabilityInfraService {
       try {
         return await fn();
       } catch (err: unknown) {
-        this.logger.warn(`Consulta pg_stat falhou: ${err instanceof Error ? err.message : err}`);
+        const msg = err instanceof Error ? err.message : 'erro desconhecido';
+        // Extensão opcional: avisa uma só vez em vez de a cada tick de cron.
+        if (msg.includes('pg_stat_statements')) {
+          if (!this.warnedNoPgss) {
+            this.warnedNoPgss = true;
+            this.logger.warn('pg_stat_statements não instalada — top queries indisponível.');
+          }
+        } else {
+          this.logger.warn(`Consulta pg_stat falhou: ${msg}`);
+        }
         return fallback;
       }
+    };
+
+    // Catálogo (tamanho de tabelas / índices sem uso) é caro e muda devagar: cache 1 h.
+    const slowCatalog = <T>(key: string, fn: () => Promise<T>, fallback: T): Promise<T> => {
+      const hit = this.catalogCache.get(key);
+      if (hit && Date.now() - hit.at < 60 * 60 * 1000) return hit.value as Promise<T>;
+      const value = safe(fn, fallback);
+      this.catalogCache.set(key, { at: Date.now(), value });
+      return value;
     };
 
     const [conn, dbStat, locks, tables, indexes, unusedIdx, slow] = await Promise.all([
@@ -395,20 +437,23 @@ export class ScalabilityInfraService {
             SELECT count(*)::int AS waiting FROM pg_locks WHERE NOT granted`,
         [],
       ),
-      safe(
+      slowCatalog(
+        'tables',
         () =>
           this.prisma.$queryRaw<{ name: string; bytes: bigint; rows: bigint }[]>`
             SELECT relname AS name, pg_total_relation_size(relid) AS bytes, n_live_tup AS rows
             FROM pg_stat_user_tables ORDER BY pg_total_relation_size(relid) DESC LIMIT 10`,
         [],
       ),
-      safe(
+      slowCatalog(
+        'idxCount',
         () =>
           this.prisma.$queryRaw<{ total: number }[]>`
             SELECT count(*)::int AS total FROM pg_stat_user_indexes`,
         [],
       ),
-      safe(
+      slowCatalog(
+        'unusedIdx',
         () =>
           this.prisma.$queryRaw<{ table: string; index: string; bytes: bigint }[]>`
             SELECT s.relname AS "table", s.indexrelname AS "index",
