@@ -8415,6 +8415,21 @@ model TenantConfig {
   cdnEnabled               Boolean                   @default(false)
   cdnConfigJson            String? // JSON com CDN config
   webhookSecret            String?
+  // ─── Definições da organização (docs/modulo_settings.md §1) ───
+  platformName             String?
+  nif                      String?
+  address                  String?
+  phone                    String?
+  contactEmail             String?
+  website                  String?
+  sector                   String?
+  country                  String?
+  faviconUrl               String?
+  dateFormat               String                    @default("DD/MM/YYYY")
+  timeFormat               String                    @default("24h")
+  numberFormat             String                    @default("pt")
+  // ─── Política de utilizadores (docs/modulo_settings.md §3) ───
+  userPolicyJson           String?
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
   integrations             IntegrationConfig[]

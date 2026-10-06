@@ -4,6 +4,7 @@ import {
   ConflictException,
   ForbiddenException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
@@ -11,6 +12,7 @@ import { Prisma } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { BCRYPT_COST_FACTOR } from '../common/config/security.config';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { flattenRolePermissions } from '../common/utils/role-permissions';
@@ -72,6 +74,9 @@ export class UsersService {
   constructor(
     private prisma: PrismaService,
     @InjectQueue('email') private readonly emailQueue: Queue,
+    // Política de utilizadores (Definições §3). Optional: specs que montam o
+    // serviço sem o SettingsModule continuam a funcionar (sem política).
+    @Optional() private readonly settings?: SettingsService,
   ) {}
 
   // ─── Sanitizar (remover password) ────────────────────────────────────────
@@ -217,7 +222,9 @@ export class UsersService {
 
   // ─── CRIAR ────────────────────────────────────────────────────────────────
 
-  async create(dto: CreateUserDto, createdById?: number) {
+  async create(dto: CreateUserDto, createdById?: number, opts: { skipPolicy?: boolean } = {}) {
+    if (this.settings && !opts.skipPolicy) dto = await this.settings.applyUserPolicy(dto);
+
     // Guards de unicidade antes da escrita: força primary para não validar contra réplica atrasada.
     const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (exists) throw new ConflictException('Email já registado');
@@ -910,6 +917,8 @@ export class UsersService {
   // ─── CONVIDAR UTILIZADOR ──────────────────────────────────────────────────
 
   async invite(dto: InviteUserDto) {
+    if (this.settings) dto = await this.settings.applyUserPolicy(dto, { invite: true });
+
     // Guard de unicidade antes da escrita: força primary.
     const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (exists) throw new ConflictException('Email já registado');
@@ -920,11 +929,15 @@ export class UsersService {
     // Mudança deliberada (Fase J): o utilizador é criado primeiro e o email de
     // convite vai para a fila `email` (retry gerido pelo Bull). Deixa de
     // bloquear a resposta e de impedir a criação quando o SMTP está em baixo.
-    const user = await this.create({
-      ...dto,
-      password: tempPassword,
-      accountStatus: AccountStatus.PENDING,
-    });
+    const user = await this.create(
+      {
+        ...dto,
+        password: tempPassword,
+        accountStatus: AccountStatus.PENDING,
+      },
+      undefined,
+      { skipPolicy: true },
+    );
 
     await this.emailQueue.add(
       'userInvite',
