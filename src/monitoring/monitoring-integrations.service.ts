@@ -214,7 +214,7 @@ export class MonitoringIntegrationsService {
       const durations = logs
         .filter(l => l.finishedAt)
         .map(l => l.finishedAt.getTime() - l.startedAt.getTime());
-      const apiLatencies = api.filter(a => a.latencyMs !== null).map(a => a.latencyMs as number);
+      const apiLatencies = api.filter(a => a.latencyMs !== null).map(a => a.latencyMs);
       const samples = [...durations, ...apiLatencies];
       const responseMs = samples.length
         ? Math.round(samples.reduce((s, v) => s + v, 0) / samples.length)
@@ -284,7 +284,7 @@ export class MonitoringIntegrationsService {
     // Resumo por família (ERP, SSO, LMS, Email, APIs, Webhooks, Outros)
     const families = (Object.keys(FAMILY_LABEL) as Family[]).map(f => {
       const items = rows.filter(x => x.family === f);
-      const lat = items.filter(x => x.avgResponseMs !== null).map(x => x.avgResponseMs as number);
+      const lat = items.filter(x => x.avgResponseMs !== null).map(x => x.avgResponseMs);
       return {
         family: f,
         label: FAMILY_LABEL[f],
@@ -303,7 +303,7 @@ export class MonitoringIntegrationsService {
     const hookConnections = connections.filter(c => c.type === 'WEBHOOK');
 
     const activeRows = rows.filter(x => x.active);
-    const allLat = rows.filter(x => x.avgResponseMs !== null).map(x => x.avgResponseMs as number);
+    const allLat = rows.filter(x => x.avgResponseMs !== null).map(x => x.avgResponseMs);
 
     return {
       generatedAt: now.toISOString(),
