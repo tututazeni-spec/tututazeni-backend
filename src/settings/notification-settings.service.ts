@@ -12,6 +12,7 @@ import {
   NotificationSettings,
   isEventDisabled,
   isWithinSendWindow,
+  nextSendWindowOpen,
   parseNotificationSettings,
 } from './notification-settings';
 
@@ -88,18 +89,27 @@ export class NotificationSettingsService {
     return isEventDisabled((await this.load()).settings, type);
   }
 
-  /** Canais globalmente ligados e se o horário permite envio externo agora. */
+  /**
+   * Canais globalmente ligados e se o horário permite envio externo agora.
+   * Fora do horário, `deferUntil` indica quando o email/WhatsApp pode sair
+   * (`null` = nada a adiar, ou a janela nunca abre).
+   */
   async deliveryPlan(critical: boolean): Promise<{
     inApp: boolean;
     email: boolean;
     whatsapp: boolean;
+    deferUntil: Date | null;
   }> {
     const { settings, timeZone } = await this.load();
-    const open = isWithinSendWindow(settings, new Date(), timeZone, critical);
+    const now = new Date();
+    const open = isWithinSendWindow(settings, now, timeZone, critical);
+    const wantsExternal = settings.channels.email || settings.channels.whatsapp;
     return {
       inApp: settings.channels.inApp,
       email: settings.channels.email && open,
       whatsapp: settings.channels.whatsapp && open,
+      deferUntil:
+        !open && wantsExternal ? nextSendWindowOpen(settings, now, timeZone, critical) : null,
     };
   }
 }

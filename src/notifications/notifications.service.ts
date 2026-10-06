@@ -20,6 +20,15 @@ import {
   NotificationPriority,
 } from './notifications.dto';
 
+export type DeferredChannel = 'email' | 'whatsapp';
+export interface DeferredDelivery {
+  userId: number;
+  subject: string;
+  message: string;
+  critical: boolean;
+  channels: DeferredChannel[];
+}
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
@@ -114,7 +123,7 @@ export class NotificationsService {
     }
     const plan = (await this.orgSettings?.deliveryPlan(
       dto.priority === NotificationPriority.CRITICAL,
-    )) ?? { inApp: true, email: true, whatsapp: true };
+    )) ?? { inApp: true, email: true, whatsapp: true, deferUntil: null };
 
     const notification = await this.prisma.notificationLog.create({
       data: {
@@ -156,7 +165,7 @@ export class NotificationsService {
     target: { email: string; phone: string | null },
     dto: CreateNotificationDto,
     prefs: { email: boolean; sms: boolean; whatsapp: boolean } | null,
-    plan: { email: boolean; whatsapp: boolean },
+    plan: { email: boolean; whatsapp: boolean; deferUntil: Date | null },
   ): Promise<void> {
     const subject = dto.title ?? dto.type;
     const onFail = (channel: string) => (e: unknown) =>
@@ -175,6 +184,77 @@ export class NotificationsService {
     }
     if (plan.whatsapp && (prefs?.whatsapp ?? false) && target.phone) {
       await this.sms.sendWhatsApp(target.phone, dto.message).catch(onFail('whatsapp'));
+    }
+
+    // Fora do horário permitido: em vez de descartar, agenda email/WhatsApp para a
+    // próxima abertura da janela (job atrasado na fila 'notifications').
+    if (plan.deferUntil) {
+      const channels: DeferredChannel[] = [];
+      if (!plan.email && (prefs ? prefs.email : true)) channels.push('email');
+      if (!plan.whatsapp && (prefs?.whatsapp ?? false) && target.phone) channels.push('whatsapp');
+      if (channels.length) {
+        await this.deferExternal(
+          {
+            userId: dto.userId,
+            subject,
+            message: dto.message,
+            critical: dto.priority === NotificationPriority.CRITICAL,
+            channels,
+          },
+          plan.deferUntil,
+        ).catch(onFail('deferred'));
+      }
+    }
+  }
+
+  private async deferExternal(payload: DeferredDelivery, runAt: Date): Promise<void> {
+    if (!this.queueEnabled) {
+      this.logger.warn({
+        userId: payload.userId,
+        msg: 'Envio fora do horário não adiado — fila desactivada, canais externos descartados',
+      });
+      return;
+    }
+    await this.notificationsQueue.add('deliver-external', payload, {
+      delay: Math.max(0, runAt.getTime() - Date.now()),
+      removeOnComplete: true,
+      attempts: 3,
+      backoff: 5000,
+    });
+  }
+
+  /** Executa um envio adiado: reavalia preferências/definições (podem ter mudado
+   *  durante a espera) e, se o horário ainda estiver fechado, reagenda. */
+  async deliverDeferred(payload: DeferredDelivery): Promise<void> {
+    const [target, prefs] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: payload.userId },
+        select: { email: true, phone: true },
+      }),
+      this.prisma.notificationPreference.findUnique({ where: { userId: payload.userId } }),
+    ]);
+    if (!target) return;
+    const plan = (await this.orgSettings?.deliveryPlan(payload.critical)) ?? {
+      inApp: true,
+      email: true,
+      whatsapp: true,
+      deferUntil: null,
+    };
+    const stillClosed: DeferredChannel[] = [];
+    for (const channel of payload.channels) {
+      if (channel === 'email') {
+        if (!(prefs ? prefs.email : true)) continue;
+        if (plan.email) {
+          await this.mail.sendNotification(target.email, payload.subject, payload.message);
+        } else if (plan.deferUntil) stillClosed.push('email');
+      } else {
+        if (!(prefs?.whatsapp ?? false) || !target.phone) continue;
+        if (plan.whatsapp) await this.sms.sendWhatsApp(target.phone, payload.message);
+        else if (plan.deferUntil) stillClosed.push('whatsapp');
+      }
+    }
+    if (stillClosed.length && plan.deferUntil) {
+      await this.deferExternal({ ...payload, channels: stillClosed }, plan.deferUntil);
     }
   }
 

@@ -1,10 +1,12 @@
 // src/settings/integration-settings.service.ts
 // Módulo Definições §6 (Integrações): SMTP, WhatsApp (só envio), Ísis (IA) e
 // resumo das integrações/chaves de API/webhooks já geridas por api-integration.
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import type { Redis } from 'ioredis';
 import * as nodemailer from 'nodemailer';
 import { Twilio } from 'twilio';
 import { PrismaService } from '../prisma/prisma.service';
+import { CACHE_REDIS } from '../cache/cache.constants';
 import { writeChainedAuditLog } from '../common/helpers/audit-chain';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 import { decryptSecret, encryptSecret } from '../automation/automation-connections.service';
@@ -19,6 +21,19 @@ import {
 const TTL_MS = 30_000;
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
+
+const WA_QUOTA_KEY = 'innova:whatsapp:sent';
+// KEYS[1]=sorted set; ARGV: now, hourMs, dayMs, hourlyLimit, dailyLimit, member.
+const CONSUME_QUOTA_LUA = `
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', tonumber(ARGV[1]) - tonumber(ARGV[3]))
+local day = redis.call('ZCARD', KEYS[1])
+local hour = redis.call('ZCOUNT', KEYS[1], tonumber(ARGV[1]) - tonumber(ARGV[2]) + 1, '+inf')
+if tonumber(ARGV[5]) > 0 and day >= tonumber(ARGV[5]) then return 0 end
+if tonumber(ARGV[4]) > 0 and hour >= tonumber(ARGV[4]) then return 0 end
+redis.call('ZADD', KEYS[1], ARGV[1], ARGV[6])
+redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[3]))
+return 1
+`;
 
 export interface ResolvedSmtp {
   host: string;
@@ -39,10 +54,14 @@ export interface ResolvedWhatsApp {
 export class IntegrationSettingsService {
   private readonly logger = new Logger(IntegrationSettingsService.name);
   private cache: { at: number; settings: IntegrationSettings } | null = null;
-  // Contadores em memória (por processo) — o limite é por instância da API.
+  // Fallback em memória (por processo) — só se o Redis não existir/estiver em baixo.
   private waSent: number[] = [];
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // Quota partilhada entre instâncias da API via Redis (sorted set de timestamps).
+    @Optional() @Inject(CACHE_REDIS) private readonly redis?: Redis,
+  ) {}
 
   private async load(): Promise<IntegrationSettings> {
     if (this.cache && Date.now() - this.cache.at < TTL_MS) return this.cache.settings;
@@ -190,10 +209,35 @@ export class IntegrationSettingsService {
     return whatsapp.accountSid || whatsapp.number ? whatsapp.enabled : null;
   }
 
-  /** Aplica os limites hora/dia; devolve false (sem consumir quota) se excedido. */
+  /**
+   * Aplica os limites hora/dia; devolve false (sem consumir quota) se excedido.
+   * Contadores no Redis (partilhados por todas as instâncias); script Lua para
+   * verificar+consumir atomicamente. Sem Redis → contagem em memória por processo.
+   */
   async consumeWhatsAppQuota(): Promise<boolean> {
     const { whatsapp } = await this.load();
     const now = Date.now();
+    if (this.redis) {
+      try {
+        const res = await this.redis.eval(
+          CONSUME_QUOTA_LUA,
+          1,
+          WA_QUOTA_KEY,
+          now,
+          HOUR_MS,
+          DAY_MS,
+          whatsapp.hourlyLimit,
+          whatsapp.dailyLimit,
+          `${now}-${Math.random().toString(36).slice(2, 10)}`,
+        );
+        return res === 1;
+      } catch (err: unknown) {
+        this.logger.warn({
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Redis indisponível — quota do WhatsApp contada em memória (por instância)',
+        });
+      }
+    }
     this.waSent = this.waSent.filter(t => now - t < DAY_MS);
     if (whatsapp.dailyLimit > 0 && this.waSent.length >= whatsapp.dailyLimit) return false;
     if (
@@ -206,12 +250,29 @@ export class IntegrationSettingsService {
     return true;
   }
 
+  private async waUsage(now: number): Promise<{ lastHour: number; lastDay: number }> {
+    if (this.redis) {
+      try {
+        const [h, d] = await Promise.all([
+          this.redis.zcount(WA_QUOTA_KEY, now - HOUR_MS + 1, '+inf'),
+          this.redis.zcount(WA_QUOTA_KEY, now - DAY_MS + 1, '+inf'),
+        ]);
+        return { lastHour: h, lastDay: d };
+      } catch {
+        // cai para a contagem local
+      }
+    }
+    return {
+      lastHour: this.waSent.filter(t => now - t < HOUR_MS).length,
+      lastDay: this.waSent.filter(t => now - t < DAY_MS).length,
+    };
+  }
+
   async whatsAppStatus() {
     const { whatsapp } = await this.load();
     const now = Date.now();
     const usage = {
-      lastHour: this.waSent.filter(t => now - t < HOUR_MS).length,
-      lastDay: this.waSent.filter(t => now - t < DAY_MS).length,
+      ...(await this.waUsage(now)),
       hourlyLimit: whatsapp.hourlyLimit,
       dailyLimit: whatsapp.dailyLimit,
     };

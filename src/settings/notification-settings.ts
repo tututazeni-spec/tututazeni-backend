@@ -108,3 +108,26 @@ export function isWithinSendWindow(
     ? hour >= w.startHour && hour < w.endHour
     : hour >= w.startHour || hour < w.endHour;
 }
+
+const STEP_MS = 15 * 60_000;
+const MAX_LOOKAHEAD_MS = 8 * 24 * 3_600_000;
+
+/**
+ * Próximo instante (>= now) em que o horário permitido abre, com resolução de 15 min.
+ * `now` se já está aberto; `null` se a janela nunca abre (ex.: início == fim com
+ * `weekdaysOnly`, ou 8 dias sem abrir) — o chamador deve então descartar o envio.
+ */
+export function nextSendWindowOpen(
+  settings: NotificationSettings,
+  now: Date,
+  timeZone: string,
+  critical = false,
+): Date | null {
+  if (isWithinSendWindow(settings, now, timeZone, critical)) return now;
+  // Alinha ao próximo múltiplo de 15 min (fusos com offset em quartos de hora ficam correctos).
+  const start = Math.ceil(now.getTime() / STEP_MS) * STEP_MS;
+  for (let t = start; t - now.getTime() <= MAX_LOOKAHEAD_MS; t += STEP_MS) {
+    if (isWithinSendWindow(settings, new Date(t), timeZone, critical)) return new Date(t);
+  }
+  return null;
+}
