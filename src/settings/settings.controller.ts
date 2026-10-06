@@ -12,6 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { DsrStatus } from '@prisma/client';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, CurrentUserData, Roles } from '../common/decorators';
@@ -20,14 +21,25 @@ import { SettingsService } from './settings.service';
 import { SecuritySettingsService } from './security-settings.service';
 import { NotificationSettingsService } from './notification-settings.service';
 import { IntegrationSettingsService } from './integration-settings.service';
+import { CertificateSettingsService } from './certificate-settings.service';
+import { PrivacySettingsService } from './privacy-settings.service';
+import { LicenseSettingsService } from './license-settings.service';
 import {
+  CreateCertificateTemplateDto,
+  CreateDataSubjectRequestDto,
   DisableTwoFactorDto,
+  PublishConsentTextDto,
   SetDepartmentScopeDto,
   TestSmtpDto,
   TwoFactorCodeDto,
+  UpdateCertificateSettingsDto,
+  UpdateCertificateTemplateDto,
+  UpdateDataSubjectRequestDto,
   UpdateIntegrationSettingsDto,
+  UpdateModuleFlagsDto,
   UpdateNotificationSettingsDto,
   UpdateOrganizationSettingsDto,
+  UpdatePrivacySettingsDto,
   UpdateSecurityPolicyDto,
   UpdateUserPolicyDto,
 } from './settings.dto';
@@ -42,6 +54,9 @@ export class SettingsController {
     private readonly security: SecuritySettingsService,
     private readonly notifications: NotificationSettingsService,
     private readonly integrations: IntegrationSettingsService,
+    private readonly certificates: CertificateSettingsService,
+    private readonly privacy: PrivacySettingsService,
+    private readonly license: LicenseSettingsService,
   ) {}
 
   // Qualquer utilizador autenticado: nome da plataforma, logo e formatos.
@@ -298,5 +313,152 @@ export class SettingsController {
   @ApiOperation({ summary: 'Estado da ligação WhatsApp e consumo face aos limites' })
   whatsAppStatus() {
     return this.integrations.whatsAppStatus();
+  }
+
+  // ─── §7 Certificados ──────────────────────────────────────────────────────
+
+  @Get('certificates')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Logo, assinatura, texto padrão e numeração dos certificados' })
+  certificateSettings() {
+    return this.certificates.get();
+  }
+
+  @Put('certificates')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Actualizar definições globais dos certificados' })
+  updateCertificateSettings(
+    @Body() dto: UpdateCertificateSettingsDto,
+    @CurrentUser() admin: CurrentUserData,
+  ) {
+    return this.certificates.update(dto, admin.id);
+  }
+
+  @Get('certificates/templates')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Biblioteca de templates de certificados' })
+  listCertificateTemplates() {
+    return this.certificates.listTemplates();
+  }
+
+  @Post('certificates/templates')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Criar um template de certificado' })
+  createCertificateTemplate(
+    @Body() dto: CreateCertificateTemplateDto,
+    @CurrentUser() admin: CurrentUserData,
+  ) {
+    return this.certificates.createTemplate(dto, admin.id);
+  }
+
+  @Put('certificates/templates/:id')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Actualizar um template de certificado' })
+  updateCertificateTemplate(
+    @Param('id') id: string,
+    @Body() dto: UpdateCertificateTemplateDto,
+    @CurrentUser() admin: CurrentUserData,
+  ) {
+    return this.certificates.updateTemplate(id, dto, admin.id);
+  }
+
+  @Delete('certificates/templates/:id')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Remover um template de certificado (soft delete)' })
+  deleteCertificateTemplate(@Param('id') id: string, @CurrentUser() admin: CurrentUserData) {
+    return this.certificates.deleteTemplate(id, admin.id);
+  }
+
+  @Post('certificates/templates/:id/default')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Definir como predefinido do seu tipo' })
+  setDefaultCertificateTemplate(@Param('id') id: string, @CurrentUser() admin: CurrentUserData) {
+    return this.certificates.setDefaultTemplate(id, admin.id);
+  }
+
+  // ─── §8 Privacidade (LPDP) ────────────────────────────────────────────────
+
+  @Get('privacy')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'DPO, retenção, anonimização e versão vigente do consentimento' })
+  privacySettings() {
+    return this.privacy.get();
+  }
+
+  @Put('privacy')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Actualizar definições de privacidade' })
+  updatePrivacySettings(
+    @Body() dto: UpdatePrivacySettingsDto,
+    @CurrentUser() admin: CurrentUserData,
+  ) {
+    return this.privacy.update(dto, admin.id);
+  }
+
+  @Get('privacy/consent/versions')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Histórico de versões do texto de consentimento' })
+  consentVersions() {
+    return this.privacy.listConsentVersions();
+  }
+
+  @Post('privacy/consent/publish')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Publicar uma nova versão do texto de consentimento' })
+  publishConsent(@Body() dto: PublishConsentTextDto, @CurrentUser() admin: CurrentUserData) {
+    return this.privacy.publishConsentText(dto, admin.id);
+  }
+
+  @Get('privacy/requests')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Pedidos de direitos dos titulares' })
+  @ApiQuery({ name: 'status', required: false, enum: DsrStatus })
+  listDataSubjectRequests(
+    @Query('status') status?: DsrStatus,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.privacy.listRequests({
+      status,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Post('privacy/requests')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Registar um pedido de direitos de um titular' })
+  createDataSubjectRequest(
+    @Body() dto: CreateDataSubjectRequestDto,
+    @CurrentUser() admin: CurrentUserData,
+  ) {
+    return this.privacy.createRequest(dto, admin.id);
+  }
+
+  @Put('privacy/requests/:id')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Actualizar o estado de um pedido de direitos de um titular' })
+  updateDataSubjectRequest(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateDataSubjectRequestDto,
+    @CurrentUser() admin: CurrentUserData,
+  ) {
+    return this.privacy.updateRequest(id, dto, admin.id);
+  }
+
+  // ─── §9 Licença e Módulos ─────────────────────────────────────────────────
+
+  @Get('license')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Plano, utilizadores, validade, trial e módulos activos' })
+  licenseSettings() {
+    return this.license.get();
+  }
+
+  @Put('license/modules')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Activar/desactivar módulos (feature flags)' })
+  updateModuleFlags(@Body() dto: UpdateModuleFlagsDto, @CurrentUser() admin: CurrentUserData) {
+    return this.license.updateModules(dto, admin.id);
   }
 }

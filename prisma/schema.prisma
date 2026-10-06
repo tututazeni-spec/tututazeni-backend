@@ -8455,6 +8455,10 @@ model TenantConfig {
   securityPolicyJson       String?
   notificationSettingsJson String?
   integrationSettingsJson  String?
+  // ─── Certificados / Privacidade (LPDP) / Licença e Módulos (docs/modulo_settings.md §7-9) ───
+  certificateSettingsJson  String?
+  privacySettingsJson      String?
+  moduleFlagsJson          String?
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
   integrations             IntegrationConfig[]
@@ -8466,8 +8470,51 @@ model TenantConfig {
   declarations             Declaration[]
   declarationTenantConfigs DeclarationTenantConfig[]
   declarationTemplates     DeclarationTemplate[]
+  dataSubjectRequests      DataSubjectRequest[]
 
   @@map("tenant_configs")
+}
+
+// Pedidos de direitos dos titulares (LPDP) — docs/modulo_settings.md §8.
+// userId/handledById guardam o id sem relação formal (ver Certificate.revokedById):
+// o titular pode não ser um utilizador da plataforma (ex-colaborador, candidato).
+model DataSubjectRequest {
+  id             Int       @id @default(autoincrement())
+  tenantId       String
+  userId         Int?
+  requesterName  String
+  requesterEmail String
+  type           DsrType
+  status         DsrStatus @default(PENDING)
+  details        String?   @db.Text
+  resolutionNote String?   @db.Text
+  handledById    Int?
+  requestedAt    DateTime  @default(now())
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  tenant TenantConfig @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([userId])
+  @@map("data_subject_requests")
+}
+
+enum DsrType {
+  ACCESS
+  RECTIFICATION
+  ERASURE
+  PORTABILITY
+  OBJECTION
+}
+
+enum DsrStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
 }
 
 model IntegrationSyncLog {

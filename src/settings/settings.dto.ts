@@ -3,8 +3,11 @@ import {
   IsArray,
   IsBoolean,
   IsEmail,
+  IsEnum,
   IsIn,
   IsInt,
+  IsNotEmpty,
+  IsObject,
   IsOptional,
   IsString,
   IsUrl,
@@ -14,8 +17,9 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { CertificateTemplateType, DsrStatus, DsrType, PermissionSubject } from '@prisma/client';
 import { EmptyStringToUndefined } from '../common/transformers/empty-string-to-undefined';
 import { POLICY_REQUIRED_FIELD_OPTIONS } from './user-policy';
 import { TWO_FACTOR_MODES } from './security-policy';
@@ -434,4 +438,164 @@ export class TestSmtpDto {
   @IsOptional()
   @IsEmail()
   to?: string;
+}
+
+// ─── §7 Certificados ─────────────────────────────────────────────────────────
+
+export class UpdateCertificateSettingsDto {
+  @ApiPropertyOptional({ description: 'Logo da academia — substitui o logo de cada template' })
+  @IsOptional()
+  @IsString()
+  academyLogoUrl?: string | null;
+
+  @ApiPropertyOptional({ description: 'Assinatura electrónica — aplicada a todos os certificados' })
+  @IsOptional()
+  @IsString()
+  signatureUrl?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  @MaxLength(120)
+  signatoryName?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  @MaxLength(120)
+  signatoryTitle?: string | null;
+
+  @ApiPropertyOptional({ description: 'Texto padrão acrescentado a todos os certificados' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  defaultText?: string | null;
+
+  @ApiPropertyOptional({ example: 'CERT-' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  numberingPrefix?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  numberingNextSeq?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  numberingPadding?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(6)
+  @Max(32)
+  verificationCodeLength?: number;
+}
+
+export class CreateCertificateTemplateDto {
+  @ApiProperty() @IsString() @MaxLength(120) name!: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) description?: string;
+
+  @ApiProperty({ enum: CertificateTemplateType }) @IsEnum(CertificateTemplateType) type!: CertificateTemplateType;
+
+  @ApiProperty() @IsString() @IsNotEmpty() html!: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() cssStyle?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() logoUrl?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() signatureUrl?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(120) signatoryName?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(120) signatoryTitle?: string;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() isDefault?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(3650)
+  validityDays?: number;
+}
+
+export class UpdateCertificateTemplateDto extends PartialType(CreateCertificateTemplateDto) {}
+
+// ─── §8 Privacidade (LPDP) ───────────────────────────────────────────────────
+
+export class UpdatePrivacySettingsDto {
+  @ApiPropertyOptional() @IsOptional() @EmptyStringToUndefined() @IsString() @MaxLength(120)
+  dpoName?: string;
+
+  @ApiPropertyOptional() @IsOptional() @EmptyStringToUndefined() @IsEmail() dpoEmail?: string;
+
+  @ApiPropertyOptional() @IsOptional() @EmptyStringToUndefined() @IsString() @MaxLength(40)
+  dpoPhone?: string;
+
+  @ApiPropertyOptional({ description: 'Prazo geral de retenção de dados pessoais, em dias' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(30)
+  @Max(3650)
+  retentionDays?: number;
+
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() anonymizationEnabled?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() exportEnabled?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() autoDeleteOnRequest?: boolean;
+}
+
+export class PublishConsentTextDto {
+  @ApiProperty() @IsString() @IsNotEmpty() @MaxLength(20000) text!: string;
+}
+
+export class CreateDataSubjectRequestDto {
+  @ApiProperty() @IsString() @MaxLength(120) requesterName!: string;
+  @ApiProperty() @IsEmail() requesterEmail!: string;
+  @ApiProperty({ enum: DsrType }) @IsEnum(DsrType) type!: DsrType;
+
+  @ApiPropertyOptional({ description: 'Id do utilizador titular, se for colaborador da plataforma' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  userId?: number;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(4000) details?: string;
+}
+
+export class UpdateDataSubjectRequestDto {
+  @ApiPropertyOptional({ enum: DsrStatus }) @IsOptional() @IsEnum(DsrStatus) status?: DsrStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  resolutionNote?: string;
+}
+
+// ─── §9 Licença e Módulos ─────────────────────────────────────────────────────
+
+/**
+ * Activar/desactivar módulos é informativo/administrativo nesta fase — persiste
+ * a preferência da organização, mas não há ainda um guard central que bloqueie
+ * rotas de um módulo desactivado (seria um projecto à parte, por módulo).
+ */
+export class UpdateModuleFlagsDto {
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: { type: 'boolean' },
+    example: { LMS: true, PAYROLL: false },
+  })
+  @IsObject()
+  modules!: Partial<Record<PermissionSubject, boolean>>;
 }
