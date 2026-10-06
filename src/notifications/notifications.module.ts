@@ -6,6 +6,7 @@ import { NotificationsController } from './notifications.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { MailModule } from '../mail/mail.module';
 import { SmsModule } from '../sms/sms.module';
+import { SettingsModule } from '../settings/settings.module';
 import { NotificationsProcessor } from '../queue/processors/notifications.processor';
 
 @Module({
@@ -13,6 +14,7 @@ import { NotificationsProcessor } from '../queue/processors/notifications.proces
     PrismaModule,
     MailModule,
     SmsModule,
+    SettingsModule,
     BullModule.registerQueue({ name: 'notifications' }),
   ],
   providers: [NotificationsService, NotificationsProcessor],

@@ -1,12 +1,53 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import type Mail from 'nodemailer/lib/mailer';
 import { sanitizeForLog } from '../common/logging/sanitize';
+import { IntegrationSettingsService } from '../settings/integration-settings.service';
 
 @Injectable()
 export class MailService implements OnModuleInit {
   private readonly logger = new Logger(MailService.name);
   private transporter: nodemailer.Transporter | null = null;
+  private dbTransport: {
+    at: number;
+    key: string;
+    transporter: nodemailer.Transporter | null;
+    from?: string;
+  } | null = null;
+
+  // Definições §6: o SMTP guardado nas definições tem prioridade sobre as variáveis de ambiente.
+  constructor(@Optional() private readonly orgIntegrations?: IntegrationSettingsService) {}
+
+  private async resolveTransport(): Promise<{
+    transporter: nodemailer.Transporter | null;
+    from?: string;
+  }> {
+    if (this.orgIntegrations) {
+      // Cache curto: evita reconstruir o transporter a cada email.
+      if (this.dbTransport && Date.now() - this.dbTransport.at < 30_000) return this.dbTransport;
+      const cfg = await this.orgIntegrations.getSmtp().catch(() => null);
+      if (cfg) {
+        const key = JSON.stringify(cfg);
+        const reuse = this.dbTransport?.key === key ? this.dbTransport.transporter : null;
+        this.dbTransport = {
+          at: Date.now(),
+          key,
+          from: cfg.from,
+          transporter:
+            reuse ??
+            nodemailer.createTransport({
+              host: cfg.host,
+              port: cfg.port,
+              secure: cfg.secure,
+              auth: cfg.user ? { user: cfg.user, pass: cfg.pass } : undefined,
+            }),
+        };
+        return this.dbTransport;
+      }
+      this.dbTransport = null;
+    }
+    return { transporter: this.transporter };
+  }
 
   onModuleInit(): void {
     const host = process.env.SMTP_HOST;
@@ -72,7 +113,8 @@ export class MailService implements OnModuleInit {
   }
 
   private async send(options: Mail.Options): Promise<void> {
-    if (!this.transporter) {
+    const { transporter, from } = await this.resolveTransport();
+    if (!transporter) {
       this.logger.warn({
         to: sanitizeForLog(options.to),
         subject: sanitizeForLog(options.subject),
@@ -81,8 +123,8 @@ export class MailService implements OnModuleInit {
       return;
     }
     try {
-      await this.transporter.sendMail({
-        from: process.env.SMTP_FROM ?? 'INNOVA <noreply@innova.ao>',
+      await transporter.sendMail({
+        from: from ?? process.env.SMTP_FROM ?? 'INNOVA <noreply@innova.ao>',
         ...options,
       });
     } catch (err: unknown) {

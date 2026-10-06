@@ -131,9 +131,7 @@ export class SettingsService {
     } as UserPolicy;
     next.allowedEmailDomains = [
       ...new Set(
-        next.allowedEmailDomains
-          .map(d => d.trim().toLowerCase().replace(/^@/, ''))
-          .filter(Boolean),
+        next.allowedEmailDomains.map(d => d.trim().toLowerCase().replace(/^@/, '')).filter(Boolean),
       ),
     ];
 

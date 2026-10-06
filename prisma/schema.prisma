@@ -1082,6 +1082,11 @@ model User {
 
   // ─── Auth Tokens ──────────────────────────────────────────────
   passwordChangedAt   DateTime?
+  // Definições §4 Segurança: bloqueio por tentativas falhadas e 2FA (TOTP)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  twoFactorEnabled    Boolean   @default(false)
+  twoFactorSecret     String?
   passwordResetTokens PasswordResetToken[]
   refreshTokens       RefreshToken[]
 
@@ -8446,6 +8451,10 @@ model TenantConfig {
   numberFormat             String                    @default("pt")
   // ─── Política de utilizadores (docs/modulo_settings.md §3) ───
   userPolicyJson           String?
+  // ─── Segurança / Notificações / Integrações (docs/modulo_settings.md §4-6) ───
+  securityPolicyJson       String?
+  notificationSettingsJson String?
+  integrationSettingsJson  String?
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
   integrations             IntegrationConfig[]
@@ -13917,6 +13926,8 @@ model RefreshToken {
   expiresAt    DateTime
   revokedAt    DateTime?
   replacedById Int?
+  ip           String?
+  userAgent    String?
   createdAt    DateTime  @default(now())
 
   @@index([userId])
@@ -15370,4 +15381,59 @@ model ScalabilityMetricHourly {
   maxStorageGb   Float
 
   @@map("scalability_metrics_hourly")
+}
+
+
+// ─── Chaves de API e webhooks (docs/modulo_settings.md §6) ───
+// Usados por src/api-integration/api-integration.service.ts, que até aqui
+// degradava para "sem persistência" por estes modelos não existirem.
+model ApiKey {
+  id          Int       @id @default(autoincrement())
+  name        String
+  description String?
+  keyHash     String    @unique
+  keyPreview  String
+  scopes      String[]
+  expiresAt   DateTime?
+  allowedIps  String[]  @default([])
+  rateLimit   Int       @default(1000)
+  createdById Int
+  active      Boolean   @default(true)
+  lastUsedAt  DateTime?
+  rotatedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([createdById])
+  @@index([active])
+}
+
+model Webhook {
+  id          Int               @id @default(autoincrement())
+  name        String
+  url         String
+  events      String[]
+  secret      String
+  active      Boolean           @default(true)
+  retryMax    Int               @default(3)
+  createdById Int
+  createdAt   DateTime          @default(now())
+  deliveries  WebhookDelivery[]
+
+  @@index([active])
+}
+
+model WebhookDelivery {
+  id           String    @id @default(cuid())
+  webhookId    Int
+  event        String
+  payload      String    @db.Text
+  status       String    @default("PENDING") // PENDING | DELIVERED | FAILED
+  attempt      Int       @default(0)
+  attempts     Int       @default(0)
+  responseCode Int?
+  deliveredAt  DateTime?
+  createdAt    DateTime  @default(now())
+  webhook      Webhook   @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId, status])
 }

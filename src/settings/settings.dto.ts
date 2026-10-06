@@ -8,14 +8,18 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Matches,
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { EmptyStringToUndefined } from '../common/transformers/empty-string-to-undefined';
 import { POLICY_REQUIRED_FIELD_OPTIONS } from './user-policy';
+import { TWO_FACTOR_MODES } from './security-policy';
+import { ISIS_MODULE_OPTIONS } from './integration-settings';
 
 const DATE_FORMATS = ['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'] as const;
 const TIME_FORMATS = ['24h', '12h'] as const;
@@ -179,4 +183,255 @@ export class SetDepartmentScopeDto {
   @Type(() => Number)
   @IsInt({ each: true })
   departmentIds!: number[];
+}
+
+// ─── §4 Segurança ────────────────────────────────────────────────────────────
+
+export class UpdateSecurityPolicyDto {
+  @ApiPropertyOptional({ minimum: 10, maximum: 64, description: 'Piso do projecto: 10' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(10)
+  @Max(64)
+  passwordMinLength?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  passwordRequireSymbol?: boolean;
+
+  @ApiPropertyOptional({ description: '0 = a palavra-passe nunca expira' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(730)
+  passwordExpiryDays?: number;
+
+  @ApiPropertyOptional({ description: '0 = sem bloqueio' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(20)
+  maxFailedAttempts?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1440)
+  lockoutMinutes?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(5)
+  @Max(1440)
+  sessionIdleMinutes?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(5)
+  @Max(120)
+  accessTokenMinutes?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(7) // limite do cookie de refresh (token-cookie.ts)
+  refreshTokenDays?: number;
+
+  @ApiPropertyOptional({ enum: TWO_FACTOR_MODES })
+  @IsOptional()
+  @IsIn(TWO_FACTOR_MODES)
+  twoFactorMode?: string;
+}
+
+export class TwoFactorCodeDto {
+  @ApiPropertyOptional({ example: '123456' })
+  @IsString()
+  @Matches(/^\d{6}$/, { message: 'O código deve ter 6 dígitos' })
+  code!: string;
+}
+
+export class DisableTwoFactorDto extends TwoFactorCodeDto {}
+
+// ─── §5 Notificações ─────────────────────────────────────────────────────────
+
+class NotificationChannelsDto {
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() inApp?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() email?: boolean;
+  @ApiPropertyOptional({ description: 'WhatsApp — só envio' })
+  @IsOptional()
+  @IsBoolean()
+  whatsapp?: boolean;
+}
+
+class NotificationEventsDto {
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() ENROLLMENT?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() COURSE_REMINDER?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() CORPORATE_EVENT?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() PENDING_EVALUATION?: boolean;
+}
+
+class SendWindowDto {
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() enabled?: boolean;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 23 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  startHour?: number;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 23 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  endHour?: number;
+
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() weekdaysOnly?: boolean;
+}
+
+export class UpdateNotificationSettingsDto {
+  @ApiPropertyOptional({ type: NotificationChannelsDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => NotificationChannelsDto)
+  channels?: NotificationChannelsDto;
+
+  @ApiPropertyOptional({ type: NotificationEventsDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => NotificationEventsDto)
+  events?: NotificationEventsDto;
+
+  @ApiPropertyOptional({ type: SendWindowDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SendWindowDto)
+  sendWindow?: SendWindowDto;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  criticalBypassWindow?: boolean;
+}
+
+// ─── §6 Integrações ──────────────────────────────────────────────────────────
+
+class SmtpSettingsDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(255) host?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  port?: number;
+
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() secure?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(255) user?: string;
+
+  @ApiPropertyOptional({ description: 'Só é gravada se enviada; nunca é devolvida' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  password?: string;
+
+  @ApiPropertyOptional({ example: 'INNOVA <noreply@empresa.ao>' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  from?: string;
+}
+
+class WhatsAppSettingsDto {
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() enabled?: boolean;
+
+  @ApiPropertyOptional({ example: '+244923000000' })
+  @IsOptional()
+  @Matches(/^(\+[1-9]\d{6,14})?$/, { message: 'Número em formato E.164 (ex.: +244923000000)' })
+  number?: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(64) accountSid?: string;
+
+  @ApiPropertyOptional({ description: 'Só é gravado se enviado; nunca é devolvido' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  authToken?: string;
+
+  @ApiPropertyOptional({ description: '0 = sem limite' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100000)
+  hourlyLimit?: number;
+
+  @ApiPropertyOptional({ description: '0 = sem limite' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(1000000)
+  dailyLimit?: number;
+}
+
+class IsisSettingsDto {
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() enabled?: boolean;
+
+  @ApiPropertyOptional({ enum: ISIS_MODULE_OPTIONS, isArray: true, description: 'Vazio = todos' })
+  @IsOptional()
+  @IsArray()
+  @IsIn(ISIS_MODULE_OPTIONS, { each: true })
+  enabledModules?: string[];
+
+  @ApiPropertyOptional({ description: '0 = usa o limite das definições do AI Tutor' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10000)
+  dailyLimitPerUser?: number;
+}
+
+export class UpdateIntegrationSettingsDto {
+  @ApiPropertyOptional({ type: SmtpSettingsDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SmtpSettingsDto)
+  smtp?: SmtpSettingsDto;
+
+  @ApiPropertyOptional({ type: WhatsAppSettingsDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => WhatsAppSettingsDto)
+  whatsapp?: WhatsAppSettingsDto;
+
+  @ApiPropertyOptional({ type: IsisSettingsDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => IsisSettingsDto)
+  isis?: IsisSettingsDto;
+}
+
+export class TestSmtpDto {
+  @ApiPropertyOptional({ description: 'Destinatário do email de teste (por omissão, o do admin)' })
+  @IsOptional()
+  @IsEmail()
+  to?: string;
 }

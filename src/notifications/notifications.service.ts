@@ -1,5 +1,5 @@
 // src/notifications/notifications.service.ts
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { ConfigService } from '@nestjs/config';
@@ -7,6 +7,7 @@ import { AutomationTrigger, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { SmsService } from '../sms/sms.service';
+import { NotificationSettingsService } from '../settings/notification-settings.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 import {
@@ -29,6 +30,8 @@ export class NotificationsService {
     private readonly config: ConfigService,
     private readonly mail: MailService,
     private readonly sms: SmsService,
+    // Definições §5: canais/eventos/horário. Optional: specs sem SettingsModule.
+    @Optional() private readonly orgSettings?: NotificationSettingsService,
   ) {}
 
   private get queueEnabled(): boolean {
@@ -105,6 +108,14 @@ export class NotificationsService {
       }
     }
 
+    // Definições §5: evento desligado pela organização.
+    if (await this.orgSettings?.isEventDisabled(dto.type)) {
+      return { skipped: true, reason: 'event_disabled' };
+    }
+    const plan = (await this.orgSettings?.deliveryPlan(
+      dto.priority === NotificationPriority.CRITICAL,
+    )) ?? { inApp: true, email: true, whatsapp: true };
+
     const notification = await this.prisma.notificationLog.create({
       data: {
         userId: dto.userId,
@@ -118,6 +129,9 @@ export class NotificationsService {
         metadata: dto.metadata ? JSON.stringify(dto.metadata) : undefined,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
         read: false,
+        // Canal in-app desligado: o registo mantém-se (auditoria) mas fica arquivado,
+        // fora da caixa de entrada do utilizador.
+        archived: !plan.inApp,
         success: true,
       },
     });
@@ -133,7 +147,7 @@ export class NotificationsService {
     // desta notificação. Honra os toggles de NotificationPreference (email
     // por omissão ligado no schema, sms/whatsapp por omissão desligados —
     // sem preferências guardadas ainda, usa esses mesmos defaults).
-    await this.deliverExternalChannels(target, dto, prefs);
+    await this.deliverExternalChannels(target, dto, prefs, plan);
 
     return notification;
   }
@@ -142,6 +156,7 @@ export class NotificationsService {
     target: { email: string; phone: string | null },
     dto: CreateNotificationDto,
     prefs: { email: boolean; sms: boolean; whatsapp: boolean } | null,
+    plan: { email: boolean; whatsapp: boolean },
   ): Promise<void> {
     const subject = dto.title ?? dto.type;
     const onFail = (channel: string) => (e: unknown) =>
@@ -152,13 +167,13 @@ export class NotificationsService {
         msg: `Falha ao entregar notificação por ${channel} — registo interno já criado`,
       });
 
-    if (prefs ? prefs.email : true) {
+    if (plan.email && (prefs ? prefs.email : true)) {
       await this.mail.sendNotification(target.email, subject, dto.message).catch(onFail('email'));
     }
     if ((prefs?.sms ?? false) && target.phone) {
       await this.sms.sendSms(target.phone, dto.message).catch(onFail('sms'));
     }
-    if ((prefs?.whatsapp ?? false) && target.phone) {
+    if (plan.whatsapp && (prefs?.whatsapp ?? false) && target.phone) {
       await this.sms.sendWhatsApp(target.phone, dto.message).catch(onFail('whatsapp'));
     }
   }
@@ -184,6 +199,12 @@ export class NotificationsService {
 
     if (!targetIds.length) return { sent: 0, skipped: dto.userIds.length };
 
+    // Definições §5: evento desligado / canal in-app desligado (ver send()).
+    if (await this.orgSettings?.isEventDisabled(dto.type)) {
+      return { sent: 0, skipped: dto.userIds.length };
+    }
+    const inApp = (await this.orgSettings?.deliveryPlan(false))?.inApp ?? true;
+
     const now = new Date();
     const result = await this.prisma.notificationLog.createMany({
       data: targetIds.map(userId => ({
@@ -196,6 +217,7 @@ export class NotificationsService {
         actionUrl: dto.actionUrl,
         metadata: dto.metadata ? JSON.stringify(dto.metadata) : undefined,
         read: false,
+        archived: !inApp,
         success: true,
         createdAt: now,
       })),

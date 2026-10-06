@@ -13,6 +13,7 @@ import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
+import { SecuritySettingsService } from '../settings/security-settings.service';
 import { BCRYPT_COST_FACTOR } from '../common/config/security.config';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { flattenRolePermissions } from '../common/utils/role-permissions';
@@ -77,6 +78,8 @@ export class UsersService {
     // Política de utilizadores (Definições §3). Optional: specs que montam o
     // serviço sem o SettingsModule continuam a funcionar (sem política).
     @Optional() private readonly settings?: SettingsService,
+    // Definições §4: política de palavras-passe (comprimento, símbolo).
+    @Optional() private readonly security?: SecuritySettingsService,
   ) {}
 
   // ─── Sanitizar (remover password) ────────────────────────────────────────
@@ -257,6 +260,7 @@ export class UsersService {
       if (usernameExists) throw new ConflictException(`Username ${dto.username} já existe`);
     }
 
+    if (dto.password) await this.security?.assertPasswordAllowed(dto.password);
     const hashed = dto.password ? await bcrypt.hash(dto.password, BCRYPT_COST_FACTOR) : null;
 
     let user: Prisma.UserGetPayload<{ include: typeof USER_INCLUDE_BASIC }>;
@@ -433,7 +437,10 @@ export class UsersService {
     }
 
     const data: Prisma.UserUpdateInput = { ...dto };
-    if (dto.password) data.password = await bcrypt.hash(dto.password, BCRYPT_COST_FACTOR);
+    if (dto.password) {
+      await this.security?.assertPasswordAllowed(dto.password);
+      data.password = await bcrypt.hash(dto.password, BCRYPT_COST_FACTOR);
+    }
     if (dto.birthDate) data.birthDate = new Date(dto.birthDate);
     if (dto.hireDate) data.hireDate = new Date(dto.hireDate);
     if (dto.exitDate) data.exitDate = new Date(dto.exitDate);
@@ -594,6 +601,7 @@ export class UsersService {
     const valid = user.password && (await bcrypt.compare(dto.currentPassword, user.password));
     if (!valid) throw new ForbiddenException('Password actual incorrecta');
 
+    await this.security?.assertPasswordAllowed(dto.newPassword);
     const hashed = await bcrypt.hash(dto.newPassword, BCRYPT_COST_FACTOR);
     const now = new Date();
 
@@ -936,8 +944,9 @@ export class UsersService {
     const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (exists) throw new ConflictException('Email já registado');
 
-    // CSPRNG — 12 bytes = 24 chars hexadecimais
-    const tempPassword = crypto.randomBytes(12).toString('hex');
+    // CSPRNG — 12 bytes = 24 chars hexadecimais, mais um sufixo fixo para cumprir sempre a
+    // política de palavras-passe (maiúscula, símbolo, dígito) quando a organização a aperta.
+    const tempPassword = crypto.randomBytes(12).toString('hex') + 'Aa#1';
 
     // Mudança deliberada (Fase J): o utilizador é criado primeiro e o email de
     // convite vai para a fila `email` (retry gerido pelo Bull). Deixa de

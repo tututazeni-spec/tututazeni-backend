@@ -1,5 +1,6 @@
 // src/auth/password-reset.service.ts
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Optional } from '@nestjs/common';
+import { SecuritySettingsService } from '../settings/security-settings.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,6 +19,7 @@ export class PasswordResetService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
+    @Optional() private readonly security?: SecuritySettingsService,
   ) {}
 
   async forgotPassword(email: string): Promise<{ message: string }> {
@@ -51,6 +53,7 @@ export class PasswordResetService {
       throw new BadRequestException('Token inválido ou expirado');
     }
 
+    await this.security?.assertPasswordAllowed(newPassword);
     const hashed = await bcrypt.hash(newPassword, BCRYPT_COST_FACTOR);
     const now = new Date();
     // F1: as três escritas correm de forma atómica — um crash a meio não deixa
@@ -58,7 +61,13 @@ export class PasswordResetService {
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: record.userId },
-        data: { password: hashed, passwordChangedAt: now },
+        // Redefinir a palavra-passe por email também levanta um bloqueio por tentativas falhadas.
+        data: {
+          password: hashed,
+          passwordChangedAt: now,
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+        },
       }),
       this.prisma.passwordResetToken.update({
         where: { id: record.id },

@@ -13,9 +13,10 @@
 // normaliza/valida o formato, só reencaminha para a API da Twilio (que
 // rejeita números inválidos — o erro fica registado no log, nunca rebenta
 // a acção que despoletou o envio).
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { Twilio } from 'twilio';
 import { sanitizeForLog } from '../common/logging/sanitize';
+import { IntegrationSettingsService } from '../settings/integration-settings.service';
 
 @Injectable()
 export class SmsService implements OnModuleInit {
@@ -23,6 +24,9 @@ export class SmsService implements OnModuleInit {
   private client: Twilio | null = null;
   private smsFrom?: string;
   private whatsappFrom?: string;
+
+  // Definições §6: credenciais/número/limites do WhatsApp guardados nas definições.
+  constructor(@Optional() private readonly orgIntegrations?: IntegrationSettingsService) {}
 
   onModuleInit(): void {
     const sid = process.env.TWILIO_ACCOUNT_SID;
@@ -59,7 +63,32 @@ export class SmsService implements OnModuleInit {
   }
 
   async sendWhatsApp(to: string, body: string): Promise<void> {
-    if (!this.client || !this.whatsappFrom) {
+    let client = this.client;
+    let from = this.whatsappFrom;
+    if (this.orgIntegrations) {
+      // `false` = a organização desligou o WhatsApp; `null` = nunca configurado (usa env).
+      const enabled = await this.orgIntegrations.isWhatsAppEnabledInSettings().catch(() => null);
+      if (enabled === false) {
+        this.logger.warn({
+          to: sanitizeForLog(to),
+          msg: 'WhatsApp não enviado — desactivado nas definições',
+        });
+        return;
+      }
+      const cfg = await this.orgIntegrations.getWhatsApp().catch(() => null);
+      if (cfg) {
+        client = new Twilio(cfg.accountSid, cfg.authToken);
+        from = cfg.from;
+      }
+      if (client && from && !(await this.orgIntegrations.consumeWhatsAppQuota())) {
+        this.logger.warn({
+          to: sanitizeForLog(to),
+          msg: 'WhatsApp não enviado — limite de envio atingido',
+        });
+        return;
+      }
+    }
+    if (!client || !from) {
       this.logger.warn({
         to: sanitizeForLog(to),
         msg: 'WhatsApp não enviado — Twilio não configurado (TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/TWILIO_WHATSAPP_FROM)',
@@ -67,9 +96,9 @@ export class SmsService implements OnModuleInit {
       return;
     }
     try {
-      await this.client.messages.create({
+      await client.messages.create({
         to: `whatsapp:${to}`,
-        from: `whatsapp:${this.whatsappFrom.replace(/^whatsapp:/, '')}`,
+        from: `whatsapp:${from.replace(/^whatsapp:/, '')}`,
         body,
       });
     } catch (err: unknown) {
