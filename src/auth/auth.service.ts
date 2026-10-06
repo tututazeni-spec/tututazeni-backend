@@ -4,11 +4,13 @@ import {
   ConflictException,
   BadRequestException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { LoginDto, RegisterDto, ChangePasswordDto } from './auth.dto';
 import { BCRYPT_COST_FACTOR } from '../common/config/security.config';
 import { withFlatPermissions } from '../common/utils/role-permissions';
@@ -42,6 +44,8 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    // Optional: specs sem SettingsModule continuam a montar o serviço.
+    @Optional() private readonly settings?: SettingsService,
   ) {}
 
   /**
@@ -126,6 +130,25 @@ export class AuthService {
     const valid = await bcrypt.compare(dto.password, user.password);
     if (!valid) throw this.failedLogin('BAD_PASSWORD', dto.email, user.id, ctx);
 
+    // Política de utilizadores (Definições §3): convites expiram e a password
+    // temporária tem de ser trocada. Só se aplica a contas criadas por convite
+    // (PENDING + INVITE_SENT) que ainda nunca trocaram a password.
+    let mustChangePassword = false;
+    if (this.settings && user.accountStatus === 'PENDING' && !user.passwordChangedAt) {
+      const invited = await this.prisma.notificationLog.findFirst({
+        where: { userId: user.id, type: 'INVITE_SENT' },
+        select: { id: true },
+      });
+      if (invited) {
+        const policy = await this.settings.getUserPolicy();
+        const expiresAt = user.createdAt.getTime() + policy.invitationExpiryDays * 86_400_000;
+        if (Date.now() > expiresAt) {
+          throw new UnauthorizedException('Convite expirado — peça um novo convite ao administrador');
+        }
+        mustChangePassword = policy.forcePasswordChangeOnFirstLogin;
+      }
+    }
+
     const tokens = await this.generateTokens(user.id, user.email);
     await this.persistRefreshToken(user.id, tokens.refreshToken);
 
@@ -163,7 +186,7 @@ export class AuthService {
 
     const { password: _, ...rest } = user;
     const safeUser = { ...rest, role: withFlatPermissions(user.role) };
-    return { user: safeUser, ...tokens };
+    return { user: safeUser, ...tokens, mustChangePassword };
   }
 
   async register(dto: RegisterDto) {
@@ -219,7 +242,12 @@ export class AuthService {
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: userId },
-        data: { password: hashed, passwordChangedAt: now },
+        // Primeira troca de password de uma conta convidada activa-a.
+        data: {
+          password: hashed,
+          passwordChangedAt: now,
+          ...(user.accountStatus === 'PENDING' && { accountStatus: 'ACTIVE' as const }),
+        },
       }),
       this.prisma.refreshToken.updateMany({
         where: { userId, revokedAt: null },

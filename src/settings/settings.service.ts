@@ -1,8 +1,9 @@
 // src/settings/settings.service.ts
 // Módulo Definições — docs/modulo_settings.md §1 (Visão Geral) e §3 (Utilizadores).
 // §2 (Permissões) reutiliza o módulo roles-permissions existente.
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { writeChainedAuditLog } from '../common/helpers/audit-chain';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 import { UpdateOrganizationSettingsDto, UpdateUserPolicyDto } from './settings.dto';
 import {
@@ -17,6 +18,23 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 @Injectable()
 export class SettingsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /** Auditoria das alterações de definições (cadeia SHA-256 partilhada). */
+  private async audit(
+    userId: number | undefined,
+    action: string,
+    entityId: number | undefined,
+    metadata: Record<string, unknown>,
+  ) {
+    await writeChainedAuditLog(this.prisma, {
+      userId,
+      action,
+      entity: 'Settings',
+      entityId,
+      severity: 'MEDIUM',
+      metadata: JSON.stringify(metadata),
+    }).catch(() => undefined);
+  }
 
   // ─── §1 Visão Geral ───────────────────────────────────────────────────────
 
@@ -69,7 +87,7 @@ export class SettingsService {
     };
   }
 
-  async updateOrganization(dto: UpdateOrganizationSettingsDto) {
+  async updateOrganization(dto: UpdateOrganizationSettingsDto, actorId?: number) {
     const t = await this.tenant();
     // "" -> undefined já foi tratado pelo DTO; só se grava o que veio no payload.
     const data = Object.fromEntries(
@@ -78,6 +96,13 @@ export class SettingsService {
     if (Object.keys(data).length > 0) {
       await this.prisma.tenantConfig.update({ where: { id: t.id }, data });
     }
+    // Logo/favicon são data-URLs grandes — só se regista que mudaram.
+    const { logoUrl, faviconUrl, ...rest } = data;
+    await this.audit(actorId, 'SETTINGS_ORGANIZATION_UPDATE', undefined, {
+      ...rest,
+      ...(logoUrl !== undefined && { logoChanged: true }),
+      ...(faviconUrl !== undefined && { faviconChanged: true }),
+    });
     return this.getOrganization();
   }
 
@@ -91,7 +116,7 @@ export class SettingsService {
     };
   }
 
-  async updateUserPolicy(dto: UpdateUserPolicyDto) {
+  async updateUserPolicy(dto: UpdateUserPolicyDto, actorId?: number) {
     const t = await this.tenant();
     const current = parseUserPolicy(t.userPolicyJson);
 
@@ -116,7 +141,66 @@ export class SettingsService {
       where: { id: t.id },
       data: { userPolicyJson: JSON.stringify(next) },
     });
+    await this.audit(actorId, 'SETTINGS_USER_POLICY_UPDATE', undefined, {
+      before: current,
+      after: next,
+    });
     return this.getUserPolicy();
+  }
+
+  // ─── §2 Âmbito por departamento ───────────────────────────────────────────
+
+  async getDepartmentScopes() {
+    const [roles, departments, scopes] = await Promise.all([
+      this.prisma.read.role.findMany({
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.read.department.findMany({
+        where: { active: true },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.read.roleDepartmentScope.findMany(),
+    ]);
+    return {
+      departments,
+      roles: roles.map(r => ({
+        ...r,
+        departmentIds: scopes.filter(s => s.roleId === r.id).map(s => s.departmentId),
+      })),
+    };
+  }
+
+  async setDepartmentScope(roleId: number, departmentIds: number[], actorId?: number) {
+    const role = await this.prisma.role.findUnique({ where: { id: roleId } });
+    if (!role) throw new NotFoundException('Função não encontrada');
+    const ids = [...new Set(departmentIds)];
+    if (ids.length > 0) {
+      const found = await this.prisma.department.count({ where: { id: { in: ids } } });
+      if (found !== ids.length) throw new BadRequestException('Departamento inexistente');
+    }
+    await this.prisma.$transaction([
+      this.prisma.roleDepartmentScope.deleteMany({ where: { roleId } }),
+      this.prisma.roleDepartmentScope.createMany({
+        data: ids.map(departmentId => ({ roleId, departmentId })),
+      }),
+    ]);
+    await this.audit(actorId, 'SETTINGS_ROLE_DEPARTMENT_SCOPE', roleId, {
+      role: role.name,
+      departmentIds: ids,
+    });
+    return { roleId, departmentIds: ids };
+  }
+
+  /** `null` = sem restrição; caso contrário os departamentos visíveis ao perfil. */
+  async getScopeForRole(roleId: number | null | undefined): Promise<number[] | null> {
+    if (!roleId) return null;
+    const rows = await this.prisma.read.roleDepartmentScope.findMany({
+      where: { roleId },
+      select: { departmentId: true },
+    });
+    return rows.length > 0 ? rows.map(r => r.departmentId) : null;
   }
 
   /**

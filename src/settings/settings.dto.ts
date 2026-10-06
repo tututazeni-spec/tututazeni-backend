@@ -172,3 +172,11 @@ export class UpdateUserPolicyDto {
   @Max(730)
   inactiveAfterDays?: number;
 }
+
+export class SetDepartmentScopeDto {
+  @ApiPropertyOptional({ type: [Number], description: 'Vazio = sem restrição' })
+  @IsArray()
+  @Type(() => Number)
+  @IsInt({ each: true })
+  departmentIds!: number[];
+}

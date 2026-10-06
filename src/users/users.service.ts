@@ -92,7 +92,7 @@ export class UsersService {
 
   // ─── LISTAGEM ─────────────────────────────────────────────────────────────
 
-  async findAll(filters: UserFilterDto) {
+  async findAll(filters: UserFilterDto, actor?: { roleId: number | null; roleName?: string }) {
     const {
       page = 1,
       limit = 20,
@@ -111,7 +111,20 @@ export class UsersService {
     const where: Prisma.UserWhereInput = {};
 
     if (active !== undefined) where.active = active;
-    if (departmentId) where.departmentId = departmentId;
+    // Âmbito por departamento do perfil (Definições §2). ADMIN/RH nunca são limitados.
+    const privileged = actor?.roleName === 'ADMIN' || actor?.roleName === 'RH';
+    const scope =
+      this.settings && actor && !privileged
+        ? await this.settings.getScopeForRole(actor.roleId)
+        : null;
+    if (scope) {
+      if (departmentId && !scope.includes(departmentId)) {
+        throw new ForbiddenException('Sem acesso a este departamento');
+      }
+      where.departmentId = departmentId ? departmentId : { in: scope };
+    } else if (departmentId) {
+      where.departmentId = departmentId;
+    }
     if (positionId) where.positionId = positionId;
     if (unitId) where.unitId = unitId;
     if (managerId) where.managerId = managerId;
@@ -939,9 +952,12 @@ export class UsersService {
       { skipPolicy: true },
     );
 
+    const expiryDays = this.settings
+      ? (await this.settings.getUserPolicy()).invitationExpiryDays
+      : undefined;
     await this.emailQueue.add(
       'userInvite',
-      { email: dto.email, fullName: dto.fullName, tempPassword },
+      { email: dto.email, fullName: dto.fullName, tempPassword, expiryDays },
       { attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true },
     );
 

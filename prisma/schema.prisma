@@ -1158,13 +1158,14 @@ model Answers {
 // ══════════════════════════════════════════════════════════════════
 
 model Role {
-  id              Int              @id @default(autoincrement())
-  name            String           @unique
-  description     String?          @db.Text
-  users           User[]
-  code            String?          @unique
-  rolePermissions RolePermission[]
-  roleTemplates   RoleTemplate[]
+  id               Int                   @id @default(autoincrement())
+  departmentScopes RoleDepartmentScope[]
+  name             String                @unique
+  description      String?               @db.Text
+  users            User[]
+  code             String?               @unique
+  rolePermissions  RolePermission[]
+  roleTemplates    RoleTemplate[]
 
   leadershipTargetings LeadershipProgramTargeting[]
 }
@@ -1217,6 +1218,20 @@ model Permission {
 
   @@index([action])
   @@index([subject])
+}
+
+// Âmbito de acesso de um perfil por departamento (docs/modulo_settings.md §2).
+// Sem linhas = sem restrição. Aplicado à listagem de utilizadores para perfis
+// que não sejam ADMIN/RH.
+model RoleDepartmentScope {
+  id           Int        @id @default(autoincrement())
+  roleId       Int
+  departmentId Int
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, departmentId])
+  @@index([departmentId])
 }
 
 model RolePermission {
@@ -1277,6 +1292,7 @@ enum DepartmentVisibility {
 
 model Department {
   id                       Int                     @id @default(autoincrement())
+  roleScopes               RoleDepartmentScope[]
   code                     String                  @unique
   name                     String
   acronym                  String?

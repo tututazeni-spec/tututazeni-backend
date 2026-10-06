@@ -41,7 +41,12 @@ export class MailService implements OnModuleInit {
     });
   }
 
-  async sendUserInvite(email: string, fullName: string, tempPassword: string): Promise<void> {
+  async sendUserInvite(
+    email: string,
+    fullName: string,
+    tempPassword: string,
+    expiryDays?: number,
+  ): Promise<void> {
     await this.send({
       to: email,
       subject: 'Bem-vindo ao INNOVA — acesso à sua conta',
@@ -53,6 +58,7 @@ export class MailService implements OnModuleInit {
         `Password temporária: ${tempPassword}`,
         '',
         'Por favor aceda e altere a sua password no primeiro login.',
+        ...(expiryDays ? [`Este convite é válido por ${expiryDays} dias.`] : []),
         '',
         '-- Sistema INNOVA',
       ].join('\n'),
