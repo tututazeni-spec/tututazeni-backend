@@ -25,7 +25,7 @@ const ENDPOINT_LIST = 15;
 /** [atenção, degradado, crítico] — valor ≥ limiar sobe o estado. */
 type Limits = readonly [number, number, number];
 
-const LIMITS = {
+export const LIMITS = {
   p95Ms: [500, 1000, 2000],
   errorRatePercent: [1, 3, 5],
   cpuPercent: [70, 85, 95],

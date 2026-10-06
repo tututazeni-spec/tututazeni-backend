@@ -9,6 +9,9 @@ import { MonitoringProcessesService } from './monitoring-processes.service';
 import { MonitoringAutomationsService } from './monitoring-automations.service';
 import { MonitoringIntegrationsService } from './monitoring-integrations.service';
 import { MonitoringPerformanceService } from './monitoring-performance.service';
+import { MonitoringAlertsService } from './monitoring-alerts.service';
+import { MonitoringIncidentsService } from './monitoring-incidents.service';
+import { MonitoringHealthService } from './monitoring-health.service';
 
 @Module({
   imports: [
@@ -29,6 +32,9 @@ import { MonitoringPerformanceService } from './monitoring-performance.service';
     MonitoringAutomationsService,
     MonitoringIntegrationsService,
     MonitoringPerformanceService,
+    MonitoringAlertsService,
+    MonitoringIncidentsService,
+    MonitoringHealthService,
   ],
   exports: [MonitoringModulesService],
 })

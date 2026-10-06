@@ -80,6 +80,7 @@ import { ApiIntegrationModule } from '../api-integration/api-integration.module'
     ScalabilityInfraService,
     ScalabilityQueuesService,
     ScalabilityStorageService,
+    ScalabilityIncidentsService,
   ],
 })
 export class ScalabilityModule {}
