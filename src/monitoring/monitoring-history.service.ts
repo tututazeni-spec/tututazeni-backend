@@ -302,7 +302,7 @@ export class MonitoringHistoryService {
 
     // ── Séries diárias da plataforma: horárias (ponderadas) + brutas ainda não agregadas ──
     const lastHour = hourly.length ? hourly[hourly.length - 1].hour.getTime() + 3_600_000 : 0;
-    type Day = {
+    interface Day {
       w: number;
       lat: number;
       err: number;
@@ -310,7 +310,7 @@ export class MonitoringHistoryService {
       cpu: number;
       mem: number;
       rpm: number;
-    };
+    }
     const perDay = new Map<string, Day>();
     const add = (
       d: Date,
