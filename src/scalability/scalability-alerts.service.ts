@@ -9,7 +9,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { AlertCategory, AlertSeverity } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ScalabilityCapacityService } from './scalability-capacity.service';
@@ -557,7 +557,7 @@ export class ScalabilityAlertsService {
     return { raised, resolved };
   }
 
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  @Cron('40 */5 * * * *')
   async scheduledEvaluation() {
     try {
       const r = await this.evaluateAndRaise();

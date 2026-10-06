@@ -351,7 +351,29 @@ export class ScalabilityInfraService {
     });
   }
 
-  async getDatabaseMetrics() {
+  private dbMetricsCache: {
+    at: number;
+    value: ReturnType<ScalabilityInfraService['computeDatabaseMetrics']>;
+  } | null = null;
+
+  /**
+   * Partilha o resultado entre chamadores simultâneos (alertas do Monitoring,
+   * alertas do Scalability, performance, controller): as queries a pg_stat_*
+   * são caras e antes corriam duplicadas no mesmo tick de cron.
+   */
+  getDatabaseMetrics() {
+    const now = Date.now();
+    if (!this.dbMetricsCache || now - this.dbMetricsCache.at > 30_000) {
+      const value = this.computeDatabaseMetrics();
+      this.dbMetricsCache = { at: now, value };
+      value.catch(() => {
+        this.dbMetricsCache = null;
+      });
+    }
+    return this.dbMetricsCache.value;
+  }
+
+  private async computeDatabaseMetrics() {
     // Garante pelo menos uma amostra recente (o cron é horário).
     const last = await this.prisma.databaseSizeSample.findFirst({
       orderBy: { capturedAt: 'desc' },
