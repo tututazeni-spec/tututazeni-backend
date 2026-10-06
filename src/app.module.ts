@@ -32,6 +32,7 @@ import { OnboardingModule } from './onboarding/onboarding.module';
 import { LiveClassesModule } from './live-classes/live-classes.module';
 import { MobileModule } from './mobile/mobile.module';
 import { ScalabilityModule } from './scalability/scalability.module';
+import { MonitoringModule } from './monitoring/monitoring.module';
 import { TrainingModule } from './trainings/trainings.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { ExecutiveReportsModule } from './executive-reports/executive-reports.module';
@@ -161,6 +162,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     LiveClassesModule,
     MobileModule,
     ScalabilityModule,
+    MonitoringModule,
     TrainingModule,
     AnalyticsModule,
     ExecutiveReportsModule,
