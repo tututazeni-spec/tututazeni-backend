@@ -74,7 +74,13 @@ import { ApiIntegrationModule } from '../api-integration/api-integration.module'
     ScalabilityModulesService,
     ScalabilityEventListeners,
   ],
-  exports: [ScalabilityService],
+  // Infra/Queues/Storage: reutilizados pelo Monitoring (§6 Performance) em vez de duplicar a recolha.
+  exports: [
+    ScalabilityService,
+    ScalabilityInfraService,
+    ScalabilityQueuesService,
+    ScalabilityStorageService,
+  ],
 })
 export class ScalabilityModule {}
 
