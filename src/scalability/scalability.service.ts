@@ -4,13 +4,17 @@
 // ============================================================
 
 import {
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Optional,
 } from '@nestjs/common';
+import * as os from 'os';
 import { Prisma, AuthType } from '@prisma/client';
+import { TRAFFIC_METRICS_SOURCE, TrafficMetricsSource } from './traffic-metrics.source';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../common/services/audit.service';
@@ -109,6 +113,10 @@ export class ScalabilityService {
     private readonly audit: AuditService,
     private readonly events: EventEmitter2,
     private readonly apiIntegration: ApiIntegrationService,
+    // Opcional: preenchido pelo módulo Monitoring quando existir.
+    @Optional()
+    @Inject(TRAFFIC_METRICS_SOURCE)
+    private readonly trafficSource?: TrafficMetricsSource,
   ) {}
 
   // ============================================================
@@ -293,7 +301,7 @@ export class ScalabilityService {
 
     const data: Prisma.IntegrationConfigUncheckedCreateInput = {
       ...rest,
-      authType: dto.authType as AuthType | undefined,
+      authType: dto.authType,
       credentialsJson: safeCredentials,
       endpoint: dto.baseUrl ?? '',
       config: dto.configJson ? JSON.parse(dto.configJson) : {},
@@ -343,7 +351,7 @@ export class ScalabilityService {
     // só `authType` precisa de cast pontual (ver nota acima).
     const data: Prisma.IntegrationConfigUncheckedUpdateInput = {
       ...rest,
-      authType: dto.authType as AuthType | undefined,
+      authType: dto.authType,
       credentialsJson: safeCredentials ?? existing.credentialsJson,
       ...(dto.baseUrl !== undefined && { endpoint: dto.baseUrl }),
       ...(dto.configJson !== undefined && { config: JSON.parse(dto.configJson) }),
@@ -837,11 +845,29 @@ export class ScalabilityService {
   @Cron(CronExpression.EVERY_MINUTE)
   async captureSystemMetrics() {
     try {
+      // §24 — frequência de recolha configurável (o cron corre sempre ao minuto).
+      const cfg = await this.prisma.scalabilityInfraSettings.findUnique({
+        where: { id: 'default' },
+        select: { collectionIntervalMin: true },
+      });
+      const every = cfg?.collectionIntervalMin ?? 1;
+      if (every > 1) {
+        const last = await this.prisma.scalabilityMetric.findFirst({
+          orderBy: { capturedAt: 'desc' },
+          select: { capturedAt: true },
+        });
+        // margem de 30 s para a deriva do cron
+        if (last && Date.now() - last.capturedAt.getTime() < every * 60_000 - 30_000) return;
+      }
       // Em produção: integrar com CloudWatch / Azure Monitor / Prometheus
       // Aqui: simular ou buscar de endpoint de health interno
       const snapshot = await this.collectSystemSnapshot();
 
-      await this.prisma.scalabilityMetric.create({ data: snapshot });
+      // O dashboard filtra por tenantId — sem ele nenhuma métrica era lida.
+      const tenantId = await this.resolveTenantId().catch(() => undefined);
+      await this.prisma.scalabilityMetric.create({
+        data: { ...snapshot, ...(tenantId ? { tenantId } : {}) },
+      });
 
       // Verificar thresholds para gerar alertas
       await this.evaluateAlertThresholds(snapshot);
@@ -854,14 +880,61 @@ export class ScalabilityService {
     }
   }
 
+  // Janela em que um refresh token recém-emitido conta o utilizador como
+  // "em sessão" — não há registo de sessões; a rotação de RefreshToken é o
+  // melhor sinal de actividade autenticada disponível.
+  private static readonly SESSION_WINDOW_MS = 15 * 60 * 1000;
+  private lastCpuSample: { idle: number; total: number } | null = null;
+
+  private sampleCpuPercent(): number {
+    const cpus = os.cpus();
+    const cur = cpus.reduce(
+      (a, c) => {
+        const t = Object.values(c.times).reduce((s, v) => s + v, 0);
+        return { idle: a.idle + c.times.idle, total: a.total + t };
+      },
+      { idle: 0, total: 0 },
+    );
+    const prev = this.lastCpuSample ?? { idle: 0, total: 0 };
+    this.lastCpuSample = cur;
+    const dTotal = cur.total - prev.total;
+    if (dTotal <= 0) return 0;
+    return Math.round((1 - (cur.idle - prev.idle) / dTotal) * 1000) / 10;
+  }
+
+  // Lê a fonte de tráfego se existir; uma falha nela nunca impede a captura
+  // de CPU/memória/sessões.
+  private async readTrafficMetrics(): Promise<Partial<SystemMetricsSnapshot>> {
+    if (!this.trafficSource) return {};
+    try {
+      return await this.trafficSource.getTrafficMetrics();
+    } catch (err: unknown) {
+      this.logger.warn({
+        action: 'READ_TRAFFIC_METRICS',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao ler métricas de tráfego da fonte de monitorização',
+      });
+      return {};
+    }
+  }
+
   private async collectSystemSnapshot(): Promise<SystemMetricsSnapshot> {
-    // Em produção: buscar via API interna de infraestrutura
-    // Placeholder que pode ser substituído por integração real com Prometheus/CloudWatch
+    const since = new Date(Date.now() - ScalabilityService.SESSION_WINDOW_MS);
+    const [activeUsers, sessionGroups] = await Promise.all([
+      this.prisma.read.user.count({ where: { active: true } }),
+      this.prisma.refreshToken.groupBy({
+        by: ['userId'],
+        where: { createdAt: { gte: since }, revokedAt: null },
+      }),
+    ]);
+    const traffic = await this.readTrafficMetrics();
+    const memTotal = os.totalmem();
     return {
-      activeUsers: 0,
-      concurrentSessions: 0,
-      cpuUsagePercent: 0,
-      memoryUsagePercent: 0,
+      activeUsers,
+      concurrentSessions: sessionGroups.length,
+      cpuUsagePercent: this.sampleCpuPercent(),
+      memoryUsagePercent: Math.round(((memTotal - os.freemem()) / memTotal) * 1000) / 10,
+      // Sem fonte de tráfego (módulo Monitoring) estes campos ficam a 0.
       diskUsagePercent: 0,
       avgLatencyMs: 0,
       p95LatencyMs: 0,
@@ -873,6 +946,7 @@ export class ScalabilityService {
       bandwidthMbps: 0,
       videoStreamCount: 0,
       apiCallsPerMin: 0,
+      ...traffic,
     };
   }
 
@@ -1132,7 +1206,12 @@ export class ScalabilityService {
       }),
     ]);
 
-    const activeUsers = await this.prisma.read.user.count();
+    const capacityEstimate = await this.estimateConcurrentCapacity(tenantId);
+    const [registeredUsers, activeUsers, dbUsagePercent] = await Promise.all([
+      this.prisma.read.user.count(),
+      this.prisma.read.user.count({ where: { active: true } }),
+      this.getDbConnectionUsagePercent(),
+    ]);
     const activeIntegrations = integrations
       .filter(i => i.status === 'ACTIVE')
       .reduce((s, i) => s + i._count.id, 0);
@@ -1179,6 +1258,7 @@ export class ScalabilityService {
         plan: tenant.plan,
         maxUsers: tenant.maxUsers,
         activeUsersCount: activeUsers,
+        registeredUsersCount: registeredUsers,
         storageUsedGb: latestMetric?.storageUsedGb ?? 0,
         maxStorageGb: tenant.maxStorageGb,
       },
@@ -1190,7 +1270,9 @@ export class ScalabilityService {
         requestsPerMinute: latestMetric?.requestsPerMinute ?? 0,
         cpuUsagePercent: latestMetric?.cpuUsagePercent ?? 0,
         memoryUsagePercent: latestMetric?.memoryUsagePercent ?? 0,
+        dbUsagePercent,
       },
+      capacityEstimate,
       integrations: {
         total: integrations.reduce((s, i) => s + i._count.id, 0),
         active: activeIntegrations,
@@ -1217,6 +1299,356 @@ export class ScalabilityService {
         latencyTarget: slas?.maxLatencyMs ?? 2000,
       },
     };
+  }
+
+  /**
+   * Dados dos gráficos da Visão Geral (modulo_scalability.md §5):
+   * - timeline: métricas das últimas 24h agregadas por hora (média; sessões em pico)
+   * - userGrowth: 12 meses — registados/activos acumulados e novos no mês
+   * - forecast: meses até os utilizadores registados atingirem 80% da licença
+   *   (maxUsers), pelo crescimento médio dos últimos 3 meses
+   */
+  async getOverviewCharts(tenantId: string) {
+    const tenant = await this.findTenantOrFail(tenantId);
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const metrics = await this.prisma.scalabilityMetric.findMany({
+      where: { tenantId, capturedAt: { gte: since } },
+      orderBy: { capturedAt: 'asc' },
+      select: {
+        capturedAt: true,
+        cpuUsagePercent: true,
+        memoryUsagePercent: true,
+        requestsPerMinute: true,
+        concurrentSessions: true,
+        avgLatencyMs: true,
+      },
+    });
+    const buckets = new Map<string, typeof metrics>();
+    for (const m of metrics) {
+      const key = new Date(
+        Math.floor(m.capturedAt.getTime() / 3_600_000) * 3_600_000,
+      ).toISOString();
+      const arr = buckets.get(key) ?? [];
+      arr.push(m);
+      buckets.set(key, arr);
+    }
+    const timeline = [...buckets.entries()].map(([at, rows]) => ({
+      at,
+      cpuUsagePercent: this.round1(this.avg(rows.map(r => r.cpuUsagePercent))),
+      memoryUsagePercent: this.round1(this.avg(rows.map(r => r.memoryUsagePercent))),
+      requestsPerMinute: Math.round(this.avg(rows.map(r => r.requestsPerMinute))),
+      concurrentSessions: Math.max(...rows.map(r => r.concurrentSessions)),
+      avgLatencyMs: Math.round(this.avg(rows.map(r => r.avgLatencyMs))),
+    }));
+
+    const now = new Date();
+    const monthStart = (offset: number) => new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const firstMonth = monthStart(11);
+    const [baseRegistered, baseActive, created] = await Promise.all([
+      this.prisma.read.user.count({ where: { createdAt: { lt: firstMonth } } }),
+      this.prisma.read.user.count({ where: { createdAt: { lt: firstMonth }, active: true } }),
+      this.prisma.read.user.findMany({
+        where: { createdAt: { gte: firstMonth } },
+        select: { createdAt: true, active: true },
+      }),
+    ]);
+    // Utilizadores com actividade autenticada em cada mês (rotação de
+    // RefreshToken — o melhor sinal de actividade disponível, como nas sessões).
+    const monthlyActive = await Promise.all(
+      Array.from({ length: 12 }, (_, k) => {
+        const i = 11 - k;
+        return this.prisma.refreshToken
+          .groupBy({
+            by: ['userId'],
+            where: { createdAt: { gte: monthStart(i), lt: monthStart(i - 1) } },
+          })
+          .then(rows => rows.length);
+      }),
+    );
+    let registered = baseRegistered;
+    let active = baseActive;
+    const userGrowth: {
+      month: string;
+      registered: number;
+      active: number;
+      activeInMonth: number;
+      newUsers: number;
+    }[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const start = monthStart(i);
+      const end = monthStart(i - 1);
+      const inMonth = created.filter(u => u.createdAt >= start && u.createdAt < end);
+      registered += inMonth.length;
+      active += inMonth.filter(u => u.active).length;
+      userGrowth.push({
+        month: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`,
+        registered,
+        active,
+        activeInMonth: monthlyActive[11 - i],
+        newUsers: inMonth.length,
+      });
+    }
+
+    const target = Math.round(tenant.maxUsers * 0.8);
+    const last3 = userGrowth.slice(-3);
+    const monthlyGrowth = last3.length
+      ? last3.reduce((s, g) => s + g.newUsers, 0) / last3.length
+      : 0;
+    const current = userGrowth[userGrowth.length - 1]?.registered ?? 0;
+    const forecast = {
+      thresholdPercent: 80,
+      targetUsers: target,
+      monthlyGrowth: this.round1(monthlyGrowth),
+      alreadyReached: current >= target,
+      monthsToThreshold:
+        current >= target || monthlyGrowth <= 0
+          ? null
+          : Math.ceil((target - current) / monthlyGrowth),
+    };
+
+    return {
+      timeline,
+      userGrowth,
+      forecast,
+      trafficSourceConnected: !!this.trafficSource,
+    };
+  }
+
+  /**
+   * Aba Utilizadores & Carga (modulo_scalability.md §6).
+   *
+   * - Utilizadores activos diários/mensais: utilizadores distintos com
+   *   RefreshToken criado nas últimas 24h / 30 dias (mesmo sinal de actividade
+   *   do overview-charts).
+   * - Sessões por utilizador: logins ≈ tokens criados em 30d menos os que são
+   *   rotações (tokens que substituíram outro, via replacedById).
+   * - Duração média da sessão e Web/mobile: não existe esse dado (sem
+   *   registo de dispositivo nem fim de sessão) — devolvidos a null.
+   * - Requests por utilizador: requestsPerMinute ÷ sessões simultâneas das
+   *   últimas 24h; null enquanto não houver fonte de tráfego (Monitoring).
+   */
+  async getUsersLoad(tenantId: string) {
+    await this.findTenantOrFail(tenantId);
+    const now = Date.now();
+    const day = 24 * 60 * 60 * 1000;
+    const since24h = new Date(now - day);
+    const since30d = new Date(now - 30 * day);
+    const since365d = new Date(now - 365 * day);
+
+    const [
+      total,
+      activeUsers,
+      dailyRows,
+      monthlyRows,
+      tokens30d,
+      rotated30d,
+      newDay,
+      newMonth,
+      newYear,
+      metrics24h,
+      historicPeak,
+      latestMetric,
+    ] = await Promise.all([
+      this.prisma.read.user.count(),
+      this.prisma.read.user.count({ where: { active: true } }),
+      this.prisma.refreshToken.groupBy({
+        by: ['userId'],
+        where: { createdAt: { gte: since24h } },
+      }),
+      this.prisma.refreshToken.groupBy({
+        by: ['userId'],
+        where: { createdAt: { gte: since30d } },
+      }),
+      this.prisma.refreshToken.count({ where: { createdAt: { gte: since30d } } }),
+      this.prisma.refreshToken.count({
+        where: { createdAt: { gte: since30d }, replacedById: { not: null } },
+      }),
+      this.prisma.read.user.count({ where: { createdAt: { gte: since24h } } }),
+      this.prisma.read.user.count({ where: { createdAt: { gte: since30d } } }),
+      this.prisma.read.user.count({ where: { createdAt: { gte: since365d } } }),
+      this.prisma.scalabilityMetric.findMany({
+        where: { tenantId, capturedAt: { gte: since24h } },
+        orderBy: { capturedAt: 'asc' },
+        select: { capturedAt: true, concurrentSessions: true, requestsPerMinute: true },
+      }),
+      this.prisma.scalabilityMetric.aggregate({
+        where: { tenantId },
+        _max: { concurrentSessions: true },
+      }),
+      this.prisma.scalabilityMetric.findFirst({
+        where: { tenantId },
+        orderBy: { capturedAt: 'desc' },
+        select: { concurrentSessions: true },
+      }),
+    ]);
+
+    const sessions = metrics24h.map(m => m.concurrentSessions);
+    const withTraffic = metrics24h.filter(m => m.requestsPerMinute > 0 && m.concurrentSessions > 0);
+    const requestsPerUserPerMin = withTraffic.length
+      ? this.round1(this.avg(withTraffic.map(m => m.requestsPerMinute / m.concurrentSessions)))
+      : null;
+
+    const buckets = new Map<number, number>();
+    for (const m of metrics24h) {
+      const k = Math.floor(m.capturedAt.getTime() / 3_600_000) * 3_600_000;
+      buckets.set(k, Math.max(buckets.get(k) ?? 0, m.concurrentSessions));
+    }
+    const concurrentTimeline = [...buckets.entries()].map(([k, peak]) => ({
+      at: new Date(k).toISOString(),
+      peak,
+    }));
+
+    const monthlyIds = new Set(monthlyRows.map(r => r.userId));
+    const people = await this.prisma.read.user.findMany({
+      where: { active: true },
+      select: {
+        id: true,
+        departmentId: true,
+        positionId: true,
+        unitId: true,
+        roleId: true,
+        workLocation: true,
+        contractType: true,
+      },
+    });
+    const [departments, positions, units, roles] = await Promise.all([
+      this.prisma.department.findMany({ select: { id: true, name: true } }),
+      this.prisma.position.findMany({ select: { id: true, name: true } }),
+      this.prisma.unit.findMany({ select: { id: true, name: true } }),
+      this.prisma.role.findMany({ select: { id: true, name: true } }),
+    ]);
+    const names = (rows: { id: number; name: string }[]) => new Map(rows.map(r => [r.id, r.name]));
+    const segment = (
+      key: (u: (typeof people)[number]) => string | number | null,
+      label?: Map<number, string>,
+    ) => {
+      const acc = new Map<string, { users: number; activeMonthly: number }>();
+      for (const u of people) {
+        const raw = key(u);
+        const name =
+          raw === null || raw === ''
+            ? 'Sem atribuição'
+            : typeof raw === 'number'
+              ? (label?.get(raw) ?? `#${raw}`)
+              : raw;
+        const row = acc.get(name) ?? { users: 0, activeMonthly: 0 };
+        row.users += 1;
+        if (monthlyIds.has(u.id)) row.activeMonthly += 1;
+        acc.set(name, row);
+      }
+      return [...acc.entries()]
+        .map(([name, v]) => ({ name, ...v }))
+        .sort((a, b) => b.users - a.users)
+        .slice(0, 15);
+    };
+
+    const pct = (n: number) => (total > 0 ? this.round1((n / total) * 100) : 0);
+    return {
+      totals: {
+        total,
+        active: activeUsers,
+        activeDaily: dailyRows.length,
+        activeMonthly: monthlyRows.length,
+      },
+      concurrent: {
+        current: latestMetric?.concurrentSessions ?? 0,
+        peak24h: sessions.length ? Math.max(...sessions) : 0,
+        historicPeak: historicPeak._max.concurrentSessions ?? 0,
+        avg24h: sessions.length ? this.round1(this.avg(sessions)) : 0,
+        min24h: sessions.length ? Math.min(...sessions) : 0,
+        max24h: sessions.length ? Math.max(...sessions) : 0,
+        timeline: concurrentTimeline,
+      },
+      sessions: {
+        avgPerUser30d: monthlyRows.length
+          ? this.round1(Math.max(tokens30d - rotated30d, 0) / monthlyRows.length)
+          : 0,
+        avgDurationMinutes: null as number | null,
+        requestsPerUserPerMin,
+      },
+      growth: {
+        daily: { newUsers: newDay, percent: pct(newDay) },
+        monthly: { newUsers: newMonth, percent: pct(newMonth) },
+        yearly: { newUsers: newYear, percent: pct(newYear) },
+      },
+      segmentation: {
+        department: segment(u => u.departmentId, names(departments)),
+        position: segment(u => u.positionId, names(positions)),
+        unit: segment(u => u.unitId, names(units)),
+        role: segment(u => u.roleId, names(roles)),
+        location: segment(u => u.workLocation),
+        userType: segment(u => u.contractType),
+        platform: null as null | { web: number; mobile: number },
+      },
+      trafficSourceConnected: !!this.trafficSource,
+    };
+  }
+
+  /**
+   * Estimativa de utilizadores simultâneos que a infraestrutura suporta.
+   *
+   * MEASURED — extrapola das últimas 24h: para cada amostra com carga real
+   * (≥5 sessões e CPU ≥20%) capacidade = sessões ÷ CPU; devolve a mediana.
+   * Só o CPU entra: a memória tem uma base fixa alta que não cresce com os
+   * utilizadores e faria a extrapolação subestimar brutalmente.
+   *
+   * MODEL — sem carga suficiente, aplica a lei de Little ao pool de ligações
+   * da BD (gargalo habitual de NestJS+Prisma): cada utilizador faz 1 pedido
+   * por THINK_TIME_S e cada pedido segura uma ligação SERVICE_TIME_MS, logo
+   * utilizadores ≈ pool × THINK_TIME_S×1000 ÷ SERVICE_TIME_MS. Os pressupostos
+   * vão na resposta para a UI os mostrar; é uma estimativa teórica, não medida.
+   */
+  private async estimateConcurrentCapacity(tenantId: string): Promise<{
+    concurrentUsers: number;
+    method: 'MEASURED' | 'MODEL';
+    basis: string;
+  }> {
+    const samples = await this.prisma.scalabilityMetric.findMany({
+      where: {
+        tenantId,
+        capturedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        concurrentSessions: { gte: 5 },
+        cpuUsagePercent: { gte: 20 },
+      },
+      select: { concurrentSessions: true, cpuUsagePercent: true },
+    });
+    if (samples.length >= 10) {
+      const caps = samples
+        .map(s => s.concurrentSessions / (Math.min(s.cpuUsagePercent, 100) / 100))
+        .sort((a, b) => a - b);
+      return {
+        concurrentUsers: Math.round(caps[Math.floor(caps.length / 2)]),
+        method: 'MEASURED',
+        basis: `Mediana de ${samples.length} amostras das últimas 24h (sessões ÷ CPU).`,
+      };
+    }
+
+    const THINK_TIME_S = 10;
+    const SERVICE_TIME_MS = 50;
+    const pool = parseInt(process.env.DB_POOL_MAX || '50', 10);
+    return {
+      concurrentUsers: Math.round((pool * THINK_TIME_S * 1000) / SERVICE_TIME_MS),
+      method: 'MODEL',
+      basis: `Modelo teórico: pool de ${pool} ligações à BD, 1 pedido por utilizador a cada ${THINK_TIME_S}s, ${SERVICE_TIME_MS}ms por pedido. Passa a valor medido quando houver carga real.`,
+    };
+  }
+
+  // Utilização da base de dados = ligações abertas / max_connections do Postgres.
+  // Best-effort: se a consulta falhar, devolve 0 em vez de partir o dashboard.
+  private async getDbConnectionUsagePercent(): Promise<number> {
+    try {
+      const rows = await this.prisma.$queryRaw<{ used: number; max: number }[]>`
+        SELECT
+          (SELECT count(*)::int FROM pg_stat_activity) AS used,
+          current_setting('max_connections')::int AS max`;
+      const { used, max } = rows[0] ?? { used: 0, max: 0 };
+      return max > 0 ? Math.round((used / max) * 1000) / 10 : 0;
+    } catch (err: unknown) {
+      this.logger.warn(
+        `Não foi possível ler a utilização da BD: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return 0;
+    }
   }
 
   // ============================================================
@@ -1257,6 +1689,10 @@ export class ScalabilityService {
     };
     const hours = map[window] ?? 24;
     return new Date(now.getTime() - hours * 60 * 60 * 1000);
+  }
+
+  private round1(v: number): number {
+    return Math.round(v * 10) / 10;
   }
 
   private avg(arr: number[]): number {
