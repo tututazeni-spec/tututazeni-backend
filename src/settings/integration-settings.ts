@@ -23,6 +23,8 @@ export interface SmtpSettings {
 
 export interface WhatsAppSettings {
   enabled: boolean;
+  /** Fornecedor activo (§13) — as credenciais Meta vivem em whatsapp-settings.ts. */
+  provider: 'TWILIO' | 'META';
   /** Número remetente em E.164. */
   number: string;
   accountSid: string;
@@ -51,6 +53,7 @@ export const DEFAULT_INTEGRATION_SETTINGS: IntegrationSettings = {
   smtp: { host: '', port: 587, secure: false, user: '', passEnc: null, from: '' },
   whatsapp: {
     enabled: false,
+    provider: 'TWILIO',
     number: '',
     accountSid: '',
     authTokenEnc: null,

@@ -2049,7 +2049,9 @@ export class EventsService {
         participants
           .filter(p => p.user.phone)
           .map(p =>
-            this.sms.sendWhatsApp(p.user.phone, message).catch(onFail(p.userId, 'whatsapp')),
+            this.sms
+              .sendWhatsApp(p.user.phone, message, 'CORPORATE_EVENT')
+              .catch(onFail(p.userId, 'whatsapp')),
           ),
       );
     }

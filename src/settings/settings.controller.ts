@@ -27,16 +27,23 @@ import { LicenseSettingsService } from './license-settings.service';
 import { AuditDataSettingsService } from './audit-data-settings.service';
 import { AuthSettingsService } from './auth-settings.service';
 import { EmailSettingsService } from './email-settings.service';
+import { WhatsAppSettingsService } from './whatsapp-settings.service';
+import { BackupSettingsService } from './backup-settings.service';
+import { SystemSettingsService } from './system-settings.service';
 import {
   CreateCertificateTemplateDto,
   CreateDataSubjectRequestDto,
   DisableTwoFactorDto,
+  FlushCacheDto,
   PublishConsentTextDto,
+  RestoreBackupDto,
   SetDepartmentScopeDto,
   TestEmailTemplateDto,
   TestSmtpDto,
+  TestWhatsAppDto,
   TwoFactorCodeDto,
   UpdateAuthSettingsDto,
+  UpdateBackupSettingsDto,
   UpdateCertificateSettingsDto,
   UpdateCertificateTemplateDto,
   UpdateDataSubjectRequestDto,
@@ -47,7 +54,9 @@ import {
   UpdateOrganizationSettingsDto,
   UpdatePrivacySettingsDto,
   UpdateSecurityPolicyDto,
+  UpdateSystemSettingsDto,
   UpdateUserPolicyDto,
+  UpdateWhatsAppSettingsDto,
 } from './settings.dto';
 
 @ApiTags('Settings')
@@ -66,6 +75,9 @@ export class SettingsController {
     private readonly auditData: AuditDataSettingsService,
     private readonly authSettings: AuthSettingsService,
     private readonly emailSettings: EmailSettingsService,
+    private readonly whatsapp: WhatsAppSettingsService,
+    private readonly backups: BackupSettingsService,
+    private readonly system: SystemSettingsService,
   ) {}
 
   // Qualquer utilizador autenticado: nome da plataforma, logo e formatos.
@@ -535,5 +547,135 @@ export class SettingsController {
   @ApiOperation({ summary: 'Enviar um template com dados de exemplo para validar o resultado' })
   testEmailTemplate(@Body() dto: TestEmailTemplateDto, @CurrentUser() admin: CurrentUserData) {
     return this.emailSettings.testTemplate(dto.key, dto.to, admin.id);
+  }
+
+  // ─── §13 WhatsApp ─────────────────────────────────────────────────────────
+
+  @Get('whatsapp')
+  @Roles(Role.ADMIN)
+  @ApiOperation({
+    summary: 'Fornecedor (Twilio/Meta), número, templates, eventos, limites e estado',
+  })
+  whatsappSettingsView() {
+    return this.whatsapp.get();
+  }
+
+  @Put('whatsapp')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Actualizar a integração WhatsApp' })
+  updateWhatsAppSettings(
+    @Body() dto: UpdateWhatsAppSettingsDto,
+    @CurrentUser() admin: CurrentUserData,
+  ) {
+    return this.whatsapp.update(dto, admin.id);
+  }
+
+  @Get('whatsapp/templates')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Templates aprovados na conta Meta (WhatsApp Business)' })
+  whatsappMetaTemplates() {
+    return this.whatsapp.listMetaTemplates();
+  }
+
+  @Post('whatsapp/test')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Enviar uma mensagem de teste' })
+  testWhatsApp(@Body() dto: TestWhatsAppDto, @CurrentUser() admin: CurrentUserData) {
+    return this.whatsapp.sendTest(dto.to, admin.id);
+  }
+
+  // ─── §14 Backups ──────────────────────────────────────────────────────────
+
+  @Get('backups')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Configuração, estado e histórico de backups' })
+  backupsView() {
+    return this.backups.get();
+  }
+
+  @Put('backups')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Actualizar periodicidade, retenção e destino dos backups' })
+  updateBackups(@Body() dto: UpdateBackupSettingsDto, @CurrentUser() admin: CurrentUserData) {
+    return this.backups.update(dto, admin.id);
+  }
+
+  @Post('backups/run')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Executar um backup agora' })
+  runBackup(@CurrentUser() admin: CurrentUserData) {
+    return this.backups.runBackup('MANUAL', admin.id);
+  }
+
+  @Post('backups/:id/restore')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Restaurar a base de dados a partir de um backup (destrutivo)' })
+  restoreBackup(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: RestoreBackupDto,
+    @CurrentUser() admin: CurrentUserData,
+  ) {
+    return this.backups.restore(id, dto, admin.id);
+  }
+
+  // ─── §15 Sistema ──────────────────────────────────────────────────────────
+
+  @Get('system')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Manutenção, paginação, uploads e jobs' })
+  systemSettingsView() {
+    return this.system.get();
+  }
+
+  @Put('system')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Actualizar parâmetros de sistema' })
+  updateSystemSettings(
+    @Body() dto: UpdateSystemSettingsDto,
+    @CurrentUser() admin: CurrentUserData,
+  ) {
+    return this.system.update(dto, admin.id);
+  }
+
+  @Get('system/status')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Estado de filas, cache, base de dados e processo' })
+  systemStatus() {
+    return this.system.status();
+  }
+
+  @Post('system/cache/flush')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Limpar um namespace da cache' })
+  flushCache(@Body() dto: FlushCacheDto, @CurrentUser() admin: CurrentUserData) {
+    return this.system.flushCache(dto.namespace, admin.id);
+  }
+
+  @Post('system/queues/:name/pause')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Pausar uma fila' })
+  pauseQueue(@Param('name') name: string, @CurrentUser() admin: CurrentUserData) {
+    return this.system.setQueuePaused(name, true, admin.id);
+  }
+
+  @Post('system/queues/:name/resume')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Retomar uma fila' })
+  resumeQueue(@Param('name') name: string, @CurrentUser() admin: CurrentUserData) {
+    return this.system.setQueuePaused(name, false, admin.id);
+  }
+
+  @Post('system/queues/:name/clean')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Limpar jobs concluídos/falhados antigos' })
+  cleanQueue(@Param('name') name: string, @CurrentUser() admin: CurrentUserData) {
+    return this.system.cleanQueue(name, admin.id);
+  }
+
+  @Post('system/queues/:name/retry-failed')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Repor em fila os jobs falhados' })
+  retryFailed(@Param('name') name: string, @CurrentUser() admin: CurrentUserData) {
+    return this.system.retryFailed(name, admin.id);
   }
 }

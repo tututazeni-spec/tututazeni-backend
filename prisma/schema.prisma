@@ -8461,6 +8461,10 @@ model TenantConfig {
   moduleFlagsJson          String?
   // ─── Email (docs/modulo_settings.md §12) — templates e assinatura ───
   emailSettingsJson        String?
+  // ─── WhatsApp / Backups / Sistema (docs/modulo_settings.md §13-15) ───
+  whatsappSettingsJson     String?
+  backupSettingsJson       String?
+  systemSettingsJson       String?
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
   integrations             IntegrationConfig[]
@@ -15485,4 +15489,24 @@ model WebhookDelivery {
   webhook      Webhook   @relation(fields: [webhookId], references: [id], onDelete: Cascade)
 
   @@index([webhookId, status])
+}
+
+// Execuções de backup da base de dados (docs/modulo_settings.md §14).
+model BackupRun {
+  id            Int       @id @default(autoincrement())
+  trigger       String // MANUAL | SCHEDULED
+  status        String // RUNNING | SUCCESS | FAILED
+  filePath      String?
+  sizeBytes     BigInt?
+  error         String?   @db.Text
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+  triggeredById Int?
+  deletedAt     DateTime? // ficheiro eliminado pela política de retenção
+  restoredAt    DateTime?
+  restoredById  Int?
+
+  @@index([startedAt])
+  @@index([status])
+  @@map("backup_runs")
 }

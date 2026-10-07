@@ -17,6 +17,7 @@ import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { Twilio } from 'twilio';
 import { sanitizeForLog } from '../common/logging/sanitize';
 import { IntegrationSettingsService } from '../settings/integration-settings.service';
+import { WhatsAppSettingsService } from '../settings/whatsapp-settings.service';
 
 @Injectable()
 export class SmsService implements OnModuleInit {
@@ -26,7 +27,11 @@ export class SmsService implements OnModuleInit {
   private whatsappFrom?: string;
 
   // Definições §6: credenciais/número/limites do WhatsApp guardados nas definições.
-  constructor(@Optional() private readonly orgIntegrations?: IntegrationSettingsService) {}
+  constructor(
+    @Optional() private readonly orgIntegrations?: IntegrationSettingsService,
+    // §13: fornecedor Meta Cloud API + eventos autorizados.
+    @Optional() private readonly waSettings?: WhatsAppSettingsService,
+  ) {}
 
   onModuleInit(): void {
     const sid = process.env.TWILIO_ACCOUNT_SID;
@@ -62,7 +67,8 @@ export class SmsService implements OnModuleInit {
     }
   }
 
-  async sendWhatsApp(to: string, body: string): Promise<void> {
+  /** `event` (ver WHATSAPP_EVENT_KEYS) permite às Definições §13 filtrar e escolher template. */
+  async sendWhatsApp(to: string, body: string, event?: string): Promise<void> {
     let client = this.client;
     let from = this.whatsappFrom;
     if (this.orgIntegrations) {
@@ -73,6 +79,36 @@ export class SmsService implements OnModuleInit {
           to: sanitizeForLog(to),
           msg: 'WhatsApp não enviado — desactivado nas definições',
         });
+        return;
+      }
+      if (this.waSettings && !(await this.waSettings.isEventAuthorized(event).catch(() => true))) {
+        this.logger.warn({
+          to: sanitizeForLog(to),
+          msg: `WhatsApp não enviado — evento ${event} não autorizado nas definições`,
+        });
+        return;
+      }
+      const provider = this.waSettings
+        ? await this.waSettings.getProvider().catch(() => 'TWILIO' as const)
+        : 'TWILIO';
+      if (this.waSettings && provider === 'META') {
+        if (!(await this.orgIntegrations.consumeWhatsAppQuota())) {
+          this.logger.warn({
+            to: sanitizeForLog(to),
+            msg: 'WhatsApp não enviado — limite de envio atingido',
+          });
+          return;
+        }
+        try {
+          await this.waSettings.sendMeta(to, body, event);
+        } catch (err: unknown) {
+          this.logger.error({
+            to: sanitizeForLog(to),
+            err: { message: err instanceof Error ? err.message : String(err) },
+            msg: 'Falha ao enviar WhatsApp via Meta Cloud API',
+          });
+          throw err;
+        }
         return;
       }
       const cfg = await this.orgIntegrations.getWhatsApp().catch(() => null);

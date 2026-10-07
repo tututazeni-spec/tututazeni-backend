@@ -184,7 +184,7 @@ describe('NotificationsService', () => {
 
       expect(mockMail.sendNotification).toHaveBeenCalledWith('user@innova.com', 'Title', 'Test');
       expect(mockSms.sendSms).toHaveBeenCalledWith('+244900000000', 'Test');
-      expect(mockSms.sendWhatsApp).toHaveBeenCalledWith('+244900000000', 'Test');
+      expect(mockSms.sendWhatsApp).toHaveBeenCalledWith('+244900000000', 'Test', 'NOTIFICATION');
     });
 
     it('com email desligado nas preferências, não envia email', async () => {
