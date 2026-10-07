@@ -1,5 +1,7 @@
 // src/settings/settings.module.ts
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { BullModule } from '@nestjs/bull';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuditModule } from '../audit/audit.module';
 import { SettingsService } from './settings.service';
@@ -13,9 +15,22 @@ import { LicenseSettingsService } from './license-settings.service';
 import { AuditDataSettingsService } from './audit-data-settings.service';
 import { AuthSettingsService } from './auth-settings.service';
 import { EmailSettingsService } from './email-settings.service';
+import { WhatsAppSettingsService } from './whatsapp-settings.service';
+import { BackupSettingsService } from './backup-settings.service';
+import { SystemSettingsService } from './system-settings.service';
+import { SystemSettingsInterceptor } from './system-settings.interceptor';
 
 @Module({
-  imports: [PrismaModule, AuditModule],
+  imports: [
+    PrismaModule,
+    AuditModule,
+    BullModule.registerQueue(
+      { name: 'audit' },
+      { name: 'email' },
+      { name: 'notifications' },
+      { name: 'webhooks' },
+    ),
+  ],
   providers: [
     SettingsService,
     SecuritySettingsService,
@@ -27,6 +42,10 @@ import { EmailSettingsService } from './email-settings.service';
     AuditDataSettingsService,
     AuthSettingsService,
     EmailSettingsService,
+    WhatsAppSettingsService,
+    BackupSettingsService,
+    SystemSettingsService,
+    { provide: APP_INTERCEPTOR, useClass: SystemSettingsInterceptor },
   ],
   controllers: [SettingsController],
   exports: [
@@ -40,6 +59,9 @@ import { EmailSettingsService } from './email-settings.service';
     AuditDataSettingsService,
     AuthSettingsService,
     EmailSettingsService,
+    WhatsAppSettingsService,
+    BackupSettingsService,
+    SystemSettingsService,
   ],
 })
 export class SettingsModule {}

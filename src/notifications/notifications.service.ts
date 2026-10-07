@@ -183,7 +183,7 @@ export class NotificationsService {
       await this.sms.sendSms(target.phone, dto.message).catch(onFail('sms'));
     }
     if (plan.whatsapp && (prefs?.whatsapp ?? false) && target.phone) {
-      await this.sms.sendWhatsApp(target.phone, dto.message).catch(onFail('whatsapp'));
+      await this.sms.sendWhatsApp(target.phone, dto.message, 'NOTIFICATION').catch(onFail('whatsapp'));
     }
 
     // Fora do horário permitido: em vez de descartar, agenda email/WhatsApp para a
@@ -249,7 +249,7 @@ export class NotificationsService {
         } else if (plan.deferUntil) stillClosed.push('email');
       } else {
         if (!(prefs?.whatsapp ?? false) || !target.phone) continue;
-        if (plan.whatsapp) await this.sms.sendWhatsApp(target.phone, payload.message);
+        if (plan.whatsapp) await this.sms.sendWhatsApp(target.phone, payload.message, 'NOTIFICATION');
         else if (plan.deferUntil) stillClosed.push('whatsapp');
       }
     }

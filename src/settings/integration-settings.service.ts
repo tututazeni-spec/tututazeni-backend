@@ -116,6 +116,7 @@ export class IntegrationSettingsService {
     };
     if (
       next.whatsapp.enabled &&
+      next.whatsapp.provider === 'TWILIO' &&
       (!next.whatsapp.number || !next.whatsapp.accountSid || !next.whatsapp.authTokenEnc)
     ) {
       throw new BadRequestException(
@@ -195,7 +196,7 @@ export class IntegrationSettingsService {
   /** Credenciais guardadas; `null` = desligado/incompleto → usar variáveis de ambiente. */
   async getWhatsApp(): Promise<ResolvedWhatsApp | null> {
     const { whatsapp } = await this.load();
-    if (!whatsapp.enabled || !whatsapp.authTokenEnc) return null;
+    if (!whatsapp.enabled || whatsapp.provider !== 'TWILIO' || !whatsapp.authTokenEnc) return null;
     return {
       accountSid: whatsapp.accountSid,
       authToken: decryptSecret(whatsapp.authTokenEnc),
@@ -266,6 +267,11 @@ export class IntegrationSettingsService {
       lastHour: this.waSent.filter(t => now - t < HOUR_MS).length,
       lastDay: this.waSent.filter(t => now - t < DAY_MS).length,
     };
+  }
+
+  /** Definições base do WhatsApp (ligado, fornecedor, número, limites) sem segredos. */
+  async getWhatsAppBase() {
+    return (await this.load()).whatsapp;
   }
 
   async whatsAppStatus() {

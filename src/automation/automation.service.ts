@@ -489,7 +489,7 @@ export class AutomationService {
         await this.sms.sendSms(contact.phone, message);
       } else {
         if (!contact?.phone) throw new Error('utilizador sem telemóvel registado');
-        await this.sms.sendWhatsApp(contact.phone, message);
+        await this.sms.sendWhatsApp(contact.phone, message, 'AUTOMATION');
       }
     } catch (e: unknown) {
       this.logger.warn({
@@ -2490,7 +2490,7 @@ export class AutomationService {
         if (contact?.phone) {
           try {
             if (rule.action === ActionType.SEND_WHATSAPP) {
-              await this.sms.sendWhatsApp(contact.phone, message);
+              await this.sms.sendWhatsApp(contact.phone, message, 'AUTOMATION');
             } else {
               await this.sms.sendSms(contact.phone, message);
             }
