@@ -20,7 +20,9 @@ export function logQueryEvent(
   event: PrismaQueryEvent,
   slowQueryMs: number,
 ): void {
-  if (event.duration >= slowQueryMs) {
+  // Queries de catálogo intrinsecamente pesadas (marcador `heavy-ok`, já cacheadas
+  // no chamador) não são "slow query" accionáveis — ficam em debug com o tempo.
+  if (event.duration >= slowQueryMs && !event.query.includes('heavy-ok')) {
     logger.warn(
       {
         durationMs: event.duration,

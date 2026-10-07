@@ -1,6 +1,7 @@
 // src/settings/system-settings.service.ts
 // Definições de Sistema (docs/modulo_settings.md §15): modo de manutenção,
 // tecto de paginação, limites de uploads, e operação de cache e filas (jobs).
+import { getDatabaseSizeBytes } from '../common/helpers/db-size';
 import { BadRequestException, Inject, Injectable, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
@@ -133,8 +134,7 @@ export class SystemSettingsService {
   private async dbStatus() {
     const started = Date.now();
     try {
-      const [{ size }] = await this.prisma.$queryRaw<{ size: bigint }[]>`
-        SELECT pg_database_size(current_database()) AS size`;
+      const size = await getDatabaseSizeBytes(this.prisma);
       return {
         connected: true,
         latencyMs: Date.now() - started,

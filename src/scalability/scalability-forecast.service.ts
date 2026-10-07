@@ -6,6 +6,7 @@
 // meses de histórico o recurso devolve `available: false` com o motivo.
 // Não persiste previsões — são recalculadas a cada pedido a partir do histórico.
 
+import { SharedResult } from '../common/helpers/shared-result';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
@@ -129,7 +130,13 @@ export class ScalabilityForecastService {
     };
   }
 
-  async getForecasts() {
+  private readonly getForecastsShared = new SharedResult();
+
+  getForecasts() {
+    return this.getForecastsShared.get(() => this.computeGetForecasts());
+  }
+
+  private async computeGetForecasts() {
     const since = new Date();
     since.setDate(1);
     since.setHours(0, 0, 0, 0);
