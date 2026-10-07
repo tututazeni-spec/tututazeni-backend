@@ -1082,6 +1082,11 @@ model User {
 
   // ─── Auth Tokens ──────────────────────────────────────────────
   passwordChangedAt   DateTime?
+  // Definições §4 Segurança: bloqueio por tentativas falhadas e 2FA (TOTP)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  twoFactorEnabled    Boolean   @default(false)
+  twoFactorSecret     String?
   passwordResetTokens PasswordResetToken[]
   refreshTokens       RefreshToken[]
 
@@ -1158,13 +1163,14 @@ model Answers {
 // ══════════════════════════════════════════════════════════════════
 
 model Role {
-  id              Int              @id @default(autoincrement())
-  name            String           @unique
-  description     String?          @db.Text
-  users           User[]
-  code            String?          @unique
-  rolePermissions RolePermission[]
-  roleTemplates   RoleTemplate[]
+  id               Int                   @id @default(autoincrement())
+  departmentScopes RoleDepartmentScope[]
+  name             String                @unique
+  description      String?               @db.Text
+  users            User[]
+  code             String?               @unique
+  rolePermissions  RolePermission[]
+  roleTemplates    RoleTemplate[]
 
   leadershipTargetings LeadershipProgramTargeting[]
 }
@@ -1217,6 +1223,20 @@ model Permission {
 
   @@index([action])
   @@index([subject])
+}
+
+// Âmbito de acesso de um perfil por departamento (docs/modulo_settings.md §2).
+// Sem linhas = sem restrição. Aplicado à listagem de utilizadores para perfis
+// que não sejam ADMIN/RH.
+model RoleDepartmentScope {
+  id           Int        @id @default(autoincrement())
+  roleId       Int
+  departmentId Int
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, departmentId])
+  @@index([departmentId])
 }
 
 model RolePermission {
@@ -1277,6 +1297,7 @@ enum DepartmentVisibility {
 
 model Department {
   id                       Int                     @id @default(autoincrement())
+  roleScopes               RoleDepartmentScope[]
   code                     String                  @unique
   name                     String
   acronym                  String?
@@ -8415,6 +8436,31 @@ model TenantConfig {
   cdnEnabled               Boolean                   @default(false)
   cdnConfigJson            String? // JSON com CDN config
   webhookSecret            String?
+  // ─── Definições da organização (docs/modulo_settings.md §1) ───
+  platformName             String?
+  nif                      String?
+  address                  String?
+  phone                    String?
+  contactEmail             String?
+  website                  String?
+  sector                   String?
+  country                  String?
+  faviconUrl               String?
+  dateFormat               String                    @default("DD/MM/YYYY")
+  timeFormat               String                    @default("24h")
+  numberFormat             String                    @default("pt")
+  // ─── Política de utilizadores (docs/modulo_settings.md §3) ───
+  userPolicyJson           String?
+  // ─── Segurança / Notificações / Integrações (docs/modulo_settings.md §4-6) ───
+  securityPolicyJson       String?
+  notificationSettingsJson String?
+  integrationSettingsJson  String?
+  // ─── Certificados / Privacidade (LPDP) / Licença e Módulos (docs/modulo_settings.md §7-9) ───
+  certificateSettingsJson  String?
+  privacySettingsJson      String?
+  moduleFlagsJson          String?
+  // ─── Email (docs/modulo_settings.md §12) — templates e assinatura ───
+  emailSettingsJson        String?
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
   integrations             IntegrationConfig[]
@@ -8426,8 +8472,51 @@ model TenantConfig {
   declarations             Declaration[]
   declarationTenantConfigs DeclarationTenantConfig[]
   declarationTemplates     DeclarationTemplate[]
+  dataSubjectRequests      DataSubjectRequest[]
 
   @@map("tenant_configs")
+}
+
+// Pedidos de direitos dos titulares (LPDP) — docs/modulo_settings.md §8.
+// userId/handledById guardam o id sem relação formal (ver Certificate.revokedById):
+// o titular pode não ser um utilizador da plataforma (ex-colaborador, candidato).
+model DataSubjectRequest {
+  id             Int       @id @default(autoincrement())
+  tenantId       String
+  userId         Int?
+  requesterName  String
+  requesterEmail String
+  type           DsrType
+  status         DsrStatus @default(PENDING)
+  details        String?   @db.Text
+  resolutionNote String?   @db.Text
+  handledById    Int?
+  requestedAt    DateTime  @default(now())
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  tenant TenantConfig @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([userId])
+  @@map("data_subject_requests")
+}
+
+enum DsrType {
+  ACCESS
+  RECTIFICATION
+  ERASURE
+  PORTABILITY
+  OBJECTION
+}
+
+enum DsrStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
 }
 
 model IntegrationSyncLog {
@@ -13886,6 +13975,8 @@ model RefreshToken {
   expiresAt    DateTime
   revokedAt    DateTime?
   replacedById Int?
+  ip           String?
+  userAgent    String?
   createdAt    DateTime  @default(now())
 
   @@index([userId])
@@ -15339,4 +15430,59 @@ model ScalabilityMetricHourly {
   maxStorageGb   Float
 
   @@map("scalability_metrics_hourly")
+}
+
+
+// ─── Chaves de API e webhooks (docs/modulo_settings.md §6) ───
+// Usados por src/api-integration/api-integration.service.ts, que até aqui
+// degradava para "sem persistência" por estes modelos não existirem.
+model ApiKey {
+  id          Int       @id @default(autoincrement())
+  name        String
+  description String?
+  keyHash     String    @unique
+  keyPreview  String
+  scopes      String[]
+  expiresAt   DateTime?
+  allowedIps  String[]  @default([])
+  rateLimit   Int       @default(1000)
+  createdById Int
+  active      Boolean   @default(true)
+  lastUsedAt  DateTime?
+  rotatedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([createdById])
+  @@index([active])
+}
+
+model Webhook {
+  id          Int               @id @default(autoincrement())
+  name        String
+  url         String
+  events      String[]
+  secret      String
+  active      Boolean           @default(true)
+  retryMax    Int               @default(3)
+  createdById Int
+  createdAt   DateTime          @default(now())
+  deliveries  WebhookDelivery[]
+
+  @@index([active])
+}
+
+model WebhookDelivery {
+  id           String    @id @default(cuid())
+  webhookId    Int
+  event        String
+  payload      String    @db.Text
+  status       String    @default("PENDING") // PENDING | DELIVERED | FAILED
+  attempt      Int       @default(0)
+  attempts     Int       @default(0)
+  responseCode Int?
+  deliveredAt  DateTime?
+  createdAt    DateTime  @default(now())
+  webhook      Webhook   @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId, status])
 }

@@ -33,6 +33,6 @@ import { PrismaModule } from '../prisma/prisma.module';
     AuditReportsController,
     AuditController,
   ],
-  exports: [AuditService],
+  exports: [AuditService, AuditPolicyService],
 })
 export class AuditModule {}

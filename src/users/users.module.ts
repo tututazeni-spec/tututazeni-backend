@@ -10,6 +10,7 @@ import { EmailProcessor } from '../queue/processors/email.processor';
 // EmployeesModule e ex-RolesPermissionsModule, fundidos aqui como "Utilizadores".
 import { EmployeesModule } from '../employees/employees.module';
 import { RolesPermissionsModule } from '../roles-permissions/roles-permissions.module';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { RolesPermissionsModule } from '../roles-permissions/roles-permissions.m
     BullModule.registerQueue({ name: 'email' }),
     EmployeesModule,
     RolesPermissionsModule,
+    SettingsModule,
   ],
   providers: [UsersService, EmailProcessor],
   controllers: [UsersController],

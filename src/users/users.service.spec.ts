@@ -352,7 +352,7 @@ describe('UsersService', () => {
       jest.clearAllMocks();
     });
 
-    it('gera tempPassword com 24 chars hexadecimais (CSPRNG) e passa-o no job de email', async () => {
+    it('gera tempPassword com 24 chars hexadecimais (CSPRNG) + sufixo de complexidade e passa-o no job de email', async () => {
       userMock.findUnique.mockResolvedValue(null);
       userMock.create.mockResolvedValue({ id: 1, email: 'novo@innova.com', fullName: 'Novo User' });
 
@@ -364,8 +364,10 @@ describe('UsersService', () => {
       });
 
       const [, jobData] = mockEmailQueue.add.mock.calls[0] as [string, { tempPassword: string }];
-      expect(jobData.tempPassword).toHaveLength(24);
-      expect(jobData.tempPassword).toMatch(/^[0-9a-f]{24}$/);
+      // Definições §4: sufixo "Aa#1" garante maiúscula/minúscula/dígito/símbolo
+      // exigidos pela política de palavras-passe — ver users.service.ts#invite.
+      expect(jobData.tempPassword).toHaveLength(28);
+      expect(jobData.tempPassword).toMatch(/^[0-9a-f]{24}Aa#1$/);
     });
 
     it('enfileira o job "userInvite" com email/fullName correctos e retry configurado', async () => {

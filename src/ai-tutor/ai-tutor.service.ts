@@ -5,7 +5,9 @@ import {
   BadRequestException,
   ForbiddenException,
   Logger,
+  Optional,
 } from '@nestjs/common';
+import { IntegrationSettingsService } from '../settings/integration-settings.service';
 import { Prisma, ActionStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiProvidersService } from './ai-providers.service';
@@ -70,11 +72,19 @@ export class AiTutorService {
     private prisma: PrismaService,
     private aiProviders: AiProvidersService,
     private knowledge: AiKnowledgeService,
+    // Definições §6: Ísis ligada/desligada, módulos activos e limite por utilizador.
+    @Optional() private orgIntegrations?: IntegrationSettingsService,
   ) {}
 
   // ─── INICIAR SESSÃO ───────────────────────────────────────────────────────
 
   async startSession(userId: number, dto: StartAiSessionDto) {
+    const isisModule = dto.planId
+      ? 'PDI'
+      : dto.courseId || dto.lessonId || dto.trainingId || dto.enrollmentId
+        ? 'LEARNING'
+        : undefined;
+    await this.orgIntegrations?.assertIsisAllowed(isisModule);
     // 1. Carregar perfil completo do utilizador
     const user = await this.prisma.read.user.findUnique({
       where: { id: userId },
@@ -231,16 +241,23 @@ export class AiTutorService {
     if (session.endedAt) throw new BadRequestException('Esta sessão já foi encerrada');
     if (!dto.message?.trim()) throw new BadRequestException('Mensagem vazia');
 
+    await this.orgIntegrations?.assertIsisAllowed();
     const settings = await this.getSettings();
-    if (settings.dailyMessageLimit) {
+    const orgLimit = (await this.orgIntegrations?.getIsis())?.dailyLimitPerUser ?? 0;
+    // O limite mais restritivo entre as definições do AI Tutor e as da organização manda.
+    const dailyLimit =
+      orgLimit > 0 && settings.dailyMessageLimit
+        ? Math.min(orgLimit, settings.dailyMessageLimit)
+        : orgLimit || settings.dailyMessageLimit;
+    if (dailyLimit) {
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
       const messagesToday = await this.prisma.read.aiMessage.count({
         where: { role: 'USER', session: { userId }, createdAt: { gte: todayStart } },
       });
-      if (messagesToday >= settings.dailyMessageLimit) {
+      if (messagesToday >= dailyLimit) {
         throw new BadRequestException(
-          `Limite diário de ${settings.dailyMessageLimit} perguntas ao AI Tutor atingido. Tenta novamente amanhã.`,
+          `Limite diário de ${dailyLimit} perguntas ao AI Tutor atingido. Tenta novamente amanhã.`,
         );
       }
     }

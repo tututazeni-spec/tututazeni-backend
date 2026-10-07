@@ -1,5 +1,5 @@
 // src/notifications/notifications.service.ts
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { ConfigService } from '@nestjs/config';
@@ -7,6 +7,7 @@ import { AutomationTrigger, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { SmsService } from '../sms/sms.service';
+import { NotificationSettingsService } from '../settings/notification-settings.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 import {
@@ -19,6 +20,15 @@ import {
   NotificationPriority,
 } from './notifications.dto';
 
+export type DeferredChannel = 'email' | 'whatsapp';
+export interface DeferredDelivery {
+  userId: number;
+  subject: string;
+  message: string;
+  critical: boolean;
+  channels: DeferredChannel[];
+}
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
@@ -29,6 +39,8 @@ export class NotificationsService {
     private readonly config: ConfigService,
     private readonly mail: MailService,
     private readonly sms: SmsService,
+    // Definições §5: canais/eventos/horário. Optional: specs sem SettingsModule.
+    @Optional() private readonly orgSettings?: NotificationSettingsService,
   ) {}
 
   private get queueEnabled(): boolean {
@@ -105,6 +117,14 @@ export class NotificationsService {
       }
     }
 
+    // Definições §5: evento desligado pela organização.
+    if (await this.orgSettings?.isEventDisabled(dto.type)) {
+      return { skipped: true, reason: 'event_disabled' };
+    }
+    const plan = (await this.orgSettings?.deliveryPlan(
+      dto.priority === NotificationPriority.CRITICAL,
+    )) ?? { inApp: true, email: true, whatsapp: true, deferUntil: null };
+
     const notification = await this.prisma.notificationLog.create({
       data: {
         userId: dto.userId,
@@ -118,6 +138,9 @@ export class NotificationsService {
         metadata: dto.metadata ? JSON.stringify(dto.metadata) : undefined,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
         read: false,
+        // Canal in-app desligado: o registo mantém-se (auditoria) mas fica arquivado,
+        // fora da caixa de entrada do utilizador.
+        archived: !plan.inApp,
         success: true,
       },
     });
@@ -133,7 +156,7 @@ export class NotificationsService {
     // desta notificação. Honra os toggles de NotificationPreference (email
     // por omissão ligado no schema, sms/whatsapp por omissão desligados —
     // sem preferências guardadas ainda, usa esses mesmos defaults).
-    await this.deliverExternalChannels(target, dto, prefs);
+    await this.deliverExternalChannels(target, dto, prefs, plan);
 
     return notification;
   }
@@ -142,6 +165,7 @@ export class NotificationsService {
     target: { email: string; phone: string | null },
     dto: CreateNotificationDto,
     prefs: { email: boolean; sms: boolean; whatsapp: boolean } | null,
+    plan: { email: boolean; whatsapp: boolean; deferUntil: Date | null },
   ): Promise<void> {
     const subject = dto.title ?? dto.type;
     const onFail = (channel: string) => (e: unknown) =>
@@ -152,14 +176,85 @@ export class NotificationsService {
         msg: `Falha ao entregar notificação por ${channel} — registo interno já criado`,
       });
 
-    if (prefs ? prefs.email : true) {
+    if (plan.email && (prefs ? prefs.email : true)) {
       await this.mail.sendNotification(target.email, subject, dto.message).catch(onFail('email'));
     }
     if ((prefs?.sms ?? false) && target.phone) {
       await this.sms.sendSms(target.phone, dto.message).catch(onFail('sms'));
     }
-    if ((prefs?.whatsapp ?? false) && target.phone) {
+    if (plan.whatsapp && (prefs?.whatsapp ?? false) && target.phone) {
       await this.sms.sendWhatsApp(target.phone, dto.message).catch(onFail('whatsapp'));
+    }
+
+    // Fora do horário permitido: em vez de descartar, agenda email/WhatsApp para a
+    // próxima abertura da janela (job atrasado na fila 'notifications').
+    if (plan.deferUntil) {
+      const channels: DeferredChannel[] = [];
+      if (!plan.email && (prefs ? prefs.email : true)) channels.push('email');
+      if (!plan.whatsapp && (prefs?.whatsapp ?? false) && target.phone) channels.push('whatsapp');
+      if (channels.length) {
+        await this.deferExternal(
+          {
+            userId: dto.userId,
+            subject,
+            message: dto.message,
+            critical: dto.priority === NotificationPriority.CRITICAL,
+            channels,
+          },
+          plan.deferUntil,
+        ).catch(onFail('deferred'));
+      }
+    }
+  }
+
+  private async deferExternal(payload: DeferredDelivery, runAt: Date): Promise<void> {
+    if (!this.queueEnabled) {
+      this.logger.warn({
+        userId: payload.userId,
+        msg: 'Envio fora do horário não adiado — fila desactivada, canais externos descartados',
+      });
+      return;
+    }
+    await this.notificationsQueue.add('deliver-external', payload, {
+      delay: Math.max(0, runAt.getTime() - Date.now()),
+      removeOnComplete: true,
+      attempts: 3,
+      backoff: 5000,
+    });
+  }
+
+  /** Executa um envio adiado: reavalia preferências/definições (podem ter mudado
+   *  durante a espera) e, se o horário ainda estiver fechado, reagenda. */
+  async deliverDeferred(payload: DeferredDelivery): Promise<void> {
+    const [target, prefs] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: payload.userId },
+        select: { email: true, phone: true },
+      }),
+      this.prisma.notificationPreference.findUnique({ where: { userId: payload.userId } }),
+    ]);
+    if (!target) return;
+    const plan = (await this.orgSettings?.deliveryPlan(payload.critical)) ?? {
+      inApp: true,
+      email: true,
+      whatsapp: true,
+      deferUntil: null,
+    };
+    const stillClosed: DeferredChannel[] = [];
+    for (const channel of payload.channels) {
+      if (channel === 'email') {
+        if (!(prefs ? prefs.email : true)) continue;
+        if (plan.email) {
+          await this.mail.sendNotification(target.email, payload.subject, payload.message);
+        } else if (plan.deferUntil) stillClosed.push('email');
+      } else {
+        if (!(prefs?.whatsapp ?? false) || !target.phone) continue;
+        if (plan.whatsapp) await this.sms.sendWhatsApp(target.phone, payload.message);
+        else if (plan.deferUntil) stillClosed.push('whatsapp');
+      }
+    }
+    if (stillClosed.length && plan.deferUntil) {
+      await this.deferExternal({ ...payload, channels: stillClosed }, plan.deferUntil);
     }
   }
 
@@ -184,6 +279,12 @@ export class NotificationsService {
 
     if (!targetIds.length) return { sent: 0, skipped: dto.userIds.length };
 
+    // Definições §5: evento desligado / canal in-app desligado (ver send()).
+    if (await this.orgSettings?.isEventDisabled(dto.type)) {
+      return { sent: 0, skipped: dto.userIds.length };
+    }
+    const inApp = (await this.orgSettings?.deliveryPlan(false))?.inApp ?? true;
+
     const now = new Date();
     const result = await this.prisma.notificationLog.createMany({
       data: targetIds.map(userId => ({
@@ -196,6 +297,7 @@ export class NotificationsService {
         actionUrl: dto.actionUrl,
         metadata: dto.metadata ? JSON.stringify(dto.metadata) : undefined,
         read: false,
+        archived: !inApp,
         success: true,
         createdAt: now,
       })),

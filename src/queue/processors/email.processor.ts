@@ -7,6 +7,7 @@ export interface UserInviteEmailJob {
   email: string;
   fullName: string;
   tempPassword: string;
+  expiryDays?: number;
 }
 
 /**
@@ -24,8 +25,8 @@ export class EmailProcessor {
 
   @Process('userInvite')
   async userInvite(job: Job<UserInviteEmailJob>): Promise<void> {
-    const { email, fullName, tempPassword } = job.data;
-    await this.mail.sendUserInvite(email, fullName, tempPassword);
+    const { email, fullName, tempPassword, expiryDays } = job.data;
+    await this.mail.sendUserInvite(email, fullName, tempPassword, expiryDays);
     this.logger.log({
       email,
       attempt: job.attemptsMade + 1,

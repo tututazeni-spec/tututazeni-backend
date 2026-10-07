@@ -21,6 +21,6 @@ import { CACHE_REDIS } from './cache.constants';
     },
     CacheService,
   ],
-  exports: [CacheService],
+  exports: [CacheService, CACHE_REDIS],
 })
 export class CacheModule {}

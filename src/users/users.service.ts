@@ -4,6 +4,7 @@ import {
   ConflictException,
   ForbiddenException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
@@ -11,6 +12,8 @@ import { Prisma } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
+import { SecuritySettingsService } from '../settings/security-settings.service';
 import { BCRYPT_COST_FACTOR } from '../common/config/security.config';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { flattenRolePermissions } from '../common/utils/role-permissions';
@@ -72,6 +75,11 @@ export class UsersService {
   constructor(
     private prisma: PrismaService,
     @InjectQueue('email') private readonly emailQueue: Queue,
+    // Política de utilizadores (Definições §3). Optional: specs que montam o
+    // serviço sem o SettingsModule continuam a funcionar (sem política).
+    @Optional() private readonly settings?: SettingsService,
+    // Definições §4: política de palavras-passe (comprimento, símbolo).
+    @Optional() private readonly security?: SecuritySettingsService,
   ) {}
 
   // ─── Sanitizar (remover password) ────────────────────────────────────────
@@ -87,7 +95,7 @@ export class UsersService {
 
   // ─── LISTAGEM ─────────────────────────────────────────────────────────────
 
-  async findAll(filters: UserFilterDto) {
+  async findAll(filters: UserFilterDto, actor?: { roleId: number | null; roleName?: string }) {
     const {
       page = 1,
       limit = 20,
@@ -106,7 +114,20 @@ export class UsersService {
     const where: Prisma.UserWhereInput = {};
 
     if (active !== undefined) where.active = active;
-    if (departmentId) where.departmentId = departmentId;
+    // Âmbito por departamento do perfil (Definições §2). ADMIN/RH nunca são limitados.
+    const privileged = actor?.roleName === 'ADMIN' || actor?.roleName === 'RH';
+    const scope =
+      this.settings && actor && !privileged
+        ? await this.settings.getScopeForRole(actor.roleId)
+        : null;
+    if (scope) {
+      if (departmentId && !scope.includes(departmentId)) {
+        throw new ForbiddenException('Sem acesso a este departamento');
+      }
+      where.departmentId = departmentId ? departmentId : { in: scope };
+    } else if (departmentId) {
+      where.departmentId = departmentId;
+    }
     if (positionId) where.positionId = positionId;
     if (unitId) where.unitId = unitId;
     if (managerId) where.managerId = managerId;
@@ -217,7 +238,9 @@ export class UsersService {
 
   // ─── CRIAR ────────────────────────────────────────────────────────────────
 
-  async create(dto: CreateUserDto, createdById?: number) {
+  async create(dto: CreateUserDto, createdById?: number, opts: { skipPolicy?: boolean } = {}) {
+    if (this.settings && !opts.skipPolicy) dto = await this.settings.applyUserPolicy(dto);
+
     // Guards de unicidade antes da escrita: força primary para não validar contra réplica atrasada.
     const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (exists) throw new ConflictException('Email já registado');
@@ -237,6 +260,7 @@ export class UsersService {
       if (usernameExists) throw new ConflictException(`Username ${dto.username} já existe`);
     }
 
+    if (dto.password) await this.security?.assertPasswordAllowed(dto.password);
     const hashed = dto.password ? await bcrypt.hash(dto.password, BCRYPT_COST_FACTOR) : null;
 
     let user: Prisma.UserGetPayload<{ include: typeof USER_INCLUDE_BASIC }>;
@@ -413,7 +437,10 @@ export class UsersService {
     }
 
     const data: Prisma.UserUpdateInput = { ...dto };
-    if (dto.password) data.password = await bcrypt.hash(dto.password, BCRYPT_COST_FACTOR);
+    if (dto.password) {
+      await this.security?.assertPasswordAllowed(dto.password);
+      data.password = await bcrypt.hash(dto.password, BCRYPT_COST_FACTOR);
+    }
     if (dto.birthDate) data.birthDate = new Date(dto.birthDate);
     if (dto.hireDate) data.hireDate = new Date(dto.hireDate);
     if (dto.exitDate) data.exitDate = new Date(dto.exitDate);
@@ -574,6 +601,7 @@ export class UsersService {
     const valid = user.password && (await bcrypt.compare(dto.currentPassword, user.password));
     if (!valid) throw new ForbiddenException('Password actual incorrecta');
 
+    await this.security?.assertPasswordAllowed(dto.newPassword);
     const hashed = await bcrypt.hash(dto.newPassword, BCRYPT_COST_FACTOR);
     const now = new Date();
 
@@ -910,25 +938,35 @@ export class UsersService {
   // ─── CONVIDAR UTILIZADOR ──────────────────────────────────────────────────
 
   async invite(dto: InviteUserDto) {
+    if (this.settings) dto = await this.settings.applyUserPolicy(dto, { invite: true });
+
     // Guard de unicidade antes da escrita: força primary.
     const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (exists) throw new ConflictException('Email já registado');
 
-    // CSPRNG — 12 bytes = 24 chars hexadecimais
-    const tempPassword = crypto.randomBytes(12).toString('hex');
+    // CSPRNG — 12 bytes = 24 chars hexadecimais, mais um sufixo fixo para cumprir sempre a
+    // política de palavras-passe (maiúscula, símbolo, dígito) quando a organização a aperta.
+    const tempPassword = crypto.randomBytes(12).toString('hex') + 'Aa#1';
 
     // Mudança deliberada (Fase J): o utilizador é criado primeiro e o email de
     // convite vai para a fila `email` (retry gerido pelo Bull). Deixa de
     // bloquear a resposta e de impedir a criação quando o SMTP está em baixo.
-    const user = await this.create({
-      ...dto,
-      password: tempPassword,
-      accountStatus: AccountStatus.PENDING,
-    });
+    const user = await this.create(
+      {
+        ...dto,
+        password: tempPassword,
+        accountStatus: AccountStatus.PENDING,
+      },
+      undefined,
+      { skipPolicy: true },
+    );
 
+    const expiryDays = this.settings
+      ? (await this.settings.getUserPolicy()).invitationExpiryDays
+      : undefined;
     await this.emailQueue.add(
       'userInvite',
-      { email: dto.email, fullName: dto.fullName, tempPassword },
+      { email: dto.email, fullName: dto.fullName, tempPassword, expiryDays },
       { attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true },
     );
 

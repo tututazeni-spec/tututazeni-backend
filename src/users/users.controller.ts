@@ -96,8 +96,8 @@ export class UsersController {
   @Get()
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar utilizadores com filtros e paginação' })
-  findAll(@Query() filters: UserFilterDto) {
-    return this.svc.findAll(filters);
+  findAll(@Query() filters: UserFilterDto, @CurrentUser() actor: CurrentUserData) {
+    return this.svc.findAll(filters, { roleId: actor.roleId, roleName: actor.role?.name });
   }
 
   @Get('directory')

@@ -5,9 +5,10 @@ import { AiTutorController } from './ai-tutor.controller';
 import { AiProvidersService } from './ai-providers.service';
 import { AiKnowledgeService } from './ai-knowledge.service';
 import { PrismaModule } from '../prisma/prisma.module';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, SettingsModule],
   providers: [AiProvidersService, AiTutorService, AiKnowledgeService],
   controllers: [AiTutorController],
   exports: [AiTutorService, AiProvidersService, AiKnowledgeService],
