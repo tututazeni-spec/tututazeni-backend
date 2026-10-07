@@ -29,7 +29,7 @@ const mockSvc = {
   remove: jest.fn().mockResolvedValue({ message: 'ok' }),
 };
 
-const mockUser = { id: 1, email: 'test@innova.com', role: { name: 'ADMIN' } };
+const mockUser = { id: 1, email: 'test@innova.com', roleId: 1, role: { name: 'ADMIN' } };
 
 describe('UsersController', () => {
   let controller: UsersController;
@@ -96,10 +96,10 @@ describe('UsersController', () => {
     expect(mockSvc.changePassword).toHaveBeenCalledWith(1, dto);
   });
 
-  it('findAll → findAll(filters)', async () => {
+  it('findAll → findAll(filters, { roleId, roleName })', async () => {
     const filters = {} as any;
-    await controller.findAll(filters);
-    expect(mockSvc.findAll).toHaveBeenCalledWith(filters);
+    await controller.findAll(filters, mockUser as any);
+    expect(mockSvc.findAll).toHaveBeenCalledWith(filters, { roleId: 1, roleName: 'ADMIN' });
   });
 
   it('directory → getDirectory sem params', async () => {

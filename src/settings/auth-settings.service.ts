@@ -47,7 +47,8 @@ export class AuthSettingsService {
     });
     const settings = parseAuthSettings(row?.ssoConfigJson);
     settings.ssoEnabled = row?.ssoEnabled ?? settings.ssoEnabled;
-    settings.ssoProvider = (row?.ssoProvider as AuthSettings['ssoProvider']) ?? settings.ssoProvider;
+    settings.ssoProvider =
+      (row?.ssoProvider as AuthSettings['ssoProvider']) ?? settings.ssoProvider;
     this.cache = { at: Date.now(), settings };
     return settings;
   }
@@ -83,13 +84,21 @@ export class AuthSettingsService {
         ...cur.oidc,
         ...strip(oidcRest),
         clientSecretEnc:
-          clientSecret === undefined ? cur.oidc.clientSecretEnc : clientSecret ? encryptSecret(clientSecret) : null,
+          clientSecret === undefined
+            ? cur.oidc.clientSecretEnc
+            : clientSecret
+              ? encryptSecret(clientSecret)
+              : null,
       },
       ldap: {
         ...cur.ldap,
         ...strip(ldapRest),
         bindPasswordEnc:
-          bindPassword === undefined ? cur.ldap.bindPasswordEnc : bindPassword ? encryptSecret(bindPassword) : null,
+          bindPassword === undefined
+            ? cur.ldap.bindPasswordEnc
+            : bindPassword
+              ? encryptSecret(bindPassword)
+              : null,
       },
       enforceSsoOnly: dto.enforceSsoOnly ?? cur.enforceSsoOnly,
     };
@@ -99,7 +108,9 @@ export class AuthSettingsService {
         throw new BadRequestException('Escolha um fornecedor de SSO para activar o login único');
       }
       if (!next.oidc.clientId || !next.oidc.clientSecretEnc) {
-        throw new BadRequestException('Indique Client ID e Client Secret para o fornecedor escolhido');
+        throw new BadRequestException(
+          'Indique Client ID e Client Secret para o fornecedor escolhido',
+        );
       }
       if (next.ssoProvider === 'OIDC' && !next.oidc.issuer) {
         throw new BadRequestException('Indique o emissor (issuer) do fornecedor OIDC');
@@ -165,13 +176,15 @@ export class AuthSettingsService {
   }
 
   resolveClientSecret(settings: AuthSettings): string {
-    if (!settings.oidc.clientSecretEnc) throw new BadRequestException('SSO sem Client Secret configurado');
+    if (!settings.oidc.clientSecretEnc)
+      throw new BadRequestException('SSO sem Client Secret configurado');
     return decryptSecret(settings.oidc.clientSecretEnc);
   }
 
   async testOidc() {
     const settings = await this.load();
-    if (!settings.ssoProvider) throw new BadRequestException('Escolha um fornecedor de SSO primeiro');
+    if (!settings.ssoProvider)
+      throw new BadRequestException('Escolha um fornecedor de SSO primeiro');
     try {
       const doc = await this.resolveOidcDiscovery(settings);
       return { ok: true, issuer: doc.issuer, authorizationEndpoint: doc.authorization_endpoint };
@@ -207,7 +220,8 @@ export class AuthSettingsService {
       });
       const entry = searchEntries[0] as Record<string, unknown> | undefined;
       if (!entry) return null;
-      const attr = (v: unknown): string => (Array.isArray(v) ? String(v[0] ?? '') : String(v ?? ''));
+      const attr = (v: unknown): string =>
+        Array.isArray(v) ? String(v[0] ?? '') : String(v ?? '');
       return {
         dn: String(entry.dn ?? ''),
         email: attr(entry[ldap.emailAttribute]) || email,
@@ -219,7 +233,11 @@ export class AuthSettingsService {
   }
 
   /** Confirma a password do utilizador fazendo bind com o DN encontrado. */
-  async verifyLdapCredentials(settings: AuthSettings, dn: string, password: string): Promise<boolean> {
+  async verifyLdapCredentials(
+    settings: AuthSettings,
+    dn: string,
+    password: string,
+  ): Promise<boolean> {
     const client = new Client({ url: settings.ldap.url, timeout: 10_000, connectTimeout: 10_000 });
     try {
       if (settings.ldap.startTls) await client.startTLS();

@@ -116,8 +116,10 @@ describe('AuthService', () => {
       expect(result.user).not.toHaveProperty('password');
       // A10-1: password é omitido por omissão (PrismaService) — login precisa
       // do hash para o bcrypt.compare, por isso tem de pedir a excepção.
+      // Definições §4: twoFactorSecret também pedido (verificação de 2FA no login),
+      // via findUserWithRoleByEmail partilhado com o fluxo SSO/LDAP.
       expect(mockPrisma.user.findUnique).toHaveBeenCalledWith(
-        expect.objectContaining({ omit: { password: false } }),
+        expect.objectContaining({ omit: { password: false, twoFactorSecret: false } }),
       );
     });
 

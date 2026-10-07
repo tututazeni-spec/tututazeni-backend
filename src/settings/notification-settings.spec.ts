@@ -50,7 +50,11 @@ describe('nextSendWindowOpen', () => {
 
   it('devolve null se a janela nunca abre', () => {
     expect(
-      nextSendWindowOpen(settings({ startHour: 8, endHour: 8 }), new Date('2026-10-06T05:00:00Z'), tz),
+      nextSendWindowOpen(
+        settings({ startHour: 8, endHour: 8 }),
+        new Date('2026-10-06T05:00:00Z'),
+        tz,
+      ),
     ).toBeNull();
   });
 });

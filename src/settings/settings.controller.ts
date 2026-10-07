@@ -486,7 +486,9 @@ export class SettingsController {
 
   @Get('auth')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'SSO (Google/Microsoft/OIDC), LDAP/Active Directory e domínio autorizado' })
+  @ApiOperation({
+    summary: 'SSO (Google/Microsoft/OIDC), LDAP/Active Directory e domínio autorizado',
+  })
   authSettingsView() {
     return this.authSettings.get();
   }

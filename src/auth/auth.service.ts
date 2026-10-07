@@ -151,7 +151,11 @@ export class AuthService {
     // para todos menos ADMIN (acesso de emergência caso o IdP fique indisponível).
     if (this.authSettings) {
       const auth = await this.authSettings.getInternal();
-      if (auth.enforceSsoOnly && (auth.ssoEnabled || auth.ldap.enabled) && user.role?.name !== 'ADMIN') {
+      if (
+        auth.enforceSsoOnly &&
+        (auth.ssoEnabled || auth.ldap.enabled) &&
+        user.role?.name !== 'ADMIN'
+      ) {
         this.recordAccessEvent({
           userId: user.id,
           action: 'FAILED',

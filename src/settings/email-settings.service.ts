@@ -85,7 +85,9 @@ export class EmailSettingsService {
 
   async testTemplate(key: EmailTemplateKey, to: string | undefined, adminId: number) {
     const sampleVars: Record<EmailTemplateKey, Record<string, string | number>> = {
-      PASSWORD_RESET: { resetLink: `${process.env.APP_URL ?? ''}/auth/reset-password?token=EXEMPLO` },
+      PASSWORD_RESET: {
+        resetLink: `${process.env.APP_URL ?? ''}/auth/reset-password?token=EXEMPLO`,
+      },
       USER_INVITE: {
         fullName: 'Utilizador de Teste',
         email: to ?? 'teste@innova.ao',

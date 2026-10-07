@@ -12,7 +12,8 @@ export type OidcProviderKey = (typeof OIDC_PROVIDERS)[number];
 /** Emissores OIDC conhecidos (Google e Microsoft expõem descoberta OIDC padrão). */
 export function oidcIssuerFor(provider: OidcProviderKey, tenantId: string): string | null {
   if (provider === 'GOOGLE') return 'https://accounts.google.com';
-  if (provider === 'MICROSOFT') return `https://login.microsoftonline.com/${tenantId || 'common'}/v2.0`;
+  if (provider === 'MICROSOFT')
+    return `https://login.microsoftonline.com/${tenantId || 'common'}/v2.0`;
   return null; // OIDC genérico — o emissor vem sempre do admin
 }
 
@@ -114,6 +115,9 @@ export function resolveOidcIssuer(settings: AuthSettings): string | null {
 
 /** Substitui {{email}} no filtro LDAP — escapa caracteres especiais de filtro LDAP (RFC 4515). */
 export function renderLdapFilter(template: string, email: string): string {
-  const escaped = email.replace(/[\\*()\0]/g, c => `\\${c.charCodeAt(0).toString(16).padStart(2, '0')}`);
+  const escaped = email.replace(
+    /[\\*()\0]/g,
+    c => `\\${c.charCodeAt(0).toString(16).padStart(2, '0')}`,
+  );
   return template.replace(/\{\{email\}\}/g, escaped);
 }

@@ -3,7 +3,12 @@
 // GOOGLE e MICROSOFT, que expõem descoberta OIDC padrão, e um fornecedor OIDC
 // próprio) e LDAP/Active Directory. A configuração/validação admin vive em
 // AuthSettingsService; este serviço só autentica utilizadores finais.
-import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
 import { AuthService, AuthRequestContext } from './auth.service';
@@ -83,7 +88,9 @@ export class SsoAuthService {
     try {
       payload = await this.jwt.verifyAsync<SsoStatePayload>(state, { secret: this.stateSecret() });
     } catch {
-      throw new UnauthorizedException('Pedido de SSO inválido ou expirado — tente iniciar sessão novamente');
+      throw new UnauthorizedException(
+        'Pedido de SSO inválido ou expirado — tente iniciar sessão novamente',
+      );
     }
     if (payload.typ !== 'sso_state') throw new UnauthorizedException('Pedido de SSO inválido');
 
@@ -121,7 +128,8 @@ export class SsoAuthService {
       headers: { Authorization: `Bearer ${tokenBody.access_token}` },
       signal: AbortSignal.timeout(10_000),
     });
-    if (!userInfoRes.ok) throw new BadRequestException('Falha ao obter os dados do utilizador no fornecedor de SSO');
+    if (!userInfoRes.ok)
+      throw new BadRequestException('Falha ao obter os dados do utilizador no fornecedor de SSO');
     const info = (await userInfoRes.json()) as {
       email?: string;
       email_verified?: boolean;
@@ -138,7 +146,8 @@ export class SsoAuthService {
 
   async ldapLogin(email: string, password: string, ctx?: AuthRequestContext) {
     const settings = await this.authSettings.getInternal();
-    if (!settings.ldap.enabled) throw new BadRequestException('LDAP/AD não está activo nesta organização');
+    if (!settings.ldap.enabled)
+      throw new BadRequestException('LDAP/AD não está activo nesta organização');
 
     const entry = await this.authSettings.findLdapUser(settings, email).catch(() => null);
     if (!entry) throw new UnauthorizedException('Credenciais inválidas');

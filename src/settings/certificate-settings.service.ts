@@ -111,7 +111,10 @@ export class CertificateSettingsService {
         'Este template é o predefinido do seu tipo — defina outro predefinido antes de o remover',
       );
     }
-    await this.prisma.certificateTemplate.update({ where: { id }, data: { deletedAt: new Date() } });
+    await this.prisma.certificateTemplate.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
     await this.audit(actorId, 'SETTINGS_CERTIFICATE_TEMPLATE_DELETE', { id, name: existing.name });
     return { id, deleted: true };
   }

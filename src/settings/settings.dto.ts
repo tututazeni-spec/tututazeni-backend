@@ -50,7 +50,7 @@ export class UpdateOrganizationSettingsDto {
   @ApiPropertyOptional({ description: 'Logo — URL ou data-URL' })
   @IsOptional()
   @IsString()
-  logoUrl?: string;
+  logoUrl?: string; // file-url-exempt: data-URL base64 inline (ver comentário em settings.service.ts#updateOrganization), não é referência a storage externo
 
   @ApiPropertyOptional({ description: 'Favicon — URL ou data-URL' })
   @IsOptional()
@@ -453,7 +453,7 @@ export class UpdateCertificateSettingsDto {
   @ApiPropertyOptional({ description: 'Assinatura electrónica — aplicada a todos os certificados' })
   @IsOptional()
   @IsString()
-  signatureUrl?: string | null;
+  signatureUrl?: string | null; // file-url-exempt: data-URL base64 inline (mesma convenção do logo/favicon da organização), não é referência a storage externo
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -510,7 +510,9 @@ export class CreateCertificateTemplateDto {
 
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) description?: string;
 
-  @ApiProperty({ enum: CertificateTemplateType }) @IsEnum(CertificateTemplateType) type!: CertificateTemplateType;
+  @ApiProperty({ enum: CertificateTemplateType })
+  @IsEnum(CertificateTemplateType)
+  type!: CertificateTemplateType;
 
   @ApiProperty() @IsString() @IsNotEmpty() html!: string;
 
@@ -536,12 +538,20 @@ export class UpdateCertificateTemplateDto extends PartialType(CreateCertificateT
 // ─── §8 Privacidade (LPDP) ───────────────────────────────────────────────────
 
 export class UpdatePrivacySettingsDto {
-  @ApiPropertyOptional() @IsOptional() @EmptyStringToUndefined() @IsString() @MaxLength(120)
+  @ApiPropertyOptional()
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  @MaxLength(120)
   dpoName?: string;
 
   @ApiPropertyOptional() @IsOptional() @EmptyStringToUndefined() @IsEmail() dpoEmail?: string;
 
-  @ApiPropertyOptional() @IsOptional() @EmptyStringToUndefined() @IsString() @MaxLength(40)
+  @ApiPropertyOptional()
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  @MaxLength(40)
   dpoPhone?: string;
 
   @ApiPropertyOptional({ description: 'Prazo geral de retenção de dados pessoais, em dias' })
@@ -566,7 +576,9 @@ export class CreateDataSubjectRequestDto {
   @ApiProperty() @IsEmail() requesterEmail!: string;
   @ApiProperty({ enum: DsrType }) @IsEnum(DsrType) type!: DsrType;
 
-  @ApiPropertyOptional({ description: 'Id do utilizador titular, se for colaborador da plataforma' })
+  @ApiPropertyOptional({
+    description: 'Id do utilizador titular, se for colaborador da plataforma',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -613,13 +625,18 @@ class OidcSettingsDto {
   @MaxLength(255)
   clientSecret?: string;
 
-  @ApiPropertyOptional({ description: 'Só MICROSOFT — tenant do Azure AD ("common" = qualquer conta)' })
+  @ApiPropertyOptional({
+    description: 'Só MICROSOFT — tenant do Azure AD ("common" = qualquer conta)',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(255)
   tenantId?: string;
 
-  @ApiPropertyOptional({ description: 'Só OIDC genérico — emissor do fornecedor', example: 'https://idp.empresa.ao' })
+  @ApiPropertyOptional({
+    description: 'Só OIDC genérico — emissor do fornecedor',
+    example: 'https://idp.empresa.ao',
+  })
   @IsOptional()
   @IsUrl()
   issuer?: string;
@@ -631,7 +648,7 @@ class LdapSettingsDto {
   @ApiPropertyOptional({ example: 'ldaps://ad.empresa.ao:636' })
   @IsOptional()
   @Matches(/^ldaps?:\/\/\S+$/, { message: 'URL LDAP inválido (ex.: ldaps://ad.empresa.ao:636)' })
-  url?: string;
+  url?: string; // file-url-exempt: URI de ligação ao servidor LDAP (ldaps://), não é referência a ficheiro
 
   @ApiPropertyOptional({ example: 'CN=innova-svc,OU=Service Accounts,DC=empresa,DC=ao' })
   @IsOptional()
@@ -727,7 +744,10 @@ export class UpdateEmailSettingsDto {
   @Type(() => EmailTemplatesDto)
   templates?: EmailTemplatesDto;
 
-  @ApiPropertyOptional({ type: SmtpSettingsDto, description: 'Delegado para as definições de Integrações (§6)' })
+  @ApiPropertyOptional({
+    type: SmtpSettingsDto,
+    description: 'Delegado para as definições de Integrações (§6)',
+  })
   @IsOptional()
   @ValidateNested()
   @Type(() => SmtpSettingsDto)
