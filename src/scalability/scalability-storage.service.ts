@@ -4,6 +4,7 @@
 // ficheiros. Mede o que a aplicação sabe — não o espaço físico do disco/bucket.
 // Ficheiros sem tamanho registado (fileSize NULL) contam como ficheiro mas com 0 bytes.
 
+import { SharedResult } from '../common/helpers/shared-result';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -155,7 +156,13 @@ export class ScalabilityStorageService {
     `;
   }
 
-  async getStorageMetrics() {
+  private readonly getStorageMetricsShared = new SharedResult();
+
+  getStorageMetrics() {
+    return this.getStorageMetricsShared.get(() => this.computeGetStorageMetrics());
+  }
+
+  private async computeGetStorageMetrics() {
     const [rows, largest, tenant] = await Promise.all([
       this.usageRows(),
       this.largest(),

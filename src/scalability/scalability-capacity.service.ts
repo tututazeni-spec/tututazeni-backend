@@ -10,6 +10,7 @@
 // Resiliência: o que a app consegue verificar (BD, replicação, filas) mais factos
 // de infra declarados (réplicas, backups, DR) que não são observáveis daqui.
 
+import { SharedResult } from '../common/helpers/shared-result';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Prisma, ScalabilityInfraSettings } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -93,7 +94,13 @@ export class ScalabilityCapacityService {
   // §15 Capacidade
   // ============================================================
 
-  async getCapacityMetrics() {
+  private readonly getCapacityMetricsShared = new SharedResult();
+
+  getCapacityMetrics() {
+    return this.getCapacityMetricsShared.get(() => this.computeGetCapacityMetrics());
+  }
+
+  private async computeGetCapacityMetrics() {
     const [s, tenant, api, storage, queue, conn, totalUsers, activeUsers, peak, latest] =
       await Promise.all([
         this.settings(),
@@ -342,7 +349,13 @@ export class ScalabilityCapacityService {
   // §17 Resiliência
   // ============================================================
 
-  async getResilienceMetrics() {
+  private readonly getResilienceMetricsShared = new SharedResult();
+
+  getResilienceMetrics() {
+    return this.getResilienceMetricsShared.get(() => this.computeGetResilienceMetrics());
+  }
+
+  private async computeGetResilienceMetrics() {
     const s = await this.settings();
     const t0 = Date.now();
     const [dbPing, replicas, inRecovery, queueMetrics] = await Promise.all([

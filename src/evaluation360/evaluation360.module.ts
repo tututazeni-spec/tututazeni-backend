@@ -4,7 +4,6 @@
 // ============================================================
 
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { Evaluation360Service } from './evaluation360.service';
 import { Evaluation360Controller } from './evaluation360.controller';
@@ -20,7 +19,6 @@ import { CompetenciesModule } from '../competencies/competencies.module';
     NotificationsModule,
     AuditModule,
     CompetenciesModule,
-    ScheduleModule.forRoot(),
     EventEmitterModule.forRoot({ wildcard: true, delimiter: '.' }),
   ],
   controllers: [Evaluation360Controller],

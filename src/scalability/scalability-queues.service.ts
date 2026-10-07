@@ -5,6 +5,7 @@
 // AutomationExecution e IntegrationSyncLog. O histórico de Queue Depth é
 // amostrado de minuto a minuto em memória (perde-se num reinício).
 
+import { SharedResult } from '../common/helpers/shared-result';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { ConfigService } from '@nestjs/config';
@@ -231,7 +232,13 @@ export class ScalabilityQueuesService {
     }));
   }
 
-  async getQueueMetrics() {
+  private readonly getQueueMetricsShared = new SharedResult();
+
+  getQueueMetrics() {
+    return this.getQueueMetricsShared.get(() => this.computeGetQueueMetrics());
+  }
+
+  private async computeGetQueueMetrics() {
     const now = Date.now();
     const dbJobs = await this.dbJobs();
 
