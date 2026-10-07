@@ -5,7 +5,6 @@
 
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bull';
-import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScalabilityService } from './scalability.service';
 import { ScalabilityController } from './scalability.controller';
@@ -44,7 +43,6 @@ import { ApiIntegrationModule } from '../api-integration/api-integration.module'
       { name: 'notifications' },
       { name: 'webhooks' },
     ),
-    ScheduleModule.forRoot(),
     EventEmitterModule.forRoot({
       // Wildcard events para padrões como 'integration.*'
       wildcard: true,

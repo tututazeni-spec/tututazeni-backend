@@ -556,7 +556,7 @@ async function main() {
   for (const name of roleNames) {
     const role = await prisma.role.upsert({
       where: { name },
-      update: {},
+      update: { code: name },
       create: { name, code: name },
     });
     roleMap[name] = role;

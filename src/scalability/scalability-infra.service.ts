@@ -5,6 +5,8 @@
 // processo; os débitos (req/s, req/min) vêm do delta entre amostras em memória.
 // BD: consultas a pg_stat_* + histórico de tamanho em DatabaseSizeSample.
 
+import { SharedResult } from '../common/helpers/shared-result';
+import { getDatabaseSizeBytes } from '../common/helpers/db-size';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { register } from 'prom-client';
@@ -205,7 +207,13 @@ export class ScalabilityInfraService {
       }));
   }
 
-  async getApiMetrics() {
+  private readonly getApiMetricsShared = new SharedResult();
+
+  getApiMetrics() {
+    return this.getApiMetricsShared.get(() => this.computeGetApiMetrics());
+  }
+
+  private async computeGetApiMetrics() {
     const values = await this.histogram('http_request_duration_seconds');
     const byRoute = new Map<string, RouteAgg>();
     for (const v of values) {
@@ -338,10 +346,9 @@ export class ScalabilityInfraService {
   }
 
   private async recordSizeSample() {
-    const [size] = await this.prisma.$queryRaw<{ bytes: bigint }[]>`
-      SELECT pg_database_size(current_database()) AS bytes`;
+    const size = { bytes: await getDatabaseSizeBytes(this.prisma, 0) };
     const tables = await this.prisma.$queryRaw<{ name: string; bytes: bigint }[]>`
-      SELECT relname AS name, pg_total_relation_size(relid) AS bytes
+      /* heavy-ok */ SELECT relname AS name, pg_total_relation_size(relid) AS bytes
       FROM pg_stat_user_tables ORDER BY pg_total_relation_size(relid) DESC LIMIT 30`;
     await this.prisma.databaseSizeSample.create({
       data: {
@@ -412,7 +419,7 @@ export class ScalabilityInfraService {
       return value;
     };
 
-    const [conn, dbStat, locks, tables, indexes, unusedIdx, slow] = await Promise.all([
+    const [conn, dbStat, sizeRows, locks, tables, indexes, unusedIdx, slow] = await Promise.all([
       safe(
         () =>
           this.prisma.$queryRaw<{ total: number; active: number; idle: number; max: number }[]>`
@@ -426,11 +433,12 @@ export class ScalabilityInfraService {
       safe(
         () =>
           this.prisma.$queryRaw<
-            { deadlocks: bigint; blks_hit: bigint; blks_read: bigint; size: bigint }[]
-          >`SELECT deadlocks, blks_hit, blks_read, pg_database_size(datname) AS size
+            { deadlocks: bigint; blks_hit: bigint; blks_read: bigint }[]
+          >`SELECT deadlocks, blks_hit, blks_read
             FROM pg_stat_database WHERE datname = current_database()`,
         [],
       ),
+      safe(() => getDatabaseSizeBytes(this.prisma).then(size => [size]), [] as bigint[]),
       safe(
         () =>
           this.prisma.$queryRaw<{ waiting: number }[]>`
@@ -441,7 +449,7 @@ export class ScalabilityInfraService {
         'tables',
         () =>
           this.prisma.$queryRaw<{ name: string; bytes: bigint; rows: bigint }[]>`
-            SELECT relname AS name, pg_total_relation_size(relid) AS bytes, n_live_tup AS rows
+            /* heavy-ok */ SELECT relname AS name, pg_total_relation_size(relid) AS bytes, n_live_tup AS rows
             FROM pg_stat_user_tables ORDER BY pg_total_relation_size(relid) DESC LIMIT 10`,
         [],
       ),
@@ -449,14 +457,14 @@ export class ScalabilityInfraService {
         'idxCount',
         () =>
           this.prisma.$queryRaw<{ total: number }[]>`
-            SELECT count(*)::int AS total FROM pg_stat_user_indexes`,
+            /* heavy-ok */ SELECT count(*)::int AS total FROM pg_stat_user_indexes`,
         [],
       ),
       slowCatalog(
         'unusedIdx',
         () =>
           this.prisma.$queryRaw<{ table: string; index: string; bytes: bigint }[]>`
-            SELECT s.relname AS "table", s.indexrelname AS "index",
+            /* heavy-ok */ SELECT s.relname AS "table", s.indexrelname AS "index",
                    pg_relation_size(s.indexrelid) AS bytes
             FROM pg_stat_user_indexes s
             JOIN pg_index i ON i.indexrelid = s.indexrelid
@@ -582,7 +590,7 @@ export class ScalabilityInfraService {
     return {
       // CPU/RAM/IOPS reais do servidor de BD não são acessíveis por SQL.
       host: { cpuPercent: null as number | null, ramPercent: null as number | null },
-      storage: { sizeGb: d ? toGb(Number(d.size)) : 0 },
+      storage: { sizeGb: sizeRows[0] !== undefined ? toGb(Number(sizeRows[0])) : 0 },
       connections: {
         active: c?.active ?? 0,
         idle: c?.idle ?? 0,
