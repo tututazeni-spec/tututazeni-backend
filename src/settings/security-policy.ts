@@ -36,7 +36,7 @@ export const DEFAULT_SECURITY_POLICY: SecurityPolicy = {
   passwordExpiryDays: 0,
   maxFailedAttempts: 5,
   lockoutMinutes: 15,
-  sessionIdleMinutes: 25,
+  sessionIdleMinutes: 30,
   accessTokenMinutes: 15,
   refreshTokenDays: 7,
   twoFactorMode: 'OPTIONAL',
