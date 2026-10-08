@@ -7,14 +7,15 @@
 > Borda WAF/CDN (Cloudflare): ver `docs/deploy/cloudflare.md`.
 > Réplicas, load balancing e SPOF residuais: ver `docs/deploy/ha-and-spof.md`.
 
-> **Topologia:** Cloudflare (WAF+CDN) → Caddy (TLS origin + load balancer) →
-> serviço `app` com **2 réplicas** (round-robin). As migrations correm num job
-> `migrate` one-shot antes das réplicas, não no arranque de cada container.
+> **Topologia:** Cloudflare (WAF+CDN) → Caddy (TLS origin + load balancer,
+> endurecido) → serviço `app` (**2 réplicas**) para `/api/*` e serviço
+> `frontend` (**2 réplicas**) para `/`. As migrations correm num job `migrate`
+> one-shot antes das réplicas.
 
 ## 1. Provisionar o VPS (uma vez)
 
 Requisitos: Ubuntu 22.04+ (ou equivalente), **4 vCPU / 8 GB RAM recomendado**
-(2 réplicas da app + borda Caddy + stack de monitorização; ver o dimensionamento
+(2 réplicas da app + 2 réplicas do frontend + borda Caddy + stack de monitorização; ver o dimensionamento
 detalhado em `docs/deploy/ha-and-spof.md`). Num host de 4 GB funciona com os
 limites de memória do compose, mas sem folga. Docker Engine com o plugin compose.
 
@@ -63,6 +64,9 @@ Preencher `/opt/innova/.env.production` a partir de `ops/.env.production.example
 O compose e os scripts são copiados/actualizados pelo próprio workflow em cada
 deploy (`ops/` → `/opt/innova/`).
 
+Acrescentar ao `/opt/innova/.env.production`: `FRONTEND_IMAGE_TAG=latest` e
+`API_INTERNAL_URL=http://app:4000` (ver `ops/.env.production.example`).
+
 ## 3. Secrets no GitHub (Settings → Secrets and variables → Actions)
 
 | Secret | Conteúdo |
@@ -79,6 +83,29 @@ deploy (`ops/` → `/opt/innova/`).
 Criar os utilizadores/curso de smoke na BD de produção antes do primeiro deploy
 (a suite corre com `SMOKE_SEED=false` e `SMOKE_ALLOW_WRITES=false` — só leituras;
 não cria nada).
+
+## 3-A. Frontend — imagem e rollout cruzado
+
+O frontend (`tututazeni-frontend`, repo separado) publica a sua própria imagem
+no GHCR e dispara o rollout deste repo:
+
+1. Merge em `main` do frontend → workflow `Frontend Deploy`:
+   - `build`: push `ghcr.io/tututazeni-spec/tututazeni-frontend:{sha-<sha>,latest}`.
+   - `notify-backend`: `repository_dispatch` (`frontend-updated`,
+     `client_payload.tag`) para este repo.
+2. Este workflow `Deploy` acorda no `repository_dispatch`: **não** reconstrói o
+   backend; corre `deploy.sh` com `FRONTEND_TAG=<sha-…>` e a tag do backend já
+   em produção (`sha-<HEAD de main>`, que em regime normal é a que já corre).
+   Health gate espera **todas** as réplicas `app` + `frontend`; falha →
+   `rollback.sh` repõe as duas tags anteriores.
+
+**Secret no repo do frontend:** `BACKEND_DISPATCH_TOKEN` — PAT fine-grained com
+`contents: write` **apenas** neste repo. Sem ele a imagem publica mas o rollout
+não arranca (recuperável: Actions → Deploy → *Run workflow*).
+
+**Primeiro deploy:** o `Frontend Deploy` tem de ter corrido ao menos uma vez
+(para existir `:latest` no GHCR) antes do primeiro `up -d` que inclua o serviço
+`frontend`. `current_frontend_tag` ainda não existe → `deploy.sh` assume `latest`.
 
 ## 4. Cloudflare + firewall de origem (ponto 4 — WAF/CDN)
 
@@ -116,15 +143,18 @@ COMPOSE="docker compose -f /opt/innova/docker-compose.prod.yml"
 # estado e logs (serviço replicado — sem nome de container fixo)
 $COMPOSE ps
 $COMPOSE logs -f app          # ambas as réplicas
+$COMPOSE logs -f frontend           # ambas as réplicas do frontend
 $COMPOSE logs migrate         # última execução de migrations
 
 # escalar réplicas à mão (temporário; o valor fixo está no compose)
 $COMPOSE up -d --scale app=3 app
+$COMPOSE up -d --scale frontend=3 frontend
 
-# tag a correr / anterior
+# tag a correr / anterior (backend e frontend têm ficheiros de estado próprios)
 cat /opt/innova/current_tag /opt/innova/previous_tag
+cat /opt/innova/current_frontend_tag /opt/innova/previous_frontend_tag
 
-# rollback manual (mesmo mecanismo do automático)
+# rollback manual (mesmo mecanismo do automático; repõe app + frontend)
 /opt/innova/deploy/rollback.sh
 
 # deploy manual de uma tag específica (ex. voltar 3 versões atrás)
@@ -157,17 +187,29 @@ anterior do código:
 docker build -t innova-api:local .
 docker tag innova-api:local ghcr.io/tututazeni-spec/tututazeni-backend:local-v1
 docker tag innova-api:local ghcr.io/tututazeni-spec/tututazeni-backend:local-v2
-# ops/.env.production local: ver ops/.env.production.example (BD innova_test do host)
+
+# Frontend: build a partir de um checkout local do repo tututazeni-frontend
+# (neste repo vive em ./frontend; ajustar o caminho se estiver noutro sítio)
+docker build -t innova-fe:local ./frontend
+docker tag innova-fe:local ghcr.io/tututazeni-spec/tututazeni-frontend:local-v1
+docker tag innova-fe:local ghcr.io/tututazeni-spec/tututazeni-frontend:local-v2
+
+# ops/.env.production local: ver ops/.env.production.example
+#   FRONTEND_IMAGE_TAG e API_INTERNAL_URL=http://app:4000 incluídos
 
 # Caddy sem Cloudflare: gerar um par self-signed para o origin cert, senão o
 # container `caddy` não arranca (não afecta o smoke, que bate em localhost:4000).
 openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
   -keyout ops/caddy/origin/key.pem -out ops/caddy/origin/cert.pem -subj "/CN=localhost"
 
-bash ops/deploy/deploy.sh local-v1
-bash ops/deploy/deploy.sh local-v2
-bash ops/deploy/rollback.sh          # volta a local-v1
-npm run test:regression              # smoke contra http://localhost:4000
-IMAGE_TAG=local-v1 docker compose -f ops/docker-compose.prod.yml down
-rm -f ops/current_tag ops/previous_tag ops/caddy/origin/*.pem
+FRONTEND_TAG=local-v1 bash ops/deploy/deploy.sh local-v1
+FRONTEND_TAG=local-v2 bash ops/deploy/deploy.sh local-v2
+bash ops/deploy/rollback.sh          # volta a app+frontend local-v1
+
+curl -k https://localhost/                 # HTML do Next
+curl -k https://localhost/api/health/ready # 200 do backend
+npm run test:regression                    # smoke contra http://localhost:4000
+
+IMAGE_TAG=local-v1 FRONTEND_IMAGE_TAG=local-v1 docker compose -f ops/docker-compose.prod.yml down
+rm -f ops/current_tag ops/previous_tag ops/current_frontend_tag ops/previous_frontend_tag ops/caddy/origin/*.pem
 ```

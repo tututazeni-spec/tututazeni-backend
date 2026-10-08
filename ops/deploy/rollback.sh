@@ -13,5 +13,11 @@ if [ ! -f previous_tag ]; then
 fi
 
 PREV="$(cat previous_tag)"
-echo "▶ rollback para a tag anterior: $PREV"
+if [ -f previous_frontend_tag ]; then
+  FRONTEND_TAG="$(cat previous_frontend_tag)"
+  export FRONTEND_TAG
+  echo "▶ rollback para: app=$PREV · frontend=$FRONTEND_TAG"
+else
+  echo "▶ rollback para: app=$PREV · frontend=<inalterado>"
+fi
 exec "$SCRIPT_DIR/deploy.sh" "$PREV"

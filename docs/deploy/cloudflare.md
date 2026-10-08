@@ -67,11 +67,16 @@ Um registo "DNS only" expõe o IP de origem e salta a Cloudflare.
 
 - **Rules → Cache Rules**:
   - `URI Path starts with /api/` → **Bypass cache** (respostas da API são dinâmicas).
-  - `/` e estáticos do futuro frontend (Faixa H) → **Cache Everything**,
-    `Edge TTL` conforme.
+  - `/` e estáticos do frontend (agora deployado) → **Cache Everything** com
+    `Edge TTL` conservador (ex. 5 min); manter `/api/*` → **Bypass cache**.
+    Páginas autenticadas do Next não devem ser cacheadas — se o frontend
+    servir HTML específico do utilizador em `/`, restringir a regra aos
+    caminhos de estáticos (`/_next/static/*`, `/*.svg`, etc.) e deixar `/`
+    como *Standard*.
 - **Caching → Configuration → Always Online: On** — durante um outage total do
   VPS a Cloudflare serve a última versão em cache das páginas GET (fallback de
-  leitura do ponto 9).
+  leitura do ponto 9). Agora cobre também as páginas GET do frontend (antes só
+  existia a API).
 - **Speed → Optimization**: Brotli On.
 
 ## 6. Firewall de origem no VPS
