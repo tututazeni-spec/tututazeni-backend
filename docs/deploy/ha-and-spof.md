@@ -15,6 +15,8 @@
 | Sem borda WAF/CDN | Cloudflare à frente (WAF, CDN, anti-DDoS) + origin trancado aos ranges Cloudflare |
 | Monitorização sem limites de recursos | `deploy.resources.limits` de memória em app/redis/caddy/prometheus/alertmanager/node-exporter |
 | Sem alerta de redundância | `AppRunningDegraded` (só 1 réplica de pé), `AppAllReplicasDown` (outage) |
+| `Sem frontend deployado` | Serviço `frontend` com **2 réplicas** no mesmo VPS, atrás do Caddy (`/` → `frontend`, `/api/*` → `app`) |
+| `Caddy: 1 container, sem healthcheck, 128 MB` | `restart: always` (cobre crash/OOM) + healthcheck da admin API (expõe um Caddy *pendurado* como `unhealthy`, monitorável) + limite 256 MB + `stop_grace_period` |
 
 ## O que passou a ser redundante (deixou de ser SPOF)
 
@@ -27,13 +29,17 @@
 - **Borda / ataques volumétricos.** Absorvidos pela Cloudflare antes de chegarem
   ao VPS.
 - **Corrida de migrations.** Eliminada — corre num único job antes das réplicas.
+- **Processo do frontend.** Uma réplica `frontend` que crashe ou entre em OOM
+  (limite 384 MB) sai da rotação do Caddy em segundos; a outra continua a
+  servir. Mesmo mecanismo do `app`.
 
 ## O que CONTINUA a ser SPOF (aceite nesta topologia)
 
 | SPOF | Risco | Mitigação actual | Só resolve com… |
 |---|---|---|---|
 | **O VPS (host físico)** | Kernel panic, falha de disco, o datacenter em baixo, VPS suspenso → **outage total** | Cloudflare *Always Online* serve GETs em cache; backups off-box (pg_dump diário + WAL-G PITR); DR runbook; alerta externo (healthchecks.io dead-man) | 2º VPS atrás de LB (topologia "Médio") |
-| **Container Caddy** | Se o Caddy morre, não há borda → outage total (mesmo com as 2 réplicas vivas) | `restart: unless-stopped`; config validada em CI-local; limite de memória isola de OOM do vizinho | Caddy replicado / LB gerido do provider |
+| **Container Caddy** | Se o Caddy morre, não há borda → outage total (mesmo com as 2 réplicas vivas) | `restart: always` repõe o Caddy que **crashe ou seja morto por OOM**; **healthcheck** da admin API marca-o `unhealthy` (visível em `docker ps` / monitorização) mas o `docker compose` puro **não reinicia** por health — um Caddy *pendurado* (processo vivo, não serve) fica como risco residual até Swarm mode / sidecar autoheal / 2 VPS; config validada em CI; limite 256 MB isola de OOM do vizinho | Caddy replicado / LB gerido do provider |
+| **Frontend (mesma caixa)** | Partilha os SPOF do host / Caddy / Redis | 2 réplicas (falha de processo), `restart: unless-stopped` | 2º VPS (topologia "Médio") |
 | **Container Redis** | Filas Bull (webhooks, e-mail) e cache param; a app degrada mas **não perde dados de domínio** (Postgres é a fonte de verdade) | `--appendonly yes` (persiste entre restarts); `restart: unless-stopped`; readiness trata Redis como informativo (não derruba a app) | Redis gerido / Sentinel / cluster |
 | **Postgres** | — | **Já mitigado**: Postgres gerido/externo com failover do provider (`docs/db-architecture/`) | — (já OK) |
 | **Rede do VPS / IP** | Perda de conectividade do host | Cloudflare Always Online (leitura) | 2º VPS noutra rede/região |
@@ -49,11 +55,12 @@ ou a topologia de 2 nós — ver abaixo.
 
 ## Dimensionamento do VPS
 
-A topologia antiga assumia **2 vCPU / 4 GB**. Com 2 réplicas + borda + stack de
-monitorização, o **recomendado é 4 vCPU / 8 GB**. Limites de memória aplicados
-(somam ~2,4 GB de tecto): app 2×768 MB, prometheus 400 MB, redis 192 MB,
-caddy/alertmanager 128 MB, node-exporter 96 MB. Num host de 4 GB funciona mas
-sem folga para picos — subir para 8 GB antes de aumentar `replicas`.
+A topologia antiga assumia **2 vCPU / 4 GB**. Com 2 réplicas `app` + 2 réplicas
+`frontend` + borda + monitorização, os limites de memória somam **≈ 3,4 GB**
+(app 2×768, frontend 2×384, prometheus 400, caddy 256, redis 192,
+alertmanager 128, node-exporter 96). **Recomendado 4 vCPU / 8 GB.** Num host de
+4 GB fica sem folga para picos — subir para 8 GB antes de aumentar qualquer
+`replicas`.
 
 ## Gatilho para subir a "Médio — 2 VPS + LB"
 
@@ -61,10 +68,16 @@ Passar à topologia de 2 nós quando **qualquer** destes for verdade:
 
 - Um outage de host (mesmo curto) tem custo de negócio inaceitável (SLA formal).
 - Tráfego sustentado > ~300 req/s ou CPU do host > 60 % em média.
-- Passa a haver frontend deployado no mesmo VPS (mais carga, mais superfície).
+- ✅ **Cumprido:** há frontend deployado no mesmo VPS (mais carga, mais superfície).
 - Exigência de janela de deploy zero-downtime.
 
-Nessa altura: 2 VPS idênticos (`docker compose` em cada), Redis gerido, e um
-load balancer à frente (o LB gerido do provider, ou Caddy/HAProxy num 3º nó
-pequeno). O `Caddyfile` já usa `dynamic a` — passa a resolver um nome de
-serviço DNS que aponta aos dois nós, sem mudança estrutural.
+**O item "frontend no mesmo VPS" está agora cumprido** — a topologia "Médio"
+passa de gatilho futuro a **recomendação activa**. Plano concreto:
+
+- 2 VPS idênticos (`docker compose -f docker-compose.prod.yml` em cada);
+- Redis gerido (ou Sentinel) — deixa de ser SPOF local;
+- LB à frente dos dois: **Cloudflare Load Balancing** (add-on pago) sobre os
+  dois IPs de origem com health checks activos, **ou** Caddy/HAProxy num 3º
+  nó pequeno;
+- o `Caddyfile` já usa `dynamic a` — passa a resolver um nome DNS que aponta
+  aos dois nós; sem mudança estrutural na config.

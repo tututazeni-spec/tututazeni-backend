@@ -45,6 +45,28 @@ services:
     # healthcheck herdado do HEALTHCHECK da imagem (GET /health/ready).
     # O Caddy faz balanceamento + tira da rotação a réplica que falhe o health.
 
+  # ─── Frontend Next.js (ponto 3 — camada Next.js) ─────────────────────────
+  # Imagem própria, construída pelo repo tututazeni-frontend e publicada no
+  # GHCR. 2 réplicas pelo mesmo motivo do `app`: falha de processo não derruba
+  # o site. Sem porta publicada (as réplicas partilhariam a :3000). O Caddy
+  # encaminha `/` para aqui e `/api/*` para o `app`.
+  frontend:
+    image: ghcr.io/tututazeni-spec/tututazeni-frontend:${FRONTEND_IMAGE_TAG:-latest}
+    env_file: .env.production # API_INTERNAL_URL
+    environment:
+      PORT: '3000'
+    depends_on:
+      app:
+        condition: service_started
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 384M
+    # healthcheck herdado do HEALTHCHECK da imagem (GET /health).
+
   # ─── Borda TLS + Load Balancer (pontos 2/4) — única porta pública do VPS ───
   # Atrás da Cloudflare. O ufw só deixa entrar 80/443 dos ranges Cloudflare
   # (ops/deploy/origin-firewall.sh), portanto o Caddy nunca é alcançado
@@ -64,11 +86,21 @@ services:
       - caddy-config:/config
     depends_on:
       - app
-    restart: unless-stopped
+      - frontend
+    restart: always
+    stop_grace_period: 15s
+    healthcheck:
+      # A admin API do Caddy escuta em localhost:2019. Se o Caddy pendurar (não
+      # morrer), o Docker reinicia-o em vez de esperar pelo exit do processo.
+      test: ['CMD', 'wget', '-q', '-O', '-', 'http://127.0.0.1:2019/config/']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     deploy:
       resources:
         limits:
-          memory: 128M
+          memory: 256M
 
   redis:
     image: redis:7-alpine
