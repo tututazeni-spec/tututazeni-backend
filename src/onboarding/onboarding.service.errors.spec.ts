@@ -156,7 +156,16 @@ describe('OnboardingService — completeTask', () => {
 
     await service.completeTask({ taskInstanceId: 1 } as any, 7);
 
-    expect(mockPrisma.onboardingPlan.update).not.toHaveBeenCalled();
+    // checkPlanCompletion agora persiste sempre o progresso (33% = 1/3),
+    // mas não marca o plano como COMPLETED enquanto houver tarefas por
+    // concluir.
+    expect(mockPrisma.onboardingPlan.update).toHaveBeenCalledWith({
+      where: { id: 10 },
+      data: { progress: 33 },
+    });
+    expect(mockPrisma.onboardingPlan.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'COMPLETED' }) }),
+    );
   });
 });
 

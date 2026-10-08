@@ -55,6 +55,11 @@ export class StartAiSessionDto {
   @IsInt()
   planId?: number;
 
+  @ApiPropertyOptional({ description: 'ID da Formação (Training) para tutor contextualizado' })
+  @IsOptional()
+  @IsInt()
+  trainingId?: number;
+
   @ApiPropertyOptional({ enum: TutorPersonality, default: TutorPersonality.FRIENDLY })
   @IsOptional()
   @IsEnum(TutorPersonality)
@@ -126,10 +131,22 @@ export class ExecuteAgentActionDto {
 
 // ─── Generate ─────────────────────────────────────────────────────────────────
 
+export const EXERCISE_TYPES = [
+  'QUIZ',
+  'TRUE_FALSE',
+  'OPEN_QUESTION',
+  'PRACTICAL_CASE',
+  'SIMULATION',
+  'SCENARIO',
+  'FLASHCARDS',
+] as const;
+
+export type ExerciseType = (typeof EXERCISE_TYPES)[number];
+
 export class GenerateContentDto {
-  @ApiProperty({ enum: ['QUIZ', 'FLASHCARDS', 'SUMMARY', 'STUDY_PLAN'] })
+  @ApiProperty({ enum: [...EXERCISE_TYPES, 'SUMMARY', 'STUDY_PLAN'] })
   @IsString()
-  type!: 'QUIZ' | 'FLASHCARDS' | 'SUMMARY' | 'STUDY_PLAN';
+  type!: ExerciseType | 'SUMMARY' | 'STUDY_PLAN';
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -140,6 +157,11 @@ export class GenerateContentDto {
   @IsOptional()
   @IsInt()
   lessonId?: number;
+
+  @ApiPropertyOptional({ description: 'ID da Formação (Training) para gerar exercícios' })
+  @IsOptional()
+  @IsInt()
+  trainingId?: number;
 
   @ApiPropertyOptional({ description: 'Tema livre se não houver curso' })
   @IsOptional()
@@ -152,6 +174,43 @@ export class GenerateContentDto {
   @Min(2)
   @Max(20)
   count?: number;
+}
+
+// ─── Feedback de exercícios ────────────────────────────────────────────────────
+
+export class ExerciseFeedbackDto {
+  @ApiProperty({ enum: ['OPEN_QUESTION', 'PRACTICAL_CASE', 'SIMULATION', 'SCENARIO'] })
+  @IsEnum(['OPEN_QUESTION', 'PRACTICAL_CASE', 'SIMULATION', 'SCENARIO'])
+  exerciseType!: 'OPEN_QUESTION' | 'PRACTICAL_CASE' | 'SIMULATION' | 'SCENARIO';
+
+  @ApiProperty({ description: 'Enunciado da pergunta/caso/cenário' })
+  @IsString()
+  question!: string;
+
+  @ApiProperty({ description: 'Resposta dada pelo colaborador' })
+  @IsString()
+  userAnswer!: string;
+
+  @ApiPropertyOptional({ description: 'Resposta-modelo ou pontos-chave esperados' })
+  @IsOptional()
+  @IsString()
+  modelAnswer?: string;
+}
+
+// ─── Base de Conhecimento ───────────────────────────────────────────────────────
+
+export class KnowledgeSearchDto {
+  @ApiProperty({ description: 'Texto a pesquisar na base de conhecimento autorizada' })
+  @IsString()
+  q!: string;
+
+  @ApiPropertyOptional({ default: 5 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  @Type(() => Number)
+  limit?: number;
 }
 
 // ─── Filters ──────────────────────────────────────────────────────────────────
@@ -167,4 +226,68 @@ export class AiSessionFilterDto extends BaseFilterDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   activeOnly?: boolean;
+}
+
+export class AdminSessionFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) courseId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() dateFrom?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() dateTo?: string;
+}
+
+// ─── Recomendações (secção 6/7 — histórico e aceitação) ─────────────────────────
+
+export class AcceptRecommendationDto {
+  @ApiProperty({ description: 'Curso recomendado que o colaborador aceitou' })
+  @IsInt()
+  courseId!: number;
+}
+
+// ─── Configurações (secção 8) ──────────────────────────────────────────────────
+
+export class UpdateAiTutorSettingsDto {
+  @ApiPropertyOptional({ description: 'Permitir respostas fora da base de conhecimento' })
+  @IsOptional()
+  @IsBoolean()
+  allowOutsideKnowledge?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Responder apenas com informação encontrada nas fontes autorizadas',
+  })
+  @IsOptional()
+  @IsBoolean()
+  sourceOnlyMode?: boolean;
+
+  @ApiPropertyOptional({ description: 'Incluir "Fonte: ..." nas respostas' })
+  @IsOptional()
+  @IsBoolean()
+  showSources?: boolean;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 1 })
+  @IsOptional()
+  @Min(0)
+  @Max(1)
+  temperature?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  defaultLanguage?: string;
+
+  @ApiPropertyOptional({ description: 'Máximo de perguntas por colaborador por dia' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  dailyMessageLimit?: number;
+
+  @ApiPropertyOptional({ description: 'Dias de retenção do histórico de sessões' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  historyRetentionDays?: number;
+
+  @ApiPropertyOptional({ description: 'Texto adicional anexado ao prompt de sistema' })
+  @IsOptional()
+  @IsString()
+  customSystemPromptAddendum?: string;
 }

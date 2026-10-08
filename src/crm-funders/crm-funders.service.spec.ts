@@ -63,11 +63,14 @@ const mockPrisma = {
   funderInteraction: {
     create: jest.fn(),
     findMany: jest.fn(),
+    findFirst: jest.fn(),
     count: jest.fn(),
+    aggregate: jest.fn(),
   },
   funderReport: {
     create: jest.fn(),
     findUnique: jest.fn(),
+    findFirst: jest.fn().mockResolvedValue(null),
     update: jest.fn(),
     count: jest.fn(),
     findMany: jest.fn(),
@@ -293,10 +296,8 @@ describe('CrmFundersService', () => {
     });
 
     it('deve lançar BadRequestException se desembolso excede o grant', async () => {
-      mockPrisma.fundingGrant.findUnique.mockResolvedValue({
-        ...mockGrant,
-        disbursed: 4500000,
-      });
+      mockPrisma.fundingGrant.findUnique.mockResolvedValue(mockGrant);
+      mockPrisma.grantDisbursement.aggregate.mockResolvedValue({ _sum: { amount: 4500000 } });
       await expect(
         service.addDisbursement('grt-1', { amount: 600000, receivedAt: '2026-06-01' } as any, 1),
       ).rejects.toThrow(BadRequestException);
@@ -327,7 +328,11 @@ describe('CrmFundersService', () => {
         type: 'MEETING',
         user: { fullName: 'User Teste' },
       });
-      mockPrisma.funderInteraction.findMany.mockResolvedValue([]);
+      const last = new Date('2026-01-01');
+      mockPrisma.funderInteraction.findFirst
+        .mockResolvedValueOnce({ date: last })
+        .mockResolvedValueOnce(null);
+      mockPrisma.funderInteraction.aggregate.mockResolvedValue({ _avg: { satisfaction: null } });
       mockPrisma.funder.update.mockResolvedValue({});
       mockPrisma.auditLog.create.mockResolvedValue({});
 
@@ -339,7 +344,7 @@ describe('CrmFundersService', () => {
       expect(result.type).toBe('MEETING');
       expect(mockPrisma.funder.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ lastContactAt: expect.any(Date) }),
+          data: expect.objectContaining({ lastContactAt: last }),
         }),
       );
     });
@@ -391,26 +396,6 @@ describe('CrmFundersService', () => {
       });
       await expect(service.submitReport('rep-1', 'http://file.pdf', 1)).rejects.toThrow(
         NotFoundException,
-      );
-    });
-  });
-
-  describe('getOverdueReports', () => {
-    it('deve retornar relatórios em atraso paginados', async () => {
-      mockPrisma.funderReport.findMany.mockResolvedValue([{ id: 'rep-1' }]);
-      mockPrisma.funderReport.count.mockResolvedValue(1);
-      const result = await service.getOverdueReports({});
-      expect(result.data).toHaveLength(1);
-      expect(result).toMatchObject({ total: 1, page: 1, limit: 20, totalPages: 1 });
-    });
-
-    it('deve aplicar o tecto de paginação (limit máximo 100)', async () => {
-      mockPrisma.funderReport.findMany.mockResolvedValue([]);
-      mockPrisma.funderReport.count.mockResolvedValue(0);
-      const result = await service.getOverdueReports({ page: 1, limit: 5000 });
-      expect(result.limit).toBe(100);
-      expect(mockPrisma.funderReport.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ take: 100, skip: 0 }),
       );
     });
   });

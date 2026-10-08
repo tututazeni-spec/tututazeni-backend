@@ -2,6 +2,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { TrainingService as TrainingsService } from './trainings.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../common/services/audit.service';
+import { CompetenciesService } from '../competencies/competencies.service';
+
+const mockAuditService = { log: jest.fn().mockResolvedValue(undefined) };
+const mockCompetenciesService = { updateFromTraining: jest.fn().mockResolvedValue(undefined) };
 
 const makeFind = (val: any = null) => jest.fn().mockResolvedValue(val);
 const makeFindMany = (data: any[] = []) => jest.fn().mockResolvedValue(data);
@@ -12,8 +17,11 @@ const baseTraining = {
   title: 'Formação Teste',
   status: 'PUBLISHED',
   type: 'ONLINE',
+  createdById: 1,
   _count: { participants: 0, sessions: 1, ratings: 0 },
 };
+
+const adminUser = { id: 1, email: 'admin@innova.com', role: { name: 'ADMIN' } } as any;
 
 const baseSession = {
   id: 1,
@@ -72,7 +80,12 @@ describe('TrainingsService — additional coverage', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [TrainingsService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        TrainingsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: AuditService, useValue: mockAuditService },
+        { provide: CompetenciesService, useValue: mockCompetenciesService },
+      ],
     }).compile();
     service = module.get<TrainingsService>(TrainingsService);
   });
@@ -84,13 +97,13 @@ describe('TrainingsService — additional coverage', () => {
       mockPrisma.training.findUnique.mockResolvedValue(baseTraining);
       mockPrisma.training.update.mockResolvedValue({ ...baseTraining, title: 'Updated' });
 
-      const result = await service.update(1, { title: 'Updated' } as any);
+      const result = await service.update(1, { title: 'Updated' } as any, adminUser);
       expect(result).toBeDefined();
     });
 
     it('deve lançar NotFoundException se não encontrada', async () => {
       mockPrisma.training.findUnique.mockResolvedValue(null);
-      await expect(service.update(99, {} as any)).rejects.toThrow(NotFoundException);
+      await expect(service.update(99, {} as any, adminUser)).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -101,7 +114,7 @@ describe('TrainingsService — additional coverage', () => {
       mockPrisma.training.findUnique.mockResolvedValue(baseTraining);
       mockPrisma.training.update.mockResolvedValue({ ...baseTraining, status: 'ARCHIVED' });
 
-      const result = await service.archive(1);
+      const result = await service.archive(1, adminUser);
       expect(result).toBeDefined();
     });
   });
@@ -116,7 +129,7 @@ describe('TrainingsService — additional coverage', () => {
       });
       mockPrisma.training.delete.mockResolvedValue({});
 
-      const result = await service.remove(1);
+      const result = await service.remove(1, adminUser);
       expect(result).toHaveProperty('message');
     });
 
@@ -127,7 +140,7 @@ describe('TrainingsService — additional coverage', () => {
         _count: { participants: 5, sessions: 1, ratings: 0 },
       });
 
-      await expect(service.remove(1)).rejects.toThrow(ForbiddenException);
+      await expect(service.remove(1, adminUser)).rejects.toThrow(ForbiddenException);
     });
   });
 
@@ -138,12 +151,15 @@ describe('TrainingsService — additional coverage', () => {
       mockPrisma.training.findUnique.mockResolvedValue(baseTraining);
       mockPrisma.trainingSession.create.mockResolvedValue({ id: 1, trainingId: 1 });
 
-      const result = await service.createSession({
-        trainingId: 1,
-        sessionDate: new Date().toISOString(),
-        durationMinutes: 90,
-        modality: 'ONLINE',
-      } as any);
+      const result = await service.createSession(
+        {
+          trainingId: 1,
+          sessionDate: new Date().toISOString(),
+          durationMinutes: 90,
+          modality: 'ONLINE',
+        } as any,
+        adminUser,
+      );
 
       expect(result).toBeDefined();
     });
@@ -158,6 +174,7 @@ describe('TrainingsService — additional coverage', () => {
         ...baseSession,
         maxParticipants: 20,
         _count: { participants: 5 },
+        training: { requiresApproval: false },
       });
       mockPrisma.trainingParticipant.create.mockResolvedValue({ id: 1, status: 'CONFIRMED' });
 

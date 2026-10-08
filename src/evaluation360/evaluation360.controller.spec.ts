@@ -12,7 +12,10 @@ const mockSvc = {
   updateCycle: jest.fn().mockResolvedValue({}),
   publishCycle: jest.fn().mockResolvedValue({}),
   listCycles: jest.fn().mockResolvedValue([]),
+  listDeletedCycles: jest.fn().mockResolvedValue([]),
   getCycleDetail: jest.fn().mockResolvedValue({ id: 'cycle-1' }),
+  deleteCycle: jest.fn().mockResolvedValue({ id: 'cycle-1' }),
+  restoreCycle: jest.fn().mockResolvedValue({ id: 'cycle-1' }),
   calculateCycleResults: jest.fn().mockResolvedValue({}),
   createQuestion: jest.fn().mockResolvedValue({ id: 'q1' }),
   listQuestions: jest.fn().mockResolvedValue([]),
@@ -31,7 +34,6 @@ const mockSvc = {
   getOrganizationalAnalytics: jest.fn().mockResolvedValue({}),
   getNineBox: jest.fn().mockResolvedValue([]),
   generateReport: jest.fn().mockResolvedValue({}),
-  calibrateScore: jest.fn().mockResolvedValue({}),
   createContinuousFeedback: jest.fn().mockResolvedValue({ id: 'fb1' }),
   listFeedbackForUser: jest.fn().mockResolvedValue([]),
   createPulseSurvey: jest.fn().mockResolvedValue({ id: 'ps1' }),
@@ -69,9 +71,9 @@ describe('Evaluation360Controller', () => {
     expect(mockSvc.updateCompetency).toHaveBeenCalledWith('c1', dto, '1');
   });
 
-  it('listCompetencies → listCompetencies(tenantId, query)', async () => {
-    await controller.listCompetencies('t1', undefined);
-    expect(mockSvc.listCompetencies).toHaveBeenCalledWith('t1', undefined);
+  it('listCompetencies → listCompetencies(tenantId, query, tag)', async () => {
+    await controller.listCompetencies('t1', undefined, 'FEEDBACK');
+    expect(mockSvc.listCompetencies).toHaveBeenCalledWith('t1', undefined, 'FEEDBACK');
   });
 
   it('createCycle → createCycle(dto, userId)', async () => {
@@ -98,9 +100,24 @@ describe('Evaluation360Controller', () => {
     expect(mockSvc.listCycles).toHaveBeenCalledWith('t1', query);
   });
 
+  it('listDeletedCycles → listDeletedCycles(tenantId)', async () => {
+    await controller.listDeletedCycles('t1');
+    expect(mockSvc.listDeletedCycles).toHaveBeenCalledWith('t1');
+  });
+
   it('getCycleDetail → getCycleDetail(id)', async () => {
     await controller.getCycleDetail('cycle-1');
     expect(mockSvc.getCycleDetail).toHaveBeenCalledWith('cycle-1');
+  });
+
+  it('deleteCycle → deleteCycle(id, userId)', async () => {
+    await controller.deleteCycle('cycle-1', mockUser as any);
+    expect(mockSvc.deleteCycle).toHaveBeenCalledWith('cycle-1', '1');
+  });
+
+  it('restoreCycle → restoreCycle(id, userId)', async () => {
+    await controller.restoreCycle('cycle-1', mockUser as any);
+    expect(mockSvc.restoreCycle).toHaveBeenCalledWith('cycle-1', '1');
   });
 
   it('calculateResults → calculateCycleResults(id, userId)', async () => {
@@ -186,9 +203,9 @@ describe('Evaluation360Controller', () => {
     expect(mockSvc.submitResponse).toHaveBeenCalled();
   });
 
-  it('getResult → getParticipantResult(cycleId, participantId, userId, roleCode)', async () => {
+  it('getResult → getParticipantResult(cycleId, participantId, userId)', async () => {
     await controller.getResult('cycle-1', 'p1', mockUser as any);
-    expect(mockSvc.getParticipantResult).toHaveBeenCalledWith('cycle-1', 'p1', '1', 'ADMIN');
+    expect(mockSvc.getParticipantResult).toHaveBeenCalledWith('cycle-1', 'p1', '1');
   });
 
   it('getTeamAnalytics → getTeamAnalytics(cycleId, userId)', async () => {
@@ -214,11 +231,8 @@ describe('Evaluation360Controller', () => {
     expect(mockSvc.generateReport).toHaveBeenCalledWith(dto, '1');
   });
 
-  it('calibrateScore → calibrateScore(cycleId, dto, userId)', async () => {
-    const dto = {} as any;
-    await controller.calibrateScore('cycle-1', dto, mockUser as any);
-    expect(mockSvc.calibrateScore).toHaveBeenCalledWith('cycle-1', dto, '1');
-  });
+  // calibrateScore foi removido (matriz de calibração RH) — ver
+  // evaluation360.service.ts/evaluation360.controller.ts.
 
   it('createFeedback → createContinuousFeedback(dto, userId)', async () => {
     const dto = {} as any;

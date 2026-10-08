@@ -165,10 +165,10 @@ describe('Process Standard Integration', () => {
       expect(res.body.id).toBe(processId);
     });
 
-    it('GET /processes inclui o processo criado', async () => {
+    it('GET /processes inclui o processo criado (RH vê DRAFT; colaborador só os publicados)', async () => {
       const res = await request(app.getHttpServer())
         .get('/processes')
-        .set('Authorization', `Bearer ${employeeToken}`)
+        .set('Authorization', `Bearer ${rhToken}`)
         .query({ search: 'INT-TEST-PS-1' })
         .expect(200);
       expect(res.body.data.some((p: any) => p.id === processId)).toBe(true);
@@ -319,13 +319,13 @@ describe('Process Standard Integration', () => {
       expect(res.body.some((t: any) => t.instanceId === instanceId)).toBe(true);
     });
 
-    it('o colaborador alvo completa o primeiro passo (START)', async () => {
+    it('o passo START é concluído automaticamente ao iniciar a instância', async () => {
       const res = await request(app.getHttpServer())
-        .post(`/processes/instances/${instanceId}/steps/${stepIds[0]}/complete`)
+        .get(`/processes/instances/${instanceId}`)
         .set('Authorization', `Bearer ${employeeToken}`)
-        .send({ notes: 'Concluído' })
         .expect(200);
-      expect(res.body.status).toBe('COMPLETED');
+      const start = res.body.stepProgress.find((sp: any) => sp.stepId === stepIds[0]);
+      expect(start.status).toBe('COMPLETED');
     });
 
     it('completar o mesmo passo outra vez → 409', async () => {
@@ -358,14 +358,12 @@ describe('Process Standard Integration', () => {
         .expect(200);
     });
 
-    it('cancelar instância já concluída/cancelada de novo → 403', async () => {
-      // a instância já está CANCELLED; cancelInstance só bloqueia COMPLETED,
-      // mas isto ainda serve para confirmar que uma segunda chamada não 500s
+    it('cancelar instância já cancelada de novo → 409', async () => {
       await request(app.getHttpServer())
         .patch(`/processes/instances/${instanceId}/cancel`)
         .set('Authorization', `Bearer ${rhToken}`)
         .send({ reason: 'Repetido' })
-        .expect(200);
+        .expect(409);
     });
 
     it('eliminar processo com instância associada → 400 (bug: RESTRICT FK não guardado)', async () => {
@@ -472,7 +470,7 @@ describe('Process Standard Integration', () => {
         .send({ targetUserId: employeeId });
 
       await request(app.getHttpServer())
-        .post(`/processes/instances/${inst.body.id}/steps/${stepIds[0]}/complete`)
+        .post(`/processes/instances/${inst.body.id}/steps/${stepIds[1]}/complete`)
         .set('Authorization', `Bearer ${employeeToken}`)
         .send({ notes: 'Concluído' })
         .expect(200);

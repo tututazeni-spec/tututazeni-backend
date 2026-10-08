@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD, APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { envValidationSchema } from './config/env.validation';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { buildThrottlerOptions } from './common/config/throttler.config';
@@ -17,45 +18,49 @@ import { CoursesModule } from './courses/courses.module';
 import { CourseModulesModule } from './course-modules/course-modules.module';
 import { EnrollmentsModule } from './enrollments/enrollments.module';
 import { AssessmentsModule } from './assessments/assessments.module';
+// CompetenciesModule único junta CompetenciesController (/competencies) e
+// CompetencyMapController (/competency-map) — ex-CompetencyMapModule,
+// fundido lá como "Competências".
 import { CompetenciesModule } from './competencies/competencies.module';
 import { DevelopmentPlansModule } from './development-plans/development-plans.module';
-import { PerformanceModule } from './performance/performance.module';
+// SuccessionModule — módulo Career, secção 7 (Sucessão): cargos críticos,
+// planos de sucessão, matriz e dashboard. Removido por engano na limpeza de
+// "módulos legados" (#295) junto com módulos efectivamente mortos
+// (leadership, engagement, avatar-training…); restaurado porque é o motor
+// real por trás do separador "Sucessão" da spec docs/04-modulo-career.md.
 import { SuccessionModule } from './succession/succession.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
-import { LeadershipModule } from './leadership/leadership.module';
-import { KnowledgeModule } from './knowledge/knowledge.module';
-import { MicroLearningModule } from './micro-learning/micro-learning.module';
 import { LiveClassesModule } from './live-classes/live-classes.module';
 import { MobileModule } from './mobile/mobile.module';
 import { ScalabilityModule } from './scalability/scalability.module';
+import { SettingsModule } from './settings/settings.module';
+import { MonitoringModule } from './monitoring/monitoring.module';
 import { TrainingModule } from './trainings/trainings.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { ExecutiveReportsModule } from './executive-reports/executive-reports.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AuditModule } from './audit/audit.module';
 import { AiTutorModule } from './ai-tutor/ai-tutor.module';
-import { InstructorModule } from './instructor/instructor.module';
+import { AvatarTrainingModule } from './avatar-training/avatar-training.module';
 import { EventsModule } from './events/events.module';
-import { EmployeesModule } from './employees/employees.module';
+// UsersModule único junta UsersController (/users), EmployeesController
+// (/employees) e RolesPermissionsController (/roles-permissions) — ex-
+// EmployeesModule e ex-RolesPermissionsModule, fundidos lá como "Utilizadores".
 
 // MÓDULOS NOVOS — RH
 import { AttendanceModule } from './attendance/attendance.module';
 import { LeaveManagementModule } from './leave-management/leave-management.module';
-import { PayslipsModule } from './payslips/payslips.module';
+import { PayslipsModule } from './payroll/payroll.module';
 import { WorkDeclarationModule } from './work-declaration/work-declaration.module';
 import { DeclarationsModule } from './declarations/declarations.module';
 import { DocumentRepositoryModule } from './document-repository/document-repository.module';
 
 // MÓDULOS NOVOS — TALENTO E CARREIRA
-import { CareerPlansModule } from './career-plans/career-plans.module';
+// CareerModule único junta CareerController (/career) e CareerPlansController
+// (/career-plans) — ex-CareerPlansModule, fundido aqui.
 import { CareerModule } from './career/career.module';
-import { CompetencyMapModule } from './competency-map/competency-map.module';
-import { TalentDevelopmentModule } from './talent-development/talent-development.module';
-import { EngagementModule } from './engagement/engagement.module';
-import { ContentLibraryModule } from './content-library/content-library.module';
 import { EvaluationModule } from './evaluation/evaluation.module';
 import { Evaluation360Module } from './evaluation360/evaluation360.module';
-import { AvatarTrainingModule } from './avatar-training/avatar-training.module';
 
 // MÓDULOS NOVOS — DASHBOARD E RELATÓRIOS
 import { DashboardModule } from './dashboard/dashboard.module';
@@ -65,10 +70,7 @@ import { RoiImpactModule } from './roi-impact/roi-impact.module';
 import { HistoryModule } from './history/history.module';
 
 // MÓDULOS NOVOS — ORGANIZAÇÃO E ACESSOS
-import { OrganizationModule } from './organization/organization.module';
 import { AclModule } from './acl/acl.module';
-import { RolesPermissionsModule } from './roles-permissions/roles-permissions.module';
-import { LeaderModule } from './leader/leader.module';
 
 // MÓDULOS NOVOS — PROCESSOS E INTEGRAÇÃO
 import { ProcessStandardModule } from './process-standard/process-standard.module';
@@ -79,20 +81,18 @@ import { PdfModule } from './pdf/pdf.module';
 import { CrmBeneficiariesModule } from './crm-beneficiaries/crm-beneficiaries.module';
 import { CrmPartnersModule } from './crm-partners/crm-partners.module';
 import { CrmFundersModule } from './crm-funders/crm-funders.module';
+// LibraryModule único junta LibraryController (/library — repositório
+// documental), ContentLibraryController (/content-library — catálogo
+// multimédia) e KnowledgeController (/knowledge — base de conhecimento) —
+// ex-ContentLibraryModule e ex-KnowledgeModule, fundidos aqui.
 import { LibraryModule } from './library/library.module';
-import { CertificationModule } from './certification/certification.module';
 import { DashboardInstitutionalModule } from './dashboard-institutional/dashboard-institutional.module';
-import { AcademicModule } from './academic/academic.module';
-import { LmsModule } from './lms/lms.module';
-import { MonitoringModule } from './monitoring/monitoring.module';
 import { HealthModule } from './health/health.module';
 import { MetricsModule } from './metrics/metrics.module';
 
 // INFRA
 import { QueueModule } from './queue/queue.module';
 import { CacheModule } from './cache/cache.module';
-import { LearningPathsController } from './learning-paths/learning-paths.controller';
-import { LearningPathsService } from './learning-paths/learning-paths.service';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -100,6 +100,8 @@ import { RolesGuard } from './common/guards/roles.guard';
 
 @Module({
   imports: [
+    // Único registo: chamar forRoot() em mais módulos duplica todos os @Cron da app.
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       validationSchema: envValidationSchema,
@@ -159,24 +161,21 @@ import { RolesGuard } from './common/guards/roles.guard';
     AssessmentsModule,
     CompetenciesModule,
     DevelopmentPlansModule,
-    PerformanceModule,
     SuccessionModule,
     OnboardingModule,
-    LeadershipModule,
-    KnowledgeModule,
-    MicroLearningModule,
     LiveClassesModule,
     MobileModule,
     ScalabilityModule,
+    SettingsModule,
+    MonitoringModule,
     TrainingModule,
     AnalyticsModule,
     ExecutiveReportsModule,
     NotificationsModule,
     AuditModule,
     AiTutorModule,
-    InstructorModule,
+    AvatarTrainingModule,
     EventsModule,
-    EmployeesModule,
     AttendanceModule,
     LeaveManagementModule,
     PayslipsModule,
@@ -184,24 +183,15 @@ import { RolesGuard } from './common/guards/roles.guard';
     WorkDeclarationModule,
     DeclarationsModule,
     DocumentRepositoryModule,
-    CareerPlansModule,
     CareerModule,
-    CompetencyMapModule,
-    TalentDevelopmentModule,
-    EngagementModule,
-    ContentLibraryModule,
     EvaluationModule,
     Evaluation360Module,
-    AvatarTrainingModule,
     DashboardModule,
     DashboardRhModule,
     ReportsModule,
     RoiImpactModule,
     HistoryModule,
-    OrganizationModule,
     AclModule,
-    RolesPermissionsModule,
-    LeaderModule,
     ProcessStandardModule,
     ApiIntegrationModule,
     AutomationModule,
@@ -210,17 +200,11 @@ import { RolesGuard } from './common/guards/roles.guard';
     CrmPartnersModule,
     CrmFundersModule,
     LibraryModule,
-    CertificationModule,
     DashboardInstitutionalModule,
-    AcademicModule,
-    LmsModule,
-    MonitoringModule,
     HealthModule,
     MetricsModule,
   ],
-  controllers: [LearningPathsController],
   providers: [
-    LearningPathsService,
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
     { provide: APP_GUARD, useClass: JwtAuthGuard },

@@ -5,12 +5,19 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EnrollmentsService } from '../enrollments/enrollments.service';
 import { DevelopmentPlansService } from '../development-plans/development-plans.service';
 import { GamificationService } from '../gamification/gamification.service';
+import { MailService } from '../mail/mail.service';
+import { SmsService } from '../sms/sms.service';
 
 const mockEnrollments = { enroll: jest.fn().mockResolvedValue({ id: 1 }) };
 const mockDevPlans = { create: jest.fn().mockResolvedValue({ id: 1, status: 'DRAFT' }) };
 const mockGamification = {
   awardPoints: jest.fn().mockResolvedValue(undefined),
   awardBadge: jest.fn().mockResolvedValue(undefined),
+};
+const mockMail = { sendNotification: jest.fn().mockResolvedValue(undefined) };
+const mockSms = {
+  sendSms: jest.fn().mockResolvedValue(undefined),
+  sendWhatsApp: jest.fn().mockResolvedValue(undefined),
 };
 
 const automationRuleMock = {
@@ -30,6 +37,7 @@ const automationExecutionMock = {
   create: jest.fn().mockResolvedValue({ id: 'exec-1' }),
   update: jest.fn().mockResolvedValue({}),
   count: jest.fn().mockResolvedValue(0),
+  groupBy: jest.fn().mockResolvedValue([]),
 };
 
 const mockPrisma = {
@@ -88,6 +96,8 @@ describe('AutomationService', () => {
         { provide: EnrollmentsService, useValue: mockEnrollments },
         { provide: DevelopmentPlansService, useValue: mockDevPlans },
         { provide: GamificationService, useValue: mockGamification },
+        { provide: MailService, useValue: mockMail },
+        { provide: SmsService, useValue: mockSms },
       ],
     }).compile();
     service = module.get<AutomationService>(AutomationService);

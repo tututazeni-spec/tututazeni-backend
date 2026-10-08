@@ -280,7 +280,7 @@ describe('Automation Integration', () => {
 
       await request(app.getHttpServer())
         .delete(`/automation/rules/${created.body.id}`)
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
     });
   });

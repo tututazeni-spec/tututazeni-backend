@@ -2,6 +2,7 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { RolesPermissionsModule } from '../roles-permissions/roles-permissions.module';
+import { AuditModule } from '../common/modules/audit.module';
 import {
   DepartmentsService,
   UnitsService,
@@ -19,7 +20,7 @@ import {
 @Module({
   // Fase D: RolesController é servido pelo RolesPermissionsService canónico
   // (via RolesPermissionsModule). departments.RolesService foi eliminado.
-  imports: [PrismaModule, RolesPermissionsModule],
+  imports: [PrismaModule, RolesPermissionsModule, AuditModule],
   providers: [DepartmentsService, UnitsService, PositionsService, CareersService],
   controllers: [
     DepartmentsController,

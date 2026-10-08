@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ConflictException,
   BadRequestException,
@@ -8,16 +9,38 @@ import { SnapshotType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSnapshotDto, CreateWidgetDto, UpdateWidgetDto, FilterSnapshotDto } from './dto';
 import { AuditService } from '../common/services/audit.service';
+// Serviço de hash-chain (src/audit/) — desligado da actividade real da app
+// (ver docs), mas `getStats()` conta directo a tabela AuditLog partilhada,
+// por isso os totais aqui são reais mesmo sem a cadeia de hash.
+import { AuditService as AuditLogStatsService } from '../audit/audit.service';
 import { CacheService } from '../cache/cache.service';
 import { DASHBOARD_CACHE_TTL } from '../cache/cache.constants';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { OnboardingService } from '../onboarding/onboarding.service';
+import { EventsService } from '../events/events.service';
+import { ProcessStandardService } from '../process-standard/process-standard.service';
+import { LegacyDocumentDeclarationsService } from '../work-declaration/legacy-document-declarations.service';
+import { AutomationService } from '../automation/automation.service';
+import { ScalabilityService } from '../scalability/scalability.service';
+import { DashboardService } from '../dashboard/dashboard.service';
+import { DashboardPeriod } from '../dashboard/dashboard.dto';
 
 @Injectable()
 export class DashboardInstitutionalService {
+  private readonly logger = new Logger(DashboardInstitutionalService.name);
+
   constructor(
     private prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly cache: CacheService,
+    private readonly onboardingService: OnboardingService,
+    private readonly eventsService: EventsService,
+    private readonly processStandardService: ProcessStandardService,
+    private readonly declarationsService: LegacyDocumentDeclarationsService,
+    private readonly auditStatsService: AuditLogStatsService,
+    private readonly automationService: AutomationService,
+    private readonly scalabilityService: ScalabilityService,
+    private readonly dashboardService: DashboardService,
   ) {}
 
   // ─── RESUMO EXECUTIVO ────────────────────────────────
@@ -343,6 +366,134 @@ export class DashboardInstitutionalService {
       data: { deletedAt: new Date() },
     });
     return { message: 'Widget removido com sucesso' };
+  }
+
+  // ─── EXECUTIVO (ponto único) ──────────────────────────
+  // Página "Organização" do /dashboard passa a chamar só isto. Compõe, sem
+  // duplicar, o que já existia em dois módulos separados:
+  //  - DashboardService.getExecutiveDashboard(): headcount/learning/
+  //    performance/engagement/development/talent/pending + departamentos +
+  //    top conteúdos + insights + talentHealth + eNPS + topTalent + riscos
+  //    (org-wide, RH/academia)
+  //  - este serviço: people/learning/crm/knowledge (CRM+conhecimento,
+  //    ausentes do lado RH), alertas institucionais, tendência de
+  //    crescimento, distribuição geográfica e a visão cruzada de módulos
+  //    (getModulesOverview) já acrescentada acima.
+  // Nenhum dos dois lados foi apagado — continuam acessíveis directamente
+  // (/dashboard/organization, /dashboard/executive, etc.) para quem já os
+  // chamava; isto é só a composição que o frontend consome de um único sítio.
+
+  async getExecutive(period?: DashboardPeriod) {
+    const [organization, summary, growthTrend, geographic, alerts, modules] = await Promise.all([
+      this.dashboardService.getExecutiveDashboard(period),
+      this.getExecutiveSummary(),
+      this.getGrowthTrend(6),
+      this.getGeographicDistribution(),
+      this.getAlerts(),
+      this.getModulesOverview(),
+    ]);
+
+    return {
+      organization,
+      summary,
+      growthTrend,
+      geographic,
+      alerts,
+      modules,
+    };
+  }
+
+  // ─── VISÃO CRUZADA DE MÓDULOS ────────────────────────
+  // Reaproveita os dashboards/stats já existentes de outros módulos em vez
+  // de duplicar as suas queries. Promise.allSettled porque nenhum destes
+  // módulos é dono do resumo institucional — uma falha isolada (ex.: tenant
+  // de escalabilidade por resolver) não pode derrubar o resto do painel.
+
+  async getModulesOverview() {
+    return this.cache.getOrSet(
+      'dashboard:institutional:modules-overview',
+      DASHBOARD_CACHE_TTL,
+      async () => {
+        const [onboarding, events, processes, declarations, auditStats, automation, platform] =
+          await Promise.allSettled([
+            this.onboardingService.getDashboard(),
+            this.eventsService.getStats(),
+            this.processStandardService.getDashboard(),
+            this.declarationsService.getDashboard(),
+            this.auditStatsService.getStats(),
+            this.automationService.getStats(),
+            this.scalabilityService
+              .resolveTenantId()
+              .then(tenantId => this.scalabilityService.getDashboard(tenantId)),
+          ]);
+
+        const results = {
+          onboarding,
+          events,
+          processes,
+          declarations,
+          auditStats,
+          automation,
+          platform,
+        };
+        for (const [name, r] of Object.entries(results)) {
+          if (r.status === 'rejected') {
+            this.logger.warn(
+              `Falha ao agregar módulo '${name}' no dashboard institucional: ${
+                r.reason instanceof Error ? r.reason.message : String(r.reason)
+              }`,
+            );
+          }
+        }
+
+        const onb = onboarding.status === 'fulfilled' ? onboarding.value : null;
+        const evt = events.status === 'fulfilled' ? events.value : null;
+        const proc = processes.status === 'fulfilled' ? processes.value : null;
+        const decl = declarations.status === 'fulfilled' ? declarations.value : null;
+        const aud = auditStats.status === 'fulfilled' ? auditStats.value : null;
+        const auto = automation.status === 'fulfilled' ? automation.value : null;
+        const plat = platform.status === 'fulfilled' ? platform.value : null;
+
+        return {
+          onboarding: onb && {
+            active:
+              (onb.summary.byStatus?.IN_PROGRESS ?? 0) + (onb.summary.byStatus?.NOT_STARTED ?? 0),
+            overdueTasks: onb.summary.overdueTasks,
+            avgSurveyScore: onb.summary.avgSurveyScore,
+          },
+          events: evt && {
+            total: evt.total,
+            totalParticipants: evt.totalParticipants,
+          },
+          processes: proc && {
+            active: proc.processes.active,
+            inProgress: proc.instances.inProgress,
+            overdueSteps: proc.compliance.overdueSteps,
+          },
+          declarations: decl && {
+            pending: decl.pending,
+            issued: decl.issued,
+            total: decl.total,
+          },
+          audit: aud && {
+            totalEvents: aud.totals.total,
+            todayEvents: aud.totals.today,
+            criticalEvents: aud.totals.critical,
+          },
+          automation: auto && {
+            totalRules: auto.rules.total,
+            activeRules: auto.rules.active,
+            successRate: auto.executions.successRate,
+          },
+          platform: plat && {
+            uptimePercent: plat.performanceSummary.uptimePercent,
+            openAlerts: plat.alerts.open,
+            criticalAlerts: plat.alerts.critical,
+            integrationsWithErrors: plat.integrations.withErrors,
+          },
+        };
+      },
+    );
   }
 
   // ─── HELPER ──────────────────────────────────────────

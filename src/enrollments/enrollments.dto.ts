@@ -112,6 +112,12 @@ export class EnrollmentFilterDto extends BaseFilterDto {
   @Type(() => Number)
   departmentId?: number;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  unitId?: number;
+
   @ApiPropertyOptional({ enum: EnrollmentStatus })
   @IsOptional()
   @IsEnum(EnrollmentStatus)

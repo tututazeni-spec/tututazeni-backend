@@ -3,6 +3,8 @@ import { OnboardingController } from './onboarding.controller';
 import { OnboardingService } from './onboarding.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { ROLES_KEY } from '../common/decorators/roles.decorator';
+import { Role } from '../auth/enums/role.enum';
 
 const mockSvc = {
   getDashboard: jest.fn().mockResolvedValue({}),
@@ -47,14 +49,14 @@ describe('OnboardingController', () => {
     controller = module.get<OnboardingController>(OnboardingController);
   });
 
-  it('dashboard sem managerId → getDashboard(undefined)', async () => {
+  it('dashboard sem filtros → getDashboard(undefined, undefined, undefined)', async () => {
     await controller.dashboard();
-    expect(mockSvc.getDashboard).toHaveBeenCalledWith(undefined);
+    expect(mockSvc.getDashboard).toHaveBeenCalledWith(undefined, undefined, undefined);
   });
 
-  it('dashboard com managerId → getDashboard(parsed)', async () => {
-    await controller.dashboard('3');
-    expect(mockSvc.getDashboard).toHaveBeenCalledWith(3);
+  it('dashboard com managerId/departmentId/unitId → getDashboard(parsed)', async () => {
+    await controller.dashboard('3', '5', '8');
+    expect(mockSvc.getDashboard).toHaveBeenCalledWith(3, 5, 8);
   });
 
   it('findAllTemplates → findAllTemplates', async () => {
@@ -177,5 +179,25 @@ describe('OnboardingController', () => {
     const dto = {} as any;
     await controller.submitSurvey(mockUser as any, dto);
     expect(mockSvc.submitSurvey).toHaveBeenCalledWith(1, dto);
+  });
+});
+
+// Só ADMIN, GESTOR, RH, DIRECTOR, LIDER podem criar planos de integração
+// (templates). Regressão: não pode voltar a ficar restrito só a ADMIN/RH,
+// nem abrir para COLABORADOR/INSTRUCTOR/AUDITOR.
+describe('OnboardingController#createTemplate — @Roles', () => {
+  it('exige ADMIN, GESTOR, RH, DIRECTOR ou LIDER, e mais nenhum', () => {
+    const meta: string[] | undefined = Reflect.getMetadata(
+      ROLES_KEY,
+      OnboardingController.prototype.createTemplate,
+    );
+    expect(meta).toBeDefined();
+    expect(meta).toEqual(
+      expect.arrayContaining([Role.ADMIN, Role.GESTOR, Role.RH, Role.DIRECTOR, Role.LIDER]),
+    );
+    expect(meta).toHaveLength(5);
+    expect(meta).not.toContain(Role.COLABORADOR);
+    expect(meta).not.toContain(Role.AUDITOR);
+    expect(meta).not.toContain(Role.INSTRUCTOR);
   });
 });

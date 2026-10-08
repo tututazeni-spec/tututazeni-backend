@@ -4,6 +4,15 @@ import { JwtService } from '@nestjs/jwt';
 import { AuthService, sessionIdleTimeoutMs } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 
+// A escrita encadeada (SHA-256 + advisory lock) é testada em audit-chain; aqui só
+// interessa o que cada serviço regista, por isso delega no mock de prisma.auditLog.
+jest.mock('../common/helpers/audit-chain', () => ({
+  writeChainedAuditLog: (
+    prisma: { auditLog: { create: (a: unknown) => unknown } },
+    data: unknown,
+  ) => prisma.auditLog.create({ data }),
+}));
+
 describe('sessionIdleTimeoutMs', () => {
   it('devolve 30 minutos por omissão quando a env var não está definida', () => {
     expect(sessionIdleTimeoutMs(undefined)).toBe(1_800_000);
@@ -36,6 +45,7 @@ const mockPrisma = {
   },
   role: { findFirst: jest.fn() },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
+  userAuditLog: { create: jest.fn().mockResolvedValue({}) },
   userPoints: { create: jest.fn().mockResolvedValue({}) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
   refreshToken: {
@@ -106,8 +116,10 @@ describe('AuthService', () => {
       expect(result.user).not.toHaveProperty('password');
       // A10-1: password é omitido por omissão (PrismaService) — login precisa
       // do hash para o bcrypt.compare, por isso tem de pedir a excepção.
+      // Definições §4: twoFactorSecret também pedido (verificação de 2FA no login),
+      // via findUserWithRoleByEmail partilhado com o fluxo SSO/LDAP.
       expect(mockPrisma.user.findUnique).toHaveBeenCalledWith(
-        expect.objectContaining({ omit: { password: false } }),
+        expect.objectContaining({ omit: { password: false, twoFactorSecret: false } }),
       );
     });
 
@@ -116,6 +128,41 @@ describe('AuthService', () => {
       await expect(service.login({ email: 'x@x.com', password: 'pass' })).rejects.toThrow(
         UnauthorizedException,
       );
+    });
+
+    it('regista FAILED em AuditLog com IP/UA e sem palavra-passe (utilizador desconhecido)', async () => {
+      mockPrisma.auditLog.create.mockClear();
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      await expect(
+        service.login(
+          { email: 'x@x.com', password: 'segredo' },
+          { ip: '10.0.0.9', userAgent: 'jest' },
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+      await new Promise(r => setImmediate(r));
+      const data = mockPrisma.auditLog.create.mock.calls[0][0].data;
+      expect(data).toMatchObject({
+        userId: null,
+        action: 'FAILED',
+        entity: 'Auth',
+        status: 'FAILED',
+        ip: '10.0.0.9',
+      });
+      expect(JSON.stringify(data)).not.toContain('segredo');
+      expect(JSON.parse(data.metadata)).toEqual({ reason: 'UNKNOWN_USER', email: 'x@x.com' });
+    });
+
+    it('regista FAILED com o userId quando a palavra-passe está errada', async () => {
+      mockPrisma.auditLog.create.mockClear();
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+      mockPrisma.user.findUnique.mockResolvedValue(baseUser);
+      await expect(service.login({ email: 'test@innova.com', password: 'x' })).rejects.toThrow(
+        UnauthorizedException,
+      );
+      await new Promise(r => setImmediate(r));
+      const data = mockPrisma.auditLog.create.mock.calls[0][0].data;
+      expect(data).toMatchObject({ userId: baseUser.id, action: 'FAILED' });
+      expect(JSON.parse(data.metadata).reason).toBe('BAD_PASSWORD');
     });
 
     it('deve lançar UnauthorizedException se conta inactiva', async () => {

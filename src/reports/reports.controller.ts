@@ -102,6 +102,15 @@ export class ReportsController {
     return this.svc.performanceReport(period, deptId ? +deptId : undefined);
   }
 
+  @Get('evaluations')
+  @Roles(...ALL_MGMT)
+  @ApiOperation({
+    summary: 'Relatório de avaliações formais (EXAM) — notas, aprovação, departamento',
+  })
+  evaluations(@Query() filter: ReportFilterDto) {
+    return this.svc.evaluationsReportFull(filter);
+  }
+
   // ─── Engagement Reports ───────────────────────────────────────
 
   @Get('engagement')

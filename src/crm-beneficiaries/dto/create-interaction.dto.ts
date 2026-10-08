@@ -70,4 +70,14 @@ export class CreateInteractionDto {
   @IsArray()
   @IsString({ each: true })
   attachments?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @ApiPropertyOptional({ description: 'Beneficiário relacionado (ex.: familiar)' })
+  @IsOptional()
+  @IsString()
+  relatedBeneficiaryId?: string;
 }

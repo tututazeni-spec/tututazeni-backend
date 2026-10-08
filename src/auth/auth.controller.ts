@@ -42,6 +42,11 @@ export const PASSWORD_RESET_THROTTLE = { default: { limit: 3, ttl: 3_600_000 } }
 const tokenCookieOptions = buildTokenCookieOptions(process.env.NODE_ENV === 'production');
 const refreshCookieOptions = buildRefreshCookieOptions(process.env.NODE_ENV === 'production');
 
+function requestContext(req: Request): { ip?: string; userAgent?: string } {
+  const ua = req.headers?.['user-agent'];
+  return { ip: req.ip, userAgent: Array.isArray(ua) ? ua[0] : ua };
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -52,8 +57,12 @@ export class AuthController {
   @Public()
   @Throttle(AUTH_THROTTLE)
   @Post('login')
-  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
-    const result = await this.authService.login(dto);
+  async login(
+    @Body() dto: LoginDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.login(dto, requestContext(req));
     res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
     res.cookie(REFRESH_COOKIE, result.refreshToken, refreshCookieOptions);
     return result;
@@ -91,7 +100,7 @@ export class AuthController {
   @HttpCode(200)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const presented = (req.cookies ?? {}).refresh_token;
-    if (presented) await this.authService.revokeRefreshToken(presented);
+    if (presented) await this.authService.revokeRefreshToken(presented, requestContext(req));
     res.clearCookie(TOKEN_COOKIE, { ...tokenCookieOptions, maxAge: undefined });
     res.clearCookie(REFRESH_COOKIE, { ...refreshCookieOptions, maxAge: undefined });
     return { message: 'Sessão terminada' };

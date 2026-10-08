@@ -30,8 +30,8 @@ describe('refresh cookie', () => {
     expect(REFRESH_COOKIE).toBe('refresh_token');
   });
 
-  it('está limitado ao path /auth/refresh', () => {
-    expect(buildRefreshCookieOptions(true).path).toBe('/auth/refresh');
+  it('está limitado ao path /api/auth/refresh (o browser só vê pedidos via /api, ver comentário no ficheiro)', () => {
+    expect(buildRefreshCookieOptions(true).path).toBe('/api/auth/refresh');
   });
 
   it('exige secure/httpOnly em produção e sameSite lax; maxAge 7 dias', () => {

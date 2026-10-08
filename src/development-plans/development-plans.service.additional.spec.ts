@@ -1,9 +1,19 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { DevelopmentPlansService } from './development-plans.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const mockPrisma: any = {
+  // create() agora corre plano+gaps de competência dentro de uma transacção;
+  // o mock simplesmente invoca o callback com o próprio mockPrisma como `tx`.
+  $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(mockPrisma)),
+  pdiCompetencyGap: {
+    createMany: jest.fn().mockResolvedValue({}),
+    deleteMany: jest.fn().mockResolvedValue({}),
+    create: jest.fn().mockResolvedValue({}),
+    findUnique: jest.fn().mockResolvedValue(null),
+    delete: jest.fn().mockResolvedValue({}),
+  },
   developmentPlan: {
     findMany: jest.fn().mockResolvedValue([]),
     findFirst: jest.fn().mockResolvedValue(null),
@@ -173,6 +183,8 @@ describe('DevelopmentPlansService (additional)', () => {
   describe('create', () => {
     it('deve criar plano de desenvolvimento', async () => {
       mockPrisma.developmentPlan.create.mockResolvedValue(basePlan);
+      // create() lê de novo (com relations) depois da transacção.
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue(basePlan);
       const result = await service.create({ title: 'Plano 2026', userId: 2 } as any);
       expect(result).toBeDefined();
     });
@@ -276,6 +288,140 @@ describe('DevelopmentPlansService (additional)', () => {
       expect(mockPrisma.certificate.create).toHaveBeenCalled();
       expect(mockPrisma.userPoints.upsert).toHaveBeenCalled();
     });
+
+    // A mensagem de erro sempre disse "apenas planos activos", mas o código
+    // aceitava PENDING_APPROVAL — permitindo concluir (com certificado + XP)
+    // um PDI que ainda nem tinha sido aprovado pelo gestor/RH.
+    it('rejeita concluir um plano ainda PENDING_APPROVAL', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
+        ...basePlan,
+        status: 'PENDING_APPROVAL',
+      });
+      await expect(service.complete(1)).rejects.toThrow();
+      expect(mockPrisma.certificate.create).not.toHaveBeenCalled();
+    });
+
+    it('AT_RISK também pode ser concluído', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
+        ...basePlan,
+        status: 'AT_RISK',
+      });
+      mockPrisma.developmentPlan.update.mockResolvedValue({ ...basePlan, status: 'COMPLETED' });
+      await expect(service.complete(1)).resolves.toBeDefined();
+    });
+  });
+
+  // ─── complete (parcial, secção 19) ─────────────────────────────
+
+  describe('complete — conclusão parcial', () => {
+    it('ACTIVE → PARTIALLY_COMPLETED sem certificado e com metade do XP', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
+        ...basePlan,
+        status: 'ACTIVE',
+        overallProgress: 60,
+      });
+      mockPrisma.developmentPlan.update.mockResolvedValue({
+        ...basePlan,
+        status: 'PARTIALLY_COMPLETED',
+      });
+      await service.complete(1, { partial: true, nextSteps: 'CONTINUE_PDI' } as any);
+
+      const data = mockPrisma.developmentPlan.update.mock.calls[0][0].data;
+      expect(data).toMatchObject({
+        status: 'PARTIALLY_COMPLETED',
+        overallProgress: 60,
+        nextSteps: 'CONTINUE_PDI',
+      });
+      expect(mockPrisma.certificate.create).not.toHaveBeenCalled();
+      expect(mockPrisma.userPoints.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ create: expect.objectContaining({ points: 150 }) }),
+      );
+    });
+  });
+
+  // ─── markAtRisk / resume (secção 1, estados) ───────────────────
+
+  describe('markAtRisk', () => {
+    it('ACTIVE → AT_RISK com motivo anexado às notas', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
+        ...basePlan,
+        status: 'ACTIVE',
+        notes: null,
+      });
+      mockPrisma.developmentPlan.update.mockResolvedValue({ ...basePlan, status: 'AT_RISK' });
+      await service.markAtRisk(1, { reason: 'atraso nas acções' }, mockAdmin as any);
+      const data = mockPrisma.developmentPlan.update.mock.calls[0][0].data;
+      expect(data.status).toBe('AT_RISK');
+      expect(data.notes).toContain('atraso nas acções');
+    });
+
+    it('rejeita marcar em risco um plano que não está ACTIVE', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({ ...basePlan, status: 'DRAFT' });
+      await expect(service.markAtRisk(1, {}, mockAdmin as any)).rejects.toThrow();
+    });
+  });
+
+  describe('resume', () => {
+    it('AT_RISK → ACTIVE', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({ ...basePlan, status: 'AT_RISK' });
+      mockPrisma.developmentPlan.update.mockResolvedValue({ ...basePlan, status: 'ACTIVE' });
+      const result = await service.resume(1, mockAdmin as any);
+      expect(result.status).toBe('ACTIVE');
+    });
+
+    it('rejeita retomar plano que não está em risco nem pausado', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({ ...basePlan, status: 'DRAFT' });
+      await expect(service.resume(1, mockAdmin as any)).rejects.toThrow();
+    });
+  });
+
+  // ─── acceptPlan (secção 22, aceite do colaborador) ─────────────
+
+  describe('acceptPlan', () => {
+    it('o próprio dono aceita o PDI', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({ ...basePlan, userId: 2 });
+      mockPrisma.developmentPlan.update.mockResolvedValue({
+        ...basePlan,
+        employeeAcceptedAt: new Date(),
+      });
+      const owner = { id: 2, role: { name: 'COLABORADOR' } };
+      await service.acceptPlan(1, {}, owner as any);
+      const data = mockPrisma.developmentPlan.update.mock.calls[0][0].data;
+      expect(data.employeeAcceptedAt).toBeInstanceOf(Date);
+    });
+
+    it('rejeita aceite por quem não é o dono do plano', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({ ...basePlan, userId: 2 });
+      await expect(service.acceptPlan(1, {}, mockAdmin as any)).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  // ─── competency gaps (secção 5) ────────────────────────────────
+
+  describe('addCompetencyGap / removeCompetencyGap', () => {
+    it('adiciona gap de competência ao plano', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue(basePlan);
+      mockPrisma.pdiCompetencyGap.create.mockResolvedValue({ id: 1, planId: 1, competencyId: 5 });
+      const result = await service.addCompetencyGap(
+        { planId: 1, competencyId: 5, currentLevel: 2, targetLevel: 4 } as any,
+        mockAdmin as any,
+      );
+      expect(result).toBeDefined();
+      expect(mockPrisma.pdiCompetencyGap.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ planId: 1, competencyId: 5, priority: 'MEDIUM' }),
+        }),
+      );
+    });
+
+    it('remove gap de competência do plano', async () => {
+      mockPrisma.pdiCompetencyGap.findUnique.mockResolvedValue({
+        id: 1,
+        plan: { userId: 2 },
+      });
+      await service.removeCompetencyGap(1, mockAdmin as any);
+      expect(mockPrisma.pdiCompetencyGap.delete).toHaveBeenCalledWith({ where: { id: 1 } });
+    });
   });
 
   // ─── pause ────────────────────────────────────────────────────
@@ -320,6 +466,20 @@ describe('DevelopmentPlansService (additional)', () => {
         mockAdmin as any,
       );
       expect(result).toBeDefined();
+    });
+
+    // Antes era destructurado do DTO e nunca gravado (mesma classe do bug
+    // já corrigido em focusCompetencyIds, ao nível do plano).
+    it('grava competencyIds da acção', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue(basePlan);
+      mockPrisma.developmentPlanAction.create.mockResolvedValue({ id: 1 });
+      await service.addAction(
+        { planId: 1, title: 'Acção 1', type: 'COURSE' as any, competencyIds: [5, 6] } as any,
+        mockAdmin as any,
+      );
+      expect(mockPrisma.developmentPlanAction.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ competencyIds: [5, 6] }) }),
+      );
     });
   });
 

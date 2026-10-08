@@ -78,8 +78,12 @@ describe('AuthController', () => {
 
   it('login → chama authService.login', async () => {
     const dto = { email: 'a@b.com', password: '123' };
-    const result = await controller.login(dto as any, mockRes as any);
-    expect(mockSvc.login).toHaveBeenCalledWith(dto);
+    const result = await controller.login(
+      dto as any,
+      { ip: '127.0.0.1', headers: { 'user-agent': 'jest' } } as any,
+      mockRes as any,
+    );
+    expect(mockSvc.login).toHaveBeenCalledWith(dto, { ip: '127.0.0.1', userAgent: 'jest' });
     expect(result).toHaveProperty('accessToken');
   });
 

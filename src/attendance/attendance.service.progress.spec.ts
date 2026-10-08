@@ -167,7 +167,7 @@ describe('AttendanceService (progress)', () => {
       );
     });
 
-    it('deve aprovar pedido e criar registos de presença', async () => {
+    it('deve aprovar pedido delegando em LeaveManagement (sem criar registos ON_LEAVE aqui)', async () => {
       mockLeaveManagement.processApproval.mockResolvedValue(approvedLeave);
       mockAR.createMany.mockResolvedValue({ count: 5 });
 
@@ -181,8 +181,9 @@ describe('AttendanceService (progress)', () => {
         action: 'APPROVE',
         notes: 'OK',
       });
-      expect(mockAR.createMany).toHaveBeenCalled();
-      expect(result).toBeDefined();
+      // Os registos ON_LEAVE são criados por LeaveManagementService/LeaveEffectsService.
+      expect(mockAR.createMany).not.toHaveBeenCalled();
+      expect(result).toBe(approvedLeave);
     });
 
     it('deve rejeitar pedido sem criar registos de presença', async () => {

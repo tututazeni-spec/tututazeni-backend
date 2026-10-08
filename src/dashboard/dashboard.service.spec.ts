@@ -3,6 +3,7 @@ import { DashboardService } from './dashboard.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
 import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+import { DashboardPeriod } from './dashboard.dto';
 
 // ─── MetricsAggregationService mock (Fase H — Task 7) ─────────────────────
 // getAlerts / getManagerDashboard delegam nesta camada canónica; os testes
@@ -77,6 +78,10 @@ const mockPrisma = {
     findUnique: jest.fn().mockResolvedValue({ points: 100 }),
     findFirst: jest.fn().mockResolvedValue({ points: 100 }),
   },
+  onboardingTaskInstance: { count: makeCount() },
+  stepProgress: { count: makeCount() },
+  workDeclSubmission: { count: makeCount() },
+  evaluatorAssignment: { count: makeCount() },
 };
 
 const baseUser = {
@@ -148,7 +153,7 @@ describe('DashboardService', () => {
       });
     });
 
-    it('embrulha o retorno canónico: KPIs projectados aos 11 campos, atRisk→alert, alerts adaptados', async () => {
+    it('embrulha o retorno canónico: KPIs projectados aos 12 campos, atRisk→alert, alerts adaptados', async () => {
       mockMetrics.managerDashboard.mockResolvedValue({
         teamSize: 2,
         team: [
@@ -243,6 +248,7 @@ describe('DashboardService', () => {
           'engagementResponses',
           'inProgress',
           'mandatoryRate',
+          'overdueActions',
           'pdpCoverage',
           'pendingEvals',
           'scoreTrend',
@@ -251,18 +257,23 @@ describe('DashboardService', () => {
       expect(result.kpis).not.toHaveProperty('enrollmentsTotal');
       expect(result.kpis).not.toHaveProperty('completions');
       expect(result.kpis).not.toHaveProperty('completionRate');
-      expect(result.kpis).not.toHaveProperty('overdueActions');
+      expect(result.kpis.overdueActions).toBe(9);
       expect(result.kpis.avgScore).toBe(3.2);
 
       expect(result.team[0]).toEqual({
-        user: { id: 2, fullName: 'Bea', avatarUrl: null, position: { name: 'Dev' } },
+        user: {
+          id: 2,
+          fullName: 'Bea',
+          avatarUrl: null,
+          position: { name: 'Dev' },
+          department: { name: 'TI' },
+        },
         xp: 120,
         enrollment: { completed: 3, inProgress: 1 },
         plan: { progress: 40, status: 'ACTIVE' },
         lastScore: 2.1,
         alert: true,
       });
-      expect(result.team[0].user).not.toHaveProperty('department');
 
       // adaptManagerAlerts: só as 4 keys do subconjunto; EVAL_360_PENDING → URGENT
       expect(result.alerts).toEqual([
@@ -307,9 +318,22 @@ describe('DashboardService', () => {
   });
 
   describe('getExecutiveDashboard (cache)', () => {
-    it('getExecutiveDashboard usa cache com chave e TTL certos', async () => {
+    it('getExecutiveDashboard usa cache com chave e TTL certos (default MONTH)', async () => {
       await service.getExecutiveDashboard();
-      expect(cacheGetOrSet).toHaveBeenCalledWith('dashboard:executive', 90, expect.any(Function));
+      expect(cacheGetOrSet).toHaveBeenCalledWith(
+        'dashboard:executive:MONTH',
+        90,
+        expect.any(Function),
+      );
+    });
+
+    it('getExecutiveDashboard chaveia a cache pelo período pedido', async () => {
+      await service.getExecutiveDashboard(DashboardPeriod.QUARTER);
+      expect(cacheGetOrSet).toHaveBeenCalledWith(
+        'dashboard:executive:QUARTER',
+        90,
+        expect.any(Function),
+      );
     });
   });
 });

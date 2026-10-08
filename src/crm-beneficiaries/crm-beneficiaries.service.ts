@@ -7,9 +7,36 @@ import {
   FilterBeneficiaryDto,
   CreateInteractionDto,
   CreateNeedDto,
+  CreateBeneficiaryDocumentDto,
+  ValidateBeneficiaryDocumentDto,
+  CreateBenefitDto,
+  UpdateBenefitDto,
+  CreateParticipationDto,
+  UpdateParticipationDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+
+/** Campos do beneficiário que chegam como string ISO e são DateTime no schema. */
+const BENEFICIARY_DATE_FIELDS = [
+  'birthDate',
+  'nextFollowUpAt',
+  'idDocumentIssuedAt',
+  'idDocumentExpiresAt',
+  'registeredAt',
+  'consentAt',
+  'consentRevokedAt',
+] as const;
+
+const PARTICIPATION_DATE_FIELDS = ['enrolledAt', 'startDate', 'completedAt'] as const;
+
+function toDates(dto: object, fields: readonly string[]): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...dto };
+  for (const f of fields) {
+    if (out[f]) out[f] = new Date(out[f] as string);
+  }
+  return out;
+}
 
 @Injectable()
 export class CrmBeneficiariesService {
@@ -33,14 +60,12 @@ export class CrmBeneficiariesService {
 
   async create(dto: CreateBeneficiaryDto, userId: number) {
     const code = await this.generateCode();
-    const { birthDate, nextFollowUpAt, ...rest } = dto;
     const beneficiary = await this.prisma.beneficiary.create({
       data: {
-        ...rest,
-        ...(birthDate && { birthDate: new Date(birthDate) }),
-        ...(nextFollowUpAt && { nextFollowUpAt: new Date(nextFollowUpAt) }),
+        ...(toDates(dto, BENEFICIARY_DATE_FIELDS) as Prisma.BeneficiaryUncheckedCreateInput),
         code,
         createdById: userId,
+        updatedById: userId,
       },
       include: {
         createdBy: { select: { fullName: true } },
@@ -62,6 +87,11 @@ export class CrmBeneficiariesService {
       province,
       search,
       assignedToId,
+      segment,
+      programName,
+      municipality,
+      priority,
+      followUpStatus,
       page = 1,
       limit = 20,
     } = filters;
@@ -73,12 +103,19 @@ export class CrmBeneficiariesService {
       ...(category && { category }),
       ...(province && { province }),
       ...(assignedToId && { assignedToId }),
+      ...(segment && { segment }),
+      ...(programName && { programName }),
+      ...(municipality && { municipality }),
+      ...(priority && { priority }),
+      ...(followUpStatus && { followUpStatus }),
       ...(search && {
         OR: [
           { fullName: { contains: search, mode: 'insensitive' } },
           { email: { contains: search, mode: 'insensitive' } },
           { code: { contains: search, mode: 'insensitive' } },
           { nif: { contains: search } },
+          { beneficiaryNumber: { contains: search, mode: 'insensitive' } },
+          { idDocumentNumber: { contains: search } },
           { phone: { contains: search } },
         ],
       }),
@@ -105,15 +142,23 @@ export class CrmBeneficiariesService {
       include: {
         createdBy: { select: { fullName: true } },
         assignedTo: { select: { fullName: true, email: true } },
+        accountManager: { select: { fullName: true, email: true } },
+        updatedBy: { select: { fullName: true } },
+        benefits: { where: { deletedAt: null }, orderBy: { createdAt: 'desc' } },
+        participations: { where: { deletedAt: null }, orderBy: { createdAt: 'desc' } },
         interactions: {
           where: { deletedAt: null },
           orderBy: { date: 'desc' },
           take: 20,
-          include: { user: { select: { fullName: true } } },
+          include: {
+            user: { select: { fullName: true } },
+            relatedBeneficiary: { select: { id: true, fullName: true, code: true } },
+          },
         },
         documents: {
           where: { deletedAt: null },
           orderBy: { createdAt: 'desc' },
+          include: { validatedBy: { select: { fullName: true } } },
         },
         needs: {
           orderBy: { priority: 'asc' },
@@ -129,13 +174,15 @@ export class CrmBeneficiariesService {
 
   async update(id: string, dto: UpdateBeneficiaryDto, userId: number) {
     await this.findOne(id);
-    const { birthDate, nextFollowUpAt, ...rest } = dto;
     const updated = await this.prisma.beneficiary.update({
       where: { id },
       data: {
-        ...rest,
-        ...(birthDate && { birthDate: new Date(birthDate) }),
-        ...(nextFollowUpAt && { nextFollowUpAt: new Date(nextFollowUpAt) }),
+        ...(toDates(dto, BENEFICIARY_DATE_FIELDS) as Prisma.BeneficiaryUncheckedUpdateInput),
+        updatedById: userId,
+        // Alterar o estado do consentimento regista a data se o cliente não a enviar.
+        ...(dto.consentStatus === 'REVOKED' &&
+          !dto.consentRevokedAt && { consentRevokedAt: new Date() }),
+        ...(dto.consentStatus === 'GRANTED' && !dto.consentAt && { consentAt: new Date() }),
       },
     });
     await this.audit.logEntity(userId, 'UPDATE', 'Beneficiary', id, dto);
@@ -158,12 +205,13 @@ export class CrmBeneficiariesService {
 
   async addInteraction(beneficiaryId: string, dto: CreateInteractionDto, userId: number) {
     await this.findOne(beneficiaryId);
-    const { date, nextActionDate, ...rest } = dto;
+    if (dto.relatedBeneficiaryId) await this.findOne(dto.relatedBeneficiaryId);
     const interaction = await this.prisma.beneficiaryInteraction.create({
       data: {
-        ...rest,
-        ...(date && { date: new Date(date) }),
-        ...(nextActionDate && { nextActionDate: new Date(nextActionDate) }),
+        ...(toDates(dto, [
+          'date',
+          'nextActionDate',
+        ]) as Prisma.BeneficiaryInteractionUncheckedCreateInput),
         beneficiaryId,
         userId,
       },
@@ -184,7 +232,7 @@ export class CrmBeneficiariesService {
       where: { id: beneficiaryId },
       data: {
         lastContactAt: new Date(),
-        ...(nextActionDate && { nextFollowUpAt: new Date(nextActionDate) }),
+        ...(dto.nextActionDate && { nextFollowUpAt: new Date(dto.nextActionDate) }),
         satisfactionAvg: avgSatisfaction,
       },
     });
@@ -239,6 +287,207 @@ export class CrmBeneficiariesService {
       status: 'RESOLVED',
     });
     return updated;
+  }
+
+  // ─── DOCUMENTOS ──────────────────────────────────────
+
+  async addDocument(beneficiaryId: string, dto: CreateBeneficiaryDocumentDto, userId: number) {
+    await this.findOne(beneficiaryId);
+    const doc = await this.prisma.beneficiaryDocument.create({
+      data: {
+        ...(toDates(dto, [
+          'issuedAt',
+          'expiresAt',
+        ]) as Prisma.BeneficiaryDocumentUncheckedCreateInput),
+        beneficiaryId,
+        uploadedById: userId,
+      },
+    });
+    await this.audit.logEntity(userId, 'CREATE', 'BeneficiaryDocument', doc.id, {
+      beneficiaryId,
+      type: dto.type,
+    });
+    return doc;
+  }
+
+  async validateDocument(docId: string, dto: ValidateBeneficiaryDocumentDto, userId: number) {
+    const doc = await this.prisma.beneficiaryDocument.findUnique({ where: { id: docId } });
+    if (!doc || doc.deletedAt) throw new NotFoundException('Documento não encontrado');
+    const updated = await this.prisma.beneficiaryDocument.update({
+      where: { id: docId },
+      data: {
+        validationStatus: dto.validationStatus,
+        isVerified: dto.validationStatus === 'VALID',
+        validatedById: userId,
+        validatedAt: new Date(),
+        ...(dto.notes !== undefined && { notes: dto.notes }),
+      },
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'BeneficiaryDocument', docId, {
+      beneficiaryId: doc.beneficiaryId,
+      validationStatus: dto.validationStatus,
+    });
+    return updated;
+  }
+
+  async removeDocument(docId: string, userId: number) {
+    const doc = await this.prisma.beneficiaryDocument.findUnique({ where: { id: docId } });
+    if (!doc || doc.deletedAt) throw new NotFoundException('Documento não encontrado');
+    await this.prisma.beneficiaryDocument.update({
+      where: { id: docId },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.logEntity(userId, 'DELETE', 'BeneficiaryDocument', docId, {
+      beneficiaryId: doc.beneficiaryId,
+    });
+    return { message: 'Documento removido com sucesso' };
+  }
+
+  // ─── BENEFÍCIOS / SERVIÇOS ───────────────────────────
+
+  /** totalBenefits = soma dos apoios com valor, não pendentes nem apagados. */
+  private async syncTotalBenefits(beneficiaryId: string) {
+    const agg = await this.prisma.beneficiaryBenefit.aggregate({
+      _sum: { amount: true },
+      where: { beneficiaryId, deletedAt: null, status: { not: 'PENDING' } },
+    });
+    await this.prisma.beneficiary.update({
+      where: { id: beneficiaryId },
+      data: { totalBenefits: agg._sum.amount ?? 0 },
+    });
+  }
+
+  async addBenefit(beneficiaryId: string, dto: CreateBenefitDto, userId: number) {
+    await this.findOne(beneficiaryId);
+    const benefit = await this.prisma.beneficiaryBenefit.create({
+      data: {
+        ...(toDates(dto, [
+          'awardedAt',
+          'startDate',
+          'endDate',
+        ]) as Prisma.BeneficiaryBenefitUncheckedCreateInput),
+        beneficiaryId,
+        createdById: userId,
+      },
+    });
+    await this.syncTotalBenefits(beneficiaryId);
+    await this.audit.logEntity(userId, 'CREATE', 'BeneficiaryBenefit', benefit.id, {
+      beneficiaryId,
+      kind: dto.kind,
+    });
+    return benefit;
+  }
+
+  async updateBenefit(benefitId: string, dto: UpdateBenefitDto, userId: number) {
+    const existing = await this.prisma.beneficiaryBenefit.findUnique({ where: { id: benefitId } });
+    if (!existing || existing.deletedAt) throw new NotFoundException('Benefício não encontrado');
+    const updated = await this.prisma.beneficiaryBenefit.update({
+      where: { id: benefitId },
+      data: toDates(dto, ['endDate']) as Prisma.BeneficiaryBenefitUncheckedUpdateInput,
+    });
+    await this.syncTotalBenefits(existing.beneficiaryId);
+    await this.audit.logEntity(userId, 'UPDATE', 'BeneficiaryBenefit', benefitId, {
+      beneficiaryId: existing.beneficiaryId,
+      ...dto,
+    });
+    return updated;
+  }
+
+  async removeBenefit(benefitId: string, userId: number) {
+    const existing = await this.prisma.beneficiaryBenefit.findUnique({ where: { id: benefitId } });
+    if (!existing || existing.deletedAt) throw new NotFoundException('Benefício não encontrado');
+    await this.prisma.beneficiaryBenefit.update({
+      where: { id: benefitId },
+      data: { deletedAt: new Date() },
+    });
+    await this.syncTotalBenefits(existing.beneficiaryId);
+    await this.audit.logEntity(userId, 'DELETE', 'BeneficiaryBenefit', benefitId, {
+      beneficiaryId: existing.beneficiaryId,
+    });
+    return { message: 'Benefício removido com sucesso' };
+  }
+
+  // ─── PARTICIPAÇÕES (programas / formação) ────────────
+
+  async addParticipation(beneficiaryId: string, dto: CreateParticipationDto, userId: number) {
+    await this.findOne(beneficiaryId);
+    const participation = await this.prisma.beneficiaryParticipation.create({
+      data: {
+        ...(toDates(
+          dto,
+          PARTICIPATION_DATE_FIELDS,
+        ) as Prisma.BeneficiaryParticipationUncheckedCreateInput),
+        beneficiaryId,
+      },
+    });
+    await this.audit.logEntity(userId, 'CREATE', 'BeneficiaryParticipation', participation.id, {
+      beneficiaryId,
+      program: dto.program,
+    });
+    return participation;
+  }
+
+  async updateParticipation(id: string, dto: UpdateParticipationDto, userId: number) {
+    const existing = await this.prisma.beneficiaryParticipation.findUnique({ where: { id } });
+    if (!existing || existing.deletedAt) throw new NotFoundException('Participação não encontrada');
+    const updated = await this.prisma.beneficiaryParticipation.update({
+      where: { id },
+      data: toDates(
+        dto,
+        PARTICIPATION_DATE_FIELDS,
+      ) as Prisma.BeneficiaryParticipationUncheckedUpdateInput,
+    });
+    await this.audit.logEntity(userId, 'UPDATE', 'BeneficiaryParticipation', id, {
+      beneficiaryId: existing.beneficiaryId,
+    });
+    return updated;
+  }
+
+  async removeParticipation(id: string, userId: number) {
+    const existing = await this.prisma.beneficiaryParticipation.findUnique({ where: { id } });
+    if (!existing || existing.deletedAt) throw new NotFoundException('Participação não encontrada');
+    await this.prisma.beneficiaryParticipation.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.logEntity(userId, 'DELETE', 'BeneficiaryParticipation', id, {
+      beneficiaryId: existing.beneficiaryId,
+    });
+    return { message: 'Participação removida com sucesso' };
+  }
+
+  // ─── HISTÓRICO / REGISTO DE ACTIVIDADES ──────────────
+
+  /** AuditLog.entityId é Int, mas os ids de beneficiário são cuid — por isso
+   *  o id vive em metadata (`entityId` / `beneficiaryId`), como escreve logEntity. */
+  async getHistory(beneficiaryId: string, page = 1, limit = 20) {
+    await this.findOne(beneficiaryId);
+    const { skip, take } = calculatePagination(page, limit);
+    const where: Prisma.AuditLogWhereInput = {
+      entity: { startsWith: 'Beneficiary' },
+      OR: [
+        { metadata: { contains: `"entityId":"${beneficiaryId}"` } },
+        { metadata: { contains: `"beneficiaryId":"${beneficiaryId}"` } },
+      ],
+    };
+    const [data, total] = await Promise.all([
+      this.prisma.read.auditLog.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          action: true,
+          entity: true,
+          metadata: true,
+          createdAt: true,
+          user: { select: { fullName: true } },
+        },
+      }),
+      this.prisma.read.auditLog.count({ where }),
+    ]);
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   // ─── FOLLOW-UPS ──────────────────────────────────────

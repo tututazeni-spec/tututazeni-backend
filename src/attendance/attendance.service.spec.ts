@@ -382,7 +382,7 @@ describe('AttendanceService', () => {
   // ─── reviewLeave ───────────────────────────────────────────────────────────
 
   describe('reviewLeave', () => {
-    it('APPROVED → delega em processApproval com ApprovalAction.APPROVE e marca presenças ON_LEAVE', async () => {
+    it('APPROVED → delega em processApproval com ApprovalAction.APPROVE (os registos ON_LEAVE são do módulo Leave)', async () => {
       mockLeaveManagement.processApproval.mockResolvedValue({
         id: 10,
         userId: 1,
@@ -398,7 +398,9 @@ describe('AttendanceService', () => {
         action: 'APPROVE',
         notes: 'ok',
       });
-      expect(mockAttendanceRecord.createMany).toHaveBeenCalled();
+      // §11/§13: um único responsável cria ON_LEAVE (LeaveEffectsService) — a
+      // assiduidade não volta a duplicar registos.
+      expect(mockAttendanceRecord.createMany).not.toHaveBeenCalled();
     });
 
     it('REJECTED → delega com ApprovalAction.REJECT e NÃO cria registos de presença', async () => {

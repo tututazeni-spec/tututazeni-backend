@@ -11,6 +11,11 @@ export class LoginDto {
   @IsString()
   @MinLength(6)
   password!: string;
+
+  @ApiPropertyOptional({ description: 'Código TOTP (só quando o utilizador tem 2FA activo)' })
+  @IsOptional()
+  @IsString()
+  totpCode?: string;
 }
 
 export class RegisterDto {

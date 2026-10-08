@@ -66,8 +66,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       // A10-1: hash da password nunca sai por omissão em nenhuma query (findUnique,
       // include, etc.). Os únicos pontos que precisam do hash (login, changePassword)
       // pedem-no explicitamente com `omit: { password: false }`.
-      omit: { user: { password: true } },
+      omit: { user: { password: true, twoFactorSecret: true } },
     });
+
+    this.warmPools = [writePool];
 
     // ─── Réplica (leitura) — opcional, controlada por feature flag ───
     const replicaUrl = process.env.DATABASE_REPLICA_URL;
@@ -79,10 +81,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       // é tipado como PrismaClient "base" porque só é usado para o ciclo de vida
       // da ligação ($connect/$disconnect/$on); as queries passam por `this.db`,
       // que faz a ponte de tipos via `unknown` (readReplicas abaixo, em buildDbClient).
+      this.warmPools.push(readPool);
       this.replicaClient = new PrismaClient({
         adapter: new PrismaPg(readPool),
         log: [{ emit: 'event', level: 'query' }],
-        omit: { user: { password: true } },
+        omit: { user: { password: true, twoFactorSecret: true } },
       }) as PrismaClient;
     } else {
       this.replicaClient = null;
@@ -90,6 +93,28 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
     this.db = this.buildDbClient();
     this.pino.setContext('PrismaService');
+  }
+
+  /** Pools a pré-aquecer no arranque (primary; a réplica junta-se se existir). */
+  private readonly warmPools: Pool[];
+
+  /**
+   * Abre várias ligações em paralelo antes do primeiro tick de cron. Sem isto o
+   * primeiro fan-out (~40 queries em simultâneo) paga o handshake TCP/SCRAM de
+   * cada ligação nova e todas aparecem como "slow query" (700–1500 ms) mesmo
+   * sendo triviais.
+   */
+  private async warmUpPools(size = 10) {
+    await Promise.all(
+      this.warmPools.map(async pool => {
+        const n = Math.min(size, pool.options.max ?? size);
+        const clients = await Promise.all(
+          Array.from({ length: n }, () => pool.connect().catch(() => null)),
+        );
+        await Promise.all(clients.map(c => c?.query('SELECT 1').catch(() => undefined)));
+        clients.forEach(c => c?.release());
+      }),
+    ).catch(() => undefined);
   }
 
   // $extends()/readReplicas() devolvem um tipo de client estendido que não é
@@ -120,6 +145,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     if (this.replicaClient) {
       await this.replicaClient.$connect();
     }
+    await this.warmUpPools();
 
     (this as { $on: (e: 'query', cb: (e: PrismaQueryEvent) => void) => void }).$on('query', e => {
       logQueryEvent(this.pino, e, this.slowQueryMs);

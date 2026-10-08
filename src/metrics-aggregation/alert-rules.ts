@@ -68,8 +68,14 @@ export const ALERT_TYPE: Record<AlertRuleKey, string> = {
 const ACTION_URL: Partial<Record<AlertRuleKey, string>> = {
   SURVEYS_PENDING: '/engagement',
   EVAL_360_PENDING: '/evaluations/pending',
-  PDI_ACTIONS_OVERDUE: '/talent-development/plans',
-  MANDATORY_TRAINING_PENDING: '/content-library/mandatory',
+  PDI_ACTIONS_OVERDUE: '/development-plans',
+  // A regra conta cursos obrigatórios por concluir (course.mandatory +
+  // enrollments, ver evaluateRule_MANDATORY_TRAINING_PENDING) — o dado
+  // vive no módulo `courses`, não em `content-library` (tabela diferente,
+  // ContentAsset.mandatory). '/content-library/mandatory' também nunca
+  // existiu como rota Next.js (content-library é uma única page com tabs
+  // via Radix, sem sub-rotas) — clicar em "Ver" dava 404.
+  MANDATORY_TRAINING_PENDING: '/courses',
   TEAM_PERFORMANCE_AT_RISK: '/evaluations',
 };
 

@@ -1,7 +1,13 @@
 import { IsOptional, IsEnum, IsString, IsInt } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { BeneficiaryType, BeneficiaryStatus, AngolaProvince } from '@prisma/client';
+import {
+  BeneficiaryType,
+  BeneficiaryStatus,
+  AngolaProvince,
+  NeedPriority,
+  FollowUpStatus,
+} from '@prisma/client';
 import { BaseFilterDto } from '../../common/dtos/pagination.dto';
 
 export class FilterBeneficiaryDto extends BaseFilterDto {
@@ -35,4 +41,29 @@ export class FilterBeneficiaryDto extends BaseFilterDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  segment?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  programName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  municipality?: string;
+
+  @ApiPropertyOptional({ enum: NeedPriority })
+  @IsOptional()
+  @IsEnum(NeedPriority)
+  priority?: NeedPriority;
+
+  @ApiPropertyOptional({ enum: FollowUpStatus })
+  @IsOptional()
+  @IsEnum(FollowUpStatus)
+  followUpStatus?: FollowUpStatus;
 }

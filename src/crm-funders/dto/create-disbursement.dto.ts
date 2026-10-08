@@ -1,6 +1,7 @@
-import { IsNumber, IsOptional, IsString, IsDateString, Min } from 'class-validator';
+import { IsNumber, IsOptional, IsString, IsDateString, IsEnum, IsInt, Min } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { DisbursementStatus } from '@prisma/client';
 
 export class CreateDisbursementDto {
   @ApiProperty()
@@ -14,9 +15,35 @@ export class CreateDisbursementDto {
   @IsString()
   currency?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Nº da parcela (automático se omitido)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  installmentNumber?: number;
+
+  @ApiPropertyOptional({ description: 'Data prevista' })
+  @IsOptional()
   @IsDateString()
-  receivedAt: string;
+  expectedDate?: string;
+
+  @ApiPropertyOptional({ description: 'Data efectiva de recebimento' })
+  @IsOptional()
+  @IsDateString()
+  receivedAt?: string;
+
+  @ApiPropertyOptional({
+    enum: DisbursementStatus,
+    description: 'Omitido: RECEIVED se houver data efectiva, senão PREDICTED',
+  })
+  @IsOptional()
+  @IsEnum(DisbursementStatus)
+  status?: DisbursementStatus;
+
+  @ApiPropertyOptional({ description: 'URL do comprovativo' })
+  @IsOptional()
+  @IsString()
+  proofUrl?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -28,8 +55,10 @@ export class CreateDisbursementDto {
   @IsString()
   bankRef?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Observações' })
   @IsOptional()
   @IsString()
   notes?: string;
 }
+
+export class UpdateDisbursementDto extends PartialType(CreateDisbursementDto) {}

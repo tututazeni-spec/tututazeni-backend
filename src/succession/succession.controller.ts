@@ -25,10 +25,11 @@ import {
   GeneratePDIDto,
   SuccessionFilterDto,
   CriticalPositionFilterDto,
+  GetSuccessionMatrixFilterDto,
 } from './succession.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Succession Planning')
@@ -66,8 +67,11 @@ export class SuccessionController {
   @Post('critical-positions')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Classificar cargo como crítico' })
-  createCriticalPosition(@Body() dto: CreateCriticalPositionDto) {
-    return this.svc.createCriticalPosition(dto);
+  createCriticalPosition(
+    @Body() dto: CreateCriticalPositionDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.createCriticalPosition(dto, user.id);
   }
 
   @Patch('critical-positions/:id')
@@ -77,8 +81,16 @@ export class SuccessionController {
   updateCriticalPosition(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateCriticalPositionDto,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.updateCriticalPosition(id, dto);
+    return this.svc.updateCriticalPosition(id, dto, user.id);
+  }
+
+  @Get('critical-positions/:id/history')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Histórico de sucessão do cargo (auditoria de mudanças)' })
+  getCriticalPositionHistory(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getSuccessionHistory(id);
   }
 
   // ── Planos de sucessão ────────────────────────────────────────────────────
@@ -123,6 +135,18 @@ export class SuccessionController {
     );
   }
 
+  // Rota estática — tem de vir antes de @Get(':id') abaixo, senão
+  // "GET /succession/matrix" era capturado como :id="matrix" (ver
+  // [[project-innova-route-shadowing]]).
+  @Get('matrix')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({
+    summary: 'Matriz de sucessão: Posição, Titular, Sucessor, Prontidão, Gap, Risco',
+  })
+  getMatrix(@Query() filters: GetSuccessionMatrixFilterDto) {
+    return this.svc.getSuccessionMatrix(filters);
+  }
+
   @Get(':id')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Detalhe do plano de sucessão com match score e gaps' })
@@ -133,22 +157,26 @@ export class SuccessionController {
   @Post()
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar plano de sucessão (match score calculado automaticamente)' })
-  create(@Body() dto: SuccessionCreateSuccessionPlanDto) {
-    return this.svc.create(dto);
+  create(@Body() dto: SuccessionCreateSuccessionPlanDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.create(dto, user.id);
   }
 
   @Put(':id')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar plano de sucessão' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateSuccessionPlanDto) {
-    return this.svc.update(id, dto);
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateSuccessionPlanDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.update(id, dto, user.id);
   }
 
   @Delete(':id')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Remover plano de sucessão' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.remove(id);
+  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.remove(id, user.id);
   }
 
   // ── Talent Pool ───────────────────────────────────────────────────────────
@@ -179,7 +207,7 @@ export class SuccessionController {
   @Post('pdi/generate')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Gerar PDI automático baseado nos gaps do plano de sucessão' })
-  generatePDI(@Body() dto: GeneratePDIDto) {
-    return this.svc.generatePDI(dto);
+  generatePDI(@Body() dto: GeneratePDIDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.generatePDI(dto, user);
   }
 }

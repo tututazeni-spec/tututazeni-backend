@@ -9,6 +9,7 @@
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CourseCompletionService } from '../course-completion/course-completion.service';
+import { createNotificationSafe } from '../common/helpers/notification.helper';
 import {
   EnrollmentsCreateEnrollmentDto,
   UpdateEnrollmentStatusDto,
@@ -18,7 +19,7 @@ import {
   UpdateDeadlineDto,
   EnrollmentOrigin,
 } from './enrollments.dto';
-import { assertCanAccess } from '../common/authz/ownership';
+import { assertCanAccess, isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
@@ -31,6 +32,7 @@ const ENROLLMENT_INCLUDE_BASIC = {
       email: true,
       avatarUrl: true,
       department: { select: { name: true } },
+      unit: { select: { name: true } },
     },
   },
   course: {
@@ -43,7 +45,12 @@ const ENROLLMENT_INCLUDE_BASIC = {
       status: true,
     },
   },
-  certificate: { select: { id: true, validationCode: true, issuedAt: true, expiresAt: true } },
+  // `score` — aproximação de "Nota" (docs/modulo_courses.md secção 3): só
+  // populado quando o certificado já foi emitido (issueCertificateFor grava
+  // a nota final aí); sem isso não há nota de curso a nível de Enrollment.
+  certificate: {
+    select: { id: true, validationCode: true, issuedAt: true, expiresAt: true, score: true },
+  },
 } as const;
 
 @Injectable()
@@ -85,13 +92,14 @@ export class EnrollmentsService {
 
   // ─── LISTAGEM ADMIN ───────────────────────────────────────────────────────
 
-  async findAll(filters: EnrollmentFilterDto) {
+  async findAll(filters: EnrollmentFilterDto, requestingUser?: CurrentUserData) {
     const {
       page = 1,
       limit = 20,
       userId,
       courseId,
       departmentId,
+      unitId,
       status,
       origin,
       mandatory,
@@ -105,12 +113,25 @@ export class EnrollmentsService {
     if (status) where.status = status;
     if (origin) where.origin = origin;
     if (mandatory !== undefined) where.mandatory = mandatory;
-    if (departmentId) {
-      where.user = { departmentId };
+    if (departmentId || unitId) {
+      where.user = { ...(departmentId ? { departmentId } : {}), ...(unitId ? { unitId } : {}) };
     }
     if (overdue) {
       where.deadline = { lt: new Date() };
       where.status = { notIn: ['COMPLETED', 'CANCELLED', 'EXPIRED'] };
+    }
+    // GESTOR só via /enrollments/team (getTeamProgress) tinha o âmbito
+    // correcto à equipa directa — este endpoint (GET /enrollments), também
+    // aberto a GESTOR, não tinha filtro nenhum e devolvia a empresa toda.
+    // Mesma classe de lacuna documentada no CLAUDE.md ("Verificação de
+    // ownership não é garantidamente exaustiva") — confirmar por método.
+    if (requestingUser && !isPrivileged(requestingUser, [Role.ADMIN, Role.RH])) {
+      const subordinates = await this.prisma.read.user.findMany({
+        where: { managerId: requestingUser.id },
+        select: { id: true },
+      });
+      const teamIds = subordinates.map(s => s.id);
+      where.userId = userId ? (teamIds.includes(userId) ? userId : -1) : { in: teamIds };
     }
 
     const [data, total] = await Promise.all([
@@ -415,6 +436,129 @@ export class EnrollmentsService {
 
   async generateCertificate(enrollmentId: number, user: CurrentUserData) {
     return this.courseCompletion.issueCertificateFor(enrollmentId, user);
+  }
+
+  // ─── REINICIAR PROGRESSO (Admin/RH) ──────────────────────────────────────
+  // docs/modulo_courses.md secção 3, acção "Reiniciar progresso".
+
+  async resetProgress(id: number) {
+    const e = await this.findOne(id);
+    if (e.status === 'CANCELLED') {
+      throw new BadRequestException(
+        'Não é possível reiniciar o progresso de uma matrícula cancelada',
+      );
+    }
+
+    await this.prisma.lessonProgress.deleteMany({ where: { enrollmentId: id } });
+    return this.prisma.enrollment.update({
+      where: { id },
+      data: { status: 'NOT_STARTED', progress: 0, startedAt: null, completedAt: null },
+    });
+  }
+
+  // ─── REINSCREVER (Admin/RH) ───────────────────────────────────────────────
+  // docs/modulo_courses.md secção 3, acção "Reinscrever" — só faz sentido
+  // para matrículas CANCELLED/EXPIRED (as restantes já estão activas).
+
+  async reenroll(id: number) {
+    const e = await this.findOne(id);
+    if (e.status !== 'CANCELLED' && e.status !== 'EXPIRED') {
+      throw new BadRequestException('Só é possível reinscrever matrículas canceladas ou expiradas');
+    }
+
+    return this.prisma.enrollment.update({
+      where: { id },
+      data: {
+        status: 'NOT_STARTED',
+        enrolledAt: new Date(),
+        cancelledAt: null,
+        cancelReason: null,
+        deadline: null,
+      },
+      include: ENROLLMENT_INCLUDE_BASIC,
+    });
+  }
+
+  // ─── ENVIAR LEMBRETE (Admin/RH/Gestor) ────────────────────────────────────
+  // docs/modulo_courses.md secção 3, acção "Enviar lembrete".
+
+  async remind(id: number, requestingUser: CurrentUserData) {
+    const e = await this.findOne(id);
+    if (!isPrivileged(requestingUser, [Role.ADMIN, Role.RH])) {
+      const isSubordinate = await this.prisma.read.user.findFirst({
+        where: { id: e.userId, managerId: requestingUser.id },
+        select: { id: true },
+      });
+      if (!isSubordinate) {
+        throw new ForbiddenException('Só podes lembrar membros da tua equipa directa');
+      }
+    }
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: e.userId,
+      type: 'COURSE_ENROLLMENT_REMINDER',
+      title: 'Lembrete de formação',
+      message: `Tens o curso "${e.course.title}" por concluir. Continua de onde ficaste.`,
+      category: 'LMS',
+      metadata: { enrollmentId: id, courseId: e.courseId },
+    });
+    return { message: 'Lembrete enviado' };
+  }
+
+  // ─── PROGRESSO POR DEPARTAMENTO/UNIDADE (RH) ─────────────────────────────
+  // docs/modulo_courses.md secção 4 — "Para RH: Progresso por
+  // departamento/unidade". N+1 sobre a lista de departamentos/unidades —
+  // mesmo padrão já usado em getComplianceDashboard#topOverdueWithTitles,
+  // aceitável à escala local (dezenas de departamentos, não milhares).
+
+  async getProgressByDepartment() {
+    const [departments, units] = await Promise.all([
+      this.prisma.read.department.findMany({ select: { id: true, name: true } }),
+      this.prisma.read.unit.findMany({ select: { id: true, name: true } }),
+    ]);
+
+    async function statsFor(prisma: PrismaService, where: Prisma.EnrollmentWhereInput) {
+      const [total, completed, inProgress, overdue] = await Promise.all([
+        prisma.read.enrollment.count({ where }),
+        prisma.read.enrollment.count({ where: { ...where, status: 'COMPLETED' } }),
+        prisma.read.enrollment.count({ where: { ...where, status: 'IN_PROGRESS' } }),
+        prisma.read.enrollment.count({
+          where: {
+            ...where,
+            deadline: { lt: new Date() },
+            status: { notIn: ['COMPLETED', 'CANCELLED', 'EXPIRED'] },
+          },
+        }),
+      ]);
+      return {
+        total,
+        completed,
+        inProgress,
+        overdue,
+        completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+      };
+    }
+
+    const [byDepartment, byUnit] = await Promise.all([
+      Promise.all(
+        departments.map(async d => ({
+          id: d.id,
+          name: d.name,
+          ...(await statsFor(this.prisma, { user: { departmentId: d.id } })),
+        })),
+      ),
+      Promise.all(
+        units.map(async u => ({
+          id: u.id,
+          name: u.name,
+          ...(await statsFor(this.prisma, { user: { unitId: u.id } })),
+        })),
+      ),
+    ]);
+
+    return {
+      byDepartment: byDepartment.filter(d => d.total > 0),
+      byUnit: byUnit.filter(u => u.total > 0),
+    };
   }
 
   // ─── MATRÍCULAS DO UTILIZADOR ─────────────────────────────────────────────

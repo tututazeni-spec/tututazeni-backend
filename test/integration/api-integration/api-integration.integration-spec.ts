@@ -199,7 +199,9 @@ describe('API Integration (integrations/api-keys/webhooks) — Integration', () 
     });
   });
 
-  describe('Webhooks (modelo webhook ausente do schema — degrada sem persistência)', () => {
+  describe('Webhooks', () => {
+    let webhookId: number | string = 1;
+
     it('POST /api-integrations/webhooks — regista sem persistir → 201', async () => {
       const res = await request(app.getHttpServer())
         .post('/api-integrations/webhooks')
@@ -211,6 +213,7 @@ describe('API Integration (integrations/api-keys/webhooks) — Integration', () 
         })
         .expect(201);
       expect(res.body).toBeDefined();
+      if (res.body?.id !== undefined) webhookId = res.body.id;
     });
 
     it('GET /api-integrations/webhooks/list — degrada para lista vazia → 200', async () => {
@@ -223,19 +226,19 @@ describe('API Integration (integrations/api-keys/webhooks) — Integration', () 
 
     it('PATCH /api-integrations/webhooks/:id/toggle — degrada sem crashar → 200', async () => {
       await request(app.getHttpServer())
-        .patch('/api-integrations/webhooks/1/toggle')
+        .patch(`/api-integrations/webhooks/${webhookId}/toggle`)
         .set('Authorization', `Bearer ${rhToken}`)
         .expect(200);
     });
 
     it('DELETE /api-integrations/webhooks/:id → 204', async () => {
       await request(app.getHttpServer())
-        .delete('/api-integrations/webhooks/1')
+        .delete(`/api-integrations/webhooks/${webhookId}`)
         .set('Authorization', `Bearer ${rhToken}`)
         .expect(204);
     });
 
-    it('POST /api-integrations/webhooks/trigger — sem subscribers (nenhum webhook real persistido) → 201', async () => {
+    it('POST /api-integrations/webhooks/trigger — regressão DTO (payload validado) → 201 → 201', async () => {
       // Regressão: TriggerWebhookDto.payload não tinha decorator de validação —
       // com forbidNonWhitelisted (config real de main.ts) isto teria sido
       // rejeitado antes de chegar ao controller. Ver ai-tutor para o mesmo bug.
@@ -244,7 +247,8 @@ describe('API Integration (integrations/api-keys/webhooks) — Integration', () 
         .set('Authorization', `Bearer ${rhToken}`)
         .send({ event: 'course.completed', payload: { courseId: 1, userId: 1 } })
         .expect(201);
-      expect(res.body.dispatched).toBe(0);
+      // O modelo Webhook é real: a BD pode ter subscribers reais criados por esta e outras specs.
+      expect(typeof res.body.dispatched).toBe('number');
     });
 
     it('GET /api-integrations/webhooks/:id/deliveries — degrada para lista vazia → 200', async () => {

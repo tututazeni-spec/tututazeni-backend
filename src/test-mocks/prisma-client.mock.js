@@ -27,6 +27,12 @@ const Prisma = {
   },
   PrismaClientValidationError: class PrismaClientValidationError extends Error {},
   PrismaClientInitializationError: class PrismaClientInitializationError extends Error {},
+  TransactionIsolationLevel: {
+    ReadUncommitted: 'ReadUncommitted',
+    ReadCommitted: 'ReadCommitted',
+    RepeatableRead: 'RepeatableRead',
+    Serializable: 'Serializable',
+  },
 };
 
 // ── Enums (gerados a partir do schema.prisma) ─────────────────────────────────
@@ -105,6 +111,65 @@ const EvaluationRequestStatus = {
   IN_PROGRESS: 'IN_PROGRESS',
   COMPLETED: 'COMPLETED',
   SKIPPED: 'SKIPPED',
+};
+
+// Módulo Evaluation genérico (docs/12-modulo-evaluation.md, src/evaluation/) —
+// distinto do EvaluationRequestStatus/EvalType acima (monitoring/OKRs) e do
+// Eval360CycleStatus abaixo (evaluation360/).
+const EvalCampaignModel = {
+  DEG_90: 'DEG_90',
+  DEG_180: 'DEG_180',
+  DEG_270: 'DEG_270',
+  DEG_360: 'DEG_360',
+  CONTINUOUS: 'CONTINUOUS',
+  PROJECT: 'PROJECT',
+};
+
+const EvalCampaignStatus = {
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+  ACTIVE: 'ACTIVE',
+  PAUSED: 'PAUSED',
+  CALIBRATING: 'CALIBRATING',
+  COMPLETED: 'COMPLETED',
+  ARCHIVED: 'ARCHIVED',
+};
+
+const EvalQuestionType = {
+  SCALE: 'SCALE',
+  TEXT: 'TEXT',
+  NPS: 'NPS',
+  BOOLEAN: 'BOOLEAN',
+  NA_ALLOWED: 'NA_ALLOWED',
+};
+
+// docs/modulo_evaluation.md pontos 2-3 (remodelação Parte 1) — ver
+// memory project_innova_onboarding_plan_creation_roles_structure sobre
+// este ficheiro poder ficar dessincronizado do schema real.
+const EvalPurpose = {
+  PERFORMANCE: 'PERFORMANCE',
+  PROBATION: 'PROBATION',
+  EXTRAORDINARY: 'EXTRAORDINARY',
+  POST_TRAINING: 'POST_TRAINING',
+  COMPETENCY: 'COMPETENCY',
+  GOALS: 'GOALS',
+};
+
+const EvalPopulationType = {
+  ALL: 'ALL',
+  DEPARTMENT: 'DEPARTMENT',
+  UNIT: 'UNIT',
+  GROUP: 'GROUP',
+};
+
+const EvalStage = {
+  SELF_EVAL: 'SELF_EVAL',
+  MANAGER_EVAL: 'MANAGER_EVAL',
+  HR_REVIEW: 'HR_REVIEW',
+  CALIBRATION: 'CALIBRATION',
+  ONE_ON_ONE: 'ONE_ON_ONE',
+  APPROVAL: 'APPROVAL',
+  DONE: 'DONE',
 };
 
 const LeadershipProgramLevel = {
@@ -417,6 +482,12 @@ const Eval360FeedbackType = {
   PULSE: 'PULSE',
 };
 
+const Eval360QuestionnaireStatus = {
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+  ARCHIVED: 'ARCHIVED',
+};
+
 const LeadershipClassification = {
   CRITICAL: 'CRITICAL',
   BELOW_AVERAGE: 'BELOW_AVERAGE',
@@ -427,9 +498,45 @@ const LeadershipClassification = {
 
 const CourseLevel = { BEGINNER: 'BEGINNER', INTERMEDIATE: 'INTERMEDIATE', ADVANCED: 'ADVANCED' };
 
-const CourseStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED', ARCHIVED: 'ARCHIVED' };
+const CourseStatus = {
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+  PAUSED: 'PAUSED',
+  ARCHIVED: 'ARCHIVED',
+};
 
-const ModuleStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED' };
+const CourseVisibility = {
+  PUBLIC: 'PUBLIC',
+  PRIVATE: 'PRIVATE',
+  EMPLOYEES_ONLY: 'EMPLOYEES_ONLY',
+  SELECTED_GROUPS: 'SELECTED_GROUPS',
+};
+
+const CourseType = {
+  OBRIGATORIO: 'OBRIGATORIO',
+  OPCIONAL: 'OPCIONAL',
+  COMPLIANCE: 'COMPLIANCE',
+  INTEGRACAO: 'INTEGRACAO',
+  DESENVOLVIMENTO: 'DESENVOLVIMENTO',
+  TECNICO: 'TECNICO',
+  COMPORTAMENTAL: 'COMPORTAMENTAL',
+  LIDERANCA: 'LIDERANCA',
+};
+
+const CourseModality = {
+  ONLINE: 'ONLINE',
+  PRESENCIAL: 'PRESENCIAL',
+  HIBRIDO: 'HIBRIDO',
+  AO_VIVO: 'AO_VIVO',
+  AUTOAPRENDIZAGEM: 'AUTOAPRENDIZAGEM',
+};
+
+const ModuleStatus = {
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+  PAUSED: 'PAUSED',
+  ARCHIVED: 'ARCHIVED',
+};
 
 const ModuleType = {
   THEORETICAL: 'THEORETICAL',
@@ -456,6 +563,25 @@ const LessonType = {
   LINK: 'LINK',
   SCORM: 'SCORM',
   QUIZ: 'QUIZ',
+  LIVE: 'LIVE',
+};
+
+const LessonStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED' };
+
+const LessonActivityType = {
+  TEXT: 'TEXT',
+  VIDEO: 'VIDEO',
+  DOCUMENT: 'DOCUMENT',
+  IMAGE: 'IMAGE',
+  AUDIO: 'AUDIO',
+  QUIZ: 'QUIZ',
+  OPEN_QUESTION: 'OPEN_QUESTION',
+  EXERCISE: 'EXERCISE',
+  TASK: 'TASK',
+  SURVEY: 'SURVEY',
+  DISCUSSION: 'DISCUSSION',
+  DOWNLOAD: 'DOWNLOAD',
+  EXTERNAL_LINK: 'EXTERNAL_LINK',
 };
 
 const EnrollmentOrigin = {
@@ -564,6 +690,7 @@ const CompetencySource = {
   ASSESSMENT: 'ASSESSMENT',
   MANAGER: 'MANAGER',
   HRIS: 'HRIS',
+  TRAINING: 'TRAINING',
 };
 
 const MappingPriority = { MANDATORY: 'MANDATORY', OPTIONAL: 'OPTIONAL' };
@@ -609,7 +736,13 @@ const PermissionSubject = {
   HR: 'HR',
 };
 
-const DepartmentStatus = { ACTIVE: 'ACTIVE', INACTIVE: 'INACTIVE' };
+const DepartmentStatus = { ACTIVE: 'ACTIVE', INACTIVE: 'INACTIVE', ARCHIVED: 'ARCHIVED' };
+
+const DepartmentVisibility = {
+  PUBLIC: 'PUBLIC',
+  DEPARTMENT_ONLY: 'DEPARTMENT_ONLY',
+  RESTRICTED: 'RESTRICTED',
+};
 
 const UnitType = {
   HEADQUARTERS: 'HEADQUARTERS',
@@ -721,6 +854,7 @@ const TimelineEventType = {
 };
 
 const EnrollmentStatus = {
+  PENDING_APPROVAL: 'PENDING_APPROVAL',
   NOT_STARTED: 'NOT_STARTED',
   IN_PROGRESS: 'IN_PROGRESS',
   COMPLETED: 'COMPLETED',
@@ -1056,9 +1190,56 @@ const PlanStatus = {
   PENDING_APPROVAL: 'PENDING_APPROVAL',
   ACTIVE: 'ACTIVE',
   PAUSED: 'PAUSED',
+  AT_RISK: 'AT_RISK',
   COMPLETED: 'COMPLETED',
+  PARTIALLY_COMPLETED: 'PARTIALLY_COMPLETED',
   CANCELLED: 'CANCELLED',
   OVERDUE: 'OVERDUE',
+};
+
+// Estrutura completa do PDI (docs/CRIAR_NOVO_PDI_ESTRUTURA_COMPLETA.md).
+const PdiOrigin = {
+  PERFORMANCE_REVIEW: 'PERFORMANCE_REVIEW',
+  EVALUATION_360: 'EVALUATION_360',
+  COMPETENCY_MAP: 'COMPETENCY_MAP',
+  COMPETENCY_GAP: 'COMPETENCY_GAP',
+  CAREER_PLAN: 'CAREER_PLAN',
+  SUCCESSION: 'SUCCESSION',
+  LEADERSHIP_PROGRAM: 'LEADERSHIP_PROGRAM',
+  MANAGER_REQUEST: 'MANAGER_REQUEST',
+  EMPLOYEE_REQUEST: 'EMPLOYEE_REQUEST',
+  ONBOARDING: 'ONBOARDING',
+  ROLE_CHANGE: 'ROLE_CHANGE',
+  PROMOTION: 'PROMOTION',
+  OPERATIONAL_NEED: 'OPERATIONAL_NEED',
+  STRATEGIC_NEED: 'STRATEGIC_NEED',
+  OTHER: 'OTHER',
+};
+
+const PdiCompetencyPriority = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH' };
+
+const PdiFinalResult = {
+  GOAL_ACHIEVED: 'GOAL_ACHIEVED',
+  PARTIALLY_ACHIEVED: 'PARTIALLY_ACHIEVED',
+  NOT_ACHIEVED: 'NOT_ACHIEVED',
+};
+
+const PdiOverallResult = {
+  EXCEEDED: 'EXCEEDED',
+  MET: 'MET',
+  PARTIALLY_MET: 'PARTIALLY_MET',
+  NOT_MET: 'NOT_MET',
+};
+
+const PdiNextSteps = {
+  NEW_PDI: 'NEW_PDI',
+  CONTINUE_PDI: 'CONTINUE_PDI',
+  NEW_COMPETENCY_ASSESSMENT: 'NEW_COMPETENCY_ASSESSMENT',
+  LEARNING_PATH: 'LEARNING_PATH',
+  LEADERSHIP_PROGRAM: 'LEADERSHIP_PROGRAM',
+  ROLE_PREPARATION: 'ROLE_PREPARATION',
+  SUCCESSION_PLAN: 'SUCCESSION_PLAN',
+  NONE: 'NONE',
 };
 
 const ActionType = {
@@ -1144,6 +1325,49 @@ const IntegrationStatus = {
   INACTIVE: 'INACTIVE',
   ERROR: 'ERROR',
   PENDING: 'PENDING',
+  PENDING_AUTH: 'PENDING_AUTH',
+  RATE_LIMITED: 'RATE_LIMITED',
+  CONFIGURING: 'CONFIGURING',
+  SUSPENDED: 'SUSPENDED',
+};
+
+const IntegrationCategory = {
+  ERP: 'ERP',
+  SSO: 'SSO',
+  LMS: 'LMS',
+  COMMUNICATION: 'COMMUNICATION',
+  HR: 'HR',
+  FINANCE: 'FINANCE',
+  PAYROLL: 'PAYROLL',
+  IDENTITY_ACCESS: 'IDENTITY_ACCESS',
+  OTHER: 'OTHER',
+};
+
+const IntegrationEnvironment = {
+  PRODUCTION: 'PRODUCTION',
+  STAGING: 'STAGING',
+  DEVELOPMENT: 'DEVELOPMENT',
+  SANDBOX: 'SANDBOX',
+};
+
+const IntegrationDataFormat = {
+  JSON: 'JSON',
+  XML: 'XML',
+  CSV: 'CSV',
+  EXCEL: 'EXCEL',
+};
+
+const IntegrationCommunicationMethod = {
+  PULL: 'PULL',
+  PUSH: 'PUSH',
+  POLLING: 'POLLING',
+  STREAMING: 'STREAMING',
+};
+
+const IntegrationSyncDirection = {
+  INBOUND: 'INBOUND',
+  OUTBOUND: 'OUTBOUND',
+  BIDIRECTIONAL: 'BIDIRECTIONAL',
 };
 
 const SyncFrequency = {
@@ -1173,9 +1397,75 @@ const AlertCategory = {
   SECURITY: 'SECURITY',
 };
 
-const BeneficiaryType = { EMPLOYEE: 'EMPLOYEE', DEPENDENT: 'DEPENDENT', EMERGENCY: 'EMERGENCY' };
+const BeneficiaryType = {
+  EMPLOYEE: 'EMPLOYEE',
+  DEPENDENT: 'DEPENDENT',
+  EMERGENCY: 'EMERGENCY',
+  INDIVIDUAL: 'INDIVIDUAL',
+  FAMILY: 'FAMILY',
+  INSTITUTION: 'INSTITUTION',
+  COMMUNITY: 'COMMUNITY',
+  GROUP: 'GROUP',
+};
 
-const BeneficiaryStatus = { ACTIVE: 'ACTIVE', INACTIVE: 'INACTIVE', PENDING: 'PENDING' };
+const BeneficiaryStatus = {
+  ACTIVE: 'ACTIVE',
+  INACTIVE: 'INACTIVE',
+  PENDING: 'PENDING',
+  PROSPECT: 'PROSPECT',
+  FORMER: 'FORMER',
+  BLOCKED: 'BLOCKED',
+  UNDER_FOLLOW_UP: 'UNDER_FOLLOW_UP',
+  SUSPENDED: 'SUSPENDED',
+  ELIGIBLE: 'ELIGIBLE',
+  NOT_ELIGIBLE: 'NOT_ELIGIBLE',
+  BENEFIT_ACTIVE: 'BENEFIT_ACTIVE',
+  BENEFIT_ENDED: 'BENEFIT_ENDED',
+  ARCHIVED: 'ARCHIVED',
+};
+
+const MaritalStatus = {
+  SINGLE: 'SINGLE',
+  MARRIED: 'MARRIED',
+  DIVORCED: 'DIVORCED',
+  WIDOWED: 'WIDOWED',
+  COMMON_LAW: 'COMMON_LAW',
+};
+const FollowUpStatus = {
+  PENDING: 'PENDING',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  ON_HOLD: 'ON_HOLD',
+};
+const ConsentStatus = { PENDING: 'PENDING', GRANTED: 'GRANTED', REVOKED: 'REVOKED' };
+const DocumentValidationStatus = {
+  PENDING: 'PENDING',
+  VALID: 'VALID',
+  INVALID: 'INVALID',
+  EXPIRED: 'EXPIRED',
+};
+const BenefitKind = {
+  BENEFIT: 'BENEFIT',
+  SERVICE: 'SERVICE',
+  PROGRAM: 'PROGRAM',
+  TRAINING: 'TRAINING',
+  COURSE: 'COURSE',
+  SCHOLARSHIP: 'SCHOLARSHIP',
+  SUPPORT: 'SUPPORT',
+};
+const BenefitStatus = {
+  PENDING: 'PENDING',
+  ACTIVE: 'ACTIVE',
+  SUSPENDED: 'SUSPENDED',
+  ENDED: 'ENDED',
+};
+const ParticipationStatus = {
+  ENROLLED: 'ENROLLED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  DROPPED: 'DROPPED',
+  SUSPENDED: 'SUSPENDED',
+};
 
 const AngolaProvince = {
   LUANDA: 'LUANDA',
@@ -1205,6 +1495,14 @@ const InteractionType = {
   VISIT: 'VISIT',
   EVENT: 'EVENT',
   NOTE: 'NOTE',
+  TASK: 'TASK',
+  WHATSAPP: 'WHATSAPP',
+  SMS: 'SMS',
+  IN_PERSON: 'IN_PERSON',
+  VIDEO_CALL: 'VIDEO_CALL',
+  PORTAL: 'PORTAL',
+  MOBILE_APP: 'MOBILE_APP',
+  OTHER: 'OTHER',
 };
 
 const NeedPriority = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', URGENT: 'URGENT' };
@@ -1229,6 +1527,153 @@ const PartnerType = {
   OTHER: 'OTHER',
 };
 
+const PartnershipKind = {
+  TRAINING: 'TRAINING',
+  EDUCATION: 'EDUCATION',
+  EMPLOYMENT: 'EMPLOYMENT',
+  INTERNSHIPS: 'INTERNSHIPS',
+  RECRUITMENT: 'RECRUITMENT',
+  FUNDING: 'FUNDING',
+  PROJECT_IMPLEMENTATION: 'PROJECT_IMPLEMENTATION',
+  TECHNICAL_SUPPORT: 'TECHNICAL_SUPPORT',
+  SUPPLY: 'SUPPLY',
+  TECHNOLOGY: 'TECHNOLOGY',
+  CONTENT: 'CONTENT',
+  EVENTS: 'EVENTS',
+  MENTORING: 'MENTORING',
+  RESEARCH: 'RESEARCH',
+  CERTIFICATION: 'CERTIFICATION',
+  LOGISTICS: 'LOGISTICS',
+  COMMUNICATION: 'COMMUNICATION',
+  SOCIAL_RESPONSIBILITY: 'SOCIAL_RESPONSIBILITY',
+  COMMUNITY_DEVELOPMENT: 'COMMUNITY_DEVELOPMENT',
+  OTHER: 'OTHER',
+};
+
+const PartnerProgramStatus = {
+  PLANNED: 'PLANNED',
+  ACTIVE: 'ACTIVE',
+  COMPLETED: 'COMPLETED',
+  SUSPENDED: 'SUSPENDED',
+  CANCELLED: 'CANCELLED',
+};
+
+const PartnerAgreementType = {
+  MOU: 'MOU',
+  CONTRACT: 'CONTRACT',
+  PROTOCOL: 'PROTOCOL',
+  PARTNERSHIP_AGREEMENT: 'PARTNERSHIP_AGREEMENT',
+  COLLABORATION_TERMS: 'COLLABORATION_TERMS',
+  OTHER: 'OTHER',
+};
+
+const PartnerAgreementStatus = {
+  DRAFTING: 'DRAFTING',
+  NEGOTIATION: 'NEGOTIATION',
+  ACTIVE: 'ACTIVE',
+  EXPIRED: 'EXPIRED',
+  TERMINATED: 'TERMINATED',
+};
+
+const PartnershipLevel = {
+  STRATEGIC: 'STRATEGIC',
+  INSTITUTIONAL: 'INSTITUTIONAL',
+  OPERATIONAL: 'OPERATIONAL',
+  TECHNICAL: 'TECHNICAL',
+  COMMERCIAL: 'COMMERCIAL',
+  TRAINING: 'TRAINING',
+  COMMUNITY: 'COMMUNITY',
+};
+
+const PartnerOrganizationSize = {
+  MICRO: 'MICRO',
+  SMALL: 'SMALL',
+  MEDIUM: 'MEDIUM',
+  LARGE: 'LARGE',
+};
+
+const PartnerContributionType = {
+  FINANCIAL: 'FINANCIAL',
+  HUMAN_RESOURCES: 'HUMAN_RESOURCES',
+  EQUIPMENT: 'EQUIPMENT',
+  FACILITIES: 'FACILITIES',
+  TRAINING: 'TRAINING',
+  CONTENT: 'CONTENT',
+  TECHNOLOGY: 'TECHNOLOGY',
+  SERVICES: 'SERVICES',
+  LOGISTICS: 'LOGISTICS',
+  SCHOLARSHIPS: 'SCHOLARSHIPS',
+  MATERIALS: 'MATERIALS',
+  NETWORK: 'NETWORK',
+  TECHNICAL_KNOWLEDGE: 'TECHNICAL_KNOWLEDGE',
+  OTHER: 'OTHER',
+};
+
+const PartnerContributionPeriodicity = {
+  ONE_TIME: 'ONE_TIME',
+  MONTHLY: 'MONTHLY',
+  QUARTERLY: 'QUARTERLY',
+  SEMIANNUAL: 'SEMIANNUAL',
+  ANNUAL: 'ANNUAL',
+};
+
+const PartnerOpportunityStatus = {
+  IDENTIFIED: 'IDENTIFIED',
+  CONTACTED: 'CONTACTED',
+  IN_DISCUSSION: 'IN_DISCUSSION',
+  PROPOSAL_SENT: 'PROPOSAL_SENT',
+  IN_NEGOTIATION: 'IN_NEGOTIATION',
+  AGREEMENT_REACHED: 'AGREEMENT_REACHED',
+  NOT_CONCLUDED: 'NOT_CONCLUDED',
+};
+
+const PartnerDocumentType = {
+  CONTRACT: 'CONTRACT',
+  PROTOCOL: 'PROTOCOL',
+  MEMORANDUM: 'MEMORANDUM',
+  CERTIFICATE_OF_REGISTRATION: 'CERTIFICATE_OF_REGISTRATION',
+  PROPOSAL: 'PROPOSAL',
+  REPORT: 'REPORT',
+  PROOF: 'PROOF',
+  CERTIFICATE: 'CERTIFICATE',
+  INSTITUTIONAL: 'INSTITUTIONAL',
+  OTHER: 'OTHER',
+};
+
+const PartnerLocationType = {
+  HEADQUARTERS: 'HEADQUARTERS',
+  BRANCH: 'BRANCH',
+  DELEGATION: 'DELEGATION',
+  OFFICE: 'OFFICE',
+  WAREHOUSE: 'WAREHOUSE',
+  OTHER: 'OTHER',
+};
+
+const PartnerRelationshipStatus = {
+  PROSPECTING: 'PROSPECTING',
+  DEVELOPING: 'DEVELOPING',
+  CONSOLIDATED: 'CONSOLIDATED',
+  AT_RISK: 'AT_RISK',
+  PAUSED: 'PAUSED',
+  ENDED: 'ENDED',
+};
+
+const PartnerCustomFieldType = {
+  TEXT: 'TEXT',
+  NUMBER: 'NUMBER',
+  DATE: 'DATE',
+  BOOLEAN: 'BOOLEAN',
+  SELECT: 'SELECT',
+  MULTI_SELECT: 'MULTI_SELECT',
+};
+
+const PartnerDocumentStatus = {
+  DRAFT: 'DRAFT',
+  VALID: 'VALID',
+  EXPIRED: 'EXPIRED',
+  ARCHIVED: 'ARCHIVED',
+};
+
 const PartnerTier = { PLATINUM: 'PLATINUM', GOLD: 'GOLD', SILVER: 'SILVER', STANDARD: 'STANDARD' };
 
 const PartnerStatus = {
@@ -1247,6 +1692,54 @@ const PartnerInteractionType = {
   EVENT: 'EVENT',
   NOTE: 'NOTE',
   REVIEW: 'REVIEW',
+  CONTACT: 'CONTACT',
+  PROJECT_PRESENTATION: 'PROJECT_PRESENTATION',
+  APPLICATION: 'APPLICATION',
+  NEGOTIATION: 'NEGOTIATION',
+  FOLLOW_UP: 'FOLLOW_UP',
+  EVALUATION: 'EVALUATION',
+  CONTRACT_SIGNING: 'CONTRACT_SIGNING',
+  REPORT: 'REPORT',
+  RENEWAL: 'RENEWAL',
+};
+
+const FunderDocumentType = {
+  CONTRACT: 'CONTRACT',
+  GRANT_AGREEMENT: 'GRANT_AGREEMENT',
+  APPLICATION: 'APPLICATION',
+  PROPOSAL: 'PROPOSAL',
+  BUDGET: 'BUDGET',
+  REPORT: 'REPORT',
+  AUDIT: 'AUDIT',
+  PROOF: 'PROOF',
+  TERMS_OF_REFERENCE: 'TERMS_OF_REFERENCE',
+  EVALUATION: 'EVALUATION',
+  CERTIFICATE: 'CERTIFICATE',
+  OTHER: 'OTHER',
+};
+
+const FunderDocumentStatus = {
+  DRAFT: 'DRAFT',
+  VALID: 'VALID',
+  EXPIRED: 'EXPIRED',
+  ARCHIVED: 'ARCHIVED',
+};
+
+const FunderCustomFieldType = {
+  TEXT: 'TEXT',
+  NUMBER: 'NUMBER',
+  DATE: 'DATE',
+  BOOLEAN: 'BOOLEAN',
+  SELECT: 'SELECT',
+  MULTI_SELECT: 'MULTI_SELECT',
+};
+
+const FunderPartnerRelationType = {
+  CONSORTIUM: 'CONSORTIUM',
+  CO_FINANCING: 'CO_FINANCING',
+  IMPLEMENTATION: 'IMPLEMENTATION',
+  TECHNICAL_SUPPORT: 'TECHNICAL_SUPPORT',
+  OTHER: 'OTHER',
 };
 
 const MilestoneStatus = {
@@ -1265,6 +1758,15 @@ const FunderType = {
   PRIVATE_FOUNDATION: 'PRIVATE_FOUNDATION',
   CORPORATE: 'CORPORATE',
   OTHER: 'OTHER',
+  FOUNDATION: 'FOUNDATION',
+  BANK: 'BANK',
+  FINANCIAL_INSTITUTION: 'FINANCIAL_INSTITUTION',
+  COOPERATION_AGENCY: 'COOPERATION_AGENCY',
+  INTERNATIONAL_ORGANIZATION: 'INTERNATIONAL_ORGANIZATION',
+  INVESTMENT_FUND: 'INVESTMENT_FUND',
+  PUBLIC_FUND: 'PUBLIC_FUND',
+  EMBASSY: 'EMBASSY',
+  INDIVIDUAL: 'INDIVIDUAL',
 };
 
 const FunderStatus = {
@@ -1273,6 +1775,67 @@ const FunderStatus = {
   PROSPECT: 'PROSPECT',
   FORMER: 'FORMER',
   SUSPENDED: 'SUSPENDED',
+  POTENTIAL: 'POTENTIAL',
+  NEGOTIATION: 'NEGOTIATION',
+  CLOSED: 'CLOSED',
+};
+
+const FunderContactRole = {
+  DECISION_MAKER: 'DECISION_MAKER',
+  TECHNICAL: 'TECHNICAL',
+  FINANCIAL: 'FINANCIAL',
+  LEGAL: 'LEGAL',
+  COMMUNICATION: 'COMMUNICATION',
+  MONITORING: 'MONITORING',
+  OTHER: 'OTHER',
+};
+
+const FunderThematicArea = {
+  EDUCATION: 'EDUCATION',
+  VOCATIONAL_TRAINING: 'VOCATIONAL_TRAINING',
+  EMPLOYMENT: 'EMPLOYMENT',
+  YOUTH: 'YOUTH',
+  AGRICULTURE: 'AGRICULTURE',
+  AGRIBUSINESS: 'AGRIBUSINESS',
+  HEALTH: 'HEALTH',
+  COMMUNITY_DEVELOPMENT: 'COMMUNITY_DEVELOPMENT',
+  SOCIAL_INCLUSION: 'SOCIAL_INCLUSION',
+  ENTREPRENEURSHIP: 'ENTREPRENEURSHIP',
+  TECHNOLOGY: 'TECHNOLOGY',
+  INNOVATION: 'INNOVATION',
+  SUSTAINABILITY: 'SUSTAINABILITY',
+  ENVIRONMENT: 'ENVIRONMENT',
+  FOOD_SECURITY: 'FOOD_SECURITY',
+  ECONOMIC_DEVELOPMENT: 'ECONOMIC_DEVELOPMENT',
+  EQUAL_OPPORTUNITIES: 'EQUAL_OPPORTUNITIES',
+  OTHER: 'OTHER',
+};
+
+const FunderFundingType = {
+  GRANT: 'GRANT',
+  DONATION: 'DONATION',
+  LOAN: 'LOAN',
+  INVESTMENT: 'INVESTMENT',
+  SCHOLARSHIP: 'SCHOLARSHIP',
+  INSTITUTIONAL_FUNDING: 'INSTITUTIONAL_FUNDING',
+  PROJECT_FUNDING: 'PROJECT_FUNDING',
+  RESULTS_BASED: 'RESULTS_BASED',
+  CO_FINANCING: 'CO_FINANCING',
+  OTHER: 'OTHER',
+};
+
+const FunderTargetGroup = {
+  YOUTH: 'YOUTH',
+  WOMEN: 'WOMEN',
+  STUDENTS: 'STUDENTS',
+  WORKERS: 'WORKERS',
+  ENTREPRENEURS: 'ENTREPRENEURS',
+  FARMERS: 'FARMERS',
+  COMMUNITIES: 'COMMUNITIES',
+  COMPANIES: 'COMPANIES',
+  INSTITUTIONS: 'INSTITUTIONS',
+  SOCIAL_ORGANIZATIONS: 'SOCIAL_ORGANIZATIONS',
+  OTHER: 'OTHER',
 };
 
 const GrantStatus = {
@@ -1281,6 +1844,97 @@ const GrantStatus = {
   SUSPENDED: 'SUSPENDED',
   CANCELLED: 'CANCELLED',
   CLOSED: 'CLOSED',
+  PREPARING: 'PREPARING',
+  SUBMITTED: 'SUBMITTED',
+  UNDER_EVALUATION: 'UNDER_EVALUATION',
+  APPROVED: 'APPROVED',
+  CONTRACTED: 'CONTRACTED',
+  IN_EXECUTION: 'IN_EXECUTION',
+  REJECTED: 'REJECTED',
+};
+
+const DisbursementStatus = {
+  PREDICTED: 'PREDICTED',
+  RECEIVED: 'RECEIVED',
+  DELAYED: 'DELAYED',
+  CANCELLED: 'CANCELLED',
+};
+
+const FunderOpportunityStatus = {
+  IDENTIFIED: 'IDENTIFIED',
+  UNDER_ANALYSIS: 'UNDER_ANALYSIS',
+  PREPARING: 'PREPARING',
+  SUBMITTED: 'SUBMITTED',
+  UNDER_EVALUATION: 'UNDER_EVALUATION',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  WITHDRAWN: 'WITHDRAWN',
+};
+
+const FunderOpportunityDocumentType = {
+  TERMS_OF_REFERENCE: 'TERMS_OF_REFERENCE',
+  CALL_FOR_PROPOSALS: 'CALL_FOR_PROPOSALS',
+  FORM: 'FORM',
+  BUDGET: 'BUDGET',
+  TECHNICAL_PROPOSAL: 'TECHNICAL_PROPOSAL',
+  OTHER: 'OTHER',
+};
+
+const FunderReportType = {
+  FINANCIAL: 'FINANCIAL',
+  TECHNICAL: 'TECHNICAL',
+  PROGRESS: 'PROGRESS',
+  IMPACT: 'IMPACT',
+  AUDIT: 'AUDIT',
+  EXTERNAL_EVALUATION: 'EXTERNAL_EVALUATION',
+  OTHER: 'OTHER',
+};
+
+const FunderReportPeriodicity = {
+  ONE_TIME: 'ONE_TIME',
+  MONTHLY: 'MONTHLY',
+  QUARTERLY: 'QUARTERLY',
+  SEMIANNUAL: 'SEMIANNUAL',
+  ANNUAL: 'ANNUAL',
+  OTHER: 'OTHER',
+};
+
+const FunderContractType = {
+  FUNDING_CONTRACT: 'FUNDING_CONTRACT',
+  GRANT_AGREEMENT: 'GRANT_AGREEMENT',
+  COOPERATION_AGREEMENT: 'COOPERATION_AGREEMENT',
+  MEMORANDUM: 'MEMORANDUM',
+  OTHER: 'OTHER',
+};
+
+const FunderContractStatus = {
+  DRAFT: 'DRAFT',
+  ACTIVE: 'ACTIVE',
+  EXPIRED: 'EXPIRED',
+  TERMINATED: 'TERMINATED',
+  RENEWED: 'RENEWED',
+};
+
+const FunderContractRenewal = {
+  NONE: 'NONE',
+  MANUAL: 'MANUAL',
+  AUTOMATIC: 'AUTOMATIC',
+};
+
+const FunderIndicatorKey = {
+  EXPECTED_BENEFICIARIES: 'EXPECTED_BENEFICIARIES',
+  REACHED_BENEFICIARIES: 'REACHED_BENEFICIARIES',
+  WOMEN: 'WOMEN',
+  MEN: 'MEN',
+  YOUTH: 'YOUTH',
+  TRAININGS: 'TRAININGS',
+  PARTICIPANTS: 'PARTICIPANTS',
+  TRAINING_HOURS: 'TRAINING_HOURS',
+  JOBS_CREATED: 'JOBS_CREATED',
+  ENTREPRENEURS_SUPPORTED: 'ENTREPRENEURS_SUPPORTED',
+  COMMUNITIES_REACHED: 'COMMUNITIES_REACHED',
+  PROVINCES_COVERED: 'PROVINCES_COVERED',
+  CUSTOM: 'CUSTOM',
 };
 
 const FunderInteractionType = {
@@ -1479,6 +2133,9 @@ const TaskCategory = {
   BENEFITS: 'BENEFITS',
   ADMIN: 'ADMIN',
   MEETING: 'MEETING',
+  POLICIES: 'POLICIES',
+  EVALUATION: 'EVALUATION',
+  ONE_ON_ONE: 'ONE_ON_ONE',
 };
 
 const TaskType = {
@@ -1505,6 +2162,9 @@ const TaskPhase = {
   DAY_30: 'DAY_30',
   DAY_60: 'DAY_60',
   DAY_90: 'DAY_90',
+  INTEGRATION: 'INTEGRATION',
+  FOLLOW_UP: 'FOLLOW_UP',
+  CONCLUSION: 'CONCLUSION',
 };
 
 const ResponsibleRole = {
@@ -1520,6 +2180,20 @@ const DocumentStatus = { PENDING: 'PENDING', APPROVED: 'APPROVED', REJECTED: 'RE
 
 const SurveyMilestone = { DAY_1: 'DAY_1', DAY_7: 'DAY_7', DAY_30: 'DAY_30', DAY_90: 'DAY_90' };
 
+// Distinto do CheckinType (QUICK/STRUCTURED, domínio diferente) já
+// existente acima — ver [[project_innova_onboarding_plan_creation_roles_structure]]
+// sobre esta superfície de drift do mock.
+const OnboardingCheckinType = {
+  DAY_1: 'DAY_1',
+  WEEK_1: 'WEEK_1',
+  DAY_30: 'DAY_30',
+  DAY_60: 'DAY_60',
+  DAY_90: 'DAY_90',
+  CUSTOM: 'CUSTOM',
+};
+
+const OnboardingCheckinStatus = { PENDING: 'PENDING', COMPLETED: 'COMPLETED', SKIPPED: 'SKIPPED' };
+
 const ContentType = {
   VIDEO: 'VIDEO',
   TEXT: 'TEXT',
@@ -1534,22 +2208,124 @@ const ContentStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED', ARCHIVED: 'ARCHI
 
 const MicroLearningAction = { LIKE: 'LIKE', SAVE: 'SAVE', SKIP: 'SKIP' };
 
-const TrainingType = { PRESENTIAL: 'PRESENTIAL', ONLINE: 'ONLINE', HYBRID: 'HYBRID' };
+const TrainingType = {
+  PRESENTIAL: 'PRESENTIAL',
+  ONLINE: 'ONLINE',
+  HYBRID: 'HYBRID',
+  VIRTUAL_ROOM: 'VIRTUAL_ROOM',
+  ELEARNING: 'ELEARNING',
+  WORKSHOP: 'WORKSHOP',
+  SEMINAR: 'SEMINAR',
+  COACHING: 'COACHING',
+  MENTORING: 'MENTORING',
+};
 
 const TrainingLevel = { BEGINNER: 'BEGINNER', INTERMEDIATE: 'INTERMEDIATE', ADVANCED: 'ADVANCED' };
 
-const TrainingStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED', ARCHIVED: 'ARCHIVED' };
-
-const TrainingParticipantStatus = {
-  WAITLIST: 'WAITLIST',
-  REGISTERED: 'REGISTERED',
-  ATTENDED: 'ATTENDED',
-  ABSENT: 'ABSENT',
+const TrainingStatus = {
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+  ARCHIVED: 'ARCHIVED',
   CANCELLED: 'CANCELLED',
   COMPLETED: 'COMPLETED',
 };
 
+const TrainingPriority = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', URGENT: 'URGENT' };
+
+const TrainingPlanPeriod = {
+  ANNUAL: 'ANNUAL',
+  QUARTERLY: 'QUARTERLY',
+  EXTRAORDINARY: 'EXTRAORDINARY',
+};
+
+const TrainingPlanStatus = {
+  DRAFT: 'DRAFT',
+  SUBMITTED: 'SUBMITTED',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  PUBLISHED: 'PUBLISHED',
+  ARCHIVED: 'ARCHIVED',
+};
+
+const TrainingParticipantStatus = {
+  WAITLIST: 'WAITLIST',
+  PENDING_APPROVAL: 'PENDING_APPROVAL',
+  REGISTERED: 'REGISTERED',
+  ATTENDED: 'ATTENDED',
+  ABSENT: 'ABSENT',
+  CANCELLED: 'CANCELLED',
+  REJECTED: 'REJECTED',
+  COMPLETED: 'COMPLETED',
+};
+
+const TrainingAssessmentRole = {
+  INITIAL: 'INITIAL',
+  FINAL: 'FINAL',
+  SATISFACTION_SURVEY: 'SATISFACTION_SURVEY',
+  INSTRUCTOR_EVALUATION: 'INSTRUCTOR_EVALUATION',
+  ORGANIZATION_EVALUATION: 'ORGANIZATION_EVALUATION',
+  APPLICABILITY_EVALUATION: 'APPLICABILITY_EVALUATION',
+  POST_TRAINING_EFFECTIVENESS: 'POST_TRAINING_EFFECTIVENESS',
+};
+
 const SessionModality = { PRESENTIAL: 'PRESENTIAL', ONLINE: 'ONLINE', HYBRID: 'HYBRID' };
+
+const LiveClassType = {
+  AULA: 'AULA',
+  WEBINAR: 'WEBINAR',
+  WORKSHOP: 'WORKSHOP',
+  SESSAO_PRATICA: 'SESSAO_PRATICA',
+  SESSAO_ESCLARECIMENTO: 'SESSAO_ESCLARECIMENTO',
+  MENTORIA: 'MENTORIA',
+  TUTORIA: 'TUTORIA',
+  SESSAO_REVISAO: 'SESSAO_REVISAO',
+};
+
+const LiveClassStatus = {
+  AGENDADA: 'AGENDADA',
+  EM_PREPARACAO: 'EM_PREPARACAO',
+  EM_CURSO: 'EM_CURSO',
+  CONCLUIDA: 'CONCLUIDA',
+  CANCELADA: 'CANCELADA',
+  ADIADA: 'ADIADA',
+};
+
+const LiveClassRecurrence = { ONCE: 'ONCE', DAILY: 'DAILY', WEEKLY: 'WEEKLY', CUSTOM: 'CUSTOM' };
+
+const LiveClassEnrollmentMode = {
+  AUTO: 'AUTO',
+  MANUAL: 'MANUAL',
+  SELF: 'SELF',
+  APPROVAL: 'APPROVAL',
+};
+
+const LiveAttendanceStatus = {
+  PRESENTE: 'PRESENTE',
+  AUSENTE: 'AUSENTE',
+  ATRASADO: 'ATRASADO',
+  PARCIAL: 'PARCIAL',
+  JUSTIFICADO: 'JUSTIFICADO',
+};
+
+const TrainingInstructorType = { INTERNAL: 'INTERNAL', EXTERNAL: 'EXTERNAL' };
+
+const TrainingInstructorStatus = { ACTIVE: 'ACTIVE', INACTIVE: 'INACTIVE' };
+
+const TrainingResourceKind = {
+  ROOM: 'ROOM',
+  EQUIPMENT: 'EQUIPMENT',
+  MATERIAL: 'MATERIAL',
+  CATERING: 'CATERING',
+  TRANSPORT: 'TRANSPORT',
+  ACCOMMODATION: 'ACCOMMODATION',
+  OTHER: 'OTHER',
+};
+
+const TrainingResourceStatus = {
+  AVAILABLE: 'AVAILABLE',
+  UNAVAILABLE: 'UNAVAILABLE',
+  MAINTENANCE: 'MAINTENANCE',
+};
 
 const ArticleStatus = {
   DRAFT: 'DRAFT',
@@ -1587,6 +2363,14 @@ const StepType = {
   DECISION: 'DECISION',
   GATEWAY: 'GATEWAY',
   REVIEW: 'REVIEW',
+  FORM: 'FORM',
+  PARALLEL: 'PARALLEL',
+  WAIT_EVENT: 'WAIT_EVENT',
+  TIMER: 'TIMER',
+  INTEGRATION: 'INTEGRATION',
+  AUTO_ACTION: 'AUTO_ACTION',
+  NOTIFICATION: 'NOTIFICATION',
+  DOCUMENT: 'DOCUMENT',
 };
 
 const InstanceStatus = {
@@ -1599,11 +2383,16 @@ const InstanceStatus = {
 const StepProgressStatus = {
   WAITING: 'WAITING',
   PENDING: 'PENDING',
+  IN_PROGRESS: 'IN_PROGRESS',
+  BLOCKED: 'BLOCKED',
   COMPLETED: 'COMPLETED',
   REJECTED: 'REJECTED',
   ESCALATED: 'ESCALATED',
   SKIPPED: 'SKIPPED',
+  CANCELLED: 'CANCELLED',
 };
+
+const ProcessPriority = { LOW: 'LOW', NORMAL: 'NORMAL', HIGH: 'HIGH', URGENT: 'URGENT' };
 
 const NotificationPriority = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', CRITICAL: 'CRITICAL' };
 
@@ -1639,9 +2428,17 @@ const ExecutionStatus = {
   SUCCESS: 'SUCCESS',
   FAILED: 'FAILED',
   SKIPPED: 'SKIPPED',
+  CANCELLED: 'CANCELLED',
+  WAITING_APPROVAL: 'WAITING_APPROVAL',
 };
 
-const AuthType = { OAUTH2: 'OAUTH2', API_KEY: 'API_KEY', BASIC: 'BASIC', BEARER: 'BEARER' };
+const AuthType = {
+  OAUTH2: 'OAUTH2',
+  API_KEY: 'API_KEY',
+  BASIC: 'BASIC',
+  BEARER: 'BEARER',
+  NONE: 'NONE',
+};
 
 const SyncLogStatus = {
   RUNNING: 'RUNNING',
@@ -1827,6 +2624,8 @@ const EventType = {
 
 const EventModalidade = { ONLINE: 'ONLINE', PRESENCIAL: 'PRESENCIAL', HYBRID: 'HYBRID' };
 
+const EventVisibility = { PUBLIC: 'PUBLIC', INTERNAL: 'INTERNAL', RESTRICTED: 'RESTRICTED' };
+
 const EventParticipantStatus = {
   PENDING: 'PENDING',
   CONFIRMED: 'CONFIRMED',
@@ -1835,6 +2634,84 @@ const EventParticipantStatus = {
   ABSENT: 'ABSENT',
   CANCELLED: 'CANCELLED',
   NO_SHOW: 'NO_SHOW',
+  REJECTED: 'REJECTED',
+};
+
+const EventSessionStatus = {
+  SCHEDULED: 'SCHEDULED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+};
+
+const EventLogisticsStatus = {
+  PLANNED: 'PLANNED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  CONFIRMED: 'CONFIRMED',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+};
+
+const EventEquipmentType = {
+  PROJECTOR: 'PROJECTOR',
+  SCREEN: 'SCREEN',
+  SOUND_SYSTEM: 'SOUND_SYSTEM',
+  MICROPHONES: 'MICROPHONES',
+  CHAIRS: 'CHAIRS',
+  TABLES: 'TABLES',
+  COMPUTERS: 'COMPUTERS',
+  INTERNET: 'INTERNET',
+  MATERIALS: 'MATERIALS',
+  SIGNAGE: 'SIGNAGE',
+};
+
+const EventSpeakerType = {
+  SPEAKER: 'SPEAKER',
+  LECTURER: 'LECTURER',
+  MODERATOR: 'MODERATOR',
+  GUEST: 'GUEST',
+  PANELIST: 'PANELIST',
+  FACILITATOR: 'FACILITATOR',
+  INSTITUTIONAL_REP: 'INSTITUTIONAL_REP',
+};
+
+const EventSpeakerStatus = {
+  INVITED: 'INVITED',
+  CONFIRMED: 'CONFIRMED',
+  DECLINED: 'DECLINED',
+  CANCELLED: 'CANCELLED',
+};
+
+const EventCommunicationType = {
+  INVITATION: 'INVITATION',
+  CONFIRMATION: 'CONFIRMATION',
+  REMINDER: 'REMINDER',
+  TIME_CHANGE: 'TIME_CHANGE',
+  LOCATION_CHANGE: 'LOCATION_CHANGE',
+  CANCELLATION: 'CANCELLATION',
+  INSTRUCTIONS: 'INSTRUCTIONS',
+  THANK_YOU: 'THANK_YOU',
+  FOLLOW_UP: 'FOLLOW_UP',
+};
+
+const EventCommunicationChannel = {
+  INNOVA_NOTIFICATION: 'INNOVA_NOTIFICATION',
+  EMAIL: 'EMAIL',
+  SMS: 'SMS',
+  WHATSAPP: 'WHATSAPP',
+};
+
+const EventCommunicationStatus = {
+  DRAFT: 'DRAFT',
+  SENT: 'SENT',
+  FAILED: 'FAILED',
+};
+
+const EventCheckinMethod = {
+  QR_CODE: 'QR_CODE',
+  MOBILE_APP: 'MOBILE_APP',
+  CODE: 'CODE',
+  MANUAL: 'MANUAL',
 };
 
 const InstructorType = {
@@ -1857,6 +2734,203 @@ const CohortStatus = {
 
 const CohortParticipantStatus = { ACTIVE: 'ACTIVE' };
 
+const CourseCohortStatus = {
+  DRAFT: 'DRAFT',
+  OPEN: 'OPEN',
+  ACTIVE: 'ACTIVE',
+  CLOSED: 'CLOSED',
+  CANCELLED: 'CANCELLED',
+};
+
+// docs/roi-impact.md §2 — "ROI da Formação"
+const RoiInitiativeType = {
+  CURSO: 'CURSO',
+  FORMACAO: 'FORMACAO',
+  PERCURSO: 'PERCURSO',
+  PDI: 'PDI',
+  MENTORIA: 'MENTORIA',
+  EVENTO: 'EVENTO',
+};
+const RoiAnalysisStatus = {
+  EM_PREPARACAO: 'EM_PREPARACAO',
+  EM_MEDICAO: 'EM_MEDICAO',
+  DADOS_INSUFICIENTES: 'DADOS_INSUFICIENTES',
+  CALCULADO: 'CALCULADO',
+  VALIDADO: 'VALIDADO',
+  REVISTO: 'REVISTO',
+  ARQUIVADO: 'ARQUIVADO',
+};
+const RoiBenefitType = {
+  PRODUTIVIDADE: 'PRODUTIVIDADE',
+  QUALIDADE: 'QUALIDADE',
+  REDUCAO_ERROS: 'REDUCAO_ERROS',
+  REDUCAO_ROTATIVIDADE: 'REDUCAO_ROTATIVIDADE',
+  REDUCAO_ACIDENTES: 'REDUCAO_ACIDENTES',
+  AUMENTO_VENDAS: 'AUMENTO_VENDAS',
+  REDUCAO_TEMPO_CICLO: 'REDUCAO_TEMPO_CICLO',
+  SATISFACAO_CLIENTE: 'SATISFACAO_CLIENTE',
+  OUTRO: 'OUTRO',
+};
+
+// docs/roi-impact.md §3 — "Impacto no Negócio"
+const ImpactSubjectType = {
+  COLABORADOR: 'COLABORADOR',
+  EQUIPA: 'EQUIPA',
+  DEPARTAMENTO: 'DEPARTAMENTO',
+};
+const ImpactCategory = {
+  PRODUTIVIDADE: 'PRODUTIVIDADE',
+  QUALIDADE: 'QUALIDADE',
+  ROTATIVIDADE: 'ROTATIVIDADE',
+  ABSENTISMO: 'ABSENTISMO',
+  SEGURANCA: 'SEGURANCA',
+  VENDAS_RECEITA: 'VENDAS_RECEITA',
+  SATISFACAO_CLIENTE: 'SATISFACAO_CLIENTE',
+  SATISFACAO_COLABORADOR: 'SATISFACAO_COLABORADOR',
+  TEMPO_RESPOSTA: 'TEMPO_RESPOSTA',
+  CUMPRIMENTO_SLA: 'CUMPRIMENTO_SLA',
+  COMPLIANCE: 'COMPLIANCE',
+  CUSTO_EVITADO: 'CUSTO_EVITADO',
+};
+
+// docs/roi-impact.md §4 — "Modelos de Avaliação"
+const RoiModelStatus = {
+  ACTIVO: 'ACTIVO',
+  INACTIVO: 'INACTIVO',
+};
+
+// docs/roi-impact.md §5 — "Custos & Investimento"
+const CostSubCategory = {
+  FORMADOR_CONSULTOR: 'FORMADOR_CONSULTOR',
+  MATERIAL_DIDATICO: 'MATERIAL_DIDATICO',
+  PLATAFORMA_LICENCAS: 'PLATAFORMA_LICENCAS',
+  SALA_LOGISTICA: 'SALA_LOGISTICA',
+  DESLOCACAO_ALOJAMENTO: 'DESLOCACAO_ALOJAMENTO',
+  CERTIFICACAO: 'CERTIFICACAO',
+  HORAS_TRABALHO_PERDIDAS: 'HORAS_TRABALHO_PERDIDAS',
+  SUBSTITUICAO_COBERTURA: 'SUBSTITUICAO_COBERTURA',
+  COORDENACAO_GESTAO_RH: 'COORDENACAO_GESTAO_RH',
+  PRODUCAO_NAO_REALIZADA: 'PRODUCAO_NAO_REALIZADA',
+  ATRASO_PROJETOS: 'ATRASO_PROJETOS',
+};
+const CostCategory = {
+  DIRETO: 'DIRETO',
+  INDIRETO: 'INDIRETO',
+  OPORTUNIDADE: 'OPORTUNIDADE',
+};
+
+// docs/roi-impact.md §6 — "Indicadores & KPIs"
+const KpiCategory = {
+  PRODUTIVIDADE: 'PRODUTIVIDADE',
+  QUALIDADE: 'QUALIDADE',
+  PESSOAS: 'PESSOAS',
+  FINANCEIRO: 'FINANCEIRO',
+  CLIENTE: 'CLIENTE',
+  SEGURANCA: 'SEGURANCA',
+  COMPLIANCE: 'COMPLIANCE',
+};
+const KpiFrequency = {
+  DIARIA: 'DIARIA',
+  SEMANAL: 'SEMANAL',
+  MENSAL: 'MENSAL',
+  TRIMESTRAL: 'TRIMESTRAL',
+  SEMESTRAL: 'SEMESTRAL',
+  ANUAL: 'ANUAL',
+};
+const KpiDefinitionStatus = {
+  ACTIVO: 'ACTIVO',
+  INACTIVO: 'INACTIVO',
+};
+
+// docs/roi-impact.md §7 — "Correlações"
+const CorrelationType = {
+  HORAS_FORMACAO_DESEMPENHO: 'HORAS_FORMACAO_DESEMPENHO',
+  COMPETENCIAS_PRODUTIVIDADE: 'COMPETENCIAS_PRODUTIVIDADE',
+  PDI_RETENCAO: 'PDI_RETENCAO',
+  INVESTIMENTO_ROTATIVIDADE: 'INVESTIMENTO_ROTATIVIDADE',
+  ONBOARDING_TEMPO_PRODUTIVIDADE: 'ONBOARDING_TEMPO_PRODUTIVIDADE',
+  MENTORIA_PROGRESSAO_CARREIRA: 'MENTORIA_PROGRESSAO_CARREIRA',
+  LIDERANCA_ENGAGEMENT_EQUIPA: 'LIDERANCA_ENGAGEMENT_EQUIPA',
+};
+
+// docs/roi-impact.md §9 — "Benchmarks"
+const BenchmarkType = {
+  INTERNO: 'INTERNO',
+  EXTERNO: 'EXTERNO',
+};
+
+const AvatarTrainingAvatarType = {
+  IMAGE: 'IMAGE',
+  AVATAR_2D: 'AVATAR_2D',
+  AVATAR_3D: 'AVATAR_3D',
+  VIDEO: 'VIDEO',
+};
+
+const AvatarTrainingAvatarStatus = {
+  ACTIVE: 'ACTIVE',
+  TESTING: 'TESTING',
+  INACTIVE: 'INACTIVE',
+  ARCHIVED: 'ARCHIVED',
+};
+
+const AvatarTrainingStatus = {
+  DRAFT: 'DRAFT',
+  IN_REVIEW: 'IN_REVIEW',
+  PUBLISHED: 'PUBLISHED',
+  ARCHIVED: 'ARCHIVED',
+};
+
+const AvatarTrainingExperienceType = {
+  GUIDED_LESSON: 'GUIDED_LESSON',
+  Q_AND_A: 'Q_AND_A',
+  ROLE_PLAY: 'ROLE_PLAY',
+  PROCEDURE_DEMO: 'PROCEDURE_DEMO',
+  PRACTICAL_ASSESSMENT: 'PRACTICAL_ASSESSMENT',
+  PERSONALIZED_REVIEW: 'PERSONALIZED_REVIEW',
+};
+
+const AvatarTrainingAssignmentStatus = {
+  ASSIGNED: 'ASSIGNED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  OVERDUE: 'OVERDUE',
+  CANCELLED: 'CANCELLED',
+};
+
+const AvatarTrainingAttemptStatus = {
+  IN_PROGRESS: 'IN_PROGRESS',
+  PAUSED: 'PAUSED',
+  SUBMITTED: 'SUBMITTED',
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+  ABANDONED: 'ABANDONED',
+};
+
+const AvatarTrainingInteractionType = {
+  AVATAR_MESSAGE: 'AVATAR_MESSAGE',
+  USER_MESSAGE: 'USER_MESSAGE',
+  USER_ANSWER: 'USER_ANSWER',
+  STEP_ADVANCE: 'STEP_ADVANCE',
+  FEEDBACK: 'FEEDBACK',
+  PAUSE: 'PAUSE',
+  RESUME: 'RESUME',
+  HELP_REQUEST: 'HELP_REQUEST',
+  SYSTEM: 'SYSTEM',
+};
+
+const AvatarTrainingSourceType = {
+  COURSE: 'COURSE',
+  LESSON: 'LESSON',
+  DOCUMENT: 'DOCUMENT',
+  LIBRARY_ITEM: 'LIBRARY_ITEM',
+};
+
+const AvatarTrainingProviderService = {
+  TTS: 'TTS',
+  STT: 'STT',
+  VIDEO: 'VIDEO',
+};
+
 module.exports = {
   PrismaClient,
   Prisma,
@@ -1874,6 +2948,12 @@ module.exports = {
   SurveyQuestionType,
   DisputeStatus,
   EvaluationRequestStatus,
+  EvalCampaignModel,
+  EvalCampaignStatus,
+  EvalQuestionType,
+  EvalPurpose,
+  EvalPopulationType,
+  EvalStage,
   LeadershipProgramLevel,
   ProgramStatus,
   ParticipantStatus,
@@ -1883,6 +2963,19 @@ module.exports = {
   LeadershipTargetingScope,
   LeadershipCriterionSource,
   LeadershipObjectiveType,
+  RoiInitiativeType,
+  RoiAnalysisStatus,
+  RoiBenefitType,
+  ImpactSubjectType,
+  ImpactCategory,
+  RoiModelStatus,
+  CostSubCategory,
+  CostCategory,
+  KpiCategory,
+  KpiFrequency,
+  KpiDefinitionStatus,
+  CorrelationType,
+  BenchmarkType,
   LeadershipContentType,
   LeadershipMethodologyType,
   LeadershipAdvisorRole,
@@ -1909,14 +3002,20 @@ module.exports = {
   Eval360QuestionType,
   EvaluationResponseStatus,
   Eval360FeedbackType,
+  Eval360QuestionnaireStatus,
   LeadershipClassification,
   CourseLevel,
   CourseStatus,
+  CourseVisibility,
+  CourseType,
+  CourseModality,
   ModuleStatus,
   ModuleType,
   ProgressionType,
   CompletionRule,
   LessonType,
+  LessonStatus,
+  LessonActivityType,
   EnrollmentOrigin,
   QuizQuestionType,
   LearningPathLevel,
@@ -1939,6 +3038,7 @@ module.exports = {
   PermissionAction,
   PermissionSubject,
   DepartmentStatus,
+  DepartmentVisibility,
   UnitType,
   PositionLevel,
   OrgChangeType,
@@ -2001,6 +3101,11 @@ module.exports = {
   RiskLevel,
   PlanPriority,
   PlanStatus,
+  PdiOrigin,
+  PdiCompetencyPriority,
+  PdiFinalResult,
+  PdiOverallResult,
+  PdiNextSteps,
   ActionType,
   ActionStatus,
   EvidenceType,
@@ -2016,25 +3121,68 @@ module.exports = {
   SsoProvider,
   IntegrationType,
   IntegrationStatus,
+  IntegrationCategory,
+  IntegrationEnvironment,
+  IntegrationDataFormat,
+  IntegrationCommunicationMethod,
+  IntegrationSyncDirection,
   SyncFrequency,
   AutomationTrigger,
   AlertSeverity,
   AlertCategory,
   BeneficiaryType,
   BeneficiaryStatus,
+  MaritalStatus,
+  FollowUpStatus,
+  ConsentStatus,
+  DocumentValidationStatus,
+  BenefitKind,
+  BenefitStatus,
+  ParticipationStatus,
   AngolaProvince,
   InteractionType,
   NeedPriority,
   NeedStatus,
   PartnerType,
   PartnerTier,
+  PartnershipKind,
+  PartnerProgramStatus,
+  PartnerAgreementType,
+  PartnerAgreementStatus,
+  PartnershipLevel,
+  PartnerOrganizationSize,
+  PartnerContributionType,
+  PartnerContributionPeriodicity,
+  PartnerOpportunityStatus,
+  PartnerDocumentType,
+  PartnerDocumentStatus,
+  PartnerLocationType,
+  PartnerRelationshipStatus,
+  PartnerCustomFieldType,
   PartnerStatus,
   PartnerInteractionType,
   MilestoneStatus,
   FunderType,
   FunderStatus,
+  FunderContactRole,
+  FunderThematicArea,
+  FunderFundingType,
+  FunderTargetGroup,
   GrantStatus,
+  DisbursementStatus,
+  FunderOpportunityStatus,
+  FunderOpportunityDocumentType,
+  FunderReportType,
+  FunderReportPeriodicity,
+  FunderContractType,
+  FunderContractStatus,
+  FunderContractRenewal,
+  FunderIndicatorKey,
   FunderInteractionType,
+  FunderPartnerRelationType,
+  FunderDocumentType,
+  FunderDocumentStatus,
+  FunderCustomFieldType,
   ReportStatus,
   LibraryItemType,
   LibraryAction,
@@ -2069,6 +3217,8 @@ module.exports = {
   TaskPhase,
   ResponsibleRole,
   DocumentStatus,
+  OnboardingCheckinType,
+  OnboardingCheckinStatus,
   SurveyMilestone,
   ContentType,
   ContentLevel,
@@ -2077,8 +3227,21 @@ module.exports = {
   TrainingType,
   TrainingLevel,
   TrainingStatus,
+  TrainingPriority,
+  TrainingPlanPeriod,
+  TrainingPlanStatus,
   TrainingParticipantStatus,
+  TrainingAssessmentRole,
   SessionModality,
+  LiveClassType,
+  LiveClassStatus,
+  LiveClassRecurrence,
+  LiveClassEnrollmentMode,
+  LiveAttendanceStatus,
+  TrainingInstructorType,
+  TrainingInstructorStatus,
+  TrainingResourceKind,
+  TrainingResourceStatus,
   ArticleStatus,
   ArticleAccess,
   InteractionAction,
@@ -2086,6 +3249,7 @@ module.exports = {
   StepType,
   InstanceStatus,
   StepProgressStatus,
+  ProcessPriority,
   NotificationPriority,
   NotificationCategory,
   DigestFrequency,
@@ -2122,9 +3286,29 @@ module.exports = {
   AvatarSessionStatus,
   EventType,
   EventModalidade,
+  EventVisibility,
   EventParticipantStatus,
+  EventSessionStatus,
+  EventLogisticsStatus,
+  EventSpeakerType,
+  EventSpeakerStatus,
+  EventCommunicationType,
+  EventCommunicationChannel,
+  EventCommunicationStatus,
+  EventEquipmentType,
+  EventCheckinMethod,
   InstructorType,
   CohortModalidade,
   CohortStatus,
   CohortParticipantStatus,
+  CourseCohortStatus,
+  AvatarTrainingAvatarType,
+  AvatarTrainingAvatarStatus,
+  AvatarTrainingStatus,
+  AvatarTrainingExperienceType,
+  AvatarTrainingAssignmentStatus,
+  AvatarTrainingAttemptStatus,
+  AvatarTrainingInteractionType,
+  AvatarTrainingSourceType,
+  AvatarTrainingProviderService,
 };

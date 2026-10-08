@@ -2,6 +2,16 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { SuccessionService } from './succession.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { DevelopmentPlansService } from '../development-plans/development-plans.service';
+import { AuditService } from '../common/services/audit.service';
+
+const mockDevelopmentPlansService = {
+  create: jest.fn().mockResolvedValue({ id: 1 }),
+  update: jest.fn(),
+  addAction: jest.fn(),
+};
+
+const mockAuditService = { log: jest.fn().mockResolvedValue(undefined) };
 
 const mockPrisma = {
   criticalPosition: { findUnique: jest.fn() },
@@ -29,7 +39,12 @@ describe('SuccessionService.create — validações e cálculo automático de ma
     jest.clearAllMocks();
     Object.defineProperty(mockPrisma, 'read', { get: () => mockPrisma, configurable: true });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [SuccessionService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        SuccessionService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: DevelopmentPlansService, useValue: mockDevelopmentPlansService },
+        { provide: AuditService, useValue: mockAuditService },
+      ],
     }).compile();
     service = module.get<SuccessionService>(SuccessionService);
   });
@@ -37,7 +52,7 @@ describe('SuccessionService.create — validações e cálculo automático de ma
   it('cargo crítico inexistente → NotFoundException', async () => {
     mockPrisma.criticalPosition.findUnique.mockResolvedValue(null);
     await expect(
-      service.create({ criticalPositionId: 1, candidateId: 7 } as any),
+      service.create({ criticalPositionId: 1, candidateId: 7 } as any, 1),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -45,7 +60,7 @@ describe('SuccessionService.create — validações e cálculo automático de ma
     mockPrisma.criticalPosition.findUnique.mockResolvedValue({ id: 1 });
     mockPrisma.user.findUnique.mockResolvedValue(null);
     await expect(
-      service.create({ criticalPositionId: 1, candidateId: 999 } as any),
+      service.create({ criticalPositionId: 1, candidateId: 999 } as any, 1),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -54,7 +69,7 @@ describe('SuccessionService.create — validações e cálculo automático de ma
     mockPrisma.user.findUnique.mockResolvedValue({ id: 7 });
     mockPrisma.successionPlan.findFirst.mockResolvedValue({ id: 5 });
     await expect(
-      service.create({ criticalPositionId: 1, candidateId: 7 } as any),
+      service.create({ criticalPositionId: 1, candidateId: 7 } as any, 1),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(mockPrisma.successionPlan.create).not.toHaveBeenCalled();
   });
@@ -81,7 +96,7 @@ describe('SuccessionService.create — validações e cálculo automático de ma
       Promise.resolve({ id: 1, ...data }),
     );
 
-    const result = await service.create({ criticalPositionId: 1, candidateId: 7 } as any);
+    const result = await service.create({ criticalPositionId: 1, candidateId: 7 } as any, 1);
 
     // compScore=100 (cumpre o único requisito), perfScore=80, expScore=50 (5 anos = 50%)
     // final = 100*0.4 + 80*0.4 + 50*0.2 = 40+32+10 = 82
@@ -96,15 +111,20 @@ describe('SuccessionService.create — validações e cálculo automático de ma
       Promise.resolve({ id: 1, ...data }),
     );
 
-    const result = await service.create({
-      criticalPositionId: 1,
-      candidateId: 7,
-      matchScore: 95,
-    } as any);
+    const result = await service.create(
+      {
+        criticalPositionId: 1,
+        candidateId: 7,
+        matchScore: 95,
+      } as any,
+      1,
+    );
 
     expect(result.matchScore).toBe(95);
-    // Não deve ter sido chamado outra vez para calcular (apenas a 1ª validação)
-    expect(mockPrisma.criticalPosition.findUnique).toHaveBeenCalledTimes(1);
+    // 1ª chamada é a validação do cargo crítico; a 2ª é o recomputeExitRisk()
+    // best-effort disparado após a criação do plano de sucessão — não é
+    // recalculado o matchScore, só o risco de saída (ver computeExitRisk()).
+    expect(mockPrisma.criticalPosition.findUnique).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -115,20 +135,25 @@ describe('SuccessionService — update / remove', () => {
     jest.clearAllMocks();
     Object.defineProperty(mockPrisma, 'read', { get: () => mockPrisma, configurable: true });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [SuccessionService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        SuccessionService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: DevelopmentPlansService, useValue: mockDevelopmentPlansService },
+        { provide: AuditService, useValue: mockAuditService },
+      ],
     }).compile();
     service = module.get<SuccessionService>(SuccessionService);
   });
 
   it('update de plano inexistente → NotFoundException', async () => {
     mockPrisma.successionPlan.findUnique.mockResolvedValue(null);
-    await expect(service.update(1, {} as any)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.update(1, {} as any, 1)).rejects.toBeInstanceOf(NotFoundException);
     expect(mockPrisma.successionPlan.update).not.toHaveBeenCalled();
   });
 
   it('remove de plano inexistente → NotFoundException', async () => {
     mockPrisma.successionPlan.findUnique.mockResolvedValue(null);
-    await expect(service.remove(1)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.remove(1, 1)).rejects.toBeInstanceOf(NotFoundException);
     expect(mockPrisma.successionPlan.delete).not.toHaveBeenCalled();
   });
 });
@@ -140,7 +165,12 @@ describe('SuccessionService — Talent Pool', () => {
     jest.clearAllMocks();
     Object.defineProperty(mockPrisma, 'read', { get: () => mockPrisma, configurable: true });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [SuccessionService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        SuccessionService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: DevelopmentPlansService, useValue: mockDevelopmentPlansService },
+        { provide: AuditService, useValue: mockAuditService },
+      ],
     }).compile();
     service = module.get<SuccessionService>(SuccessionService);
   });
