@@ -10,6 +10,20 @@ cd "$SCRIPT_DIR/.."
 TAG="${1:?uso: deploy.sh <image-tag>}"
 COMPOSE_FILE="docker-compose.prod.yml"
 
+# ─── Tag do frontend (serviço replicado à parte, imagem própria no GHCR) ────
+# Precedência: $FRONTEND_TAG do ambiente (repository_dispatch) > current_frontend_tag
+# (deploy anterior) > "latest" (primeira vez).
+FTAG="${FRONTEND_TAG:-}"
+if [ -z "$FTAG" ] && [ -f current_frontend_tag ]; then
+  FTAG="$(cat current_frontend_tag)"
+fi
+FTAG="${FTAG:-latest}"
+
+if [ -f current_frontend_tag ] && [ "$(cat current_frontend_tag)" != "$FTAG" ]; then
+  cp current_frontend_tag previous_frontend_tag
+fi
+echo "$FTAG" > current_frontend_tag
+
 if [ -f current_tag ] && [ "$(cat current_tag)" != "$TAG" ]; then
   cp current_tag previous_tag
 fi
@@ -47,14 +61,14 @@ else
   echo "BUILD_SHA=${BUILD_SHA}" >> .env.production
 fi
 
-IMAGE_TAG="$TAG" docker compose -f "$COMPOSE_FILE" pull app migrate \
+IMAGE_TAG="$TAG" FRONTEND_IMAGE_TAG="$FTAG" docker compose -f "$COMPOSE_FILE" pull app migrate frontend \
   || echo "⚠ pull falhou — a usar imagem local se existir"
 
 # `up -d` corre o job `migrate` até terminar (as réplicas `app` dependem de
 # `service_completed_successfully`) e sobe/recria tudo o resto. Se a migração
 # falhar, o compose sai != 0 → `set -e` aborta → o job de deploy falha → o
 # workflow dispara o rollback automático.
-IMAGE_TAG="$TAG" docker compose -f "$COMPOSE_FILE" up -d
+IMAGE_TAG="$TAG" FRONTEND_IMAGE_TAG="$FTAG" docker compose -f "$COMPOSE_FILE" up -d
 
 # configs de monitorização são bind-mounts — reiniciar para recarregar
 IMAGE_TAG="$TAG" docker compose -f "$COMPOSE_FILE" restart prometheus alertmanager
@@ -62,28 +76,44 @@ IMAGE_TAG="$TAG" docker compose -f "$COMPOSE_FILE" restart prometheus alertmanag
 # ─── Health gate: TODAS as réplicas de `app` têm de ficar healthy ───────────
 # (substitui a verificação antiga por nome de container, que já não existe —
 #  o serviço `app` passou a ser replicado, sem container_name.)
-echo "▶ à espera das réplicas de app (máx 120s)..."
+echo "▶ à espera das réplicas de app + frontend (máx 120s)..."
 deadline=$((SECONDS + 120))
-summary="0/0"
-while [ "$SECONDS" -lt "$deadline" ]; do
-  ids="$(docker compose -f "$COMPOSE_FILE" ps -q app || true)"
-  total=0
-  healthy=0
+summary="app 0/0 · frontend 0/0"
+
+# Define SVC_HEALTHY / SVC_TOTAL para o serviço $1.
+svc_health() {
+  local svc="$1" cid st ids
+  SVC_TOTAL=0
+  SVC_HEALTHY=0
+  ids="$(docker compose -f "$COMPOSE_FILE" ps -q "$svc" || true)"
   for cid in $ids; do
-    total=$((total + 1))
+    SVC_TOTAL=$((SVC_TOTAL + 1))
     st="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || echo none)"
-    [ "$st" = "healthy" ] && healthy=$((healthy + 1))
+    [ "$st" = "healthy" ] && SVC_HEALTHY=$((SVC_HEALTHY + 1))
   done
-  summary="$healthy/$total"
-  if [ "$total" -ge 1 ] && [ "$healthy" -eq "$total" ]; then
-    echo "✅ $summary réplicas saudáveis com a tag $TAG"
+}
+
+while [ "$SECONDS" -lt "$deadline" ]; do
+  # `|| true`: svc_health termina no `[ … ] && …` do loop, cujo estado é != 0
+  # quando o último container ainda não está healthy — sem guarda, o `set -e`
+  # abortaria o gate antes do timeout. SVC_TOTAL/SVC_HEALTHY já ficam calculados.
+  svc_health app || true
+  a_healthy=$SVC_HEALTHY
+  a_total=$SVC_TOTAL
+  svc_health frontend || true
+  f_healthy=$SVC_HEALTHY
+  f_total=$SVC_TOTAL
+  summary="app $a_healthy/$a_total · frontend $f_healthy/$f_total"
+  if [ "$a_total" -ge 1 ] && [ "$a_healthy" -eq "$a_total" ] &&
+    [ "$f_total" -ge 1 ] && [ "$f_healthy" -eq "$f_total" ]; then
+    echo "✅ $summary — todas saudáveis (app=$TAG frontend=$FTAG)"
     exit 0
   fi
-  echo "  … réplicas saudáveis: $summary"
+  echo "  … $summary"
   sleep 3
 done
 
-echo "❌ réplicas de app não ficaram saudáveis em 120s (última contagem: $summary)"
-docker compose -f "$COMPOSE_FILE" ps app || true
-docker compose -f "$COMPOSE_FILE" logs --tail 50 app || true
+echo "❌ réplicas não ficaram saudáveis em 120s (última contagem: $summary)"
+docker compose -f "$COMPOSE_FILE" ps app frontend || true
+docker compose -f "$COMPOSE_FILE" logs --tail 50 app frontend || true
 exit 1
