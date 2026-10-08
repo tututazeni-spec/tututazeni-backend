@@ -82,10 +82,26 @@ export class EnrollmentsController {
   // ── Admin / RH ────────────────────────────────────────────────────────────
 
   @Get()
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Listar matrículas com filtros avançados (inclui compliance)' })
+  @Roles(Role.ADMIN, Role.RH, Role.DIRECTOR, Role.GESTOR, Role.LIDER, Role.INSTRUCTOR)
+  @ApiOperation({
+    summary:
+      'Listar matrículas com filtros avançados (inclui compliance). ' +
+      'GESTOR/LIDER só veem o próprio departamento; INSTRUCTOR tem de indicar courseId ' +
+      'de um curso próprio — ver EnrollmentsService.findAll.',
+  })
   findAll(@Query() filters: EnrollmentFilterDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.findAll(filters, user);
+  }
+
+  @Get('manageable-courses')
+  @Roles(Role.ADMIN, Role.RH, Role.DIRECTOR, Role.GESTOR, Role.LIDER, Role.INSTRUCTOR)
+  @ApiOperation({
+    summary:
+      'Passo 1 da "Gestão": cursos que o utilizador pode escolher antes de ver ' +
+      'os matriculados (escopo por papel — ver EnrollmentsService.getManageableCourses)',
+  })
+  manageableCourses(@CurrentUser() user: CurrentUserData) {
+    return this.svc.getManageableCourses(user);
   }
 
   @Get('admin/dashboard')

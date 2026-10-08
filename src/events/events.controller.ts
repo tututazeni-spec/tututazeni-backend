@@ -60,14 +60,14 @@ export class EventsController {
 
   @Get()
   @ApiOperation({ summary: 'Listar eventos (com filtros de tipo, modalidade, estado, busca)' })
-  findAll(@Query() filters: EventFilterDto) {
-    return this.svc.findAll(filters);
+  findAll(@Query() filters: EventFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.findAll(filters, user);
   }
 
   @Get('upcoming')
   @ApiOperation({ summary: 'Próximos eventos publicados (para homepage/widget)' })
-  upcoming() {
-    return this.svc.getUpcoming();
+  upcoming(@CurrentUser() user: CurrentUserData) {
+    return this.svc.getUpcoming(user);
   }
 
   @Get('stats')

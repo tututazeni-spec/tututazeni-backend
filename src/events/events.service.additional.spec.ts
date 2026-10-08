@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import {
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { EventsService } from './events.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -37,7 +42,10 @@ const mockPrisma: any = {
     aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 4.5 } }),
   },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
-  user: { findMany: jest.fn().mockResolvedValue([]) },
+  user: {
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue(null),
+  },
 };
 
 const baseEvent = {
@@ -51,11 +59,16 @@ const baseEvent = {
   endAt: new Date('2026-07-01'),
   maxCapacity: 30,
   mandatory: false,
+  restrictedDeptIds: [],
   organizer: { id: 1, fullName: 'Admin', avatarUrl: null },
   feedbacks: [],
   participants: [],
   _count: { participants: 10, feedbacks: 0 },
 };
+
+// ADMIN — bypassa applyDeptVisibility, mantém os testes de findAll focados
+// no comportamento pré-existente (paginação, filtros) sem mockar user.
+const adminUser: any = { id: 99, role: { name: 'ADMIN' } };
 
 describe('EventsService (additional)', () => {
   let service: EventsService;
@@ -86,7 +99,7 @@ describe('EventsService (additional)', () => {
     it('deve retornar eventos paginados com taxa de ocupação', async () => {
       mockPrisma.event.findMany.mockResolvedValue([baseEvent]);
       mockPrisma.event.count.mockResolvedValue(1);
-      const result = await service.findAll({ page: 1, limit: 10 });
+      const result = await service.findAll({ page: 1, limit: 10 }, adminUser);
       expect(result.data).toHaveLength(1);
       expect(result.data[0]).toHaveProperty('occupancyRate');
       expect(result.data[0].occupancyRate).toBe(33);
@@ -95,13 +108,33 @@ describe('EventsService (additional)', () => {
     it('deve filtrar por search, type, modalidade, status, upcoming', async () => {
       mockPrisma.event.findMany.mockResolvedValue([]);
       mockPrisma.event.count.mockResolvedValue(0);
-      await service.findAll({
-        search: 'workshop',
-        type: 'WORKSHOP' as any,
-        modalidade: 'PRESENCIAL' as any,
-        upcoming: true,
-      });
+      await service.findAll(
+        {
+          search: 'workshop',
+          type: 'WORKSHOP' as any,
+          modalidade: 'PRESENCIAL' as any,
+          upcoming: true,
+        },
+        adminUser,
+      );
       expect(mockPrisma.event.findMany).toHaveBeenCalled();
+    });
+
+    it('deve restringir a eventos abertos a todos ou ao departamento do utilizador (não-privilegiado)', async () => {
+      mockPrisma.event.findMany.mockResolvedValue([]);
+      mockPrisma.event.count.mockResolvedValue(0);
+      mockPrisma.user.findUnique.mockResolvedValue({ departmentId: 7 });
+
+      const colaborador: any = { id: 2, role: { name: 'COLABORADOR' } };
+      await service.findAll({}, colaborador);
+
+      expect(mockPrisma.event.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: [{ restrictedDeptIds: { isEmpty: true } }, { restrictedDeptIds: { has: 7 } }],
+          }),
+        }),
+      );
     });
   });
 
@@ -243,6 +276,46 @@ describe('EventsService (additional)', () => {
       mockPrisma.eventParticipant.findUnique = jest.fn().mockResolvedValue(null);
       mockPrisma.eventParticipant.count.mockResolvedValue(30);
       await expect(service.join(1, 2)).rejects.toThrow(BadRequestException);
+    });
+
+    it('deve lançar ForbiddenException se evento restrito a outro departamento', async () => {
+      mockPrisma.event.findUnique.mockResolvedValue({
+        ...baseEvent,
+        feedbacks: [],
+        participants: [],
+        _count: { participants: 5 },
+        status: 'PUBLISHED',
+        restrictedDeptIds: [3],
+      });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        departmentId: 7,
+        role: { name: 'COLABORADOR' },
+      });
+      await expect(service.join(1, 2)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('deve permitir join quando o departamento do utilizador está na lista restrita', async () => {
+      mockPrisma.event.findUnique.mockResolvedValue({
+        ...baseEvent,
+        feedbacks: [],
+        participants: [],
+        _count: { participants: 5 },
+        status: 'PUBLISHED',
+        waitlistEnabled: false,
+        restrictedDeptIds: [7],
+      });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        departmentId: 7,
+        role: { name: 'COLABORADOR' },
+      });
+      mockPrisma.eventParticipant.findUnique = jest.fn().mockResolvedValue(null);
+      mockPrisma.eventParticipant.count.mockResolvedValue(5);
+      mockPrisma.eventParticipant.upsert = jest
+        .fn()
+        .mockResolvedValue({ id: 1, eventId: 1, userId: 2 });
+      mockPrisma.userPoints = { upsert: jest.fn().mockResolvedValue({}) };
+      const result = await service.join(1, 2);
+      expect(result).toBeDefined();
     });
   });
 
