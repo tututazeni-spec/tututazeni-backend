@@ -13,6 +13,7 @@ const mockSvc = {
   skillGapReport: jest.fn().mockResolvedValue({ skills: [] }),
   performanceReportFull: jest.fn().mockResolvedValue({ topPerformers: [] }),
   performanceReport: jest.fn().mockResolvedValue({}),
+  evaluationsReportFull: jest.fn().mockResolvedValue({ topPerformers: [] }),
   engagementReport: jest.fn().mockResolvedValue({}),
   talentReport: jest.fn().mockResolvedValue({}),
   complianceReport: jest.fn().mockResolvedValue({}),
@@ -86,6 +87,12 @@ describe('ReportsController', () => {
     const filter = {} as any;
     await controller.performance(filter);
     expect(mockSvc.performanceReportFull).toHaveBeenCalledWith(filter);
+  });
+
+  it('evaluations → evaluationsReportFull(filter)', async () => {
+    const filter = {} as any;
+    await controller.evaluations(filter);
+    expect(mockSvc.evaluationsReportFull).toHaveBeenCalledWith(filter);
   });
 
   it('performanceLegacy sem deptId → performanceReport(period, undefined)', async () => {

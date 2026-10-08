@@ -14,7 +14,7 @@ import { calculatePagination, buildPaginatedResponse } from '../common/helpers/p
 // ─── Helpers ─────────────────────────────────────────────────────
 
 /** Map raw AuditLog action → EventCategory */
-function categorise(action: string, entity: string): EventCategory {
+export function categorise(action: string, entity: string): EventCategory {
   const a = action.toUpperCase();
   const e = entity.toUpperCase();
 
@@ -53,7 +53,7 @@ function categorise(action: string, entity: string): EventCategory {
 }
 
 /** Derive module from entity/action */
-function deriveModule(action: string, entity: string): EventModule {
+export function deriveModule(action: string, entity: string): EventModule {
   const e = entity.toUpperCase();
   const a = action.toUpperCase();
   if (
@@ -110,7 +110,7 @@ function eventIcon(category: EventCategory, action: string): string {
 }
 
 /** Human-readable title from action+entity */
-function buildTitle(action: string, entity: string): string {
+export function buildTitle(action: string, entity: string): string {
   const a = action.toUpperCase();
   if (a === 'CONTENT_VIEW') return `Conteúdo visualizado`;
   if (a === 'CONTENT_BOOKMARK') return `Conteúdo guardado nos favoritos`;
@@ -289,7 +289,7 @@ export class HistoryService {
         entity: dto.entity,
         entityId: dto.entityId,
         changes: dto.description,
-        reason: dto.metadata,
+        metadata: dto.metadata,
       },
     });
     return enrichEntry(entry);
@@ -299,7 +299,7 @@ export class HistoryService {
   // SMART TIMELINE (aggregated multi-source)
   // ══════════════════════════════════════════════════════
 
-  async getUserTimeline(userId: number, filters: TimelineFilterDto) {
+  async getUserTimeline(userId: number, filters: TimelineFilterDto, extras: TimelineEvent[] = []) {
     const { page = 1, limit = 20 } = filters;
     const { skip } = calculatePagination(page, limit);
     const where: Prisma.AuditLogWhereInput = { userId };
@@ -412,7 +412,7 @@ export class HistoryService {
       events.push({
         id: `enroll-${e.id}`,
         source: 'ENROLLMENT',
-        timestamp: e.enrolledAt,
+        timestamp: completed ? (e.completedAt ?? e.enrolledAt) : e.enrolledAt,
         category: EventCategory.LEARNING,
         module: EventModule.LMS,
         impactScore: completed ? 70 : 40,
@@ -474,7 +474,7 @@ export class HistoryService {
       events.push({
         id: `plan-${p.id}`,
         source: 'DEVELOPMENT_PLAN',
-        timestamp: p.createdAt,
+        timestamp: p.status === 'COMPLETED' ? (p.completedAt ?? p.createdAt) : p.createdAt,
         category: EventCategory.CAREER,
         module: EventModule.TALENT,
         impactScore: 65,
@@ -527,6 +527,9 @@ export class HistoryService {
         userId,
       });
     }
+
+    // Extras fornecidos pelo hub (movimentos, ausências, salário)
+    events.push(...extras);
 
     // Sort all by timestamp desc, paginate
     events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -773,21 +776,22 @@ export class HistoryService {
     });
 
     const [anniversaries, expiring] = await Promise.all([
-      // Anniversaries based on createdAt (proxy for hire date)
+      // Aniversários só com a data de admissão real (hireDate) — nunca
+      // createdAt, que é a data de criação do registo no sistema.
       this.prisma.user
         .findMany({
-          where: { active: true },
+          where: { active: true, hireDate: { not: null } },
           select: {
             id: true,
             fullName: true,
             avatarUrl: true,
-            createdAt: true,
+            hireDate: true,
             department: { select: { name: true } },
           },
         })
         .then(users =>
           users
-            .filter(u => new Date(u.createdAt).getMonth() + 1 === month)
+            .filter(u => u.hireDate && new Date(u.hireDate).getMonth() + 1 === month)
             .map(u => ({
               type: 'ANNIVERSARY',
               icon: '🎉',
@@ -795,8 +799,8 @@ export class HistoryService {
               fullName: u.fullName,
               avatarUrl: u.avatarUrl,
               dept: u.department?.name,
-              years: now.getFullYear() - new Date(u.createdAt).getFullYear(),
-              date: u.createdAt,
+              years: now.getFullYear() - new Date(u.hireDate as Date).getFullYear(),
+              date: u.hireDate,
             }))
             .filter(u => u.years > 0)
             .sort((a, b) => b.years - a.years),

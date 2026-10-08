@@ -48,6 +48,7 @@ export default async function globalSetup() {
     { code: 'RH', name: 'RH' },
     { code: 'GESTOR', name: 'GESTOR' },
     { code: 'COLABORADOR', name: 'COLABORADOR' },
+    { code: 'AUDITOR', name: 'AUDITOR' },
   ];
   const roleRecords: Record<string, any> = {};
 
@@ -73,6 +74,7 @@ export default async function globalSetup() {
     { email: 'int.manager@innova-test.com', fullName: 'Manager Int', roleCode: 'GESTOR' },
     { email: 'int.rh@innova-test.com', fullName: 'RH Int', roleCode: 'RH' },
     { email: 'int.admin@innova-test.com', fullName: 'Admin Int', roleCode: 'ADMIN' },
+    { email: 'int.auditor@innova-test.com', fullName: 'Auditor Int', roleCode: 'AUDITOR' },
   ];
 
   for (const u of users) {

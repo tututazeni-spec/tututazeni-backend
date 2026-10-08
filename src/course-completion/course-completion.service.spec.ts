@@ -16,7 +16,7 @@ const enrollment = {
   update: jest.fn(),
   updateMany: jest.fn(),
 };
-const courseModule = { findMany: jest.fn(), findUnique: jest.fn() };
+const courseModule = { findMany: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn() };
 const lesson = { count: jest.fn(), findUnique: jest.fn() };
 const lessonProgress = { count: jest.fn(), upsert: jest.fn() };
 const quiz = { findFirst: jest.fn() };
@@ -460,7 +460,7 @@ describe('CourseCompletionService', () => {
       mockPrisma.read.lesson.findUnique.mockResolvedValue({
         id: 1,
         moduleId: 5,
-        module: { courseId: 20 },
+        module: { courseId: 20, status: 'PUBLISHED' },
       });
       mockPrisma.enrollment.findFirst.mockResolvedValue({
         id: 7,
@@ -492,7 +492,7 @@ describe('CourseCompletionService', () => {
       mockPrisma.read.lesson.findUnique.mockResolvedValue({
         id: 1,
         moduleId: 5,
-        module: { courseId: 20 },
+        module: { courseId: 20, status: 'PUBLISHED' },
       });
       mockPrisma.enrollment.findFirst.mockResolvedValue({
         id: 7,
@@ -520,7 +520,7 @@ describe('CourseCompletionService', () => {
       mockPrisma.read.lesson.findUnique.mockResolvedValue({
         id: 1,
         moduleId: 5,
-        module: { courseId: 20 },
+        module: { courseId: 20, status: 'PUBLISHED' },
       });
       mockPrisma.enrollment.findFirst.mockResolvedValue({
         id: 7,
@@ -539,6 +539,77 @@ describe('CourseCompletionService', () => {
       const res = await service.markLessonComplete(10, 1, {});
       expect(res.courseCompleted).toBe(true);
       expect(mockPrisma.enrollment.update).not.toHaveBeenCalled(); // não re-flipa NOT_STARTED
+    });
+
+    it('módulo não publicado → ForbiddenException (gate centralizado, cobre bypass via courses.service)', async () => {
+      mockPrisma.read.lesson.findUnique.mockResolvedValue({
+        id: 1,
+        moduleId: 5,
+        module: { courseId: 20, status: 'DRAFT' },
+      });
+      mockPrisma.enrollment.findFirst.mockResolvedValue({
+        id: 7,
+        userId: 10,
+        courseId: 20,
+        status: 'IN_PROGRESS',
+      });
+      // Curso já tem outro módulo publicado — cenário real do bypass. Um curso
+      // sem NENHUM módulo publicado cai no fallback de evaluateCompletion (ver
+      // teste "curso sem módulos publicados" em course-completion.service.ts)
+      // e não deve ser bloqueado por este gate.
+      mockPrisma.courseModule.findFirst.mockResolvedValue({ id: 99, status: 'PUBLISHED' });
+      await expect(service.markLessonComplete(10, 1, {})).rejects.toThrow(ForbiddenException);
+      expect(mockPrisma.lessonProgress.upsert).not.toHaveBeenCalled();
+    });
+
+    it('curso sem nenhum módulo publicado → gate não bloqueia (fallback de evaluateCompletion)', async () => {
+      mockPrisma.read.lesson.findUnique.mockResolvedValue({
+        id: 1,
+        moduleId: 5,
+        module: { courseId: 20, status: 'DRAFT' },
+      });
+      mockPrisma.enrollment.findFirst.mockResolvedValue({
+        id: 7,
+        userId: 10,
+        courseId: 20,
+        status: 'IN_PROGRESS',
+        enrolledAt: new Date(),
+      });
+      mockPrisma.courseModule.findFirst.mockResolvedValue(null);
+      mockPrisma.lessonProgress.upsert.mockResolvedValue({ id: 1 });
+      mockPrisma.enrollment.update.mockResolvedValue({});
+      jest.spyOn(service, 'evaluateCompletion').mockResolvedValue({ complete: false, reason: 'x' });
+      jest
+        .spyOn(service, 'getCourseProgressNumbers')
+        .mockResolvedValue({ total: 2, completed: 1, percent: 50 });
+
+      await expect(service.markLessonComplete(10, 1, {})).resolves.toBeDefined();
+      expect(mockPrisma.lessonProgress.upsert).toHaveBeenCalled();
+    });
+
+    it('módulo sequencial com anterior por concluir → ForbiddenException', async () => {
+      mockPrisma.read.lesson.findUnique.mockResolvedValue({
+        id: 1,
+        moduleId: 6,
+        module: {
+          id: 6,
+          courseId: 20,
+          status: 'PUBLISHED',
+          progressionType: 'SEQUENTIAL',
+          seq: 1,
+        },
+      });
+      mockPrisma.enrollment.findFirst.mockResolvedValue({
+        id: 7,
+        userId: 10,
+        courseId: 20,
+        status: 'IN_PROGRESS',
+      });
+      mockPrisma.courseModule.findFirst.mockResolvedValue({ id: 5, status: 'PUBLISHED' });
+      jest.spyOn(service, 'isModuleCompleted').mockResolvedValue(false);
+
+      await expect(service.markLessonComplete(10, 1, {})).rejects.toThrow(ForbiddenException);
+      expect(mockPrisma.lessonProgress.upsert).not.toHaveBeenCalled();
     });
   });
 });

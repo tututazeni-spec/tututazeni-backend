@@ -41,6 +41,7 @@ const baseRule = {
 
 const tenantMock = {
   findUnique: jest.fn(),
+  findFirst: jest.fn(),
   findMany: jest.fn().mockResolvedValue([baseTenant]),
   create: jest.fn(),
   update: jest.fn(),
@@ -123,6 +124,7 @@ describe('ScalabilityService (additional)', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     tenantMock.findUnique.mockResolvedValue(baseTenant);
+    tenantMock.findFirst.mockResolvedValue(baseTenant);
     tenantMock.create.mockResolvedValue(baseTenant);
     tenantMock.update.mockResolvedValue(baseTenant);
     tenantMock.findMany.mockResolvedValue([baseTenant]);
@@ -158,6 +160,34 @@ describe('ScalabilityService (additional)', () => {
       ],
     }).compile();
     service = module.get<ScalabilityService>(ScalabilityService);
+  });
+
+  // ─── resolveTenantId ──────────────────────────────────────────────────────
+  // Wrapper fino sobre resolveDefaultTenantId (já testado isoladamente em
+  // tenant.helper.spec.ts) — aqui só confirma a delegação correcta.
+
+  describe('resolveTenantId', () => {
+    it('devolve o tenantId recebido sem tocar na BD, se fornecido', async () => {
+      const result = await service.resolveTenantId('explicit-tenant');
+      expect(result).toBe('explicit-tenant');
+      expect(tenantMock.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('devolve o primeiro tenant existente quando nenhum é fornecido', async () => {
+      tenantMock.findFirst.mockResolvedValueOnce(baseTenant);
+      const result = await service.resolveTenantId();
+      expect(result).toBe(baseTenant.id);
+    });
+
+    it('cria um tenant DEFAULT quando não existe nenhum', async () => {
+      tenantMock.findFirst.mockResolvedValueOnce(null);
+      tenantMock.create.mockResolvedValueOnce({ ...baseTenant, id: 'default-tenant' });
+      const result = await service.resolveTenantId();
+      expect(tenantMock.create).toHaveBeenCalledWith({
+        data: { tenantCode: 'DEFAULT', tenantName: 'Default Tenant' },
+      });
+      expect(result).toBe('default-tenant');
+    });
   });
 
   // ─── createTenant ─────────────────────────────────────────────────────────
@@ -486,12 +516,12 @@ describe('ScalabilityService (additional)', () => {
       expect(result).toBeDefined();
     });
 
-    it('deve lançar NotFoundException se não configurado', async () => {
+    it('deve retornar null se não configurado (estado válido, não é erro)', async () => {
       (mockPrisma as any).contentDeliveryConfig = {
         findUnique: jest.fn().mockResolvedValue(null),
         upsert: jest.fn().mockResolvedValue({}),
       };
-      await expect(service.getContentDeliveryConfig('tenant-1')).rejects.toThrow(NotFoundException);
+      await expect(service.getContentDeliveryConfig('tenant-1')).resolves.toBeNull();
     });
   });
 
@@ -727,6 +757,16 @@ describe('ScalabilityService (additional)', () => {
         'admin',
       );
       expect(result.total).toBe(2);
+      // Achado real: parseCSV() normaliza cabeçalhos para minúsculas
+      // ("fullname"), mas o create() abaixo lê `row.fullName` (camelCase) —
+      // sem o mapeamento explícito em bulkImportUsers(), esta asserção falhava
+      // sempre (`created: 0, failed: 2`) e só `total` (mera contagem de
+      // linhas) continuava a passar, escondendo o bug.
+      expect(result.created).toBe(2);
+      expect(result.failed).toBe(0);
+      expect(userMock.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ email: 'alice@innova.com', fullName: 'Alice Silva' }),
+      });
     });
 
     it('deve rejeitar payload base64 inválido', async () => {

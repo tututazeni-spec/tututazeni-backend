@@ -98,12 +98,12 @@ describe('DashboardRhController', () => {
 
   it('attendance sem params', async () => {
     await controller.attendance();
-    expect(mockSvc.getAttendancePanel).toHaveBeenCalledWith(undefined, undefined);
+    expect(mockSvc.getAttendancePanel).toHaveBeenCalledWith(undefined);
   });
 
-  it('attendance com params', async () => {
-    await controller.attendance('2024-01-01', '2024-01-31');
-    expect(mockSvc.getAttendancePanel).toHaveBeenCalledWith('2024-01-01', '2024-01-31');
+  it('attendance com department', async () => {
+    await controller.attendance('Comercial');
+    expect(mockSvc.getAttendancePanel).toHaveBeenCalledWith('Comercial');
   });
 
   it('talentPipeline', async () => {

@@ -2,24 +2,34 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AiTutorController } from './ai-tutor.controller';
 import { AiTutorService } from './ai-tutor.service';
 import { AiProvidersService } from './ai-providers.service';
+import { AiKnowledgeService } from './ai-knowledge.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
 const mockSvc = {
   getUsageStats: jest.fn().mockResolvedValue({}),
+  getMyUsageStats: jest.fn().mockResolvedValue({}),
   getMySessions: jest.fn().mockResolvedValue([]),
+  listAllSessions: jest.fn().mockResolvedValue([]),
   getSession: jest.fn().mockResolvedValue({ id: 1 }),
+  deleteSession: jest.fn().mockResolvedValue({ deleted: true }),
   startSession: jest.fn().mockResolvedValue({ id: 1 }),
   sendMessage: jest.fn().mockResolvedValue({ reply: 'ok' }),
   endSession: jest.fn().mockResolvedValue({}),
   rateMessage: jest.fn().mockResolvedValue({}),
   executeAgentAction: jest.fn().mockResolvedValue({}),
   generateContent: jest.fn().mockResolvedValue({}),
+  exerciseFeedback: jest.fn().mockResolvedValue({}),
   getRecommendations: jest.fn().mockResolvedValue([]),
 };
 
 const mockProviders = {
   getProviderInfo: jest.fn().mockReturnValue({ name: 'Groq' }),
+};
+
+const mockKnowledge = {
+  getSources: jest.fn().mockResolvedValue({}),
+  search: jest.fn().mockResolvedValue([]),
 };
 
 const mockUser = { id: 1, email: 'test@innova.com', role: { name: 'ADMIN' } };
@@ -34,6 +44,7 @@ describe('AiTutorController', () => {
       providers: [
         { provide: AiTutorService, useValue: mockSvc },
         { provide: AiProvidersService, useValue: mockProviders },
+        { provide: AiKnowledgeService, useValue: mockKnowledge },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -60,9 +71,10 @@ describe('AiTutorController', () => {
     expect(mockSvc.getMySessions).toHaveBeenCalledWith(1, filters);
   });
 
-  it('getSession → getSession(userId, id)', async () => {
+  it('getSession → getSession(userId, id, viewAll)', async () => {
     await controller.getSession(mockUser as any, 3);
-    expect(mockSvc.getSession).toHaveBeenCalledWith(1, 3);
+    // mockUser tem role ADMIN → viewAll=true (isPrivileged)
+    expect(mockSvc.getSession).toHaveBeenCalledWith(1, 3, true);
   });
 
   it('startSession → startSession(userId, dto)', async () => {

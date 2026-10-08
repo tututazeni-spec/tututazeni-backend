@@ -339,6 +339,33 @@ describe('ReportsService', () => {
     });
   });
 
+  // ─── evaluationsReportFull ──────────────────────────────────────────────
+
+  describe('evaluationsReportFull', () => {
+    it('deve agregar tentativas de avaliações formais (EXAM) por departamento', async () => {
+      mockPrismaProxy.assessmentAttempt = {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            score: 90,
+            passed: true,
+            user: { id: 1, fullName: 'Ana Silva', department: { name: 'RH' } },
+            assessment: { title: 'Prova Final', maxGrade: 20, passingScore: 70 },
+          },
+          {
+            score: 40,
+            passed: false,
+            user: { id: 2, fullName: 'Bruno Costa', department: { name: 'RH' } },
+            assessment: { title: 'Prova Final', maxGrade: 20, passingScore: 70 },
+          },
+        ]),
+      };
+      const result = await service.evaluationsReportFull({});
+      expect(result.report).toBe('EVALUATIONS');
+      expect(result.summary).toMatchObject({ totalAttempts: 2, avgScore: 65, passRate: 50 });
+      expect(result.byDepartment).toEqual([{ department: 'RH', count: 2, avgScore: 65 }]);
+    });
+  });
+
   // ─── engagementReport ─────────────────────────────────────────────────────
 
   describe('engagementReport', () => {

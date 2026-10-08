@@ -544,7 +544,7 @@ describe('HistoryService (progress)', () => {
           id: 1,
           fullName: 'Ana',
           avatarUrl: null,
-          createdAt: hireDate,
+          hireDate,
           department: { name: 'TI' },
         },
       ]);

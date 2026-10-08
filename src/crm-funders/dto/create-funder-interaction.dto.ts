@@ -10,7 +10,7 @@ import {
   IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { FunderInteractionType } from '@prisma/client';
 
 export class CreateFunderInteractionDto {
@@ -30,11 +30,6 @@ export class CreateFunderInteractionDto {
   @IsOptional()
   @IsString()
   grantId?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  channel?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -81,4 +76,61 @@ export class CreateFunderInteractionDto {
   @IsOptional()
   @IsBoolean()
   isPrivate?: boolean;
+
+  @ApiPropertyOptional({ description: 'User.id do responsável pela actividade' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  responsibleId?: number;
+
+  @ApiPropertyOptional({ type: [String], description: 'Participantes (nomes)' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  participants?: string[];
+}
+
+export class UpdateFunderInteractionDto extends PartialType(CreateFunderInteractionDto) {}
+
+export class FilterFunderInteractionDto {
+  @ApiPropertyOptional({ enum: FunderInteractionType })
+  @IsOptional()
+  @IsEnum(FunderInteractionType)
+  type?: FunderInteractionType;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  grantId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  responsibleId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({ default: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
 }

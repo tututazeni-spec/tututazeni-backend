@@ -23,16 +23,73 @@ import {
   EnrollDto,
   AssignCourseDto,
   CreateQuizDto,
+  UpdateQuizDto,
   SubmitQuizDto,
   CourseFeedbackDto,
   AssignmentTarget,
+  CreateLessonActivityDto,
+  UpdateLessonActivityDto,
+  CreateLessonResourceDto,
+  UpdateLessonResourceDto,
+  CreateCourseAudienceGroupDto,
+  UpdateCourseAudienceGroupDto,
+  CreateCourseCohortDto,
+  UpdateCourseCohortDto,
+  AddCohortParticipantsDto,
+  MarkCohortAttendanceDto,
+  CreateCourseCategoryDto,
+  UpdateCourseCategoryDto,
 } from './courses.dto';
+import { CurrentUserData } from '../common/types/current-user';
 
 const COURSE_BASE_INCLUDE = {
   _count: { select: { enrollments: true, feedbacks: true, modules: true } },
   competencies: { include: { competency: true } },
+  primaryInstructor: { select: { id: true, fullName: true, avatarUrl: true } },
 } as const;
 
+const COURSE_DETAIL_INCLUDE = {
+  ...COURSE_BASE_INCLUDE,
+  requiredCourse: { select: { id: true, title: true } },
+  instructors: { include: { user: { select: { id: true, fullName: true, avatarUrl: true } } } },
+  audienceGroups: true,
+  modules: {
+    orderBy: { seq: 'asc' as const },
+    include: {
+      lessons: { orderBy: { seq: 'asc' as const }, include: { activities: true, resources: true } },
+      competencies: { include: { competency: true } },
+      materials: true,
+      assessments: { select: { id: true, title: true, status: true } },
+    },
+  },
+  feedbacks: {
+    include: { user: { select: { id: true, fullName: true } } },
+    orderBy: { createdAt: 'desc' as const },
+    take: 10,
+  },
+  department: { select: { id: true, name: true, code: true } },
+} as const;
+
+function toDateOrNull(value?: string | null) {
+  return value ? new Date(value) : value === null ? null : undefined;
+}
+
+// NOTA — dois sistemas paralelos de Módulos/Lições (ver docs/06-modulo-courses.md):
+// Este service e `course-modules/course-modules.service.ts` expõem CRUD distinto
+// (rotas `/courses/:id/modules|/courses/modules/:id/lessons` aqui vs. `/modules`,
+// `/lessons` no outro) sobre os MESMOS modelos Prisma (CourseModule/Lesson) — sem
+// divergência de dados, mas com histórico duplicado por terem sido escritos sem
+// consciência um do outro (PR #296 não sabia que `/modules`/`/lessons` já existiam).
+// Este service tem os campos mais completos do doc (code, status, live*,
+// competências, activities, resources); o outro tem a lógica de acesso mais madura
+// (drip/sequencial/analytics/clone/TTS). Frontend: ModuleModal/ModulosView (Gestão)
+// usam este; ModuleBuilder/ProgressModal (/courses/[id]/learn) usam o outro.
+// O único ponto onde a duplicação era um bug real de segurança — conclusão de
+// aula a ignorar pré-requisitos de módulo via esta rota — foi corrigido
+// centralizando o gate de acesso em CourseCompletionService.markLessonComplete,
+// chamado por ambos. Não fundido fisicamente por agora (risco/custo de reescrever
+// duas UIs admin distintas); mesmo padrão de "documentar em vez de fundir" já
+// usado no repo para os dois AuditService (ver CLAUDE.md).
 @Injectable()
 export class CoursesService {
   private readonly logger = new Logger(CoursesService.name);
@@ -54,6 +111,9 @@ export class CoursesService {
       status,
       mandatory,
       departmentId,
+      type,
+      modality,
+      unit,
     } = filters;
     const { skip, take } = calculatePagination(page, limit);
 
@@ -63,6 +123,9 @@ export class CoursesService {
     if (level) where.level = level;
     if (mandatory !== undefined) where.mandatory = mandatory;
     if (departmentId) where.departmentId = departmentId;
+    if (type) where.type = type;
+    if (modality) where.modality = modality;
+    if (unit) where.unit = { contains: unit, mode: 'insensitive' };
     if (search) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
@@ -83,28 +146,75 @@ export class CoursesService {
       this.prisma.read.course.count({ where }),
     ]);
 
-    return buildPaginatedResponse(data, total, page, limit);
+    // "Progresso médio" (docs/modulo_courses.md secção 2, coluna da tabela
+    // Cursos) — average de Enrollment.progress agrupado por curso, só para
+    // os cursos desta página (evita groupBy sobre a tabela toda).
+    const courseIds = data.map(c => c.id);
+    const avgProgressByCourseFn =
+      courseIds.length > 0
+        ? this.prisma.read.enrollment.groupBy({
+            by: ['courseId'],
+            where: { courseId: { in: courseIds } },
+            _avg: { progress: true },
+          })
+        : Promise.resolve([] as { courseId: number; _avg: { progress: number | null } }[]);
+    const avgProgressGroups = await avgProgressByCourseFn;
+    const avgProgressByCourse: Record<number, number> = {};
+    for (const g of avgProgressGroups) {
+      avgProgressByCourse[g.courseId] = Math.round(g._avg.progress ?? 0);
+    }
+
+    const enriched = data.map(c => ({
+      ...c,
+      avgProgress: avgProgressByCourse[c.id] ?? 0,
+    }));
+
+    return buildPaginatedResponse(enriched, total, page, limit);
   }
 
   async findOne(id: number) {
     const course = await this.prisma.read.course.findUnique({
       where: { id },
-      include: {
-        ...COURSE_BASE_INCLUDE,
-        modules: {
-          orderBy: { seq: 'asc' },
-          include: { lessons: { orderBy: { seq: 'asc' } } },
-        },
-        feedbacks: {
-          include: { user: { select: { id: true, fullName: true } } },
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        },
-        department: { select: { id: true, name: true, code: true } },
-      },
+      include: COURSE_DETAIL_INCLUDE,
     });
     if (!course) throw new NotFoundException('Curso não encontrado');
-    return course;
+
+    // docs/06-modulo-courses.md secções 11-12 — "Cursos relacionados" e
+    // "Este curso faz parte de: Percurso X". Sem isto o resto da página de
+    // detalhe (secções 1-10) já tinha os dados via COURSE_DETAIL_INCLUDE mas
+    // não era renderizado; estas duas secções não tinham sequer os dados.
+    const competencyIds = course.competencies.map(c => c.competencyId);
+    const relatedWhere: Prisma.CourseWhereInput[] = [];
+    if (course.category) relatedWhere.push({ category: course.category });
+    if (competencyIds.length > 0) {
+      relatedWhere.push({ competencies: { some: { competencyId: { in: competencyIds } } } });
+    }
+    const [relatedCourses, pathLinks] = await Promise.all([
+      relatedWhere.length > 0
+        ? this.prisma.read.course.findMany({
+            where: { id: { not: id }, status: 'PUBLISHED', OR: relatedWhere },
+            take: 6,
+            select: {
+              id: true,
+              title: true,
+              thumbnailUrl: true,
+              category: true,
+              level: true,
+              workloadHours: true,
+            },
+          })
+        : Promise.resolve([]),
+      this.prisma.read.learningPathCourse.findMany({
+        where: { courseId: id },
+        select: { learningPath: { select: { id: true, title: true } } },
+      }),
+    ]);
+
+    return {
+      ...course,
+      relatedCourses,
+      learningPaths: pathLinks.map(l => l.learningPath),
+    };
   }
 
   async getCategories() {
@@ -131,9 +241,12 @@ export class CoursesService {
       data: {
         ...dto,
         tags: dto.tags ?? [],
+        targetAudience: dto.targetAudience ?? [],
         learningObjectives: dto.learningObjectives ?? [],
         status: dto.status ?? 'DRAFT',
         language: dto.language ?? 'pt',
+        startDate: toDateOrNull(dto.startDate),
+        endDate: toDateOrNull(dto.endDate),
       },
     });
 
@@ -146,7 +259,14 @@ export class CoursesService {
 
   async update(id: number, dto: UpdateCourseDto) {
     await this.findOne(id);
-    return this.prisma.course.update({ where: { id }, data: dto });
+    return this.prisma.course.update({
+      where: { id },
+      data: {
+        ...dto,
+        startDate: toDateOrNull(dto.startDate),
+        endDate: toDateOrNull(dto.endDate),
+      },
+    });
   }
 
   async publish(id: number) {
@@ -167,55 +287,139 @@ export class CoursesService {
 
   async duplicate(id: number) {
     const original = await this.findOne(id);
-    // Achado real: `department`/`competencies` (objectos de relação vindos do
-    // `include` de findOne()) não estavam excluídos deste destructure e
-    // vazavam para `...data` → `course.create({ data: {...data, ...} })`
-    // abaixo rebentava sempre em runtime real ("Unknown argument department/
-    // competencies") — mascarado pelo `as any` e nunca apanhado pelos testes
-    // unitários (mock de Prisma não valida argumentos). `competencies` nunca
-    // foi copiado para o curso duplicado (só modules/lessons o são, no loop
-    // abaixo), por isso fica excluído aqui tal como já era feito com
-    // modules/feedbacks/_count.
-    const {
-      id: _id,
-      createdAt,
-      updatedAt,
-      publishedAt,
-      modules,
-      feedbacks,
-      _count,
-      department: _department,
-      competencies: _competencies,
-      ...data
-    } = original;
-
+    // Whitelist explícito dos campos escalares do Course a copiar — nunca
+    // espalhar `original` directamente: `findOne()` inclui relações
+    // (department, competencies, primaryInstructor, requiredCourse,
+    // instructors, audienceGroups, modules, feedbacks, _count) que não são
+    // argumentos válidos de `course.create({ data })` e rebentam em runtime
+    // real (mascarado pelos testes unitários, que mockam o Prisma). Ver
+    // histórico desta função.
     const copy = await this.prisma.course.create({
       data: {
-        ...data,
-        title: `${data.title} (cópia)`,
+        title: `${original.title} (cópia)`,
+        shortDescription: original.shortDescription,
+        description: original.description,
+        category: original.category,
+        knowledgeArea: original.knowledgeArea,
+        tags: original.tags,
+        thumbnailUrl: original.thumbnailUrl,
+        introVideoUrl: original.introVideoUrl,
+        workloadHours: original.workloadHours,
+        estimatedDurationDays: original.estimatedDurationDays,
+        language: original.language,
+        level: original.level,
         status: 'DRAFT',
-        internalCode: data.internalCode ? `${data.internalCode}-COPY` : undefined,
+        visibility: original.visibility,
+        mandatory: original.mandatory,
+        internalCode: original.internalCode ? `${original.internalCode}-COPY` : undefined,
+        departmentId: original.departmentId,
+        unit: original.unit,
+        targetAudience: original.targetAudience,
+        learningObjectives: original.learningObjectives,
+        requiresApproval: original.requiresApproval,
+        passingScore: original.passingScore,
+        minCompletionPercent: original.minCompletionPercent,
+        certificateEnabled: original.certificateEnabled,
+        certificateCriteria: original.certificateCriteria,
+        certificateValidityDays: original.certificateValidityDays,
+        allowDownload: original.allowDownload,
+        primaryInstructorId: original.primaryInstructorId,
+        requiredCourseId: original.requiredCourseId,
       },
     });
 
-    for (const mod of modules) {
+    const moduleIdMap = new Map<number, number>();
+
+    for (const mod of original.modules) {
       const newMod = await this.prisma.courseModule.create({
-        data: { courseId: copy.id, title: mod.title, description: mod.description, seq: mod.seq },
+        data: {
+          courseId: copy.id,
+          code: mod.code,
+          title: mod.title,
+          description: mod.description,
+          thumbnailUrl: mod.thumbnailUrl,
+          learningObjectives: mod.learningObjectives,
+          seq: mod.seq,
+          status: 'DRAFT',
+          type: mod.type,
+          progressionType: mod.progressionType,
+          completionRule: mod.completionRule,
+          minCompletionPercent: mod.minCompletionPercent,
+          minQuizScore: mod.minQuizScore,
+          mandatory: mod.mandatory,
+          allowSkip: mod.allowSkip,
+          estimatedDurationMinutes: mod.estimatedDurationMinutes,
+          dripDays: mod.dripDays,
+        },
       });
+      moduleIdMap.set(mod.id, newMod.id);
+
+      for (const competency of mod.competencies ?? []) {
+        await this.prisma.moduleCompetency.create({
+          data: { moduleId: newMod.id, competencyId: competency.competencyId },
+        });
+      }
+
       for (const lesson of mod.lessons) {
-        await this.prisma.lesson.create({
+        const newLesson = await this.prisma.lesson.create({
           data: {
             moduleId: newMod.id,
+            code: lesson.code,
             title: lesson.title,
             description: lesson.description,
+            learningObjectives: lesson.learningObjectives,
             type: lesson.type,
             contentUrl: lesson.contentUrl,
             textContent: lesson.textContent,
+            captionsUrl: lesson.captionsUrl,
+            transcript: lesson.transcript,
             seq: lesson.seq,
             durationMinutes: lesson.durationMinutes,
             isFree: lesson.isFree,
+            mandatory: lesson.mandatory,
             allowDownload: lesson.allowDownload,
+            minWatchSeconds: lesson.minWatchSeconds,
+            allowSkip: lesson.allowSkip,
+            autoComplete: lesson.autoComplete,
+            requiresActivity: lesson.requiresActivity,
+            requiresAssessment: lesson.requiresAssessment,
           },
+        });
+
+        for (const activity of lesson.activities ?? []) {
+          await this.prisma.lessonActivity.create({
+            data: {
+              lessonId: newLesson.id,
+              type: activity.type,
+              title: activity.title,
+              description: activity.description,
+              contentUrl: activity.contentUrl,
+              seq: activity.seq,
+            },
+          });
+        }
+
+        for (const resource of lesson.resources ?? []) {
+          await this.prisma.lessonResource.create({
+            data: {
+              lessonId: newLesson.id,
+              title: resource.title,
+              url: resource.url,
+              fileType: resource.fileType,
+              fileSizeKb: resource.fileSizeKb,
+            },
+          });
+        }
+      }
+    }
+
+    // Pré-requisitos entre módulos apontam para IDs do curso original —
+    // remapeia para os novos IDs da cópia (segunda passagem, já com o mapa completo).
+    for (const mod of original.modules) {
+      if (mod.requiredModuleId && moduleIdMap.has(mod.requiredModuleId)) {
+        await this.prisma.courseModule.update({
+          where: { id: moduleIdMap.get(mod.id)! },
+          data: { requiredModuleId: moduleIdMap.get(mod.requiredModuleId) },
         });
       }
     }
@@ -257,13 +461,34 @@ export class CoursesService {
 
   async createModule(courseId: number, dto: CreateCourseModuleDto) {
     await this.findOne(courseId);
-    return this.prisma.courseModule.create({ data: { courseId, ...dto } });
+    const { competencyIds, ...data } = dto;
+    const mod = await this.prisma.courseModule.create({
+      data: { courseId, ...data, availableFrom: toDateOrNull(dto.availableFrom) },
+    });
+    await this.syncModuleCompetencies(mod.id, competencyIds);
+    return mod;
   }
 
   async updateModule(courseId: number, moduleId: number, dto: UpdateCourseModuleDto) {
     const mod = await this.prisma.courseModule.findFirst({ where: { id: moduleId, courseId } });
     if (!mod) throw new NotFoundException('Módulo não encontrado');
-    return this.prisma.courseModule.update({ where: { id: moduleId }, data: dto });
+    const { competencyIds, ...data } = dto;
+    const updated = await this.prisma.courseModule.update({
+      where: { id: moduleId },
+      data: { ...data, availableFrom: toDateOrNull(dto.availableFrom) },
+    });
+    await this.syncModuleCompetencies(moduleId, competencyIds);
+    return updated;
+  }
+
+  private async syncModuleCompetencies(moduleId: number, competencyIds?: number[]) {
+    if (competencyIds === undefined) return;
+    await this.prisma.moduleCompetency.deleteMany({ where: { moduleId } });
+    if (competencyIds.length === 0) return;
+    await this.prisma.moduleCompetency.createMany({
+      data: competencyIds.map(competencyId => ({ moduleId, competencyId })),
+      skipDuplicates: true,
+    });
   }
 
   async reorderModules(courseId: number, orderedIds: number[]) {
@@ -278,6 +503,29 @@ export class CoursesService {
   async removeModule(courseId: number, moduleId: number) {
     const mod = await this.prisma.courseModule.findFirst({ where: { id: moduleId, courseId } });
     if (!mod) throw new NotFoundException('Módulo não encontrado');
+
+    // Lesson→CourseModule tem onDelete: Cascade, mas Quiz→Lesson não — sem
+    // isto, eliminar um módulo com uma aula com quiz rebentava com 500
+    // (mesma FK RESTRICT não tratada de removeLesson, aqui atingida via
+    // cascata). Mesma regra: bloquear se há tentativas reais, senão eliminar
+    // os quizzes das aulas do módulo antes do módulo.
+    const quizzes = await this.prisma.quiz.findMany({
+      where: { lesson: { moduleId } },
+      include: { _count: { select: { attempts: true } } },
+    });
+    const withAttempts = quizzes.filter(q => q._count.attempts > 0);
+    if (withAttempts.length > 0) {
+      throw new ForbiddenException(
+        `${withAttempts.length} aula(s) deste módulo têm quiz com tentativas de alunos. Não pode ser eliminado.`,
+      );
+    }
+    if (quizzes.length > 0) {
+      await this.prisma.quizQuestion.deleteMany({
+        where: { quizId: { in: quizzes.map(q => q.id) } },
+      });
+      await this.prisma.quiz.deleteMany({ where: { id: { in: quizzes.map(q => q.id) } } });
+    }
+
     return this.prisma.courseModule.delete({ where: { id: moduleId } });
   }
 
@@ -286,13 +534,121 @@ export class CoursesService {
   async createLesson(moduleId: number, dto: CreateLessonDto) {
     const mod = await this.prisma.courseModule.findUnique({ where: { id: moduleId } });
     if (!mod) throw new NotFoundException('Módulo não encontrado');
-    return this.prisma.lesson.create({ data: { moduleId, ...dto } });
+    return this.prisma.lesson.create({
+      data: {
+        moduleId,
+        ...dto,
+        availableFrom: toDateOrNull(dto.availableFrom),
+        availableUntil: toDateOrNull(dto.availableUntil),
+        liveDate: toDateOrNull(dto.liveDate),
+      },
+    });
   }
 
   async updateLesson(lessonId: number, dto: UpdateLessonDto) {
     const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
     if (!lesson) throw new NotFoundException('Aula não encontrada');
-    return this.prisma.lesson.update({ where: { id: lessonId }, data: dto });
+    return this.prisma.lesson.update({
+      where: { id: lessonId },
+      data: {
+        ...dto,
+        availableFrom: toDateOrNull(dto.availableFrom),
+        availableUntil: toDateOrNull(dto.availableUntil),
+        liveDate: toDateOrNull(dto.liveDate),
+      },
+    });
+  }
+
+  // ─── Actividades da lição ─────────────────────────────────────────────────
+
+  async createLessonActivity(lessonId: number, dto: CreateLessonActivityDto) {
+    const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
+    if (!lesson) throw new NotFoundException('Aula não encontrada');
+    return this.prisma.lessonActivity.create({ data: { lessonId, ...dto } });
+  }
+
+  async updateLessonActivity(activityId: number, dto: UpdateLessonActivityDto) {
+    const activity = await this.prisma.lessonActivity.findUnique({ where: { id: activityId } });
+    if (!activity) throw new NotFoundException('Actividade não encontrada');
+    return this.prisma.lessonActivity.update({ where: { id: activityId }, data: dto });
+  }
+
+  async removeLessonActivity(activityId: number) {
+    const activity = await this.prisma.lessonActivity.findUnique({ where: { id: activityId } });
+    if (!activity) throw new NotFoundException('Actividade não encontrada');
+    return this.prisma.lessonActivity.delete({ where: { id: activityId } });
+  }
+
+  // ─── Recursos da lição ────────────────────────────────────────────────────
+
+  async createLessonResource(lessonId: number, dto: CreateLessonResourceDto) {
+    const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
+    if (!lesson) throw new NotFoundException('Aula não encontrada');
+    return this.prisma.lessonResource.create({ data: { lessonId, ...dto } });
+  }
+
+  async updateLessonResource(resourceId: number, dto: UpdateLessonResourceDto) {
+    const resource = await this.prisma.lessonResource.findUnique({ where: { id: resourceId } });
+    if (!resource) throw new NotFoundException('Recurso não encontrado');
+    return this.prisma.lessonResource.update({ where: { id: resourceId }, data: dto });
+  }
+
+  async removeLessonResource(resourceId: number) {
+    const resource = await this.prisma.lessonResource.findUnique({ where: { id: resourceId } });
+    if (!resource) throw new NotFoundException('Recurso não encontrado');
+    return this.prisma.lessonResource.delete({ where: { id: resourceId } });
+  }
+
+  // ─── Instrutores ──────────────────────────────────────────────────────────
+
+  async addInstructor(courseId: number, userId: number) {
+    await this.findOne(courseId);
+    return this.prisma.courseInstructor.upsert({
+      where: { courseId_userId: { courseId, userId } },
+      create: { courseId, userId },
+      update: {},
+    });
+  }
+
+  async removeInstructor(courseId: number, userId: number) {
+    return this.prisma.courseInstructor.deleteMany({ where: { courseId, userId } });
+  }
+
+  // ─── Grupos de audiência ──────────────────────────────────────────────────
+
+  async createAudienceGroup(courseId: number, dto: CreateCourseAudienceGroupDto) {
+    await this.findOne(courseId);
+    return this.prisma.courseAudienceGroup.create({
+      data: { courseId, name: dto.name, userIds: dto.userIds ?? [] },
+    });
+  }
+
+  async updateAudienceGroup(groupId: number, dto: UpdateCourseAudienceGroupDto) {
+    const group = await this.prisma.courseAudienceGroup.findUnique({ where: { id: groupId } });
+    if (!group) throw new NotFoundException('Grupo não encontrado');
+    return this.prisma.courseAudienceGroup.update({ where: { id: groupId }, data: dto });
+  }
+
+  async removeAudienceGroup(groupId: number) {
+    const group = await this.prisma.courseAudienceGroup.findUnique({ where: { id: groupId } });
+    if (!group) throw new NotFoundException('Grupo não encontrado');
+    return this.prisma.courseAudienceGroup.delete({ where: { id: groupId } });
+  }
+
+  // ─── Competências do módulo ──────────────────────────────────────────────
+
+  async addModuleCompetency(moduleId: number, competencyId: number) {
+    const mod = await this.prisma.courseModule.findUnique({ where: { id: moduleId } });
+    if (!mod) throw new NotFoundException('Módulo não encontrado');
+    return this.prisma.moduleCompetency.upsert({
+      where: { moduleId_competencyId: { moduleId, competencyId } },
+      create: { moduleId, competencyId },
+      update: {},
+    });
+  }
+
+  async removeModuleCompetency(moduleId: number, competencyId: number) {
+    return this.prisma.moduleCompetency.deleteMany({ where: { moduleId, competencyId } });
   }
 
   async reorderLessons(moduleId: number, orderedIds: number[]) {
@@ -305,6 +661,27 @@ export class CoursesService {
   async removeLesson(lessonId: number) {
     const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
     if (!lesson) throw new NotFoundException('Aula não encontrada');
+
+    // Quiz.lessonId e QuizAttempt.quizId não têm onDelete: Cascade (RESTRICT
+    // por omissão) — sem isto, eliminar uma aula com quiz rebentava com 500
+    // (violação de FK não tratada) em vez de um erro claro. Bloquear se há
+    // tentativas reais de alunos (dados que não devem desaparecer em
+    // silêncio); sem tentativas, o quiz é só configuração e pode ser
+    // eliminado em cascata com a aula.
+    const quiz = await this.prisma.quiz.findUnique({
+      where: { lessonId },
+      include: { _count: { select: { attempts: true } } },
+    });
+    if (quiz) {
+      if (quiz._count.attempts > 0) {
+        throw new ForbiddenException(
+          `Esta aula tem um quiz com ${quiz._count.attempts} tentativa(s) de alunos. Não pode ser eliminada.`,
+        );
+      }
+      await this.prisma.quizQuestion.deleteMany({ where: { quizId: quiz.id } });
+      await this.prisma.quiz.delete({ where: { id: quiz.id } });
+    }
+
     return this.prisma.lesson.delete({ where: { id: lessonId } });
   }
 
@@ -322,28 +699,99 @@ export class CoursesService {
       throw new ConflictException('Utilizador já matriculado neste curso');
     }
 
+    const pending = course.requiresApproval === true;
+
     const enrollment = await this.prisma.enrollment.create({
       data: {
         courseId,
         userId,
-        status: 'NOT_STARTED',
+        status: pending ? 'PENDING_APPROVAL' : 'NOT_STARTED',
         mandatory: dto.mandatory ?? course.mandatory ?? false,
         deadline: dto.deadline ? new Date(dto.deadline) : null,
       },
     });
 
-    await this.prisma.courseAnalytics.updateMany({
-      where: { courseId },
-      data: { totalEnrollments: { increment: 1 } },
-    });
+    if (!pending) {
+      await this.prisma.courseAnalytics.updateMany({
+        where: { courseId },
+        data: { totalEnrollments: { increment: 1 } },
+      });
+    }
 
-    await createNotificationSafe(this.prisma, this.logger, {
-      userId,
-      type: 'COURSE_ENROLLED',
-      message: `Está matriculado no curso "${course.title}"`,
-    });
+    if (pending) {
+      // Curso exige aprovação — notifica o instrutor principal (ou, na
+      // ausência, um utilizador RH) em vez do próprio requerente. Mesmo
+      // padrão de notificação single-target usado noutros módulos (ver
+      // leave-management.service.ts / work-declarations.service.ts).
+      const approver =
+        course.primaryInstructorId ??
+        (await this.prisma.read.user.findFirst({ where: { role: { code: 'RH' } } }))?.id;
+      if (approver) {
+        await createNotificationSafe(this.prisma, this.logger, {
+          userId: approver,
+          type: 'COURSE_ENROLLMENT_REQUESTED',
+          message: `Novo pedido de inscrição em "${course.title}" aguarda aprovação`,
+        });
+      }
+    } else {
+      await createNotificationSafe(this.prisma, this.logger, {
+        userId,
+        type: 'COURSE_ENROLLED',
+        message: `Está matriculado no curso "${course.title}"`,
+      });
+    }
 
     return enrollment;
+  }
+
+  async listPendingEnrollments(courseId: number) {
+    return this.prisma.read.enrollment.findMany({
+      where: { courseId, status: 'PENDING_APPROVAL' },
+      include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
+      orderBy: { enrolledAt: 'asc' },
+    });
+  }
+
+  async approveEnrollment(enrollmentId: number) {
+    const enrollment = await this.prisma.enrollment.findUnique({ where: { id: enrollmentId } });
+    if (!enrollment) throw new NotFoundException('Matrícula não encontrada');
+    if (enrollment.status !== 'PENDING_APPROVAL') {
+      throw new BadRequestException('Esta matrícula não está pendente de aprovação');
+    }
+    const updated = await this.prisma.enrollment.update({
+      where: { id: enrollmentId },
+      data: { status: 'NOT_STARTED' },
+    });
+    await this.prisma.courseAnalytics.updateMany({
+      where: { courseId: enrollment.courseId },
+      data: { totalEnrollments: { increment: 1 } },
+    });
+    const course = await this.prisma.read.course.findUnique({ where: { id: enrollment.courseId } });
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: enrollment.userId,
+      type: 'COURSE_ENROLLED',
+      message: `A sua inscrição em "${course?.title ?? 'curso'}" foi aprovada`,
+    });
+    return updated;
+  }
+
+  async rejectEnrollment(enrollmentId: number, reason?: string) {
+    const enrollment = await this.prisma.enrollment.findUnique({ where: { id: enrollmentId } });
+    if (!enrollment) throw new NotFoundException('Matrícula não encontrada');
+    if (enrollment.status !== 'PENDING_APPROVAL') {
+      throw new BadRequestException('Esta matrícula não está pendente de aprovação');
+    }
+    const updated = await this.prisma.enrollment.update({
+      where: { id: enrollmentId },
+      data: { status: 'CANCELLED', cancelReason: reason ?? 'Pedido de inscrição rejeitado' },
+    });
+    const course = await this.prisma.read.course.findUnique({ where: { id: enrollment.courseId } });
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: enrollment.userId,
+      type: 'COURSE_ENROLLMENT_REJECTED',
+      message: `A sua inscrição em "${course?.title ?? 'curso'}" foi rejeitada`,
+    });
+    return updated;
   }
 
   async assignCourse(courseId: number, dto: AssignCourseDto, assignedById: number) {
@@ -441,7 +889,10 @@ export class CoursesService {
   }
 
   async getCourseProgress(courseId: number, userId: number) {
-    const enrollment = await this.prisma.read.enrollment.findFirst({ where: { userId, courseId } });
+    const enrollment = await this.prisma.read.enrollment.findFirst({
+      where: { userId, courseId },
+      include: { certificate: { select: { id: true, code: true, issuedAt: true, fileUrl: true } } },
+    });
     if (!enrollment) return null;
 
     const courseProgress = await this.courseCompletion.getCourseProgressNumbers(courseId, userId);
@@ -510,6 +961,10 @@ export class CoursesService {
         passingScore: dto.passingScore ?? 70,
         maxAttempts: dto.maxAttempts ?? 0,
         timeLimitMinutes: dto.timeLimitMinutes,
+        shuffleQuestions: dto.shuffleQuestions ?? false,
+        shuffleAnswers: dto.shuffleAnswers ?? false,
+        showCorrectAnswers: dto.showCorrectAnswers ?? true,
+        autoFeedback: dto.autoFeedback ?? true,
       },
     });
 
@@ -530,6 +985,100 @@ export class CoursesService {
       where: { id: quiz.id },
       include: { questions: { orderBy: { seq: 'asc' } } },
     });
+  }
+
+  async updateQuiz(quizId: number, dto: UpdateQuizDto) {
+    const quiz = await this.prisma.quiz.findUnique({ where: { id: quizId } });
+    if (!quiz) throw new NotFoundException('Quiz não encontrado');
+    const { questions, ...settings } = dto;
+
+    await this.prisma.quiz.update({ where: { id: quizId }, data: settings });
+
+    // Antes desta correcção, `questions` era destruturado só para o
+    // descartar — o admin conseguia enviar perguntas editadas e a resposta
+    // 200 sugeria sucesso, mas nada mudava na BD (bug real: perda silenciosa
+    // de dados, mesma classe de problema já documentada no CLAUDE.md para
+    // outros campos "aceites mas nunca persistidos").
+    if (questions) {
+      await this.prisma.quizQuestion.deleteMany({ where: { quizId } });
+      await this.prisma.quizQuestion.createMany({
+        data: questions.map((q, idx) => ({
+          quizId,
+          question: q.question,
+          type: q.type,
+          options: q.options ? JSON.stringify(q.options) : null,
+          correctAnswer: q.correctAnswer,
+          points: q.points ?? 1,
+          seq: idx,
+        })),
+      });
+    }
+
+    return this.prisma.quiz.findUnique({
+      where: { id: quizId },
+      include: { questions: { orderBy: { seq: 'asc' } } },
+    });
+  }
+
+  /** Quiz + perguntas com resposta certa — só para a UI de edição (ADMIN/RH). */
+  async getQuizForEdit(lessonId: number) {
+    const quiz = await this.prisma.read.quiz.findUnique({
+      where: { lessonId },
+      include: { questions: { orderBy: { seq: 'asc' } } },
+    });
+    return quiz;
+  }
+
+  /**
+   * Quiz + perguntas para o aluno responder — nunca inclui a resposta certa
+   * (nem em `options[].isCorrect` nem em `correctAnswer`), e devolve as
+   * tentativas já feitas para a UI mostrar "restam N tentativas" e o
+   * histórico. Exige matrícula no curso da aula — mesma regra de acesso já
+   * usada para o conteúdo da aula (ver CourseCompletionService).
+   */
+  async getQuizForAttempt(quizId: number, userId: number) {
+    const quiz = await this.prisma.read.quiz.findUnique({
+      where: { id: quizId },
+      include: {
+        questions: { orderBy: { seq: 'asc' } },
+        lesson: { select: { module: { select: { courseId: true } } } },
+      },
+    });
+    if (!quiz) throw new NotFoundException('Quiz não encontrado');
+
+    const enrollment = await this.prisma.read.enrollment.findFirst({
+      where: { userId, courseId: quiz.lesson.module.courseId },
+    });
+    if (!enrollment) throw new ForbiddenException('Não está matriculado neste curso');
+
+    const attempts = await this.prisma.read.quizAttempt.findMany({
+      where: { quizId, userId },
+      orderBy: { submittedAt: 'desc' },
+      select: { id: true, score: true, passed: true, submittedAt: true },
+    });
+
+    return {
+      id: quiz.id,
+      title: quiz.title,
+      passingScore: quiz.passingScore,
+      maxAttempts: quiz.maxAttempts,
+      timeLimitMinutes: quiz.timeLimitMinutes,
+      shuffleQuestions: quiz.shuffleQuestions,
+      shuffleAnswers: quiz.shuffleAnswers,
+      attemptsUsed: attempts.length,
+      attemptsRemaining:
+        quiz.maxAttempts > 0 ? Math.max(0, quiz.maxAttempts - attempts.length) : null,
+      myAttempts: attempts,
+      questions: quiz.questions.map(q => ({
+        id: q.id,
+        question: q.question,
+        type: q.type,
+        points: q.points,
+        options: q.options
+          ? (JSON.parse(q.options) as { text?: string }[]).map(o => ({ text: o.text }))
+          : null,
+      })),
+    };
   }
 
   async submitQuiz(quizId: number, userId: number, dto: SubmitQuizDto) {
@@ -594,7 +1143,20 @@ export class CoursesService {
       },
     });
 
-    return { attempt, score, passed, passingScore: quiz.passingScore, results };
+    // showCorrectAnswers=false: esconde a resposta correcta na resposta ao
+    // cliente (fica guardada em quizAttempt.results para auditoria/correcção manual).
+    const visibleResults = quiz.showCorrectAnswers
+      ? results
+      : results.map(({ correctAnswer: _correctAnswer, ...r }) => r);
+
+    return {
+      attempt,
+      score,
+      passed,
+      passingScore: quiz.passingScore,
+      results: visibleResults,
+      feedback: quiz.autoFeedback ? (passed ? 'Aprovado' : 'Reprovado') : undefined,
+    };
   }
 
   // ─── Feedback ─────────────────────────────────────────────────────────────
@@ -676,37 +1238,689 @@ export class CoursesService {
     };
   }
 
+  // docs/modulo_courses.md secção 1 ("Visão Geral"). "Atalhos" ficam só no
+  // frontend (são links de navegação, não dados). `type`/`modality` (secção 2)
+  // não entram nas distribuições deste dashboard — usados na tabela/filtros
+  // da aba "Cursos" (ver findAll acima e GestaoView no frontend).
   async getAdminDashboard() {
-    const [totalCourses, published, totalEnrollments, completedEnrollments, overdueEnrollments] =
-      await Promise.all([
-        this.prisma.read.course.count(),
-        this.prisma.read.course.count({ where: { status: 'PUBLISHED' } }),
-        this.prisma.read.enrollment.count(),
-        this.prisma.read.enrollment.count({ where: { status: 'COMPLETED' } }),
-        this.prisma.read.enrollment.count({
-          where: { deadline: { lt: new Date() }, status: { notIn: ['COMPLETED', 'EXPIRED'] } },
-        }),
-      ]);
+    const now = new Date();
+    const soon = new Date(now.getTime() + 14 * 86400 * 1000);
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
-    const topCourses = await this.prisma.read.course.findMany({
-      where: { status: 'PUBLISHED' },
-      include: { _count: { select: { enrollments: true } } },
-      orderBy: { enrollments: { _count: 'desc' } },
-      take: 5,
+    const [
+      statusCounts,
+      totalModules,
+      totalLessons,
+      totalEnrollments,
+      pendingEnrollments,
+      completedEnrollments,
+      distinctLearners,
+      overdueEnrollments,
+      mandatoryCourses,
+      optionalCourses,
+      certificatesIssued,
+      byCategory,
+      byLevel,
+      byUnit,
+      byDepartmentRaw,
+      byInstructorRaw,
+      recentlyCreated,
+      recentlyUpdated,
+      openForEnrollment,
+      endingSoon,
+      withoutEnrollments,
+      withoutContent,
+      withoutInstructor,
+      withPendingContent,
+      upcomingLiveSessions,
+      recentEnrollments,
+      recentCompletions,
+      recentFeedbacks,
+      recentCertificates,
+      monthlyEnrollments,
+      monthlyCompletions,
+      feedbackAvg,
+      quizPassStats,
+      analyticsRows,
+      courseCompetencies,
+    ] = await Promise.all([
+      this.prisma.read.course.groupBy({ by: ['status'], _count: true }),
+      this.prisma.read.courseModule.count(),
+      this.prisma.read.lesson.count(),
+      this.prisma.read.enrollment.count(),
+      this.prisma.read.enrollment.count({ where: { status: 'PENDING_APPROVAL' } }),
+      this.prisma.read.enrollment.count({ where: { status: 'COMPLETED' } }),
+      this.prisma.read.enrollment
+        .findMany({ distinct: ['userId'], select: { userId: true } })
+        .then(rows => rows.length),
+      this.prisma.read.enrollment.count({
+        where: { deadline: { lt: now }, status: { notIn: ['COMPLETED', 'EXPIRED'] } },
+      }),
+      this.prisma.read.course.count({ where: { mandatory: true } }),
+      this.prisma.read.course.count({ where: { mandatory: false } }),
+      this.prisma.read.certificate.count({ where: { type: 'COURSE' } }),
+      this.prisma.read.course.groupBy({ by: ['category'], _count: true }),
+      this.prisma.read.course.groupBy({ by: ['level'], _count: true }),
+      this.prisma.read.course.groupBy({ by: ['unit'], _count: true }),
+      this.prisma.read.course.groupBy({ by: ['departmentId'], _count: true }),
+      this.prisma.read.course.groupBy({ by: ['primaryInstructorId'], _count: true }),
+      this.prisma.read.course.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: { id: true, title: true, createdAt: true },
+      }),
+      this.prisma.read.course.findMany({
+        orderBy: { updatedAt: 'desc' },
+        take: 5,
+        select: { id: true, title: true, updatedAt: true },
+      }),
+      this.prisma.read.course.count({
+        where: { status: 'PUBLISHED', OR: [{ endDate: null }, { endDate: { gt: now } }] },
+      }),
+      this.prisma.read.course.findMany({
+        where: { status: 'PUBLISHED', endDate: { gte: now, lte: soon } },
+        orderBy: { endDate: 'asc' },
+        take: 5,
+        select: { id: true, title: true, endDate: true },
+      }),
+      this.prisma.read.course.count({
+        where: { status: 'PUBLISHED', enrollments: { none: {} } },
+      }),
+      this.prisma.read.course.count({ where: { modules: { none: {} } } }),
+      this.prisma.read.course.count({ where: { primaryInstructorId: null } }),
+      this.prisma.read.course.count({ where: { modules: { some: { status: 'DRAFT' } } } }),
+      this.prisma.read.lesson.findMany({
+        where: { type: 'LIVE', liveDate: { gt: now } },
+        orderBy: { liveDate: 'asc' },
+        take: 5,
+        select: {
+          id: true,
+          title: true,
+          liveDate: true,
+          liveInstructor: { select: { fullName: true } },
+          module: { select: { course: { select: { id: true, title: true } } } },
+        },
+      }),
+      this.prisma.read.enrollment.findMany({
+        orderBy: { enrolledAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          enrolledAt: true,
+          user: { select: { fullName: true } },
+          course: { select: { id: true, title: true } },
+        },
+      }),
+      this.prisma.read.enrollment.findMany({
+        where: { status: 'COMPLETED' },
+        orderBy: { completedAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          completedAt: true,
+          user: { select: { fullName: true } },
+          course: { select: { id: true, title: true } },
+        },
+      }),
+      this.prisma.read.courseFeedback.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          rating: true,
+          createdAt: true,
+          user: { select: { fullName: true } },
+          course: { select: { id: true, title: true } },
+        },
+      }),
+      this.prisma.read.certificate.findMany({
+        where: { type: 'COURSE' },
+        orderBy: { issuedAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          issuedAt: true,
+          user: { select: { fullName: true } },
+          course: { select: { id: true, title: true } },
+        },
+      }),
+      this.prisma.read.enrollment.findMany({
+        where: { enrolledAt: { gte: sixMonthsAgo } },
+        select: { enrolledAt: true },
+      }),
+      this.prisma.read.enrollment.findMany({
+        where: { status: 'COMPLETED', completedAt: { gte: sixMonthsAgo } },
+        select: { completedAt: true },
+      }),
+      this.prisma.read.courseFeedback.aggregate({ _avg: { rating: true } }),
+      this.prisma.read.quizAttempt.groupBy({ by: ['passed'], _count: true }),
+      this.prisma.read.courseAnalytics.findMany({
+        where: { totalEnrollments: { gt: 0 } },
+        include: { course: { select: { id: true, title: true } } },
+      }),
+      this.prisma.read.courseCompetency.findMany({
+        include: {
+          competency: { select: { id: true, name: true } },
+          course: { select: { analytics: { select: { totalCompleted: true } } } },
+        },
+      }),
+    ]);
+
+    const countByStatus = (status: string) =>
+      statusCounts.find(s => s.status === status)?._count ?? 0;
+
+    // Nomes para os groupBy de departamento/instrutor — groupBy não faz join.
+    const deptIds = byDepartmentRaw.map(d => d.departmentId).filter((v): v is number => v != null);
+    const instructorIds = byInstructorRaw
+      .map(i => i.primaryInstructorId)
+      .filter((v): v is number => v != null);
+    const [depts, instructors] = await Promise.all([
+      deptIds.length
+        ? this.prisma.read.department.findMany({
+            where: { id: { in: deptIds } },
+            select: { id: true, name: true },
+          })
+        : Promise.resolve([]),
+      instructorIds.length
+        ? this.prisma.read.user.findMany({
+            where: { id: { in: instructorIds } },
+            select: { id: true, fullName: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const deptName = (id: number | null) =>
+      depts.find(d => d.id === id)?.name ?? 'Sem departamento';
+    const instructorName = (id: number | null) =>
+      instructors.find(i => i.id === id)?.fullName ?? 'Sem instrutor';
+
+    const topCourses = [...analyticsRows]
+      .sort((a, b) => b.totalEnrollments - a.totalEnrollments)
+      .slice(0, 5)
+      .map(a => ({ id: a.course.id, title: a.course.title, enrollments: a.totalEnrollments }));
+
+    const withRate = analyticsRows.map(a => ({
+      id: a.course.id,
+      title: a.course.title,
+      rate: Math.round((a.totalCompleted / a.totalEnrollments) * 100),
+    }));
+    const bestCompletion = [...withRate].sort((a, b) => b.rate - a.rate).slice(0, 5);
+    const worstCompletion = [...withRate].sort((a, b) => a.rate - b.rate).slice(0, 5);
+
+    // Horas totais de aprendizagem — soma de workloadHours × inscrições
+    // concluídas por curso (proxy: não há registo de tempo efectivamente
+    // gasto por lição a nível agregado).
+    const completedByCourse = await this.prisma.read.enrollment.groupBy({
+      by: ['courseId'],
+      where: { status: 'COMPLETED' },
+      _count: true,
     });
+    const courseHours = completedByCourse.length
+      ? await this.prisma.read.course.findMany({
+          where: { id: { in: completedByCourse.map(c => c.courseId) } },
+          select: { id: true, workloadHours: true },
+        })
+      : [];
+    const totalLearningHours = completedByCourse.reduce((sum, c) => {
+      const hours = courseHours.find(h => h.id === c.courseId)?.workloadHours ?? 0;
+      return sum + hours * c._count;
+    }, 0);
+
+    const quizTotal = quizPassStats.reduce((s, q) => s + q._count, 0);
+    const quizPassed = quizPassStats.find(q => q.passed)?._count ?? 0;
+    const avgPassRate = quizTotal > 0 ? Math.round((quizPassed / quizTotal) * 100) : 0;
+
+    const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const bucketByMonth = (dates: Date[]) => {
+      const buckets = new Map<string, number>();
+      for (let i = 0; i < 6; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
+        buckets.set(monthKey(d), 0);
+      }
+      for (const d of dates) {
+        const key = monthKey(d);
+        if (buckets.has(key)) buckets.set(key, (buckets.get(key) ?? 0) + 1);
+      }
+      return Array.from(buckets.entries()).map(([month, count]) => ({ month, count }));
+    };
+
+    const competencyCompletions = new Map<string, { id: number; name: string; count: number }>();
+    for (const cc of courseCompetencies) {
+      const key = String(cc.competency.id);
+      const entry = competencyCompletions.get(key) ?? {
+        id: cc.competency.id,
+        name: cc.competency.name,
+        count: 0,
+      };
+      entry.count += cc.course.analytics?.totalCompleted ?? 0;
+      competencyCompletions.set(key, entry);
+    }
+    const topCompetencies = Array.from(competencyCompletions.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    const alerts = [
+      pendingEnrollments > 0 && {
+        message: `${pendingEnrollments} inscrições pendentes de aprovação`,
+        severity: 'warning' as const,
+      },
+      withoutInstructor > 0 && {
+        message: `${withoutInstructor} cursos sem instrutor`,
+        severity: 'warning' as const,
+      },
+      withoutContent > 0 && {
+        message: `${withoutContent} cursos sem conteúdo`,
+        severity: 'danger' as const,
+      },
+      withPendingContent > 0 && {
+        message: `${withPendingContent} cursos com módulos por publicar`,
+        severity: 'info' as const,
+      },
+      withoutEnrollments > 0 && {
+        message: `${withoutEnrollments} cursos publicados sem qualquer inscrição`,
+        severity: 'info' as const,
+      },
+      overdueEnrollments > 0 && {
+        message: `${overdueEnrollments} inscrições com prazo ultrapassado`,
+        severity: 'danger' as const,
+      },
+    ].filter((a): a is { message: string; severity: 'warning' | 'danger' | 'info' } => !!a);
 
     const completionRate =
       totalEnrollments > 0 ? Math.round((completedEnrollments / totalEnrollments) * 100) : 0;
 
     return {
-      courses: { total: totalCourses, published },
+      // Mantidos por compatibilidade com o AdminDashboard já consumido pelo frontend.
+      courses: {
+        total: statusCounts.reduce((s, c) => s + c._count, 0),
+        published: countByStatus('PUBLISHED'),
+      },
       enrollments: {
         total: totalEnrollments,
         completed: completedEnrollments,
         overdue: overdueEnrollments,
       },
       completionRate,
+
+      counts: {
+        total: statusCounts.reduce((s, c) => s + c._count, 0),
+        published: countByStatus('PUBLISHED'),
+        draft: countByStatus('DRAFT'),
+        paused: countByStatus('PAUSED'),
+        archived: countByStatus('ARCHIVED'),
+        totalModules,
+        totalLessons,
+        totalEnrollments,
+        pendingEnrollments,
+        completions: completedEnrollments,
+        totalLearners: distinctLearners,
+        mandatoryCourses,
+        optionalCourses,
+        certificatesIssued,
+      },
+      rates: {
+        avgCompletionRate: completionRate,
+        avgPassRate,
+        avgRating: feedbackAvg._avg.rating ? Math.round(feedbackAvg._avg.rating * 10) / 10 : 0,
+        totalLearningHours,
+      },
       topCourses,
+      bestCompletion,
+      worstCompletion,
+      byCategory: byCategory.map(c => ({
+        category: c.category ?? 'Sem categoria',
+        count: c._count,
+      })),
+      byLevel: byLevel.map(l => ({ level: l.level, count: l._count })),
+      byUnit: byUnit.map(u => ({ unit: u.unit ?? 'Sem unidade', count: u._count })),
+      byDepartment: byDepartmentRaw.map(d => ({
+        department: deptName(d.departmentId),
+        count: d._count,
+      })),
+      byInstructor: byInstructorRaw.map(i => ({
+        instructor: instructorName(i.primaryInstructorId),
+        count: i._count,
+      })),
+      recentlyCreated,
+      recentlyUpdated,
+      openForEnrollment,
+      endingSoon,
+      withoutEnrollments,
+      withoutContent,
+      withoutInstructor,
+      withPendingContent,
+      upcomingLiveSessions: upcomingLiveSessions.map(l => ({
+        id: l.id,
+        title: l.title,
+        liveDate: l.liveDate,
+        instructor: l.liveInstructor?.fullName ?? null,
+        course: l.module.course,
+      })),
+      recentActivity: {
+        enrollments: recentEnrollments,
+        completions: recentCompletions,
+        feedbacks: recentFeedbacks,
+        certificates: recentCertificates,
+      },
+      monthlyTrend: {
+        enrollments: bucketByMonth(monthlyEnrollments.map(e => e.enrolledAt)),
+        completions: bucketByMonth(
+          monthlyCompletions.map(e => e.completedAt).filter((d): d is Date => !!d),
+        ),
+      },
+      topCompetencies,
+      alerts,
+    };
+  }
+
+  // ─── Turmas (docs/modulo_courses.md secção 5) ───────────────────────────
+  // Cursos presenciais/híbridos. Gestão (criar/editar/encerrar/participantes/
+  // presenças) é ADMIN/RH ou o próprio INSTRUCTOR da turma — assertCohortAccess
+  // valida ownership para evitar que um instrutor mexa na turma de outro
+  // (ver memory project_innova_ownership_check_gaps: não assumir cobertura).
+
+  private privilegedForCohorts(user: CurrentUserData) {
+    return ['ADMIN', 'RH'].includes(user.role?.name ?? '');
+  }
+
+  private assertCohortAccess(cohort: { instructorId: number | null }, user: CurrentUserData) {
+    if (this.privilegedForCohorts(user)) return;
+    if (cohort.instructorId === user.id) return;
+    throw new ForbiddenException('Sem acesso a esta turma');
+  }
+
+  async listCohorts(courseId: number) {
+    const cohorts = await this.prisma.read.courseCohort.findMany({
+      where: { courseId },
+      include: {
+        instructor: { select: { id: true, fullName: true, avatarUrl: true } },
+        _count: { select: { participants: true } },
+      },
+      orderBy: { startDate: 'desc' },
+    });
+    return cohorts.map(c => ({
+      ...c,
+      enrolled: c._count.participants,
+      availableSlots: Math.max(0, c.capacity - c._count.participants),
+    }));
+  }
+
+  async getCohort(id: number, user: CurrentUserData) {
+    const cohort = await this.prisma.read.courseCohort.findUnique({
+      where: { id },
+      include: {
+        course: { select: { id: true, title: true } },
+        instructor: { select: { id: true, fullName: true, avatarUrl: true } },
+        participants: {
+          include: {
+            user: { select: { id: true, fullName: true, avatarUrl: true, email: true } },
+          },
+          orderBy: { enrolledAt: 'asc' },
+        },
+      },
+    });
+    if (!cohort) throw new NotFoundException('Turma não encontrada');
+    this.assertCohortAccess(cohort, user);
+    return {
+      ...cohort,
+      enrolled: cohort.participants.length,
+      availableSlots: Math.max(0, cohort.capacity - cohort.participants.length),
+    };
+  }
+
+  async createCohort(courseId: number, dto: CreateCourseCohortDto) {
+    await this.findOne(courseId);
+    return this.prisma.courseCohort.create({
+      data: {
+        courseId,
+        name: dto.name,
+        instructorId: dto.instructorId,
+        location: dto.location,
+        room: dto.room,
+        schedule: dto.schedule,
+        capacity: dto.capacity ?? 30,
+        startDate: new Date(dto.startDate),
+        endDate: dto.endDate ? new Date(dto.endDate) : null,
+      },
+    });
+  }
+
+  async updateCohort(id: number, dto: UpdateCourseCohortDto, user: CurrentUserData) {
+    const cohort = await this.prisma.courseCohort.findUnique({ where: { id } });
+    if (!cohort) throw new NotFoundException('Turma não encontrada');
+    this.assertCohortAccess(cohort, user);
+    return this.prisma.courseCohort.update({
+      where: { id },
+      data: {
+        name: dto.name,
+        instructorId: dto.instructorId,
+        location: dto.location,
+        room: dto.room,
+        schedule: dto.schedule,
+        capacity: dto.capacity,
+        status: dto.status,
+        startDate: dto.startDate ? new Date(dto.startDate) : undefined,
+        endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+      },
+    });
+  }
+
+  async closeCohort(id: number, user: CurrentUserData) {
+    const cohort = await this.prisma.courseCohort.findUnique({ where: { id } });
+    if (!cohort) throw new NotFoundException('Turma não encontrada');
+    this.assertCohortAccess(cohort, user);
+    return this.prisma.courseCohort.update({ where: { id }, data: { status: 'CLOSED' } });
+  }
+
+  async deleteCohort(id: number, user: CurrentUserData) {
+    const cohort = await this.prisma.courseCohort.findUnique({ where: { id } });
+    if (!cohort) throw new NotFoundException('Turma não encontrada');
+    this.assertCohortAccess(cohort, user);
+    // Participantes são removidos em cascata (onDelete: Cascade no schema).
+    await this.prisma.courseCohort.delete({ where: { id } });
+    return { id, deleted: true };
+  }
+
+  async addCohortParticipants(
+    cohortId: number,
+    dto: AddCohortParticipantsDto,
+    user: CurrentUserData,
+  ) {
+    const cohort = await this.prisma.courseCohort.findUnique({
+      where: { id: cohortId },
+      include: { _count: { select: { participants: true } } },
+    });
+    if (!cohort) throw new NotFoundException('Turma não encontrada');
+    this.assertCohortAccess(cohort, user);
+
+    const alreadyIn = await this.prisma.courseCohortParticipant.findMany({
+      where: { cohortId, userId: { in: dto.userIds } },
+      select: { userId: true },
+    });
+    const alreadyInIds = new Set(alreadyIn.map(p => p.userId));
+    const newUserIds = dto.userIds.filter(id => !alreadyInIds.has(id));
+
+    const availableSlots = cohort.capacity - cohort._count.participants;
+    if (newUserIds.length > availableSlots) {
+      throw new ConflictException(
+        `Capacidade insuficiente: ${availableSlots} vaga(s) disponível(eis) para ${newUserIds.length} participante(s)`,
+      );
+    }
+    if (newUserIds.length === 0) return { added: 0 };
+
+    await this.prisma.courseCohortParticipant.createMany({
+      data: newUserIds.map(userId => ({ cohortId, userId })),
+    });
+    return { added: newUserIds.length };
+  }
+
+  async removeCohortParticipant(cohortId: number, userId: number, user: CurrentUserData) {
+    const cohort = await this.prisma.courseCohort.findUnique({ where: { id: cohortId } });
+    if (!cohort) throw new NotFoundException('Turma não encontrada');
+    this.assertCohortAccess(cohort, user);
+    await this.prisma.courseCohortParticipant.deleteMany({ where: { cohortId, userId } });
+    return { removed: true };
+  }
+
+  async markCohortAttendance(
+    cohortId: number,
+    dto: MarkCohortAttendanceDto,
+    user: CurrentUserData,
+  ) {
+    const cohort = await this.prisma.courseCohort.findUnique({ where: { id: cohortId } });
+    if (!cohort) throw new NotFoundException('Turma não encontrada');
+    this.assertCohortAccess(cohort, user);
+
+    const date = new Date(dto.date);
+    await Promise.all(
+      dto.records.map(r =>
+        this.prisma.attendanceRecord.upsert({
+          where: { userId_date_context: { userId: r.userId, date, context: 'LMS' } },
+          create: {
+            userId: r.userId,
+            date,
+            context: 'LMS',
+            status: r.present ? 'PRESENT' : 'ABSENT',
+            courseId: cohort.courseId,
+            sessionId: cohort.id,
+            notes: r.notes,
+          },
+          update: {
+            status: r.present ? 'PRESENT' : 'ABSENT',
+            notes: r.notes,
+          },
+        }),
+      ),
+    );
+    return { marked: dto.records.length };
+  }
+
+  async getCohortAttendance(cohortId: number, date: string, user: CurrentUserData) {
+    const cohort = await this.prisma.read.courseCohort.findUnique({ where: { id: cohortId } });
+    if (!cohort) throw new NotFoundException('Turma não encontrada');
+    this.assertCohortAccess(cohort, user);
+    return this.prisma.read.attendanceRecord.findMany({
+      where: {
+        courseId: cohort.courseId,
+        sessionId: cohort.id,
+        context: 'LMS',
+        date: new Date(date),
+      },
+      select: { userId: true, status: true, notes: true },
+    });
+  }
+
+  // ─── Categorias (docs/modulo_courses.md secção 6) ───────────────────────
+  // Course.category continua String livre — CourseCategory é o registo de
+  // gestão (descrição/estado); a contagem "cursos associados" é por nome.
+
+  async listCategoriesManaged() {
+    const [managed, counts] = await Promise.all([
+      this.prisma.read.courseCategory.findMany({ orderBy: { name: 'asc' } }),
+      this.prisma.read.course.groupBy({
+        by: ['category'],
+        where: { category: { not: null } },
+        _count: true,
+      }),
+    ]);
+    const countByName = new Map(counts.map(c => [c.category, c._count]));
+    return managed.map(cat => ({ ...cat, courseCount: countByName.get(cat.name) ?? 0 }));
+  }
+
+  async createCategory(dto: CreateCourseCategoryDto) {
+    const exists = await this.prisma.courseCategory.findUnique({ where: { name: dto.name } });
+    if (exists) throw new ConflictException(`Categoria "${dto.name}" já existe`);
+    return this.prisma.courseCategory.create({ data: dto });
+  }
+
+  async updateCategory(id: number, dto: UpdateCourseCategoryDto) {
+    const category = await this.prisma.courseCategory.findUnique({ where: { id } });
+    if (!category) throw new NotFoundException('Categoria não encontrada');
+    return this.prisma.courseCategory.update({ where: { id }, data: dto });
+  }
+
+  async removeCategory(id: number) {
+    const category = await this.prisma.courseCategory.findUnique({ where: { id } });
+    if (!category) throw new NotFoundException('Categoria não encontrada');
+    const coursesUsing = await this.prisma.read.course.count({
+      where: { category: category.name },
+    });
+    if (coursesUsing > 0) {
+      throw new ConflictException(
+        `Não é possível remover: ${coursesUsing} curso(s) usam esta categoria. Desactive-a em vez disso.`,
+      );
+    }
+    return this.prisma.courseCategory.delete({ where: { id } });
+  }
+
+  // ─── Relatórios (docs/modulo_courses.md secção 7) ───────────────────────
+  // Reaproveita as agregações já calculadas em getAdminDashboard (cursos mais
+  // frequentados, conclusão, horas de formação, departamento/unidade) e
+  // acrescenta só as métricas que a Visão Geral não cobre: resultados de
+  // avaliações formais, taxa de abandono e formação obrigatória pendente.
+
+  async getCourseReports() {
+    const [dashboard, evaluationAttempts, progressAgg, mandatoryPendingCourses, abandoned] =
+      await Promise.all([
+        this.getAdminDashboard(),
+        this.prisma.read.evaluationAttempt.findMany({
+          where: { finishedAt: { not: null } },
+          select: { scorePercent: true, passed: true },
+        }),
+        this.prisma.read.enrollment.aggregate({ _avg: { progress: true } }),
+        this.prisma.read.course.findMany({
+          where: {
+            mandatory: true,
+            enrollments: { some: { status: { notIn: ['COMPLETED', 'CANCELLED'] } } },
+          },
+          select: {
+            id: true,
+            title: true,
+            _count: {
+              select: { enrollments: { where: { status: { notIn: ['COMPLETED', 'CANCELLED'] } } } },
+            },
+          },
+        }),
+        this.prisma.read.enrollment.count({ where: { status: { in: ['CANCELLED', 'EXPIRED'] } } }),
+      ]);
+
+    const scored = evaluationAttempts.filter(a => a.scorePercent != null);
+    const avgEvaluationScore = scored.length
+      ? Math.round((scored.reduce((s, a) => s + (a.scorePercent ?? 0), 0) / scored.length) * 10) /
+        10
+      : 0;
+    const evaluationsPassed = evaluationAttempts.filter(a => a.passed).length;
+    const evaluationPassRate = evaluationAttempts.length
+      ? Math.round((evaluationsPassed / evaluationAttempts.length) * 100)
+      : 0;
+
+    const totalEnrollments = dashboard.counts.totalEnrollments;
+    const abandonmentRate =
+      totalEnrollments > 0 ? Math.round((abandoned / totalEnrollments) * 100) : 0;
+
+    return {
+      topCourses: dashboard.topCourses,
+      bestCompletion: dashboard.bestCompletion,
+      worstCompletion: dashboard.worstCompletion,
+      learnersByCourse: dashboard.topCourses,
+      byDepartment: dashboard.byDepartment,
+      byUnit: dashboard.byUnit,
+      totalLearningHours: dashboard.rates.totalLearningHours,
+      approvalRate: dashboard.rates.avgCompletionRate,
+      abandonmentRate,
+      avgProgress: progressAgg._avg.progress ? Math.round(progressAgg._avg.progress) : 0,
+      evaluationResults: {
+        totalAttempts: evaluationAttempts.length,
+        avgScore: avgEvaluationScore,
+        passRate: evaluationPassRate,
+      },
+      mandatoryPending: {
+        count: mandatoryPendingCourses.reduce((s, c) => s + c._count.enrollments, 0),
+        courses: mandatoryPendingCourses.map(c => ({
+          id: c.id,
+          title: c.title,
+          pending: c._count.enrollments,
+        })),
+      },
     };
   }
 }

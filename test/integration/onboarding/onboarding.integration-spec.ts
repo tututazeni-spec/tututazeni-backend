@@ -113,6 +113,7 @@ describe('Onboarding Integration', () => {
           type: 'TASK',
           phase: 'DAY_1',
           responsible: 'SELF',
+          dueDayOffset: 1,
           xpReward: 20,
           seq: 0,
         })
@@ -131,6 +132,7 @@ describe('Onboarding Integration', () => {
           type: 'MEETING',
           phase: 'WEEK_1',
           responsible: 'HR',
+          dueDayOffset: 7,
           xpReward: 30,
           requiresApproval: true,
           seq: 1,
@@ -150,6 +152,7 @@ describe('Onboarding Integration', () => {
           type: 'TASK',
           phase: 'DAY_1',
           responsible: 'IT',
+          dueDayOffset: 1,
           xpReward: 10,
           dependsOn: [normalTaskId],
           seq: 2,

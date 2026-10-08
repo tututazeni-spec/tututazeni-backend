@@ -1,7 +1,7 @@
 // src/ai-tutor/ai-providers.service.ts
 //
 // Suporte a 3 fornecedores gratuitos:
-//   - Groq     → GRATUITO, rápido, Llama 3.3 70B / Mixtral  (console.groq.com)
+//   - Groq     → GRATUITO, rápido, GPT-OSS 120B / Qwen3 (console.groq.com)
 //   - Gemini   → GRATUITO, Google, gemini-1.5-flash          (aistudio.google.com)
 //   - Ollama   → GRATUITO, auto-hospedado, corre no servidor  (ollama.com)
 //
@@ -66,7 +66,7 @@ export class AiProvidersService {
   constructor() {
     this.provider = (process.env.AI_PROVIDER ?? 'groq').toLowerCase();
     this.groqApiKey = process.env.GROQ_API_KEY ?? '';
-    this.groqModel = process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile';
+    this.groqModel = process.env.GROQ_MODEL ?? 'openai/gpt-oss-120b';
     this.geminiApiKey = process.env.GEMINI_API_KEY ?? '';
     this.geminiModel = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash';
     this.ollamaUrl = process.env.OLLAMA_URL ?? 'http://localhost:11434';
@@ -75,17 +75,22 @@ export class AiProvidersService {
     this.logger.log(`🤖 Fornecedor de IA activo: ${this.provider.toUpperCase()}`);
   }
 
-  async chat(systemPrompt: string, messages: ChatMessage[], maxTokens = 1024): Promise<AiResponse> {
+  async chat(
+    systemPrompt: string,
+    messages: ChatMessage[],
+    maxTokens = 1024,
+    temperature = 0.7,
+  ): Promise<AiResponse> {
     switch (this.provider) {
       case 'groq':
-        return this.chatGroq(systemPrompt, messages, maxTokens);
+        return this.chatGroq(systemPrompt, messages, maxTokens, temperature);
       case 'gemini':
-        return this.chatGemini(systemPrompt, messages, maxTokens);
+        return this.chatGemini(systemPrompt, messages, maxTokens, temperature);
       case 'ollama':
-        return this.chatOllama(systemPrompt, messages, maxTokens);
+        return this.chatOllama(systemPrompt, messages, maxTokens, temperature);
       default:
         this.logger.warn(`Fornecedor desconhecido: ${this.provider}. A usar Groq.`);
-        return this.chatGroq(systemPrompt, messages, maxTokens);
+        return this.chatGroq(systemPrompt, messages, maxTokens, temperature);
     }
   }
 
@@ -118,6 +123,7 @@ export class AiProvidersService {
     system: string,
     messages: ChatMessage[],
     maxTokens: number,
+    temperature: number,
   ): Promise<AiResponse> {
     if (!this.groqApiKey) {
       throw new InternalServerErrorException(
@@ -128,6 +134,7 @@ export class AiProvidersService {
     const body = {
       model: this.groqModel,
       max_tokens: maxTokens,
+      temperature,
       messages: [{ role: 'system', content: system }, ...messages],
     };
 
@@ -181,6 +188,7 @@ export class AiProvidersService {
     system: string,
     messages: ChatMessage[],
     maxTokens: number,
+    temperature: number,
   ): Promise<AiResponse> {
     if (!this.geminiApiKey) {
       throw new InternalServerErrorException(
@@ -196,7 +204,7 @@ export class AiProvidersService {
     const body = {
       systemInstruction: { parts: [{ text: system }] },
       contents,
-      generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 },
+      generationConfig: { maxOutputTokens: maxTokens, temperature },
     };
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.geminiModel}:generateContent?key=${this.geminiApiKey}`;
@@ -246,11 +254,12 @@ export class AiProvidersService {
     system: string,
     messages: ChatMessage[],
     maxTokens: number,
+    temperature: number,
   ): Promise<AiResponse> {
     const body = {
       model: this.ollamaModel,
       messages: [{ role: 'system', content: system }, ...messages],
-      options: { num_predict: maxTokens },
+      options: { num_predict: maxTokens, temperature },
       stream: false,
     };
 

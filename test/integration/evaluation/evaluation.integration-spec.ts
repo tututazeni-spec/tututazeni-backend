@@ -8,7 +8,6 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
 const TEST_DB_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/innova_test';
-const CYCLE_ID = 9001;
 
 describe('Evaluation Integration', () => {
   let app: INestApplication;
@@ -19,6 +18,7 @@ describe('Evaluation Integration', () => {
   let employeeId: number;
   let managerId: number;
   let originalEmployeeManagerId: number | null;
+  let CYCLE_ID: number;
 
   const pool = new Pool({ connectionString: TEST_DB_URL });
   const adapter = new PrismaPg(pool);
@@ -60,6 +60,22 @@ describe('Evaluation Integration', () => {
 
     // Wire employee → manager for team-scoped endpoints (seed doesn't set this by default)
     await prisma.user.update({ where: { id: employeeId }, data: { managerId } });
+
+    // EvaluationCampaign é agora um modelo real com FK — EvaluationRequest.cycleId /
+    // PerformanceEvaluation.cycleId exigem uma linha existente, ao contrário do
+    // Int solto de antes da correcção (ver memória project_innova_schema_code_drift).
+    const campaign = await prisma.evaluationCampaign.create({
+      data: {
+        name: 'Int Test Campaign',
+        model: 'DEG_360',
+        status: 'DRAFT',
+        startDate: new Date('2026-01-01'),
+        endDate: new Date('2026-03-01'),
+        weights: JSON.stringify([{ type: 'SELF', weight: 20 }]),
+        createdById: managerId,
+      },
+    });
+    CYCLE_ID = campaign.id;
   });
 
   afterAll(async () => {
@@ -86,13 +102,18 @@ describe('Evaluation Integration', () => {
         where: { userId: { in: [employeeId, managerId] }, type: { startsWith: 'EVALUATION' } },
       })
       .catch(() => undefined);
+    if (CYCLE_ID) {
+      await prisma.evaluationCampaign
+        .deleteMany({ where: { id: CYCLE_ID } })
+        .catch(() => undefined);
+    }
 
     await prisma.$disconnect();
     await pool.end();
     await app.close();
   });
 
-  describe('Cycles — degradam graciosamente (EvaluationCycle real é incompatível, ver memória)', () => {
+  describe('Cycles — persistem em EvaluationCampaign (verifica correcção, ver memória project_innova_schema_code_drift)', () => {
     it('colaborador não pode criar ciclo → 403', async () => {
       await request(app.getHttpServer())
         .post('/evaluations/cycles')
@@ -121,7 +142,7 @@ describe('Evaluation Integration', () => {
         .expect(400);
     });
 
-    it('RH cria ciclo → 201 (modo compatibilidade, não persiste de facto)', async () => {
+    it('RH cria ciclo → 201 e persiste de facto (id real, sem modo compatibilidade)', async () => {
       const res = await request(app.getHttpServer())
         .post('/evaluations/cycles')
         .set('Authorization', `Bearer ${rhToken}`)
@@ -137,8 +158,11 @@ describe('Evaluation Integration', () => {
           ],
         })
         .expect(201);
-      expect(res.body.id).toBeNull();
-      expect(res.body.message).toContain('compatibilidade');
+      expect(typeof res.body.id).toBe('number');
+      expect(res.body.model).toBe('360');
+      expect(res.body.status).toBe('DRAFT');
+
+      await prisma.evaluationCampaign.delete({ where: { id: res.body.id } }).catch(() => undefined);
     });
   });
 

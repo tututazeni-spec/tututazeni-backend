@@ -4,11 +4,13 @@ import {
   IsNumber,
   IsDateString,
   IsArray,
+  IsEnum,
   Min,
   Length,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { FunderFundingType, GrantStatus } from '@prisma/client';
 
 export class CreateGrantDto {
   @ApiProperty()
@@ -74,4 +76,40 @@ export class CreateGrantDto {
   @IsArray()
   @IsString({ each: true })
   programIds?: string[];
+
+  @ApiPropertyOptional({ enum: FunderFundingType })
+  @IsOptional()
+  @IsEnum(FunderFundingType)
+  fundingType?: FunderFundingType;
+
+  @ApiPropertyOptional({ description: 'Programa/projecto financiado (FunderProgram.id)' })
+  @IsOptional()
+  @IsString()
+  programId?: string;
+
+  @ApiPropertyOptional({ description: 'Valor solicitado' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  requestedAmount?: number;
+
+  @ApiPropertyOptional({ description: 'Valor utilizado' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  usedAmount?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  approvalDate?: string;
+
+  @ApiPropertyOptional({ enum: GrantStatus, default: 'ACTIVE' })
+  @IsOptional()
+  @IsEnum(GrantStatus)
+  status?: GrantStatus;
 }
+
+export class UpdateGrantDto extends PartialType(CreateGrantDto) {}

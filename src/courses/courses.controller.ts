@@ -27,8 +27,21 @@ import {
   EnrollDto,
   AssignCourseDto,
   CreateQuizDto,
+  UpdateQuizDto,
   SubmitQuizDto,
   CourseFeedbackDto,
+  CreateLessonActivityDto,
+  UpdateLessonActivityDto,
+  CreateLessonResourceDto,
+  UpdateLessonResourceDto,
+  CreateCourseAudienceGroupDto,
+  UpdateCourseAudienceGroupDto,
+  CreateCourseCohortDto,
+  UpdateCourseCohortDto,
+  AddCohortParticipantsDto,
+  MarkCohortAttendanceDto,
+  CreateCourseCategoryDto,
+  UpdateCourseCategoryDto,
 } from './courses.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -56,6 +69,24 @@ export class CoursesController {
   @ApiOperation({ summary: 'Listar categorias disponíveis com contagem' })
   categories() {
     return this.svc.getCategories();
+  }
+
+  // Rotas de um só segmento ('reports', 'categories/manage' tem 2 mas
+  // 'reports' tem 1) têm de vir antes de @Get(':id') — caso contrário
+  // ':id' (single-segment) intercepta-as primeiro e ParseIntPipe rebenta
+  // com "reports" como valor. Ver docs/modulo_courses.md secções 6-7.
+  @Get('categories/manage')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Listar categorias geridas (descrição, estado, cursos associados)' })
+  listCategoriesManaged() {
+    return this.svc.listCategoriesManaged();
+  }
+
+  @Get('reports')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Relatórios do módulo Cursos' })
+  reports() {
+    return this.svc.getCourseReports();
   }
 
   @Get('admin/dashboard')
@@ -172,6 +203,57 @@ export class CoursesController {
     return this.svc.removeCompetency(id, cId);
   }
 
+  // ── Instrutores ─────────────────────────────────────────────────────────
+
+  @Post(':id/instructors/:userId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Associar instrutor (co-instrutor) ao curso' })
+  addInstructor(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('userId', ParseIntPipe) userId: number,
+  ) {
+    return this.svc.addInstructor(id, userId);
+  }
+
+  @Delete(':id/instructors/:userId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Remover instrutor do curso' })
+  removeInstructor(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('userId', ParseIntPipe) userId: number,
+  ) {
+    return this.svc.removeInstructor(id, userId);
+  }
+
+  // ── Grupos de audiência (visibilidade = Apenas grupos seleccionados) ────
+
+  @Post(':id/audience-groups')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Criar grupo de audiência do curso' })
+  createAudienceGroup(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateCourseAudienceGroupDto,
+  ) {
+    return this.svc.createAudienceGroup(id, dto);
+  }
+
+  @Put('audience-groups/:groupId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Actualizar grupo de audiência' })
+  updateAudienceGroup(
+    @Param('groupId', ParseIntPipe) groupId: number,
+    @Body() dto: UpdateCourseAudienceGroupDto,
+  ) {
+    return this.svc.updateAudienceGroup(groupId, dto);
+  }
+
+  @Delete('audience-groups/:groupId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Remover grupo de audiência' })
+  removeAudienceGroup(@Param('groupId', ParseIntPipe) groupId: number) {
+    return this.svc.removeAudienceGroup(groupId);
+  }
+
   // ── Módulos ───────────────────────────────────────────────────────────────
 
   @Post(':id/modules')
@@ -208,6 +290,28 @@ export class CoursesController {
     @Param('moduleId', ParseIntPipe) moduleId: number,
   ) {
     return this.svc.removeModule(id, moduleId);
+  }
+
+  // ── Competências do módulo ─────────────────────────────────────────────
+
+  @Post(':id/modules/:moduleId/competencies/:competencyId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Associar competência ao módulo' })
+  addModuleCompetency(
+    @Param('moduleId', ParseIntPipe) moduleId: number,
+    @Param('competencyId', ParseIntPipe) competencyId: number,
+  ) {
+    return this.svc.addModuleCompetency(moduleId, competencyId);
+  }
+
+  @Delete(':id/modules/:moduleId/competencies/:competencyId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Remover competência do módulo' })
+  removeModuleCompetency(
+    @Param('moduleId', ParseIntPipe) moduleId: number,
+    @Param('competencyId', ParseIntPipe) competencyId: number,
+  ) {
+    return this.svc.removeModuleCompetency(moduleId, competencyId);
   }
 
   // ── Aulas ─────────────────────────────────────────────────────────────────
@@ -255,6 +359,64 @@ export class CoursesController {
     return this.svc.markLessonComplete(lessonId, user.id, dto);
   }
 
+  // ── Actividades da aula ──────────────────────────────────────────────────
+
+  @Post('lessons/:lessonId/activities')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Criar actividade dentro da aula' })
+  createLessonActivity(
+    @Param('lessonId', ParseIntPipe) lessonId: number,
+    @Body() dto: CreateLessonActivityDto,
+  ) {
+    return this.svc.createLessonActivity(lessonId, dto);
+  }
+
+  @Put('lessons/activities/:activityId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Actualizar actividade da aula' })
+  updateLessonActivity(
+    @Param('activityId', ParseIntPipe) activityId: number,
+    @Body() dto: UpdateLessonActivityDto,
+  ) {
+    return this.svc.updateLessonActivity(activityId, dto);
+  }
+
+  @Delete('lessons/activities/:activityId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Remover actividade da aula' })
+  removeLessonActivity(@Param('activityId', ParseIntPipe) activityId: number) {
+    return this.svc.removeLessonActivity(activityId);
+  }
+
+  // ── Recursos da aula ─────────────────────────────────────────────────────
+
+  @Post('lessons/:lessonId/resources')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Adicionar recurso/material de apoio à aula' })
+  createLessonResource(
+    @Param('lessonId', ParseIntPipe) lessonId: number,
+    @Body() dto: CreateLessonResourceDto,
+  ) {
+    return this.svc.createLessonResource(lessonId, dto);
+  }
+
+  @Put('lessons/resources/:resourceId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Actualizar recurso da aula' })
+  updateLessonResource(
+    @Param('resourceId', ParseIntPipe) resourceId: number,
+    @Body() dto: UpdateLessonResourceDto,
+  ) {
+    return this.svc.updateLessonResource(resourceId, dto);
+  }
+
+  @Delete('lessons/resources/:resourceId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Remover recurso da aula' })
+  removeLessonResource(@Param('resourceId', ParseIntPipe) resourceId: number) {
+    return this.svc.removeLessonResource(resourceId);
+  }
+
   // ── Matrículas ────────────────────────────────────────────────────────────
 
   @Post(':id/enroll')
@@ -278,13 +440,62 @@ export class CoursesController {
     return this.svc.assignCourse(id, dto, user.id);
   }
 
+  @Get(':id/enrollments/pending')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({
+    summary: 'Pedidos de inscrição pendentes de aprovação (cursos que exigem aprovação)',
+  })
+  pendingEnrollments(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.listPendingEnrollments(id);
+  }
+
+  @Patch('enrollments/:enrollmentId/approve')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Aprovar pedido de inscrição pendente' })
+  approveEnrollment(@Param('enrollmentId', ParseIntPipe) enrollmentId: number) {
+    return this.svc.approveEnrollment(enrollmentId);
+  }
+
+  @Patch('enrollments/:enrollmentId/reject')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Rejeitar pedido de inscrição pendente' })
+  rejectEnrollment(
+    @Param('enrollmentId', ParseIntPipe) enrollmentId: number,
+    @Body('reason') reason?: string,
+  ) {
+    return this.svc.rejectEnrollment(enrollmentId, reason);
+  }
+
   // ── Quiz ──────────────────────────────────────────────────────────────────
+
+  @Get('lessons/:lessonId/quiz')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Ler quiz de uma aula para edição (inclui respostas certas)' })
+  getQuizForEdit(@Param('lessonId', ParseIntPipe) lessonId: number) {
+    return this.svc.getQuizForEdit(lessonId);
+  }
 
   @Post('lessons/:lessonId/quiz')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar quiz para uma aula' })
   createQuiz(@Param('lessonId', ParseIntPipe) lessonId: number, @Body() dto: CreateQuizDto) {
     return this.svc.createQuiz(lessonId, dto);
+  }
+
+  @Put('quizzes/:quizId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Actualizar configurações e perguntas do quiz' })
+  updateQuiz(@Param('quizId', ParseIntPipe) quizId: number, @Body() dto: UpdateQuizDto) {
+    return this.svc.updateQuiz(quizId, dto);
+  }
+
+  @Get('quizzes/:quizId/attempt')
+  @ApiOperation({ summary: 'Ler quiz para o aluno responder (sem respostas certas) + tentativas' })
+  getQuizForAttempt(
+    @Param('quizId', ParseIntPipe) quizId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.getQuizForAttempt(quizId, user.id);
   }
 
   @Post('quizzes/:quizId/submit')
@@ -308,5 +519,135 @@ export class CoursesController {
     @Body() dto: CourseFeedbackDto,
   ) {
     return this.svc.addFeedback(id, user.id, dto);
+  }
+
+  // ── Turmas (docs/modulo_courses.md secção 5) — cursos presenciais/híbridos ─
+
+  @Get(':id/cohorts')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Listar turmas de um curso' })
+  listCohorts(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.listCohorts(id);
+  }
+
+  @Post(':id/cohorts')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Criar turma' })
+  createCohort(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateCourseCohortDto) {
+    return this.svc.createCohort(id, dto);
+  }
+
+  @Get('cohorts/:cohortId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Detalhe da turma (com participantes)' })
+  getCohort(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.getCohort(cohortId, user);
+  }
+
+  @Patch('cohorts/:cohortId')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Actualizar turma' })
+  updateCohort(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @Body() dto: UpdateCourseCohortDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.updateCohort(cohortId, dto, user);
+  }
+
+  @Patch('cohorts/:cohortId/close')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Encerrar turma' })
+  @HttpCode(HttpStatus.OK)
+  closeCohort(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.closeCohort(cohortId, user);
+  }
+
+  @Delete('cohorts/:cohortId')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Eliminar turma (remove também os participantes)' })
+  deleteCohort(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.deleteCohort(cohortId, user);
+  }
+
+  @Post('cohorts/:cohortId/participants')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Adicionar participantes à turma' })
+  addCohortParticipants(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @Body() dto: AddCohortParticipantsDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.addCohortParticipants(cohortId, dto, user);
+  }
+
+  @Delete('cohorts/:cohortId/participants/:userId')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Remover participante da turma' })
+  removeCohortParticipant(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.removeCohortParticipant(cohortId, userId, user);
+  }
+
+  @Post('cohorts/:cohortId/attendance')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Marcar presenças da turma numa data' })
+  markCohortAttendance(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @Body() dto: MarkCohortAttendanceDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.markCohortAttendance(cohortId, dto, user);
+  }
+
+  @Get('cohorts/:cohortId/attendance')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Ler presenças já marcadas da turma numa data' })
+  getCohortAttendance(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @Query('date') date: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.getCohortAttendance(cohortId, date, user);
+  }
+
+  // ── Categorias (docs/modulo_courses.md secção 6) — gestão ADMIN/RH ────────
+  // GET 'categories/manage' e GET 'reports' estão antes de @Get(':id') —
+  // ver comentário nessa secção.
+
+  @Post('categories')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Criar categoria de curso' })
+  createCategory(@Body() dto: CreateCourseCategoryDto) {
+    return this.svc.createCategory(dto);
+  }
+
+  @Patch('categories/:categoryId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Actualizar categoria de curso' })
+  updateCategory(
+    @Param('categoryId', ParseIntPipe) categoryId: number,
+    @Body() dto: UpdateCourseCategoryDto,
+  ) {
+    return this.svc.updateCategory(categoryId, dto);
+  }
+
+  @Delete('categories/:categoryId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Remover categoria de curso (só sem cursos associados)' })
+  removeCategory(@Param('categoryId', ParseIntPipe) categoryId: number) {
+    return this.svc.removeCategory(categoryId);
   }
 }

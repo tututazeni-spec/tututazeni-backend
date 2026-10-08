@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateIntegrationDto,
   UpdateIntegrationDto,
+  TestIntegrationConnectionDto,
   IntegrationLogFilterDto,
   CreateApiKeyDto,
   CreateWebhookDto,
@@ -16,6 +17,7 @@ import {
 import * as crypto from 'crypto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
+import { writeChainedAuditLog } from '../common/helpers/audit-chain';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -176,52 +178,147 @@ export class ApiIntegrationService {
     };
   }
 
+  // clientId/clientSecret/accessToken não têm coluna própria — combinados
+  // num único blob e encriptados antes de persistir em credentialsJson.
+  // Nunca persistidos em texto plano. Mesmo padrão de
+  // ScalabilityService.buildCredentialsJson.
+  private buildCredentialsJson(dto: {
+    clientId?: string;
+    clientSecret?: string;
+    accessToken?: string;
+  }): string | undefined {
+    if (!dto.clientId && !dto.clientSecret && !dto.accessToken) return undefined;
+    return JSON.stringify({
+      clientId: dto.clientId,
+      clientSecret: dto.clientSecret,
+      accessToken: dto.accessToken,
+    });
+  }
+
+  private encryptSensitiveData(data: string): string {
+    // TODO: Integrar com AWS KMS / Azure Key Vault / crypto do Node para produção
+    return Buffer.from(data).toString('base64');
+  }
+
   async createIntegration(dto: CreateIntegrationDto) {
     // IntegrationConfig.tenantId é FK obrigatória (multi-tenant) nunca populada
     // aqui — helper partilhado de tenant único por omissão.
     const tenantId = await resolveDefaultTenantId(this.prisma);
+
+    const combinedCredentials = this.buildCredentialsJson(dto);
+    const safeCredentials = combinedCredentials
+      ? this.encryptSensitiveData(combinedCredentials)
+      : undefined;
+
+    // Campos listados explicitamente (não spread de `dto`) — `allowedIps` do
+    // DTO não tem coluna própria (ver [[project-innova-schema-code-drift]]) e
+    // clientId/clientSecret/accessToken nunca devem chegar ao Prisma em
+    // bruto. FIX: `description`/`authType` chegavam a ser validados pelo DTO
+    // mas nunca eram gravados aqui — corrigido.
     const data: Prisma.IntegrationConfigUncheckedCreateInput = {
       name: dto.name,
       type: dto.type,
+      category: dto.category,
+      platform: dto.platform,
       endpoint: dto.endpoint,
+      description: dto.description,
       config: (dto.config ?? {}) as Prisma.InputJsonValue,
       baseUrl: dto.baseUrl,
       apiKey: dto.apiKey,
+      authType: dto.authType,
+      authUrl: dto.authUrl,
+      environment: dto.environment,
+      apiVersion: dto.apiVersion,
+      dataFormat: dto.dataFormat,
+      communicationMethod: dto.communicationMethod,
+      syncFrequency: dto.syncFrequency,
+      syncDirection: dto.syncDirection,
+      dataToSync: dto.dataToSync,
+      fieldMapping: dto.fieldMapping as Prisma.InputJsonValue | undefined,
+      webhookUrl: dto.webhookUrl,
+      webhookEvents: dto.webhookEvents,
+      timeoutMs: dto.timeoutMs,
+      maxRetries: dto.maxRetries,
+      retryIntervalMs: dto.retryIntervalMs,
+      status: dto.status,
+      activatedAt: dto.activatedAt ? new Date(dto.activatedAt) : undefined,
+      responsibleUserId: dto.responsibleUserId,
+      notes: dto.notes,
+      credentialsJson: safeCredentials,
       active: dto.active ?? true,
       tenantId,
     };
 
     const integration = await this.prisma.integrationConfig.create({ data });
 
-    await this.prisma.auditLog
-      .create({
-        data: {
-          userId: 0,
-          action: 'INTEGRATION_CREATED',
-          entity: 'IntegrationConfig',
-          entityId: integration.id,
-          changes: JSON.stringify({ name: dto.name, type: dto.type }),
-        },
-      })
-      .catch((err: unknown) =>
-        this.logger.warn({
-          integrationId: integration.id,
-          integrationType: dto.type,
-          action: 'INTEGRATION_CREATED',
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao registar audit log de criação de integração',
-        }),
-      );
+    await writeChainedAuditLog(this.prisma, {
+      userId: 0,
+      action: 'INTEGRATION_CREATED',
+      entity: 'IntegrationConfig',
+      entityId: integration.id,
+      changes: JSON.stringify({ name: dto.name, type: dto.type }),
+    }).catch((err: unknown) =>
+      this.logger.warn({
+        integrationId: integration.id,
+        integrationType: dto.type,
+        action: 'INTEGRATION_CREATED',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao registar audit log de criação de integração',
+      }),
+    );
 
     return integration;
   }
 
   async updateIntegration(id: number, dto: UpdateIntegrationDto) {
     await this.getIntegration(id);
-    return this.prisma.integrationConfig.update({
-      where: { id },
-      data: { ...dto, config: dto.config as Prisma.InputJsonValue | undefined },
-    });
+
+    const combinedCredentials = this.buildCredentialsJson(dto);
+    const safeCredentials = combinedCredentials
+      ? this.encryptSensitiveData(combinedCredentials)
+      : undefined;
+
+    // Campos listados explicitamente (mesmo motivo de createIntegration()
+    // acima) — só entram no `data` quando enviados, para não sobrescrever
+    // colunas não tocadas por este pedido.
+    const data: Prisma.IntegrationConfigUncheckedUpdateInput = {
+      ...(dto.name !== undefined && { name: dto.name }),
+      ...(dto.type !== undefined && { type: dto.type }),
+      ...(dto.category !== undefined && { category: dto.category }),
+      ...(dto.platform !== undefined && { platform: dto.platform }),
+      ...(dto.endpoint !== undefined && { endpoint: dto.endpoint }),
+      ...(dto.description !== undefined && { description: dto.description }),
+      ...(dto.config !== undefined && { config: dto.config as Prisma.InputJsonValue }),
+      ...(dto.baseUrl !== undefined && { baseUrl: dto.baseUrl }),
+      ...(dto.apiKey !== undefined && { apiKey: dto.apiKey }),
+      ...(dto.authType !== undefined && { authType: dto.authType }),
+      ...(dto.authUrl !== undefined && { authUrl: dto.authUrl }),
+      ...(dto.environment !== undefined && { environment: dto.environment }),
+      ...(dto.apiVersion !== undefined && { apiVersion: dto.apiVersion }),
+      ...(dto.dataFormat !== undefined && { dataFormat: dto.dataFormat }),
+      ...(dto.communicationMethod !== undefined && {
+        communicationMethod: dto.communicationMethod,
+      }),
+      ...(dto.syncFrequency !== undefined && { syncFrequency: dto.syncFrequency }),
+      ...(dto.syncDirection !== undefined && { syncDirection: dto.syncDirection }),
+      ...(dto.dataToSync !== undefined && { dataToSync: dto.dataToSync }),
+      ...(dto.fieldMapping !== undefined && {
+        fieldMapping: dto.fieldMapping as Prisma.InputJsonValue,
+      }),
+      ...(dto.webhookUrl !== undefined && { webhookUrl: dto.webhookUrl }),
+      ...(dto.webhookEvents !== undefined && { webhookEvents: dto.webhookEvents }),
+      ...(dto.timeoutMs !== undefined && { timeoutMs: dto.timeoutMs }),
+      ...(dto.maxRetries !== undefined && { maxRetries: dto.maxRetries }),
+      ...(dto.retryIntervalMs !== undefined && { retryIntervalMs: dto.retryIntervalMs }),
+      ...(dto.status !== undefined && { status: dto.status }),
+      ...(dto.activatedAt !== undefined && { activatedAt: new Date(dto.activatedAt) }),
+      ...(dto.responsibleUserId !== undefined && { responsibleUserId: dto.responsibleUserId }),
+      ...(dto.active !== undefined && { active: dto.active }),
+      ...(dto.notes !== undefined && { notes: dto.notes }),
+      ...(safeCredentials !== undefined && { credentialsJson: safeCredentials }),
+    };
+
+    return this.prisma.integrationConfig.update({ where: { id }, data });
   }
 
   async toggleIntegration(id: number) {
@@ -233,24 +330,20 @@ export class ApiIntegrationService {
       data: { active: !i.active },
     });
 
-    await this.prisma.auditLog
-      .create({
-        data: {
-          userId: 0,
-          action: i.active ? 'INTEGRATION_DISABLED' : 'INTEGRATION_ENABLED',
-          entity: 'IntegrationConfig',
-          entityId: id,
-          changes: JSON.stringify({ active: !i.active }),
-        },
-      })
-      .catch((err: unknown) =>
-        this.logger.warn({
-          integrationId: id,
-          action: i.active ? 'INTEGRATION_DISABLED' : 'INTEGRATION_ENABLED',
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao registar audit log de toggle de integração',
-        }),
-      );
+    await writeChainedAuditLog(this.prisma, {
+      userId: 0,
+      action: i.active ? 'INTEGRATION_DISABLED' : 'INTEGRATION_ENABLED',
+      entity: 'IntegrationConfig',
+      entityId: id,
+      changes: JSON.stringify({ active: !i.active }),
+    }).catch((err: unknown) =>
+      this.logger.warn({
+        integrationId: id,
+        action: i.active ? 'INTEGRATION_DISABLED' : 'INTEGRATION_ENABLED',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao registar audit log de toggle de integração',
+      }),
+    );
 
     return updated;
   }
@@ -335,6 +428,46 @@ export class ApiIntegrationService {
     }
   }
 
+  /**
+   * Testa conectividade/credenciais ANTES de a integração existir — usado
+   * pelo botão "Testar conexão" do formulário de criação (não tem ainda um
+   * `id`, por isso não escreve em `ApiIntegrationLog`). Mesmo padrão de
+   * ScalabilityService.testConnectionDraft().
+   */
+  async testConnectionDraft(dto: TestIntegrationConnectionDto) {
+    const start = Date.now();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (dto.apiKey) headers['Authorization'] = `Bearer ${dto.apiKey}`;
+    else if (dto.accessToken) headers['Authorization'] = `Bearer ${dto.accessToken}`;
+    else if (dto.clientId && dto.clientSecret) {
+      headers['Authorization'] =
+        `Basic ${Buffer.from(`${dto.clientId}:${dto.clientSecret}`).toString('base64')}`;
+    }
+
+    try {
+      const res = await fetch(dto.baseUrl, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(dto.timeoutMs && dto.timeoutMs > 0 ? dto.timeoutMs : 5000),
+        headers,
+      });
+      const latencyMs = Date.now() - start;
+      const success = res.status < 500;
+      return {
+        success,
+        statusCode: res.status,
+        latencyMs,
+        message: success ? `Conexão estabelecida (${latencyMs}ms)` : `Erro HTTP ${res.status}`,
+      };
+    } catch (err: unknown) {
+      const latencyMs = Date.now() - start;
+      return {
+        success: false,
+        latencyMs,
+        message: err instanceof Error ? err.message : 'Falha ao testar conectividade',
+      };
+    }
+  }
+
   // ══════════════════════════════════════════════════════
   // LOGS
   // ══════════════════════════════════════════════════════
@@ -415,25 +548,21 @@ export class ApiIntegrationService {
       };
     });
 
-    await this.prisma.auditLog
-      .create({
-        data: {
-          userId: createdById,
-          action: 'API_KEY_CREATED',
-          entity: 'ApiKey',
-          entityId: null,
-          changes: JSON.stringify({ name: dto.name, scopes: dto.scopes }),
-        },
-      })
-      .catch((err: unknown) =>
-        this.logger.warn({
-          createdById,
-          keyName: dto.name,
-          action: 'API_KEY_CREATED',
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao registar audit log de criação de API key',
-        }),
-      );
+    await writeChainedAuditLog(this.prisma, {
+      userId: createdById,
+      action: 'API_KEY_CREATED',
+      entity: 'ApiKey',
+      entityId: null,
+      changes: JSON.stringify({ name: dto.name, scopes: dto.scopes }),
+    }).catch((err: unknown) =>
+      this.logger.warn({
+        createdById,
+        keyName: dto.name,
+        action: 'API_KEY_CREATED',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao registar audit log de criação de API key',
+      }),
+    );
 
     // Return the raw key ONCE — never stored in plain text
     return { ...apiKey, key: rawKey, message: '⚠️ Guarda esta chave — não será exibida novamente' };
@@ -482,19 +611,20 @@ export class ApiIntegrationService {
           msg: 'Falha ao revogar API key',
         }),
       );
-    await this.prisma.auditLog
-      .create({
-        data: { userId, action: 'API_KEY_REVOKED', entity: 'ApiKey', entityId: keyId },
-      })
-      .catch((err: unknown) =>
-        this.logger.warn({
-          keyId,
-          userId,
-          action: 'API_KEY_REVOKED',
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao registar audit log de revogação de API key',
-        }),
-      );
+    await writeChainedAuditLog(this.prisma, {
+      userId,
+      action: 'API_KEY_REVOKED',
+      entity: 'ApiKey',
+      entityId: keyId,
+    }).catch((err: unknown) =>
+      this.logger.warn({
+        keyId,
+        userId,
+        action: 'API_KEY_REVOKED',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao registar audit log de revogação de API key',
+      }),
+    );
     return { message: 'API Key revogada' };
   }
 
@@ -517,19 +647,20 @@ export class ApiIntegrationService {
         }),
       );
 
-    await this.prisma.auditLog
-      .create({
-        data: { userId, action: 'API_KEY_ROTATED', entity: 'ApiKey', entityId: keyId },
-      })
-      .catch((err: unknown) =>
-        this.logger.warn({
-          keyId,
-          userId,
-          action: 'API_KEY_ROTATED',
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao registar audit log de rotação de API key',
-        }),
-      );
+    await writeChainedAuditLog(this.prisma, {
+      userId,
+      action: 'API_KEY_ROTATED',
+      entity: 'ApiKey',
+      entityId: keyId,
+    }).catch((err: unknown) =>
+      this.logger.warn({
+        keyId,
+        userId,
+        action: 'API_KEY_ROTATED',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao registar audit log de rotação de API key',
+      }),
+    );
 
     return { key: rawKey, message: '⚠️ Nova chave gerada — guarda antes de fechar' };
   }

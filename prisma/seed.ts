@@ -53,21 +53,113 @@ async function seedPayroll(prisma: PrismaClient) {
   }
 
   const components: Array<{
-    code: string; name: string; type: 'EARNING' | 'DEDUCTION';
+    code: string;
+    name: string;
+    type: 'EARNING' | 'DEDUCTION';
     calcType: 'FIXED' | 'PERCENT' | 'FORMULA' | 'TABLE';
-    isTaxable: boolean; isMandatory: boolean; order: number;
+    isTaxable: boolean;
+    isMandatory: boolean;
+    order: number;
   }> = [
-    { code: 'BASE_SALARY', name: 'Salário Base', type: 'EARNING', calcType: 'FIXED', isTaxable: true, isMandatory: true, order: 0 },
-    { code: 'ALLOWANCE_FOOD', name: 'Subsídio de Alimentação', type: 'EARNING', calcType: 'FIXED', isTaxable: false, isMandatory: false, order: 1 },
-    { code: 'ALLOWANCE_TRANSPORT', name: 'Subsídio de Transporte', type: 'EARNING', calcType: 'FIXED', isTaxable: false, isMandatory: false, order: 2 },
-    { code: 'OVERTIME', name: 'Horas Extras', type: 'EARNING', calcType: 'FORMULA', isTaxable: true, isMandatory: false, order: 3 },
-    { code: 'BONUS', name: 'Bónus', type: 'EARNING', calcType: 'FIXED', isTaxable: true, isMandatory: false, order: 4 },
-    { code: 'INSS_EMPLOYEE', name: 'INSS Colaborador', type: 'DEDUCTION', calcType: 'PERCENT', isTaxable: false, isMandatory: true, order: 5 },
-    { code: 'IRT', name: 'IRT (Imposto Rendimento Trabalho)', type: 'DEDUCTION', calcType: 'TABLE', isTaxable: false, isMandatory: true, order: 6 },
-    { code: 'HEALTH_INSURANCE', name: 'Seguro de Saúde', type: 'DEDUCTION', calcType: 'PERCENT', isTaxable: false, isMandatory: false, order: 7 },
-    { code: 'UNION_FEE', name: 'Quota Sindical', type: 'DEDUCTION', calcType: 'PERCENT', isTaxable: false, isMandatory: false, order: 8 },
-    { code: 'ADVANCE', name: 'Adiantamento', type: 'DEDUCTION', calcType: 'FIXED', isTaxable: false, isMandatory: false, order: 9 },
-    { code: 'ABSENCE_DEDUCTION', name: 'Desconto por Faltas', type: 'DEDUCTION', calcType: 'FIXED', isTaxable: false, isMandatory: false, order: 10 },
+    {
+      code: 'BASE_SALARY',
+      name: 'Salário Base',
+      type: 'EARNING',
+      calcType: 'FIXED',
+      isTaxable: true,
+      isMandatory: true,
+      order: 0,
+    },
+    {
+      code: 'ALLOWANCE_FOOD',
+      name: 'Subsídio de Alimentação',
+      type: 'EARNING',
+      calcType: 'FIXED',
+      isTaxable: false,
+      isMandatory: false,
+      order: 1,
+    },
+    {
+      code: 'ALLOWANCE_TRANSPORT',
+      name: 'Subsídio de Transporte',
+      type: 'EARNING',
+      calcType: 'FIXED',
+      isTaxable: false,
+      isMandatory: false,
+      order: 2,
+    },
+    {
+      code: 'OVERTIME',
+      name: 'Horas Extras',
+      type: 'EARNING',
+      calcType: 'FORMULA',
+      isTaxable: true,
+      isMandatory: false,
+      order: 3,
+    },
+    {
+      code: 'BONUS',
+      name: 'Bónus',
+      type: 'EARNING',
+      calcType: 'FIXED',
+      isTaxable: true,
+      isMandatory: false,
+      order: 4,
+    },
+    {
+      code: 'INSS_EMPLOYEE',
+      name: 'INSS Colaborador',
+      type: 'DEDUCTION',
+      calcType: 'PERCENT',
+      isTaxable: false,
+      isMandatory: true,
+      order: 5,
+    },
+    {
+      code: 'IRT',
+      name: 'IRT (Imposto Rendimento Trabalho)',
+      type: 'DEDUCTION',
+      calcType: 'TABLE',
+      isTaxable: false,
+      isMandatory: true,
+      order: 6,
+    },
+    {
+      code: 'HEALTH_INSURANCE',
+      name: 'Seguro de Saúde',
+      type: 'DEDUCTION',
+      calcType: 'PERCENT',
+      isTaxable: false,
+      isMandatory: false,
+      order: 7,
+    },
+    {
+      code: 'UNION_FEE',
+      name: 'Quota Sindical',
+      type: 'DEDUCTION',
+      calcType: 'PERCENT',
+      isTaxable: false,
+      isMandatory: false,
+      order: 8,
+    },
+    {
+      code: 'ADVANCE',
+      name: 'Adiantamento',
+      type: 'DEDUCTION',
+      calcType: 'FIXED',
+      isTaxable: false,
+      isMandatory: false,
+      order: 9,
+    },
+    {
+      code: 'ABSENCE_DEDUCTION',
+      name: 'Desconto por Faltas',
+      type: 'DEDUCTION',
+      calcType: 'FIXED',
+      isTaxable: false,
+      isMandatory: false,
+      order: 10,
+    },
   ];
   for (const c of components) {
     await prisma.salaryComponent.upsert({
@@ -119,14 +211,70 @@ async function seedOrgStructure(prisma: PrismaClient) {
 
   // Um cargo por PositionLevel. Salários em Kz (Angola) — bandas indicativas.
   const positions = [
-    { code: 'P-INT', name: 'Estagiário', level: 'INTERN', dept: 'ENG', salaryMin: 150000, salaryMax: 250000 },
-    { code: 'P-JR', name: 'Técnico Júnior', level: 'JUNIOR', dept: 'OPS', salaryMin: 300000, salaryMax: 450000 },
-    { code: 'P-MID', name: 'Analista', level: 'MID', dept: 'COM', salaryMin: 500000, salaryMax: 750000 },
-    { code: 'P-SR', name: 'Engenheiro Sénior', level: 'SENIOR', dept: 'ENG', salaryMin: 800000, salaryMax: 1200000 },
-    { code: 'P-LEAD', name: 'Team Lead', level: 'LEAD', dept: 'ENG', salaryMin: 1300000, salaryMax: 1800000 },
-    { code: 'P-MGR', name: 'Gestor de Departamento', level: 'MANAGER', dept: 'OPS', salaryMin: 1900000, salaryMax: 2600000 },
-    { code: 'P-DIR', name: 'Director', level: 'DIRECTOR', dept: 'RH', salaryMin: 2800000, salaryMax: 4000000 },
-    { code: 'P-EXEC', name: 'Administrador Executivo', level: 'EXECUTIVE', dept: 'COM', salaryMin: 4500000, salaryMax: 7000000 },
+    {
+      code: 'P-INT',
+      name: 'Estagiário',
+      level: 'INTERN',
+      dept: 'ENG',
+      salaryMin: 150000,
+      salaryMax: 250000,
+    },
+    {
+      code: 'P-JR',
+      name: 'Técnico Júnior',
+      level: 'JUNIOR',
+      dept: 'OPS',
+      salaryMin: 300000,
+      salaryMax: 450000,
+    },
+    {
+      code: 'P-MID',
+      name: 'Analista',
+      level: 'MID',
+      dept: 'COM',
+      salaryMin: 500000,
+      salaryMax: 750000,
+    },
+    {
+      code: 'P-SR',
+      name: 'Engenheiro Sénior',
+      level: 'SENIOR',
+      dept: 'ENG',
+      salaryMin: 800000,
+      salaryMax: 1200000,
+    },
+    {
+      code: 'P-LEAD',
+      name: 'Team Lead',
+      level: 'LEAD',
+      dept: 'ENG',
+      salaryMin: 1300000,
+      salaryMax: 1800000,
+    },
+    {
+      code: 'P-MGR',
+      name: 'Gestor de Departamento',
+      level: 'MANAGER',
+      dept: 'OPS',
+      salaryMin: 1900000,
+      salaryMax: 2600000,
+    },
+    {
+      code: 'P-DIR',
+      name: 'Director',
+      level: 'DIRECTOR',
+      dept: 'RH',
+      salaryMin: 2800000,
+      salaryMax: 4000000,
+    },
+    {
+      code: 'P-EXEC',
+      name: 'Administrador Executivo',
+      level: 'EXECUTIVE',
+      dept: 'COM',
+      salaryMin: 4500000,
+      salaryMax: 7000000,
+    },
   ] as const;
 
   // Position não tem campo @unique além do id — upsert por nome não é possível.
@@ -156,14 +304,70 @@ async function seedOrgStructure(prisma: PrismaClient) {
 // CareerRole não tem @unique além do id → idempotência por (name, department).
 async function seedCareerRoles(prisma: PrismaClient) {
   const roles = [
-    { name: 'Analista Júnior', department: 'Engenharia', seniority: 'JUNIOR', level: 1, salaryMin: 300000, salaryMax: 450000 },
-    { name: 'Analista', department: 'Engenharia', seniority: 'MID', level: 2, salaryMin: 500000, salaryMax: 750000 },
-    { name: 'Analista Sénior', department: 'Engenharia', seniority: 'SENIOR', level: 3, salaryMin: 800000, salaryMax: 1200000 },
-    { name: 'Team Lead', department: 'Engenharia', seniority: 'LEAD', level: 4, salaryMin: 1300000, salaryMax: 1800000 },
-    { name: 'Gestor de Recursos Humanos', department: 'Recursos Humanos', seniority: 'MANAGER', level: 5, salaryMin: 1900000, salaryMax: 2600000 },
-    { name: 'Gestor Comercial', department: 'Comercial', seniority: 'MANAGER', level: 5, salaryMin: 1900000, salaryMax: 2600000 },
-    { name: 'Director de Operações', department: 'Operações', seniority: 'DIRECTOR', level: 6, salaryMin: 2800000, salaryMax: 4000000 },
-    { name: 'Administrador Executivo', department: 'Comercial', seniority: 'C_LEVEL', level: 7, salaryMin: 4500000, salaryMax: 7000000 },
+    {
+      name: 'Analista Júnior',
+      department: 'Engenharia',
+      seniority: 'JUNIOR',
+      level: 1,
+      salaryMin: 300000,
+      salaryMax: 450000,
+    },
+    {
+      name: 'Analista',
+      department: 'Engenharia',
+      seniority: 'MID',
+      level: 2,
+      salaryMin: 500000,
+      salaryMax: 750000,
+    },
+    {
+      name: 'Analista Sénior',
+      department: 'Engenharia',
+      seniority: 'SENIOR',
+      level: 3,
+      salaryMin: 800000,
+      salaryMax: 1200000,
+    },
+    {
+      name: 'Team Lead',
+      department: 'Engenharia',
+      seniority: 'LEAD',
+      level: 4,
+      salaryMin: 1300000,
+      salaryMax: 1800000,
+    },
+    {
+      name: 'Gestor de Recursos Humanos',
+      department: 'Recursos Humanos',
+      seniority: 'MANAGER',
+      level: 5,
+      salaryMin: 1900000,
+      salaryMax: 2600000,
+    },
+    {
+      name: 'Gestor Comercial',
+      department: 'Comercial',
+      seniority: 'MANAGER',
+      level: 5,
+      salaryMin: 1900000,
+      salaryMax: 2600000,
+    },
+    {
+      name: 'Director de Operações',
+      department: 'Operações',
+      seniority: 'DIRECTOR',
+      level: 6,
+      salaryMin: 2800000,
+      salaryMax: 4000000,
+    },
+    {
+      name: 'Administrador Executivo',
+      department: 'Comercial',
+      seniority: 'C_LEVEL',
+      level: 7,
+      salaryMin: 4500000,
+      salaryMax: 7000000,
+    },
   ] as const;
 
   for (const r of roles) {
@@ -184,6 +388,151 @@ async function seedCareerRoles(prisma: PrismaClient) {
     });
   }
   console.log('✅ CareerRoles criados:', roles.map(r => r.name).join(', '));
+}
+
+// Banco fixo de competências de Avaliação 360º da INNOVA — os 8 critérios
+// pedidos, escala 1-5 (Nunca..Sempre), cada um com os seus indicadores
+// comportamentais. Idempotente (upsert por nome). Usado por
+// evaluation360.service.ts#attachStandardCompetencies quando um ciclo é
+// criado sem lista explícita de competências.
+async function seedEvaluation360Competencies(prisma: PrismaClient) {
+  const competencies = [
+    {
+      name: 'Liderança',
+      category: 'LEADERSHIP',
+      type: 'LEADERSHIP',
+      indicators: ['Inspira a equipa', 'Dá feedback', 'Toma decisões', 'Desenvolve pessoas'],
+    },
+    {
+      name: 'Comunicação',
+      category: 'SOFT_SKILL',
+      type: 'SOFT_SKILL',
+      indicators: [
+        'Comunica de forma clara',
+        'Escuta activamente',
+        'Adapta a comunicação ao público',
+      ],
+    },
+    {
+      name: 'Foco em Resultados',
+      category: 'HARD_SKILL',
+      type: 'HARD_SKILL',
+      indicators: ['Cumpre objectivos', 'Assume responsabilidade', 'Procura melhoria contínua'],
+    },
+    {
+      name: 'Trabalho em Equipa',
+      category: 'SOFT_SKILL',
+      type: 'SOFT_SKILL',
+      indicators: ['Colabora com os colegas', 'Partilha informação', 'Resolve conflitos'],
+    },
+    {
+      name: 'Pensamento Estratégico',
+      category: 'HARD_SKILL',
+      type: 'HARD_SKILL',
+      indicators: [
+        'Visão a médio e longo prazo',
+        'Capacidade de antecipação',
+        'Alinhamento com os objectivos da organização',
+      ],
+    },
+    {
+      name: 'Resiliência',
+      category: 'SOFT_SKILL',
+      type: 'SOFT_SKILL',
+      indicators: [
+        'Gestão de pressão',
+        'Adaptação perante mudanças',
+        'Capacidade de manter o foco',
+      ],
+    },
+    {
+      name: 'Inovação',
+      category: 'HARD_SKILL',
+      type: 'HARD_SKILL',
+      indicators: ['Geração de novas ideias', 'Abertura a novas abordagens', 'Melhoria contínua'],
+    },
+    {
+      name: 'Bem-estar e Disciplina',
+      category: 'SOFT_SKILL',
+      type: 'VITALITY',
+      indicators: [
+        'Gestão de stress',
+        'Equilíbrio emocional',
+        'Contributo para um ambiente de trabalho positivo',
+        'Cumprimento de prazos',
+        'Pontualidade',
+        'Cumprimento de normas e procedimentos',
+        'Responsabilidade',
+      ],
+    },
+  ] as const;
+
+  for (const c of competencies) {
+    const competency = await prisma.competency.upsert({
+      where: { name: c.name },
+      update: {},
+      create: {
+        name: c.name,
+        category: c.category as any,
+        type: c.type as any,
+        isGlobal: true,
+        scaleMin: 1,
+        scaleMax: 5,
+      },
+    });
+    for (const [index, description] of c.indicators.entries()) {
+      const existing = await prisma.competencyIndicator.findFirst({
+        where: { competencyId: competency.id, description },
+      });
+      if (existing) continue;
+      await prisma.competencyIndicator.create({
+        data: { competencyId: competency.id, level: index + 1, description },
+      });
+    }
+  }
+  console.log(
+    '✅ Competências de Avaliação 360º criadas:',
+    competencies.map(c => c.name).join(', '),
+  );
+}
+
+// Banco curado de competências para o selector "Competência" do modal
+// "Dar Feedback" (Feedback Contínuo, separador Feedback da Avaliação 360º —
+// ver GiveFeedbackModal.tsx). É um subconjunto diferente do banco formal de
+// avaliação 360º (seedEvaluation360Competencies): reutiliza pelo nome as 3
+// competências que já existem nos dois (Comunicação, Trabalho em Equipa,
+// Liderança) e adiciona as restantes 6, todas marcadas com tags: ['FEEDBACK']
+// para GET /evaluation360/competencies?tag=FEEDBACK as devolver sem misturar
+// com o banco inteiro usado pelos ciclos formais.
+async function seedFeedbackTagCompetencies(prisma: PrismaClient) {
+  const names = [
+    'Comunicação',
+    'Trabalho em Equipa',
+    'Liderança',
+    'Orientação para resultados',
+    'Orientação para o cliente',
+    'Pensamento e resolução de problemas',
+    'Adaptabilidade',
+    'Profissionalismo',
+    'Competências digitais',
+  ];
+
+  for (const name of names) {
+    await prisma.competency.upsert({
+      where: { name },
+      update: { tags: { set: ['FEEDBACK'] } },
+      create: {
+        name,
+        category: 'SOFT_SKILL',
+        type: 'BEHAVIORAL',
+        isGlobal: true,
+        scaleMin: 1,
+        scaleMax: 5,
+        tags: ['FEEDBACK'],
+      },
+    });
+  }
+  console.log('✅ Banco de competências do Feedback Contínuo marcado:', names.join(', '));
 }
 
 async function main() {
@@ -207,7 +556,7 @@ async function main() {
   for (const name of roleNames) {
     const role = await prisma.role.upsert({
       where: { name },
-      update: {},
+      update: { code: name },
       create: { name, code: name },
     });
     roleMap[name] = role;
@@ -273,6 +622,9 @@ async function main() {
       color: '#EF4444',
       icon: 'Stethoscope',
       isPaid: true,
+      requiresDocument: true,
+      isSensitive: true,
+      requiresPayrollValidation: true,
       minNoticeDays: 0,
     },
     {
@@ -284,6 +636,9 @@ async function main() {
       icon: 'Baby',
       isPaid: true,
       annualLimit: 120,
+      requiresDocument: true,
+      isSensitive: true,
+      requiresPayrollValidation: true,
       minNoticeDays: 0,
     },
     {
@@ -295,6 +650,9 @@ async function main() {
       icon: 'Baby',
       isPaid: true,
       annualLimit: 28,
+      requiresDocument: true,
+      isSensitive: true,
+      requiresPayrollValidation: true,
       minNoticeDays: 0,
     },
     {
@@ -306,6 +664,7 @@ async function main() {
       icon: 'HeartCrack',
       isPaid: true,
       annualLimit: 5,
+      requiresDocument: true,
       minNoticeDays: 0,
     },
     {
@@ -329,6 +688,7 @@ async function main() {
       color: '#DC2626',
       icon: 'AlertTriangle',
       isPaid: false,
+      requiresPayrollValidation: true,
       minNoticeDays: 0,
     },
     {
@@ -359,6 +719,7 @@ async function main() {
       color: '#94A3B8',
       icon: 'CalendarOff',
       isPaid: false,
+      requiresPayrollValidation: true,
       minNoticeDays: 15,
     },
     {
@@ -369,6 +730,7 @@ async function main() {
       color: '#64748B',
       icon: 'MoreHorizontal',
       isPaid: false,
+      requiresPayrollValidation: true,
       minNoticeDays: 0,
     },
   ];
@@ -387,6 +749,148 @@ async function main() {
   await seedCareerRoles(prisma);
 
   await seedPayroll(prisma);
+
+  await seedEvaluation360Competencies(prisma);
+
+  await seedFeedbackTagCompetencies(prisma);
+
+  // docs/roi-impact.md §4 — modelo de avaliação por omissão do sistema
+  // (Kirkpatrick 4 níveis + extensão Phillips). Sem @@unique em
+  // RoiEvaluationModel.name (não é um campo de negócio único, só o modelo
+  // "de sistema" que aqui se semeia é), por isso findFirst+create em vez de
+  // upsert — reexecutar o seed não deve duplicar nem apagar edições do RH.
+  const defaultRoiModel = await prisma.roiEvaluationModel.findFirst({
+    where: { name: 'Kirkpatrick + Phillips (padrão)' },
+  });
+  if (!defaultRoiModel) {
+    await prisma.roiEvaluationModel.create({
+      data: {
+        name: 'Kirkpatrick + Phillips (padrão)',
+        description:
+          'Modelo de 5 níveis recomendado pelo spec: Reação/Aprendizagem/Comportamento ' +
+          'obrigatórios para todas as formações; Resultados/ROI só acima do limiar de ' +
+          'custo/criticidade (ver Configurações).',
+        levels: [
+          { level: 1, name: 'Reação', mandatory: true, weight: 10 },
+          { level: 2, name: 'Aprendizagem', mandatory: true, weight: 20 },
+          { level: 3, name: 'Comportamento', mandatory: true, weight: 25 },
+          { level: 4, name: 'Resultados', mandatory: false, weight: 25 },
+          { level: 5, name: 'ROI', mandatory: false, weight: 20 },
+        ],
+        createdById: admin.id,
+      },
+    });
+    console.log('✅ Modelo de avaliação padrão criado: Kirkpatrick + Phillips');
+  }
+
+  // docs/roi-impact.md §6 — biblioteca central de KPIs, exemplos do spec.
+  // `code` é @unique, por isso upsert directo (reexecutar o seed não deve
+  // duplicar nem apagar edições do RH nos campos não semeados aqui).
+  const defaultKpis = [
+    {
+      code: 'TURNOVER_VOLUNTARIO',
+      name: 'Taxa de rotatividade voluntária',
+      category: 'PESSOAS' as const,
+      unit: '%',
+      formula: '(Saídas voluntárias ÷ Efetivo médio) × 100',
+      frequency: 'MENSAL' as const,
+      description: 'Percentagem de colaboradores que saem da empresa por iniciativa própria.',
+    },
+    {
+      code: 'CUSTO_SUBSTITUICAO_SAIDA',
+      name: 'Custo de substituição por saída',
+      category: 'FINANCEIRO' as const,
+      unit: 'AOA',
+      formula: 'Custo de recrutamento + integração + perda de produtividade até substituição',
+      frequency: 'TRIMESTRAL' as const,
+      description: 'Custo médio de substituir um colaborador que saiu.',
+    },
+    {
+      code: 'PRODUTIVIDADE_COLABORADOR',
+      name: 'Produtividade por colaborador',
+      category: 'PRODUTIVIDADE' as const,
+      unit: 'output/colaborador',
+      formula: 'Output total ÷ Nº de colaboradores',
+      frequency: 'MENSAL' as const,
+      description: 'Output médio gerado por colaborador no período.',
+    },
+    {
+      code: 'TAXA_PROMOCAO_INTERNA',
+      name: 'Taxa de promoção interna',
+      category: 'PESSOAS' as const,
+      unit: '%',
+      formula: '(Promoções internas ÷ Vagas preenchidas) × 100',
+      frequency: 'TRIMESTRAL' as const,
+      description: 'Percentagem de vagas preenchidas por promoção interna vs. contratação externa.',
+    },
+    {
+      code: 'TEMPO_PRODUTIVIDADE_PLENA',
+      name: 'Tempo médio até produtividade plena (onboarding)',
+      category: 'PRODUTIVIDADE' as const,
+      unit: 'dias',
+      formula: 'Média de dias entre admissão e produtividade plena',
+      frequency: 'MENSAL' as const,
+      dataSource: 'Onboarding',
+      description: 'Tempo médio até um novo colaborador atingir produtividade plena.',
+    },
+    {
+      code: 'CONCLUSAO_FORMACAO_OBRIGATORIA',
+      name: 'Taxa de conclusão de formação obrigatória',
+      category: 'QUALIDADE' as const,
+      unit: '%',
+      formula: '(Formações obrigatórias concluídas ÷ Formações obrigatórias atribuídas) × 100',
+      frequency: 'MENSAL' as const,
+      dataSource: 'Trainings/Courses',
+      description: 'Conformidade com formações de carácter obrigatório.',
+    },
+    {
+      code: 'CUSTO_HORA_FORMACAO',
+      name: 'Custo por hora de formação',
+      category: 'FINANCEIRO' as const,
+      unit: 'AOA/hora',
+      formula: 'Custo total da formação ÷ Total de horas de formação',
+      frequency: 'MENSAL' as const,
+      dataSource: 'Custos & Investimento',
+      description: 'Custo médio de cada hora de formação ministrada.',
+    },
+    {
+      code: 'NPS_INTERNO',
+      name: 'NPS interno',
+      category: 'CLIENTE' as const,
+      unit: 'pontos',
+      formula: '% Promotores − % Detratores',
+      frequency: 'SEMESTRAL' as const,
+      description: 'Net Promoter Score interno (satisfação/engagement do colaborador).',
+    },
+    {
+      code: 'TAXA_ABSENTISMO',
+      name: 'Taxa de absentismo',
+      category: 'PESSOAS' as const,
+      unit: '%',
+      formula: '(Dias de ausência ÷ Dias úteis totais) × 100',
+      frequency: 'MENSAL' as const,
+      dataSource: 'Attendance',
+      description: 'Percentagem de dias úteis perdidos por ausência.',
+    },
+    {
+      code: 'TAXA_ACIDENTES_TRABALHO',
+      name: 'Taxa de acidentes de trabalho',
+      category: 'SEGURANCA' as const,
+      unit: 'acidentes/1000 colaboradores',
+      formula: '(Nº de acidentes ÷ Efetivo) × 1000',
+      frequency: 'TRIMESTRAL' as const,
+      description: 'Frequência de acidentes de trabalho por 1000 colaboradores.',
+    },
+  ];
+
+  for (const kpi of defaultKpis) {
+    await prisma.kpiDefinition.upsert({
+      where: { code: kpi.code },
+      update: {},
+      create: { ...kpi, createdById: admin.id },
+    });
+  }
+  console.log('✅ Biblioteca de KPIs padrão criada:', defaultKpis.map(k => k.code).join(', '));
 
   console.log('🎉 Seed concluído!');
 }

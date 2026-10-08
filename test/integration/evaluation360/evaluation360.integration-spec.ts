@@ -26,6 +26,7 @@ describe('Evaluation360 Integration', () => {
   let competencyId: number;
   let cycleId: string;
   let questionId: string;
+  let formQuestionIds: string[];
   let managerAssignmentId: string;
   let feedbackId: string;
   let pulseSurveyId: string;
@@ -271,6 +272,11 @@ describe('Evaluation360 Integration', () => {
         .set('Authorization', `Bearer ${managerToken}`)
         .expect(200);
       expect(res.body.questions.length).toBeGreaterThanOrEqual(1);
+      // createCycle() já gera uma questão FREQUENCY por omissão por
+      // competência (attachDefaultQuestions) além da criada explicitamente
+      // acima — o formulário real pode ter mais do que a `questionId`
+      // manual, e todas as isRequired têm de ser respondidas para submeter.
+      formQuestionIds = res.body.questions.map((q: { id: string }) => q.id);
     });
 
     it('gestor submete rascunho → 200', async () => {
@@ -278,7 +284,10 @@ describe('Evaluation360 Integration', () => {
         .post(`/evaluation360/cycles/${cycleId}/responses`)
         .query({ evaluateeId: String(employeeId) })
         .set('Authorization', `Bearer ${managerToken}`)
-        .send({ answers: [{ questionId, numericValue: 4 }], submit: false })
+        .send({
+          answers: formQuestionIds.map(id => ({ questionId: id, numericValue: 4 })),
+          submit: false,
+        })
         .expect(200);
       expect(res.body.status).toBe('DRAFT');
     });
@@ -288,7 +297,10 @@ describe('Evaluation360 Integration', () => {
         .post(`/evaluation360/cycles/${cycleId}/responses`)
         .query({ evaluateeId: String(employeeId) })
         .set('Authorization', `Bearer ${managerToken}`)
-        .send({ answers: [{ questionId, numericValue: 4 }], submit: true })
+        .send({
+          answers: formQuestionIds.map(id => ({ questionId: id, numericValue: 4 })),
+          submit: true,
+        })
         .expect(200);
       expect(res.body.status).toBe('SUBMITTED');
     });
@@ -298,7 +310,10 @@ describe('Evaluation360 Integration', () => {
         .post(`/evaluation360/cycles/${cycleId}/responses`)
         .query({ evaluateeId: String(employeeId) })
         .set('Authorization', `Bearer ${employeeToken}`)
-        .send({ answers: [{ questionId, numericValue: 5 }], submit: true })
+        .send({
+          answers: formQuestionIds.map(id => ({ questionId: id, numericValue: 5 })),
+          submit: true,
+        })
         .expect(200);
     });
   });
@@ -320,12 +335,15 @@ describe('Evaluation360 Integration', () => {
       expect(res.body.rawByEvaluator).toBeNull();
     });
 
-    it('RH vê o resultado completo (rawByEvaluator preenchido — verifica correcção do roleCode)', async () => {
-      const res = await request(app.getHttpServer())
+    // getParticipantResult() nega explicitamente — "ninguém vê o resultado de
+    // outro utilizador, nem ADMIN nem RH têm excepção aqui" — resultados
+    // agregados (sem identificar ninguém) continuam disponíveis a RH via
+    // getTeamAnalytics/getOrganizationalAnalytics/getNineBox, testados abaixo.
+    it('RH não pode ver o resultado individual de outro utilizador → 403', async () => {
+      await request(app.getHttpServer())
         .get(`/evaluation360/cycles/${cycleId}/results/${employeeId}`)
         .set('Authorization', `Bearer ${rhToken}`)
-        .expect(200);
-      expect(res.body.rawByEvaluator).not.toBeNull();
+        .expect(403);
     });
 
     it('GET /evaluation360/cycles/:cycleId/analytics/team — gestor → 200', async () => {
@@ -333,7 +351,13 @@ describe('Evaluation360 Integration', () => {
         .get(`/evaluation360/cycles/${cycleId}/analytics/team`)
         .set('Authorization', `Bearer ${managerToken}`)
         .expect(200);
-      expect(Array.isArray(res.body)).toBe(true);
+      // getTeamAnalytics() devolve sempre um agregado (médias/contagens da
+      // equipa), nunca uma lista de resultados por pessoa — mesma regra de
+      // "nunca identificar ninguém" das outras rotas de analytics. teamSize
+      // pode ser 0 aqui (o seed de integração não define managerId no
+      // colaborador de teste), por isso só se confirma a forma do agregado.
+      expect(typeof res.body.teamSize).toBe('number');
+      expect(Array.isArray(res.body.competencyAverages)).toBe(true);
     });
 
     it('GET /evaluation360/analytics/organizational — RH → 200', async () => {
@@ -345,17 +369,31 @@ describe('Evaluation360 Integration', () => {
       expect(res.body.totalParticipants).toBeGreaterThanOrEqual(1);
     });
 
-    it('GET /evaluation360/analytics/nine-box — gestor → 200', async () => {
-      const res = await request(app.getHttpServer())
+    // @Roles(ADMIN, RH) só — GESTOR foi deliberadamente removido do nine-box
+    // (ver comentário sobre getTeamAnalytics/calibrateScore no controller):
+    // é uma matriz de planeamento de sucessão ao nível organizacional.
+    it('GET /evaluation360/analytics/nine-box — gestor → 403', async () => {
+      await request(app.getHttpServer())
         .get('/evaluation360/analytics/nine-box')
         .query({ cycleId })
         .set('Authorization', `Bearer ${managerToken}`)
+        .expect(403);
+    });
+
+    it('GET /evaluation360/analytics/nine-box — RH → 200', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/evaluation360/analytics/nine-box')
+        .query({ cycleId })
+        .set('Authorization', `Bearer ${rhToken}`)
         .expect(200);
       expect(Array.isArray(res.body)).toBe(true);
     });
 
-    it('RH calibra o score do participante → 200', async () => {
-      const res = await request(app.getHttpServer())
+    // POST cycles/:cycleId/calibrate foi removido do controller — calibrar
+    // era, por definição, aceder/substituir o resultado individual de outra
+    // pessoa, a mesma violação já corrigida em getParticipantResult.
+    it('POST cycles/:cycleId/calibrate foi removido → 404', async () => {
+      await request(app.getHttpServer())
         .post(`/evaluation360/cycles/${cycleId}/calibrate`)
         .set('Authorization', `Bearer ${rhToken}`)
         .send({
@@ -363,17 +401,18 @@ describe('Evaluation360 Integration', () => {
           calibratedScore: 4.2,
           justification: 'Ajuste de calibração RH',
         })
-        .expect(201);
-      expect(res.body.newScore).toBe(4.2);
+        .expect(404);
     });
 
-    it('RH gera relatório individual → 200', async () => {
-      const res = await request(app.getHttpServer())
+    // generateReport() nega o mesmo scope INDIVIDUAL de outra pessoa —
+    // "este endpoint tinha ficado de fora dessa auditoria" (ver comentário no
+    // service), mesma regra de getParticipantResult.
+    it('RH não pode gerar relatório individual de outro utilizador → 403', async () => {
+      await request(app.getHttpServer())
         .post('/evaluation360/reports/generate')
         .set('Authorization', `Bearer ${rhToken}`)
         .send({ cycleId, participantId: String(employeeId), scope: 'INDIVIDUAL' })
-        .expect(200);
-      expect(res.body.scope).toBe('INDIVIDUAL');
+        .expect(403);
     });
   });
 

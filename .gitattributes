@@ -3,3 +3,10 @@
 
 # Caddyfile da borda — consumido em Linux (VPS), manter LF
 ops/caddy/Caddyfile text eol=lf
+
+# Migrations Prisma: o checksum em _prisma_migrations é calculado sobre os
+# bytes em disco. Sem isto, checkouts Windows com core.autocrlf=true convertem
+# LF→CRLF no working tree e o Prisma passa a acusar "modified after applied"
+# em ficheiros cujo conteúdo nunca mudou — só a quebra de linha (ver
+# [[project_innova_prisma_migration_drift]]).
+prisma/migrations/**/*.sql text eol=lf

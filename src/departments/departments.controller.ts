@@ -13,6 +13,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Header,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -29,6 +30,7 @@ import {
   CreateDepartmentDto,
   UpdateDepartmentDto,
   DepartmentFilterDto,
+  ArchiveDepartmentDto,
   TransferMemberDto,
   BulkTransferDto,
   CreateUnitDto,
@@ -38,7 +40,12 @@ import {
   DepartmentsCreatePermissionDto,
   CreatePositionDto,
   UpdatePositionDto,
+  PositionFilterDto,
   CreateCareerPositionDto,
+  EmployeeFilterDto,
+  HierarchyFilterDto,
+  HistoryFilterDto,
+  ReportsFilterDto,
 } from './departments.dto';
 import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 
@@ -77,6 +84,78 @@ export class DepartmentsController {
     return this.svc.getComparativeDashboard();
   }
 
+  // Rota literal — tem de vir antes de ':id' (ver [[project_innova_route_shadowing]]).
+  @Get('export')
+  @Roles(...DEPARTMENTS_VIEW_ROLES)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="departamentos.csv"')
+  @ApiOperation({ summary: 'Exportar lista de departamentos (filtrada) como CSV' })
+  exportCsv(@Query() filters: DepartmentFilterDto) {
+    return this.svc.exportCsv(filters);
+  }
+
+  // Rotas literais — têm de vir antes de ':id' (ver [[project_innova_route_shadowing]]).
+  @Get('heads')
+  @Roles(...DEPARTMENTS_VIEW_ROLES)
+  @ApiOperation({ summary: 'Responsáveis de todos os departamentos' })
+  getHeads() {
+    return this.svc.getHeads();
+  }
+
+  @Get('heads/history')
+  @Roles(...DEPARTMENTS_VIEW_ROLES)
+  @ApiOperation({ summary: 'Histórico de alterações de responsável (todos os departamentos)' })
+  getHeadsHistory() {
+    return this.svc.getHeadHistory();
+  }
+
+  // Rota literal — tem de vir antes de ':id' (ver [[project_innova_route_shadowing]]).
+  @Get('employees')
+  @Roles(...DEPARTMENTS_VIEW_ROLES)
+  @ApiOperation({
+    summary: 'Colaboradores alocados aos departamentos, com filtros e indicadores',
+  })
+  getEmployees(@Query() filters: EmployeeFilterDto) {
+    return this.svc.getEmployees(filters);
+  }
+
+  // Rota literal — tem de vir antes de ':id' (ver [[project_innova_route_shadowing]]).
+  // Distinto de GET /positions (picker simples usado por outros módulos).
+  @Get('positions')
+  @Roles(...DEPARTMENTS_VIEW_ROLES)
+  @ApiOperation({ summary: 'Catálogo de cargos & funções, com filtros e indicadores' })
+  getPositionsCatalog(@Query() filters: PositionFilterDto) {
+    return this.svc.getPositionsCatalog(filters);
+  }
+
+  // Rota literal — tem de vir antes de ':id' (ver [[project_innova_route_shadowing]]).
+  @Get('hierarchy')
+  @Roles(...DEPARTMENTS_VIEW_ROLES)
+  @ApiOperation({
+    summary: 'Relações de reporte — cadeia hierárquica (docs/modulo_departments.md Ponto 7)',
+  })
+  getHierarchy(@Query() filters: HierarchyFilterDto) {
+    return this.svc.getHierarchy(filters);
+  }
+
+  // Rota literal — tem de vir antes de ':id' (ver [[project_innova_route_shadowing]]).
+  @Get('history')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({
+    summary: 'Histórico de alterações estruturais (docs/modulo_departments.md Ponto 8)',
+  })
+  getHistory(@Query() filters: HistoryFilterDto) {
+    return this.svc.getHistory(filters);
+  }
+
+  // Rota literal — tem de vir antes de ':id' (ver [[project_innova_route_shadowing]]).
+  @Get('reports')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Relatórios organizacionais (docs/modulo_departments.md Ponto 9)' })
+  getReports(@Query() filters: ReportsFilterDto) {
+    return this.svc.getReports(filters);
+  }
+
   // Detalhe e métricas: mesmo nível de acesso que GET /departments e
   // /departments/tree (DEPARTMENTS_VIEW_ROLES). O organograma e a lista já são
   // visíveis a qualquer autenticado não-COLABORADOR; se o detalhe fosse mais
@@ -96,6 +175,15 @@ export class DepartmentsController {
     return this.svc.getMetrics(id);
   }
 
+  @Get(':id/structure')
+  @Roles(...DEPARTMENTS_VIEW_ROLES)
+  @ApiOperation({
+    summary: 'Estrutura do departamento: equipas, cargos & posições, vagas, objectivos, documentos',
+  })
+  structure(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getStructure(id);
+  }
+
   @Get(':id/transfer-history')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Histórico de transferências do departamento' })
@@ -107,31 +195,54 @@ export class DepartmentsController {
   @Post()
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar departamento' })
-  create(@Body() dto: CreateDepartmentDto) {
-    return this.svc.create(dto);
+  create(@Body() dto: CreateDepartmentDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.create(dto, user.id);
   }
 
   @Put(':id')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar departamento' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateDepartmentDto) {
-    return this.svc.update(id, dto);
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateDepartmentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.update(id, dto, user.id);
   }
 
   @Patch(':id/deactivate')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Desactivar departamento (soft — preserva histórico)' })
   @HttpCode(HttpStatus.OK)
-  deactivate(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.deactivate(id);
+  deactivate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.deactivate(id, user.id);
   }
 
   @Patch(':id/activate')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Reactivar departamento' })
   @HttpCode(HttpStatus.OK)
-  activate(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.activate(id);
+  activate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.activate(id, user.id);
+  }
+
+  @Patch(':id/archive')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Arquivar departamento (regista data/motivo de encerramento)' })
+  @HttpCode(HttpStatus.OK)
+  archive(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ArchiveDepartmentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.archive(id, dto.reason, user.id);
+  }
+
+  @Delete(':id')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Eliminar departamento (só sem colaboradores nem sub-departamentos)' })
+  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.remove(id, user.id);
   }
 
   @Post('members/transfer')

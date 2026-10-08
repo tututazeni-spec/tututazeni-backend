@@ -5,7 +5,7 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
-    workflow_dispatch:
+  workflow_dispatch:
 
 jobs:
   quality:
@@ -94,9 +94,19 @@ jobs:
           DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/innova_test'
 
       - name: Cobertura de código
-        run: npm run test:coverage
+        # --maxWorkers=2: com 4 workers + instrumentação de cobertura o runner (7 GB)
+        # ficava sem memória e o worker do Jest era morto (OOM) de forma intermitente.
+        # --workerIdleMemoryLimit recicla workers que acumularam memória entre suites.
+        run: npm run test:coverage -- --maxWorkers=2 --workerIdleMemoryLimit=1000MB
         env:
           DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/innova_test'
+          # Os workers do Jest (herdam NODE_OPTIONS) rebentavam o heap por defeito
+          # com a cobertura activa ("Jest worker ran out of memory and crashed").
+          # 2 workers x 4096 MB (8 GB) excediam os 7 GB do runner e o SO matava o
+          # worker (evaluation360.service.additional.spec, run 37052510794) — 2560 MB
+          # por worker (5 GB no total) cabe com folga e o limite de reciclagem de 1000 MB
+          # liberta o heap entre suites antes de chegar ao tecto.
+          NODE_OPTIONS: --max-old-space-size=2560
 
       - name: Testes de integração
         run: npm run test:integration

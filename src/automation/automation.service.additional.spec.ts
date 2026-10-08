@@ -5,6 +5,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EnrollmentsService } from '../enrollments/enrollments.service';
 import { DevelopmentPlansService } from '../development-plans/development-plans.service';
 import { GamificationService } from '../gamification/gamification.service';
+import { MailService } from '../mail/mail.service';
+import { SmsService } from '../sms/sms.service';
 
 const mockEnrollments = { enroll: jest.fn().mockResolvedValue({ id: 1 }) };
 const mockDevPlans = { create: jest.fn().mockResolvedValue({ id: 1, status: 'DRAFT' }) };
@@ -12,10 +14,16 @@ const mockGamification = {
   awardPoints: jest.fn().mockResolvedValue(undefined),
   awardBadge: jest.fn().mockResolvedValue(undefined),
 };
+const mockMail = { sendNotification: jest.fn().mockResolvedValue(undefined) };
+const mockSms = {
+  sendSms: jest.fn().mockResolvedValue(undefined),
+  sendWhatsApp: jest.fn().mockResolvedValue(undefined),
+};
 
 const makeExec = () => ({
   findMany: jest.fn().mockResolvedValue([]),
   count: jest.fn().mockResolvedValue(0),
+  groupBy: jest.fn().mockResolvedValue([]),
   create: jest.fn().mockResolvedValue({}),
   update: jest.fn().mockResolvedValue({}),
   delete: jest.fn().mockResolvedValue({}),
@@ -79,6 +87,8 @@ describe('AutomationService (additional)', () => {
         { provide: EnrollmentsService, useValue: mockEnrollments },
         { provide: DevelopmentPlansService, useValue: mockDevPlans },
         { provide: GamificationService, useValue: mockGamification },
+        { provide: MailService, useValue: mockMail },
+        { provide: SmsService, useValue: mockSms },
       ],
     }).compile();
     service = module.get<AutomationService>(AutomationService);
@@ -89,11 +99,21 @@ describe('AutomationService (additional)', () => {
   describe('getRules', () => {
     it('deve retornar regras com estatísticas', async () => {
       mockPrisma.automationRule.findMany.mockResolvedValue([baseRule]);
-      mockPrisma.automationExecution.count.mockResolvedValue(5);
+      mockPrisma.automationExecution.groupBy.mockResolvedValue([
+        { ruleId: baseRule.id, status: 'SUCCESS', _count: { _all: 5 } },
+      ]);
       const result = await service.getRules();
       expect(result).toHaveLength(1);
       expect(result[0]).toHaveProperty('stats');
       expect(result[0].stats.total).toBe(5);
+    });
+
+    it('deve derivar o estado e filtrar por estado ERROR', async () => {
+      mockPrisma.automationRule.findMany.mockResolvedValue([]);
+      await service.getRules({ status: 'ERROR' as any });
+      expect(mockPrisma.automationRule.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { active: true, lastRunStatus: 'FAILED' } }),
+      );
     });
 
     it('deve filtrar por categoria', async () => {

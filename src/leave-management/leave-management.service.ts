@@ -10,7 +10,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { LeaveDecision, LeaveType, Prisma } from '@prisma/client';
 import { AuditService } from '../common/services/audit.service';
-import { assertCanAccess } from '../common/authz/ownership';
+import { assertCanAccess, isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
@@ -31,41 +31,15 @@ import {
   ApprovalAction,
   DurationMode,
 } from './leave-management.dto';
-
-// ─── Angola public holidays (configurable via DB in the future) ──────────────
-const ANGOLA_HOLIDAYS_2025: string[] = [
-  '2025-01-01',
-  '2025-02-04',
-  '2025-03-08',
-  '2025-04-04',
-  '2025-04-18',
-  '2025-05-01',
-  '2025-09-17',
-  '2025-11-02',
-  '2025-11-11',
-  '2025-12-25',
-];
+import { countWorkDays, countCalendarDays } from './leave-calendar.helper';
+import { canSeeSensitive } from './leave-scope.helper';
+import { LeaveSettingsService } from './leave-settings.service';
+import { LeaveEffectsService } from './leave-effects.service';
+import { LeaveSettings } from './leave-settings.dto';
+import { VACATION_CODE } from './leave-overview.service';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function isHoliday(date: Date, holidays: string[]): boolean {
-  return holidays.includes(date.toISOString().split('T')[0]);
-}
-
-function countWorkDays(start: Date, end: Date, holidays: string[] = ANGOLA_HOLIDAYS_2025): number {
-  let days = 0;
-  const cur = new Date(start);
-  while (cur <= end) {
-    const dow = cur.getDay();
-    if (dow !== 0 && dow !== 6 && !isHoliday(cur, holidays)) days++;
-    cur.setDate(cur.getDate() + 1);
-  }
-  return days;
-}
-
-function countCalendarDays(start: Date, end: Date): number {
-  return Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
-}
 // Ver project-innova-leave-type-enum-mismatch: LeaveTypeConfig.code é livre
 // (admin pode criar "SICK_SHORT", etc.), mas o enum fixo `LeaveType` só tem
 // 10 valores. `leaveTypeCode` é agora a chave real usada em todo este
@@ -73,6 +47,21 @@ function countCalendarDays(start: Date, end: Date): number {
 // coincide literalmente com um dos 10 membros do enum, para manter leitores
 // antigos a funcionar sem voltar a rebentar em códigos customizados.
 const LEAVE_TYPE_ENUM_VALUES = new Set<string>(Object.values(LeaveType));
+
+function timeToMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+/** `LV-2026-000123` — legível para o colaborador, único por pedido. */
+export function formatRequestNumber(id: number, createdAt: Date): string {
+  return `LV-${createdAt.getFullYear()}-${String(id).padStart(6, '0')}`;
+}
+
+/** O dia `mmdd` (MM-DD) cai dentro da janela [start, end], que pode atravessar o fim do ano. */
+export function inMonthDayWindow(mmdd: string, start: string, end: string): boolean {
+  return start <= end ? mmdd >= start && mmdd <= end : mmdd >= start || mmdd <= end;
+}
 
 function toLeaveTypeEnum(code: string): LeaveType | null {
   return LEAVE_TYPE_ENUM_VALUES.has(code) ? (code as LeaveType) : null;
@@ -87,6 +76,8 @@ export class LeaveManagementService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly settings: LeaveSettingsService,
+    private readonly effects: LeaveEffectsService,
   ) {}
 
   // ══════════════════════════════════════════════════════════════════
@@ -175,9 +166,7 @@ export class LeaveManagementService {
     });
   }
 
-  private async getApplicablePolicy(
-    userId: number,
-  ): Promise<Prisma.LeavePolicyGetPayload<object> | null> {
+  async getApplicablePolicy(userId: number): Promise<Prisma.LeavePolicyGetPayload<object> | null> {
     const user = await this.prisma.read.user.findUnique({
       where: { id: userId },
       include: { department: { select: { name: true } } },
@@ -198,7 +187,7 @@ export class LeaveManagementService {
   // LEAVE REQUESTS — LIST / DETAIL
   // ══════════════════════════════════════════════════════════════════
 
-  async findAll(filters: LeaveFilterDto) {
+  async findAll(filters: LeaveFilterDto, viewer?: CurrentUserData) {
     const {
       page = 1,
       limit = 20,
@@ -243,7 +232,36 @@ export class LeaveManagementService {
       this.prisma.read.leaveRequest.count({ where }),
     ]);
 
-    return buildPaginatedResponse(data, total, page, limit);
+    return buildPaginatedResponse(await this.redactSensitive(data, viewer), total, page, limit);
+  }
+
+  /**
+   * Tipos sensíveis (saúde, etc.): quem não é o titular nem ADMIN/RH não recebe
+   * o motivo nem os comprovativos — o gestor decide sobre a ausência, não
+   * precisa do detalhe clínico (docs/Modulo_Leave.md §4).
+   */
+  private async redactSensitive<
+    T extends {
+      userId: number;
+      leaveTypeCode: string;
+      reason?: string | null;
+      documents?: unknown[];
+      attachments?: string[];
+    },
+  >(rows: T[], viewer?: CurrentUserData): Promise<T[]> {
+    if (!viewer || rows.length === 0) return rows;
+    const sensitiveTypes =
+      (await this.prisma.read.leaveTypeConfig.findMany({
+        where: { isSensitive: true },
+        select: { code: true },
+      })) ?? [];
+    const sensitive = new Set(sensitiveTypes.map(t => t.code));
+    if (sensitive.size === 0) return rows;
+    return rows.map(r =>
+      sensitive.has(r.leaveTypeCode) && !canSeeSensitive(viewer, r.userId)
+        ? { ...r, reason: null, documents: [], attachments: [] }
+        : r,
+    );
   }
 
   async findOne(id: number, user?: CurrentUserData) {
@@ -262,11 +280,11 @@ export class LeaveManagementService {
     // Ownership (A3): dono OU ADMIN/RH/GESTOR; senão 404.
     if (user) assertCanAccess(r, r?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     else if (!r) throw new NotFoundException('Pedido não encontrado');
-    return r;
+    return user ? (await this.redactSensitive([r], user))[0] : r;
   }
 
-  async getPendingApprovals(approverId: number) {
-    return this.prisma.read.leaveRequest.findMany({
+  async getPendingApprovals(approverId: number, viewer?: CurrentUserData) {
+    const rows = await this.prisma.read.leaveRequest.findMany({
       where: {
         status: LeaveStatus.PENDING,
         approvals: { some: { approverId, decidedAt: null } },
@@ -277,6 +295,14 @@ export class LeaveManagementService {
       },
       orderBy: { createdAt: 'asc' },
     });
+    // Só os pedidos em que a etapa deste aprovador já é accionável (as etapas
+    // anteriores estão decididas).
+    const actionable = rows.filter(r => {
+      const mine = r.approvals?.find(a => a.approverId === approverId && a.decidedAt === null);
+      if (!mine) return true;
+      return !r.approvals.some(a => a.level < mine.level && a.decidedAt === null);
+    });
+    return this.redactSensitive(actionable, viewer);
   }
 
   // ══════════════════════════════════════════════════════════════════
@@ -289,23 +315,53 @@ export class LeaveManagementService {
 
     if (end < start) throw new BadRequestException('A data de fim não pode ser anterior ao início');
 
-    const leaveType = await this.prisma.leaveTypeConfig.findUnique({
-      where: { code: dto.leaveTypeCode },
-    });
+    const [leaveType, cfg, owner] = await Promise.all([
+      this.prisma.leaveTypeConfig.findUnique({ where: { code: dto.leaveTypeCode } }),
+      this.settings.current(),
+      this.prisma.read.user.findUnique({
+        where: { id: dto.userId },
+        select: { workLocation: true },
+      }),
+    ]);
     if (!leaveType)
       throw new NotFoundException(`Tipo de licença "${dto.leaveTypeCode}" não encontrado`);
+    const location = owner?.workLocation ?? null;
 
-    // ── Calcular duração
+    // ── Janela horária (licenças de poucas horas): HH:mm → horas
+    if ((dto.startTime && !dto.endTime) || (!dto.startTime && dto.endTime))
+      throw new BadRequestException('Indique a hora de início e a hora de fim');
+    let hours = dto.hours;
+    let durationMode = dto.durationMode;
+    if (dto.startTime && dto.endTime) {
+      const span = timeToMinutes(dto.endTime) - timeToMinutes(dto.startTime);
+      if (span <= 0) throw new BadRequestException('A hora de fim tem de ser posterior ao início');
+      hours = +(span / 60).toFixed(2);
+      durationMode = durationMode ?? DurationMode.HOURS;
+    }
+
+    // ── Documento comprovativo exigido pelo tipo (§4) ou pela categoria (§10)
+    // — rascunhos ficam isentos
+    const documents = dto.documents ?? [];
+    const needsDocument =
+      leaveType.requiresDocument ||
+      (!!leaveType.category && cfg.documentRequiredCategories.includes(leaveType.category));
+    if (needsDocument && !dto.saveAsDraft && documents.length === 0 && !dto.attachments?.length)
+      throw new BadRequestException(`O tipo "${leaveType.name}" exige um documento comprovativo`);
+
+    // ── Calcular duração (regra de contagem, horas por dia e feriados da localização)
     const { workDays, calendarDays } = this.calculateDuration(
       start,
       end,
-      dto.durationMode,
-      dto.hours,
-      leaveType.countWorkDaysOnly,
+      durationMode,
+      hours,
+      this.countsWorkDaysOnly(leaveType, cfg),
+      cfg.hoursPerDay,
+      location,
     );
 
     // ── Validações
-    await this.runValidations(dto.userId, leaveType, start, end, workDays, dto.durationMode);
+    if (!dto.saveAsDraft) this.assertSettingsRules(cfg, leaveType, dto, start, workDays);
+    await this.runValidations(dto.userId, leaveType, start, end, workDays, durationMode, cfg);
 
     // ── Determinar status inicial e fluxo de aprovação
     const autoApprove = leaveType.autoApprove && workDays <= (leaveType.autoApproveUnderDays ?? 1);
@@ -318,28 +374,56 @@ export class LeaveManagementService {
     // ── Calcular impacto em outros módulos
     const impact = await this.calculateImpact(dto.userId, start, end);
 
-    // ── Criar pedido
+    // ── Criar pedido (+ reserva de saldo, atómica)
     // FIXED (project-innova-leave-type-enum-mismatch): leaveTypeCode é a
     // chave real; leaveType só é preenchido quando corresponde a um dos 10
     // valores fixos do enum (toLeaveTypeEnum), nunca forçado por cast.
-    const request = await this.prisma.leaveRequest.create({
-      data: {
-        userId: dto.userId,
-        leaveTypeCode: dto.leaveTypeCode,
-        leaveType: toLeaveTypeEnum(dto.leaveTypeCode),
-        startDate: start,
-        endDate: end,
-        durationMode: dto.durationMode ?? DurationMode.FULL_DAY,
-        hours: dto.hours,
-        workDays,
-        calendarDays,
-        reason: dto.reason,
-        status: initialStatus,
-        substituteId: dto.substituteId,
-        attachments: dto.attachments ?? [],
-        impactPreview: impact ? { create: impact } : undefined,
-      },
-      include: { user: { select: { id: true, fullName: true } } },
+    const request = await this.prisma.$transaction(async tx => {
+      const created = await tx.leaveRequest.create({
+        data: {
+          userId: dto.userId,
+          leaveTypeCode: dto.leaveTypeCode,
+          leaveType: toLeaveTypeEnum(dto.leaveTypeCode),
+          startDate: start,
+          endDate: end,
+          durationMode: durationMode ?? DurationMode.FULL_DAY,
+          hours,
+          startTime: dto.startTime,
+          endTime: dto.endTime,
+          createdById,
+          submittedAt: dto.saveAsDraft ? null : new Date(),
+          workDays,
+          calendarDays,
+          reason: dto.reason,
+          status: initialStatus,
+          substituteId: dto.substituteId,
+          referenceYear: dto.referenceYear ?? cfg.referenceYear ?? start.getFullYear(),
+          contactDuringLeave: dto.contactDuringLeave,
+          attachments: dto.attachments ?? [],
+          documents: documents.length
+            ? {
+                create: documents.map(d => ({
+                  name: d.name,
+                  fileUrl: d.fileUrl,
+                  mimeType: d.mimeType,
+                  uploadedById: createdById,
+                  isSensitive: leaveType.isSensitive,
+                })),
+              }
+            : undefined,
+          impactPreview: impact ? { create: impact } : undefined,
+        },
+        include: { user: { select: { id: true, fullName: true } } },
+      });
+      const numbered = await tx.leaveRequest.update({
+        where: { id: created.id },
+        data: { requestNumber: formatRequestNumber(created.id, created.createdAt) },
+        include: { user: { select: { id: true, fullName: true } } },
+      });
+      if (initialStatus === LeaveStatus.PENDING && leaveType.annualLimit) {
+        await this.reserveBalance(tx, dto.userId, dto.leaveTypeCode, workDays, numbered.id);
+      }
+      return numbered;
     });
 
     // ── Criar nível de aprovação
@@ -351,6 +435,8 @@ export class LeaveManagementService {
     // ── Se auto-aprovado, deduzir saldo
     if (initialStatus === LeaveStatus.APPROVED) {
       await this.deductBalance(dto.userId, dto.leaveTypeCode, workDays, request.id);
+      await this.effects.syncAttendanceOnApproval(request);
+      await this.effects.emitApproved(request);
       await this.notifyUser(
         dto.userId,
         'LEAVE_AUTO_APPROVED',
@@ -369,7 +455,7 @@ export class LeaveManagementService {
       entityType: 'LeaveRequest',
       entityId: request.id,
       userId: createdById,
-      metadata: {},
+      metadata: { requestNumber: request.requestNumber, status: initialStatus },
     });
 
     return request;
@@ -392,9 +478,21 @@ export class LeaveManagementService {
     });
     if (!approval) throw new ForbiddenException('Não tem permissão para aprovar este pedido');
 
+    // §7: as etapas são sequenciais — o RH só decide depois do gestor.
+    const earlierPending = await this.prisma.read.leaveApproval.count({
+      where: { requestId, level: { lt: approval.level }, decidedAt: null },
+    });
+    if (earlierPending > 0) {
+      throw new BadRequestException('Aguarda a decisão da etapa anterior');
+    }
+
+    if (dto.action === ApprovalAction.REJECT && !dto.notes?.trim()) {
+      throw new BadRequestException('A recusa exige uma justificação');
+    }
+
     if (dto.action === ApprovalAction.DELEGATE) {
       if (!dto.delegateToId) throw new BadRequestException('Indique o delegado');
-      return this.delegateApproval(approval.id, dto.delegateToId, dto.notes);
+      return this.delegateApproval(approval, dto.delegateToId, approverId, dto.notes);
     }
 
     // Registar decisão
@@ -422,6 +520,12 @@ export class LeaveManagementService {
       });
 
       if (dto.action === ApprovalAction.REJECT) {
+        await this.releaseReservation(request, 'Pedido recusado');
+        // As etapas seguintes já não fazem sentido.
+        await this.prisma.leaveApproval.updateMany({
+          where: { requestId, decidedAt: null },
+          data: { decision: LeaveDecision.CANCELLED, decidedAt: new Date() },
+        });
         await this.notifyUser(
           request.userId,
           'LEAVE_REJECTED',
@@ -466,10 +570,21 @@ export class LeaveManagementService {
     };
   }
 
-  async cancel(requestId: number, userId: number) {
+  /**
+   * Cancela um pedido. O titular cancela o seu; ADMIN/RH cancelam qualquer um
+   * (fica registado quem). Pedidos aprovados obedecem à política de
+   * cancelamento (§10): o colaborador pode estar impedido de cancelar, ou só
+   * até N dias antes do início — ADMIN/RH não estão sujeitos a esse limite.
+   */
+  async cancel(
+    requestId: number,
+    userId: number,
+    opts: { reason?: string; actor?: CurrentUserData } = {},
+  ) {
     const request = await this.findOne(requestId);
+    const privileged = opts.actor ? isPrivileged(opts.actor, [Role.ADMIN, Role.RH]) : false;
 
-    if (request.userId !== userId)
+    if (request.userId !== userId && !privileged)
       throw new ForbiddenException('Sem permissão para cancelar este pedido');
     if (
       ![LeaveStatus.PENDING, LeaveStatus.DRAFT, LeaveStatus.APPROVED].includes(
@@ -480,15 +595,40 @@ export class LeaveManagementService {
     }
 
     const wasApproved = request.status === LeaveStatus.APPROVED;
+    if (wasApproved && !privileged) {
+      const cfg = await this.settings.current();
+      if (!cfg.employeeCanCancelApproved) {
+        throw new ForbiddenException(
+          'A política em vigor não permite cancelar pedidos aprovados — contacte o RH',
+        );
+      }
+      if (cfg.cancelApprovedMinDaysBefore) {
+        const daysBefore = Math.floor((request.startDate.getTime() - Date.now()) / 86_400_000);
+        if (daysBefore < cfg.cancelApprovedMinDaysBefore) {
+          throw new BadRequestException(
+            `Só é possível cancelar licenças aprovadas com ${cfg.cancelApprovedMinDaysBefore} dia(s) de antecedência — contacte o RH`,
+          );
+        }
+      }
+    }
+
     await this.prisma.leaveRequest.update({
       where: { id: requestId },
-      data: { status: LeaveStatus.CANCELLED },
+      data: {
+        status: LeaveStatus.CANCELLED,
+        cancelledAt: new Date(),
+        cancelledById: opts.actor?.id ?? userId,
+        cancelReason: opts.reason?.trim() || null,
+      },
     });
 
-    // Devolver saldo se estava aprovado
     if (wasApproved) {
-      await this.returnBalance(userId, request.leaveTypeCode, request.workDays, requestId);
+      // Devolver saldo e desfazer efeitos nos outros módulos
+      await this.returnBalance(request.userId, request.leaveTypeCode, request.workDays, requestId);
       await this.reverseModuleImpacts(request);
+      await this.effects.removeAttendanceOnCancel(requestId);
+    } else if (request.status === LeaveStatus.PENDING) {
+      await this.releaseReservation(request, 'Pedido cancelado');
     }
 
     // Cancelar aprovações pendentes
@@ -497,12 +637,13 @@ export class LeaveManagementService {
       data: { decision: 'CANCELLED', decidedAt: new Date() },
     });
 
-    await this.notifyUser(userId, 'LEAVE_CANCELLED', 'O seu pedido foi cancelado');
+    await this.notifyUser(request.userId, 'LEAVE_CANCELLED', 'O seu pedido foi cancelado');
     await this.audit.log({
       action: 'LEAVE_CANCELLED',
       entityType: 'LeaveRequest',
       entityId: requestId,
-      userId,
+      userId: opts.actor?.id ?? userId,
+      metadata: { wasApproved, byOwner: (opts.actor?.id ?? userId) === request.userId },
     });
 
     return { message: 'Pedido cancelado com sucesso' };
@@ -549,6 +690,10 @@ export class LeaveManagementService {
     });
     if (!leaveType) throw new NotFoundException(`Tipo "${dto.leaveTypeCode}" não encontrado`);
 
+    const before = await this.prisma.leaveBalance.findUnique({
+      where: { userId_leaveTypeCode: { userId, leaveTypeCode: dto.leaveTypeCode } },
+      select: { balance: true },
+    });
     const updated = await this.prisma.leaveBalance.upsert({
       where: { userId_leaveTypeCode: { userId, leaveTypeCode: dto.leaveTypeCode } },
       create: {
@@ -566,10 +711,11 @@ export class LeaveManagementService {
         userId,
         leaveTypeCode: dto.leaveTypeCode,
         leaveType: toLeaveTypeEnum(dto.leaveTypeCode),
-        balanceBefore: 0,
+        balanceBefore: before?.balance ?? 0,
         balanceAfter: dto.balance,
-        change: dto.balance,
+        change: dto.balance - (before?.balance ?? 0),
         reason: dto.reason ?? 'Actualização manual',
+        kind: 'ADJUSTMENT',
         updatedById,
       },
     });
@@ -615,30 +761,69 @@ export class LeaveManagementService {
     });
   }
 
-  async processCarryOver(_year: number) {
+  /**
+   * Transição de saldos de fim de ano. Respeita as configurações (§10): se a
+   * transição está desactivada ninguém transita; o tecto global limita o do
+   * tipo. É idempotente por (colaborador, tipo, ano) — correr duas vezes não
+   * volta a transitar — e cada saldo é actualizado numa transacção.
+   */
+  async processCarryOver(year: number, actorId = 0) {
+    const cfg = await this.settings.current();
+    const results: { userId: number; code: string; carryOver: number; newBalance: number }[] = [];
+    if (!cfg.carryOverEnabled) return { processed: 0, skipped: 0, results };
+
     const leaveTypes = await this.prisma.leaveTypeConfig.findMany({
       where: { allowCarryOver: true },
     });
-    const results: { userId: number; code: string; carryOver: number; newBalance: number }[] = [];
+    const marker = `Transição de saldo ${year}`;
+    let skipped = 0;
 
     for (const lt of leaveTypes) {
       const balances = await this.prisma.read.leaveBalance.findMany({
         where: { leaveTypeCode: lt.code },
       });
       for (const b of balances) {
-        const carryOver = Math.min(b.balance, lt.carryOverLimit ?? b.balance);
+        const done = await this.prisma.leaveBalanceHistory.findFirst({
+          where: { userId: b.userId, leaveTypeCode: lt.code, kind: 'CARRY_OVER', reason: marker },
+          select: { id: true },
+        });
+        if (done) {
+          skipped++;
+          continue;
+        }
+        const caps = [lt.carryOverLimit, cfg.carryOverMaxDays].filter(
+          (v): v is number => typeof v === 'number',
+        );
+        const cap = caps.length ? Math.min(...caps) : Infinity;
+        const carryOver = Math.max(0, Math.min(b.balance - b.reserved, cap));
         const newBalance = (lt.annualLimit ?? 0) + carryOver;
 
-        await this.prisma.leaveBalance.update({
-          where: { userId_leaveTypeCode: { userId: b.userId, leaveTypeCode: lt.code } },
-          data: { balance: lt.annualLimit ?? 0, used: 0 },
+        await this.prisma.$transaction(async tx => {
+          await this.lockBalance(tx, b.userId, lt.code);
+          // FIXED: o saldo novo ignorava o que transitava (guardava só annualLimit).
+          await tx.leaveBalance.update({
+            where: { userId_leaveTypeCode: { userId: b.userId, leaveTypeCode: lt.code } },
+            data: { balance: newBalance, used: 0 },
+          });
+          await tx.leaveBalanceHistory.create({
+            data: {
+              userId: b.userId,
+              leaveTypeCode: lt.code,
+              leaveType: toLeaveTypeEnum(lt.code),
+              balanceBefore: b.balance,
+              balanceAfter: newBalance,
+              change: newBalance - b.balance,
+              reason: marker,
+              kind: 'CARRY_OVER',
+              updatedById: actorId,
+            },
+          });
         });
-
         results.push({ userId: b.userId, code: lt.code, carryOver, newBalance });
       }
     }
 
-    return { processed: results.length, results };
+    return { processed: results.length, skipped, results };
   }
 
   async getBalanceHistory(userId: number, leaveTypeCode?: string) {
@@ -838,20 +1023,71 @@ export class LeaveManagementService {
   // HELPER PRIVADOS
   // ══════════════════════════════════════════════════════════════════
 
+  /** Regra de contagem: a da empresa (§10) manda; "por tipo" deixa cada tipo decidir. */
+  private countsWorkDaysOnly(
+    leaveType: Prisma.LeaveTypeConfigGetPayload<object>,
+    cfg: LeaveSettings,
+  ): boolean {
+    if (cfg.dayCountRule === 'WORK_DAYS') return true;
+    if (cfg.dayCountRule === 'CALENDAR_DAYS') return false;
+    return leaveType.countWorkDaysOnly;
+  }
+
   private calculateDuration(
     start: Date,
     end: Date,
     mode?: DurationMode,
     hours?: number,
     workDaysOnly = true,
+    hoursPerDay = 8,
+    location?: string | null,
   ) {
     const calendarDays = countCalendarDays(start, end);
-    let workDays = workDaysOnly ? countWorkDays(start, end) : calendarDays;
+    let workDays = workDaysOnly ? countWorkDays(start, end, location) : calendarDays;
 
     if (mode === DurationMode.HALF_AM || mode === DurationMode.HALF_PM) workDays = 0.5;
-    if (mode === DurationMode.HOURS && hours) workDays = +(hours / 8).toFixed(2);
+    if (mode === DurationMode.HOURS && hours) workDays = +(hours / hoursPerDay).toFixed(2);
 
     return { workDays, calendarDays };
+  }
+
+  /** Regras das Configurações (§10) que dependem da submissão e não do tipo. */
+  private assertSettingsRules(
+    cfg: LeaveSettings,
+    leaveType: Prisma.LeaveTypeConfigGetPayload<object>,
+    dto: CreateLeaveManagementRequestDto,
+    start: Date,
+    workDays: number,
+  ) {
+    if (cfg.maxAdvanceDays) {
+      const ahead = Math.floor((start.getTime() - Date.now()) / 86_400_000);
+      if (ahead > cfg.maxAdvanceDays) {
+        throw new BadRequestException(
+          `Só pode pedir com no máximo ${cfg.maxAdvanceDays} dias de antecedência`,
+        );
+      }
+    }
+    if (leaveType.code === VACATION_CODE && cfg.vacationWindowStart && cfg.vacationWindowEnd) {
+      const mmdd = (d: Date) => d.toISOString().slice(5, 10);
+      const end = new Date(dto.endDate);
+      if (
+        !inMonthDayWindow(mmdd(start), cfg.vacationWindowStart, cfg.vacationWindowEnd) ||
+        !inMonthDayWindow(mmdd(end), cfg.vacationWindowStart, cfg.vacationWindowEnd)
+      ) {
+        throw new BadRequestException(
+          `As férias têm de ficar dentro do período ${cfg.vacationWindowStart} a ${cfg.vacationWindowEnd}`,
+        );
+      }
+    }
+    if (
+      cfg.substituteRequiredOverDays &&
+      workDays > cfg.substituteRequiredOverDays &&
+      !dto.substituteId
+    ) {
+      throw new BadRequestException(
+        `Ausências com mais de ${cfg.substituteRequiredOverDays} dias úteis exigem um substituto`,
+      );
+    }
   }
 
   private async runValidations(
@@ -860,14 +1096,16 @@ export class LeaveManagementService {
     start: Date,
     end: Date,
     workDays: number,
-    _mode?: DurationMode,
+    _mode: DurationMode | undefined,
+    cfg: LeaveSettings,
   ) {
-    // 1. Antecedência mínima
-    if (leaveType.minNoticeDays) {
+    // 1. Antecedência mínima (a do tipo, ou a da empresa quando o tipo não define)
+    const minNotice = leaveType.minNoticeDays ?? cfg.minNoticeDays;
+    if (minNotice) {
       const noticeDays = countWorkDays(new Date(), start);
-      if (noticeDays < leaveType.minNoticeDays) {
+      if (noticeDays < minNotice) {
         throw new BadRequestException(
-          `Este tipo de licença requer ${leaveType.minNoticeDays} dias de antecedência`,
+          `Este tipo de licença requer ${minNotice} dias de antecedência`,
         );
       }
     }
@@ -879,12 +1117,12 @@ export class LeaveManagementService {
       );
     }
 
-    // 3. Saldo disponível
+    // 3. Saldo disponível = atribuído − já reservado por outros pedidos pendentes
     if (leaveType.annualLimit) {
-      const balance = await this.prisma.read.leaveBalance.findUnique({
+      const balance = await this.prisma.leaveBalance.findUnique({
         where: { userId_leaveTypeCode: { userId, leaveTypeCode: leaveType.code } },
       });
-      const available = balance?.balance ?? 0;
+      const available = (balance?.balance ?? 0) - (balance?.reserved ?? 0);
       if (workDays > available) {
         throw new BadRequestException(
           `Saldo insuficiente: tem ${available} dias disponíveis, solicitou ${workDays}`,
@@ -927,37 +1165,114 @@ export class LeaveManagementService {
     }
   }
 
+  /**
+   * Etapas de aprovação de um pedido (docs/Modulo_Leave.md §7): gestor directo
+   * e, quando o tipo/política o exigem (nº de níveis ou duração acima do
+   * limiar de validação RH), o RH. Partilhado entre a criação real do fluxo
+   * e a pré-visualização `GET /leave/approval-route`.
+   */
+  async resolveApprovalSteps(
+    userId: number,
+    leaveTypeCode: string,
+    workDays: number,
+    policy?: Prisma.LeavePolicyGetPayload<object> | null,
+  ) {
+    const [user, type, pol] = await Promise.all([
+      this.prisma.read.user.findUnique({
+        where: { id: userId },
+        select: { managerId: true, manager: { select: { id: true, fullName: true } } },
+      }),
+      this.prisma.read.leaveTypeConfig.findUnique({
+        where: { code: leaveTypeCode },
+        select: { approvalLevels: true },
+      }),
+      policy === undefined ? this.getApplicablePolicy(userId) : Promise.resolve(policy),
+    ]);
+
+    let levels = type?.approvalLevels ?? pol?.approvalLevels ?? 1;
+    if (pol?.hrValidationOverDays != null && workDays > pol.hrValidationOverDays) {
+      levels = Math.max(levels, 2);
+    }
+
+    const steps: Array<{
+      level: number;
+      stage: 'MANAGER' | 'HR';
+      approver: { id: number; fullName: string };
+    }> = [];
+    if (user?.manager && user.manager.id !== userId) {
+      steps.push({ level: 1, stage: 'MANAGER', approver: user.manager });
+    }
+    if (levels >= 2) {
+      const hr = await this.prisma.read.user.findFirst({
+        where: { role: { code: 'RH' }, id: { not: userId } },
+        select: { id: true, fullName: true },
+      });
+      if (hr && !steps.some(s => s.approver.id === hr.id)) {
+        steps.push({ level: 2, stage: 'HR', approver: hr });
+      }
+    }
+    const cfg = await this.settings.current();
+    return { steps, slaDays: pol?.decisionSlaDays ?? cfg.decisionSlaDays };
+  }
+
   private async createApprovalFlow(
-    request: { id: number; userId: number; leaveTypeCode: string; workDays: number },
+    request: {
+      id: number;
+      userId: number;
+      leaveTypeCode: string;
+      workDays: number;
+      startDate: Date;
+      endDate: Date;
+      requestNumber?: string | null;
+    },
     policy: Prisma.LeavePolicyGetPayload<object> | null,
   ) {
     const requestId = request.id;
-    const userId = request.userId;
-    const levels = policy?.approvalLevels ?? 1;
-    const user = await this.prisma.read.user.findUnique({ where: { id: userId } });
-    const managerId = user?.managerId;
+    const { steps, slaDays } = await this.resolveApprovalSteps(
+      request.userId,
+      request.leaveTypeCode,
+      request.workDays,
+      policy,
+    );
 
-    const approvals: { requestId: number; approverId: number; level: number }[] = [];
-
-    // Nível 1: gestor direto
-    if (managerId) approvals.push({ requestId, approverId: managerId, level: 1 });
-
-    // Nível 2+: RH (buscar por role)
-    if (levels >= 2) {
-      const hr = await this.prisma.read.user.findFirst({ where: { role: { code: 'RH' } } });
-      if (hr) approvals.push({ requestId, approverId: hr.id, level: 2 });
-    }
-
-    if (approvals.length === 0) {
+    if (steps.length === 0) {
       // Sem gestor configurado — auto-aprovar. `actorId = userId` porque não
       // existe aprovador humano que tenha tomado a decisão — quem accionou
       // este caminho foi o próprio requerente ao submeter o pedido.
-      await this.finalizeApproval(request, userId);
+      await this.finalizeApproval(request, request.userId);
     } else {
-      await this.prisma.leaveApproval.createMany({ data: approvals });
+      const dueAt = new Date(Date.now() + slaDays * 24 * 3600 * 1000);
+      let firstApproverId = steps[0].approver.id;
+      for (const [i, step] of steps.entries()) {
+        // Substituição activa (§10): a etapa vai para o substituto — nunca para
+        // o próprio requerente — e a troca fica no histórico de reatribuições.
+        const delegateId = await this.settings.activeDelegateOf(step.approver.id);
+        const delegated = delegateId && delegateId !== request.userId ? delegateId : null;
+        await this.prisma.leaveApproval.create({
+          data: {
+            requestId,
+            approverId: delegated ?? step.approver.id,
+            level: step.level,
+            stage: step.stage,
+            dueAt,
+            reassignments: delegated
+              ? {
+                  create: {
+                    fromApproverId: step.approver.id,
+                    toApproverId: delegated,
+                    byUserId: step.approver.id,
+                    kind: 'DELEGATE',
+                    reason: 'Substituição activa do aprovador',
+                  },
+                }
+              : undefined,
+          },
+        });
+        if (i === 0) firstApproverId = delegated ?? step.approver.id;
+      }
       // Notificar primeiro aprovador
       await this.notifyUser(
-        approvals[0].approverId,
+        firstApproverId,
         'LEAVE_PENDING_APPROVAL',
         'Novo pedido de licença aguarda a sua aprovação',
       );
@@ -977,11 +1292,39 @@ export class LeaveManagementService {
     }
   }
 
-  private async delegateApproval(approvalId: number, delegateToId: number, notes?: string) {
-    return this.prisma.leaveApproval.update({
-      where: { id: approvalId },
+  private async delegateApproval(
+    approval: { id: number; approverId: number },
+    delegateToId: number,
+    byUserId: number,
+    notes?: string,
+  ) {
+    const delegate = await this.prisma.read.user.findUnique({
+      where: { id: delegateToId },
+      select: { id: true },
+    });
+    if (!delegate) throw new NotFoundException('Delegado não encontrado');
+    if (delegateToId === approval.approverId)
+      throw new BadRequestException('O delegado tem de ser outro utilizador');
+    await this.prisma.leaveApprovalReassignment.create({
+      data: {
+        approvalId: approval.id,
+        fromApproverId: approval.approverId,
+        toApproverId: delegateToId,
+        byUserId,
+        kind: 'DELEGATE',
+        reason: notes ?? null,
+      },
+    });
+    const updated = await this.prisma.leaveApproval.update({
+      where: { id: approval.id },
       data: { approverId: delegateToId, notes: notes ?? 'Delegado', decidedAt: null },
     });
+    await this.notifyUser(
+      delegateToId,
+      'LEAVE_PENDING_APPROVAL',
+      'Foi-lhe delegada a aprovação de um pedido de licença',
+    );
+    return updated;
   }
 
   /**
@@ -994,7 +1337,15 @@ export class LeaveManagementService {
    * update de status, sem tocar no ledger de saldo (bug real, corrigido aqui).
    */
   private async finalizeApproval(
-    request: { id: number; userId: number; leaveTypeCode: string; workDays: number },
+    request: {
+      id: number;
+      userId: number;
+      leaveTypeCode: string;
+      workDays: number;
+      startDate: Date;
+      endDate: Date;
+      requestNumber?: string | null;
+    },
     actorId: number,
   ) {
     await this.prisma.leaveRequest.update({
@@ -1004,6 +1355,10 @@ export class LeaveManagementService {
 
     await this.deductBalance(request.userId, request.leaveTypeCode, request.workDays, request.id);
     await this.applyModuleImpacts(request as Prisma.LeaveRequestGetPayload<object>);
+    // Só pedidos aprovados chegam à assiduidade/automação (§12): o calendário
+    // de ausências confirmadas nunca vê pedidos pendentes.
+    await this.effects.syncAttendanceOnApproval(request);
+    await this.effects.emitApproved(request);
     await this.notifyUser(request.userId, 'LEAVE_APPROVED', 'O seu pedido foi aprovado!');
     await this.audit.log({
       action: 'LEAVE_APPROVED',
@@ -1013,42 +1368,134 @@ export class LeaveManagementService {
     });
   }
 
+  // ── Saldos (§13: atribuídos / reservados / gozados) ──────────────────────
+
+  /** Bloqueia a linha de saldo até ao fim da transacção — evita reservas duplicadas. */
+  private async lockBalance(tx: Prisma.TransactionClient, userId: number, code: string) {
+    await tx.$queryRaw`SELECT 1 FROM "LeaveBalance" WHERE "userId" = ${userId} AND "leaveTypeCode" = ${code} FOR UPDATE`;
+  }
+
+  /** Reserva dias para um pedido PENDING. Falha se, já com o saldo bloqueado, não houver dias. */
+  private async reserveBalance(
+    tx: Prisma.TransactionClient,
+    userId: number,
+    code: string,
+    days: number,
+    requestId: number,
+  ) {
+    await this.lockBalance(tx, userId, code);
+    const row = await tx.leaveBalance.findUnique({
+      where: { userId_leaveTypeCode: { userId, leaveTypeCode: code } },
+    });
+    const available = (row?.balance ?? 0) - (row?.reserved ?? 0);
+    if (!row || days > available) {
+      throw new BadRequestException(
+        `Saldo insuficiente: tem ${Math.max(0, available)} dias disponíveis, solicitou ${days}`,
+      );
+    }
+    await tx.leaveBalance.update({
+      where: { userId_leaveTypeCode: { userId, leaveTypeCode: code } },
+      data: { reserved: { increment: days } },
+    });
+    await tx.leaveBalanceHistory.create({
+      data: {
+        userId,
+        leaveTypeCode: code,
+        leaveType: toLeaveTypeEnum(code),
+        balanceBefore: row.balance,
+        balanceAfter: row.balance,
+        change: 0,
+        reason: `Reserva de ${days} dia(s) para o pedido`,
+        kind: 'RESERVATION',
+        requestId,
+        updatedById: userId,
+      },
+    });
+  }
+
+  /** Liberta a reserva de um pedido PENDING que deixa de o ser (recusado/cancelado). */
+  private async releaseReservation(
+    request: { id: number; userId: number; leaveTypeCode: string; workDays: number },
+    why: string,
+  ) {
+    await this.prisma.$transaction(async tx => {
+      await this.lockBalance(tx, request.userId, request.leaveTypeCode);
+      const row = await tx.leaveBalance.findUnique({
+        where: {
+          userId_leaveTypeCode: { userId: request.userId, leaveTypeCode: request.leaveTypeCode },
+        },
+      });
+      const release = Math.min(row?.reserved ?? 0, request.workDays);
+      if (!row || release <= 0) return;
+      await tx.leaveBalance.update({
+        where: {
+          userId_leaveTypeCode: { userId: request.userId, leaveTypeCode: request.leaveTypeCode },
+        },
+        data: { reserved: { decrement: release } },
+      });
+      await tx.leaveBalanceHistory.create({
+        data: {
+          userId: request.userId,
+          leaveTypeCode: request.leaveTypeCode,
+          leaveType: toLeaveTypeEnum(request.leaveTypeCode),
+          balanceBefore: row.balance,
+          balanceAfter: row.balance,
+          change: 0,
+          reason: `${why}: libertados ${release} dia(s) reservados`,
+          kind: 'RELEASE',
+          requestId: request.id,
+          updatedById: request.userId,
+        },
+      });
+    });
+  }
+
+  /** Aprovação: os dias passam de reservados para gozados (e saem do saldo). */
   private async deductBalance(
     userId: number,
     leaveTypeCode: string,
     workDays: number,
     requestId?: number,
   ) {
-    const current = await this.prisma.leaveBalance.findUnique({
-      where: { userId_leaveTypeCode: { userId, leaveTypeCode } },
-    });
-    const balanceBefore = current?.balance ?? 0;
-    const balanceAfter = Math.max(0, balanceBefore - workDays);
+    await this.prisma.$transaction(async tx => {
+      await this.lockBalance(tx, userId, leaveTypeCode);
+      const current = await tx.leaveBalance.findUnique({
+        where: { userId_leaveTypeCode: { userId, leaveTypeCode } },
+      });
+      const balanceBefore = current?.balance ?? 0;
+      const fromReserved = Math.min(current?.reserved ?? 0, workDays);
+      const balanceAfter = balanceBefore - workDays;
 
-    await this.prisma.leaveBalance.upsert({
-      where: { userId_leaveTypeCode: { userId, leaveTypeCode } },
-      create: {
-        userId,
-        leaveTypeCode,
-        leaveType: toLeaveTypeEnum(leaveTypeCode),
-        balance: balanceAfter,
-        used: workDays,
-      },
-      update: { balance: { decrement: workDays }, used: { increment: workDays } },
-    });
+      await tx.leaveBalance.upsert({
+        where: { userId_leaveTypeCode: { userId, leaveTypeCode } },
+        create: {
+          userId,
+          leaveTypeCode,
+          leaveType: toLeaveTypeEnum(leaveTypeCode),
+          balance: balanceAfter,
+          used: workDays,
+        },
+        update: {
+          balance: { decrement: workDays },
+          used: { increment: workDays },
+          reserved: { decrement: fromReserved },
+        },
+      });
 
-    await this.prisma.leaveBalanceHistory.create({
-      data: {
-        userId,
-        leaveTypeCode,
-        leaveType: toLeaveTypeEnum(leaveTypeCode),
-        balanceBefore,
-        balanceAfter,
-        change: -workDays,
-        reason: 'Licença aprovada',
-        requestId,
-        updatedById: userId,
-      },
+      await tx.leaveBalanceHistory.create({
+        data: {
+          userId,
+          leaveTypeCode,
+          leaveType: toLeaveTypeEnum(leaveTypeCode),
+          balanceBefore,
+          balanceAfter,
+          change: -workDays,
+          reason: 'Licença aprovada',
+          kind: 'USAGE',
+          requestId,
+          updatedById: userId,
+        },
+      });
     });
   }
 
@@ -1058,29 +1505,40 @@ export class LeaveManagementService {
     workDays: number,
     requestId?: number,
   ) {
-    const current = await this.prisma.leaveBalance.findUnique({
-      where: { userId_leaveTypeCode: { userId, leaveTypeCode } },
-    });
-    const balanceBefore = current?.balance ?? 0;
-    const balanceAfter = balanceBefore + workDays;
+    await this.prisma.$transaction(async tx => {
+      await this.lockBalance(tx, userId, leaveTypeCode);
+      const current = await tx.leaveBalance.findUnique({
+        where: { userId_leaveTypeCode: { userId, leaveTypeCode } },
+      });
+      const balanceBefore = current?.balance ?? 0;
+      const balanceAfter = balanceBefore + workDays;
 
-    await this.prisma.leaveBalance.update({
-      where: { userId_leaveTypeCode: { userId, leaveTypeCode } },
-      data: { balance: { increment: workDays }, used: { decrement: workDays } },
-    });
+      await tx.leaveBalance.upsert({
+        where: { userId_leaveTypeCode: { userId, leaveTypeCode } },
+        create: {
+          userId,
+          leaveTypeCode,
+          leaveType: toLeaveTypeEnum(leaveTypeCode),
+          balance: workDays,
+          used: 0,
+        },
+        update: { balance: { increment: workDays }, used: { decrement: workDays } },
+      });
 
-    await this.prisma.leaveBalanceHistory.create({
-      data: {
-        userId,
-        leaveTypeCode,
-        leaveType: toLeaveTypeEnum(leaveTypeCode),
-        balanceBefore,
-        balanceAfter,
-        change: workDays,
-        reason: 'Cancelamento de licença',
-        requestId,
-        updatedById: userId,
-      },
+      await tx.leaveBalanceHistory.create({
+        data: {
+          userId,
+          leaveTypeCode,
+          leaveType: toLeaveTypeEnum(leaveTypeCode),
+          balanceBefore,
+          balanceAfter,
+          change: workDays,
+          reason: 'Cancelamento de licença',
+          kind: 'REVERSAL',
+          requestId,
+          updatedById: userId,
+        },
+      });
     });
   }
 

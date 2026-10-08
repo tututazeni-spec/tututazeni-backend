@@ -1,6 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ProcessStandardController } from './process-standard.controller';
 import { ProcessStandardService } from './process-standard.service';
+import { ProcessInstancesService } from './process-instances.service';
+import { ProcessTasksService } from './process-tasks.service';
+import { ProcessApprovalsService } from './process-approvals.service';
+import { ProcessAutomationsService } from './process-automations.service';
+import { ProcessCalendarService } from './process-calendar.service';
+import { ProcessDocumentsService } from './process-documents.service';
+import { ProcessReportsService } from './process-reports.service';
+import { ProcessAuditTrailService } from './process-audit-trail.service';
+import { ProcessSettingsService } from './process-settings.service';
+import { ProcessIntegrationsService } from './process-integrations.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -19,12 +29,41 @@ const mockSvc = {
   approvalAction: jest.fn().mockResolvedValue({}),
   archive: jest.fn().mockResolvedValue({}),
   remove: jest.fn().mockResolvedValue({}),
-  getInstances: jest.fn().mockResolvedValue([]),
   getInstanceDetail: jest.fn().mockResolvedValue({ id: 1 }),
   startInstance: jest.fn().mockResolvedValue({ id: 1 }),
   cancelInstance: jest.fn().mockResolvedValue({}),
   completeStep: jest.fn().mockResolvedValue({}),
   rejectStep: jest.fn().mockResolvedValue({}),
+};
+
+const mockInstances = {
+  list: jest.fn().mockResolvedValue({ data: [], total: 0 }),
+  filterOptions: jest.fn().mockResolvedValue({}),
+  exportCsv: jest.fn().mockResolvedValue({ csv: 'a,b', count: 0 }),
+  update: jest.fn().mockResolvedValue({}),
+  assign: jest.fn().mockResolvedValue({}),
+  changePriority: jest.fn().mockResolvedValue({}),
+  suspend: jest.fn().mockResolvedValue({}),
+  resume: jest.fn().mockResolvedValue({}),
+  archive: jest.fn().mockResolvedValue({}),
+  duplicate: jest.fn().mockResolvedValue({}),
+  history: jest.fn().mockResolvedValue({ data: [] }),
+};
+
+const mockTasks = {
+  list: jest.fn().mockResolvedValue({ data: [], total: 0 }),
+  detail: jest.fn().mockResolvedValue({}),
+  start: jest.fn().mockResolvedValue({}),
+  block: jest.fn().mockResolvedValue({}),
+  unblock: jest.fn().mockResolvedValue({}),
+  requestClarification: jest.fn().mockResolvedValue({}),
+  addComment: jest.fn().mockResolvedValue({}),
+  updateChecklist: jest.fn().mockResolvedValue({}),
+  reassign: jest.fn().mockResolvedValue({}),
+  returnForCorrection: jest.fn().mockResolvedValue({}),
+  reopen: jest.fn().mockResolvedValue({}),
+  remind: jest.fn().mockResolvedValue({}),
+  escalate: jest.fn().mockResolvedValue({}),
 };
 
 const mockUser = { id: 1, email: 'test@innova.com', role: { name: 'ADMIN' } };
@@ -36,7 +75,19 @@ describe('ProcessStandardController', () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ProcessStandardController],
-      providers: [{ provide: ProcessStandardService, useValue: mockSvc }],
+      providers: [
+        { provide: ProcessStandardService, useValue: mockSvc },
+        { provide: ProcessInstancesService, useValue: mockInstances },
+        { provide: ProcessTasksService, useValue: mockTasks },
+        { provide: ProcessApprovalsService, useValue: {} },
+        { provide: ProcessAutomationsService, useValue: {} },
+        { provide: ProcessCalendarService, useValue: {} },
+        { provide: ProcessDocumentsService, useValue: {} },
+        { provide: ProcessReportsService, useValue: {} },
+        { provide: ProcessAuditTrailService, useValue: {} },
+        { provide: ProcessSettingsService, useValue: {} },
+        { provide: ProcessIntegrationsService, useValue: {} },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
@@ -48,8 +99,8 @@ describe('ProcessStandardController', () => {
 
   it('findAll → findAll(filters)', async () => {
     const filters = {} as any;
-    await controller.findAll(filters);
-    expect(mockSvc.findAll).toHaveBeenCalledWith(filters);
+    await controller.findAll(filters, mockUser as any);
+    expect(mockSvc.findAll).toHaveBeenCalledWith(filters, mockUser);
   });
 
   it('dashboard → getDashboard', async () => {
@@ -120,13 +171,42 @@ describe('ProcessStandardController', () => {
     expect(mockSvc.remove).toHaveBeenCalledWith(6, 1);
   });
 
-  it('getInstances → getInstances(query)', async () => {
-    await controller.getInstances(mockUser as any);
-    expect(mockSvc.getInstances).toHaveBeenCalledWith({
-      processId: undefined,
-      status: undefined,
-      page: 1,
-    });
+  it('getInstances → instances.list(filters, user)', async () => {
+    const filters = { status: 'IN_PROGRESS' } as any;
+    await controller.getInstances(filters, mockUser as any);
+    expect(mockInstances.list).toHaveBeenCalledWith(filters, mockUser);
+  });
+
+  it('listTasks → tasks.list(filters, user)', async () => {
+    const filters = { scope: 'mine' } as any;
+    await controller.listTasks(filters, mockUser as any);
+    expect(mockTasks.list).toHaveBeenCalledWith(filters, mockUser);
+  });
+
+  it('taskDetail → tasks.detail(instanceId, stepId, user)', async () => {
+    await controller.taskDetail(1, 2, mockUser as any);
+    expect(mockTasks.detail).toHaveBeenCalledWith(1, 2, mockUser);
+  });
+
+  it('blockTask → tasks.block(instanceId, stepId, user, reason)', async () => {
+    await controller.blockTask(1, 2, mockUser as any, { reason: 'falta info' });
+    expect(mockTasks.block).toHaveBeenCalledWith(1, 2, mockUser, 'falta info');
+  });
+
+  it('returnTask → tasks.returnForCorrection(...)', async () => {
+    await controller.returnTask(1, 2, mockUser as any, { reason: 'corrigir' });
+    expect(mockTasks.returnForCorrection).toHaveBeenCalledWith(1, 2, mockUser, 'corrigir');
+  });
+
+  it('suspendInstance → instances.suspend(id, user, reason)', async () => {
+    await controller.suspendInstance(7, mockUser as any, { reason: 'pausa' });
+    expect(mockInstances.suspend).toHaveBeenCalledWith(7, mockUser, 'pausa');
+  });
+
+  it('assignInstance → instances.assign(id, dto, user)', async () => {
+    const dto = { responsibleId: 9 } as any;
+    await controller.assignInstance(7, mockUser as any, dto);
+    expect(mockInstances.assign).toHaveBeenCalledWith(7, dto, mockUser);
   });
 
   it('getInstance → getInstanceDetail(id, user)', async () => {
@@ -137,7 +217,9 @@ describe('ProcessStandardController', () => {
   it('startInstance → startInstance(id, userId, dto)', async () => {
     const dto = {} as any;
     await controller.startInstance(2, mockUser as any, dto);
-    expect(mockSvc.startInstance).toHaveBeenCalledWith(2, 1, dto);
+    expect(mockSvc.startInstance).toHaveBeenCalledWith(2, 1, dto, mockUser, {
+      validateRequirements: true,
+    });
   });
 
   it('cancelInstance → cancelInstance(instanceId, userId, reason)', async () => {

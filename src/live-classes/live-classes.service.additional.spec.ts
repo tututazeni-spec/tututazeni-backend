@@ -1,7 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { LiveClassesService } from './live-classes.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CourseCompletionService } from '../course-completion/course-completion.service';
+
+const mockCourseCompletion = { markLessonComplete: jest.fn() };
 
 const mockPrisma: any = {
   liveClass: {
@@ -11,11 +14,27 @@ const mockPrisma: any = {
     update: jest.fn(),
     delete: jest.fn(),
     count: jest.fn().mockResolvedValue(0),
+    groupBy: jest.fn().mockResolvedValue([]),
+    aggregate: jest.fn().mockResolvedValue({ _sum: { duration: 0 } }),
   },
-  liveAttendance: {
+  liveClassSession: {
+    findMany: jest.fn().mockResolvedValue([]),
+    findFirst: jest.fn().mockResolvedValue(null),
     findUnique: jest.fn().mockResolvedValue(null),
     create: jest.fn(),
     update: jest.fn(),
+    delete: jest.fn(),
+  },
+  liveAttendance: {
+    findUnique: jest.fn().mockResolvedValue(null),
+    findFirst: jest.fn().mockResolvedValue(null),
+    create: jest.fn(),
+    update: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
+    aggregate: jest.fn().mockResolvedValue({ _avg: { attendancePercent: 0 }, _count: { _all: 0 } }),
+  },
+  trainingInstructorProfile: {
     findMany: jest.fn().mockResolvedValue([]),
   },
   liveMessage: { create: jest.fn().mockResolvedValue({}) },
@@ -28,8 +47,9 @@ const baseLiveClass = {
   title: 'Aula ao Vivo TypeScript',
   courseId: 1,
   scheduledAt: new Date('2026-07-15T10:00:00'),
-  durationMinutes: 90,
-  status: 'SCHEDULED',
+  duration: 90,
+  status: 'AGENDADA',
+  type: 'AULA',
   meetUrl: 'https://meet.google.com/abc',
   course: { id: 1, title: 'TypeScript Avançado' },
   attendances: [],
@@ -50,7 +70,11 @@ describe('LiveClassesService (additional)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [LiveClassesService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        LiveClassesService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: CourseCompletionService, useValue: mockCourseCompletion },
+      ],
     }).compile();
     service = module.get<LiveClassesService>(LiveClassesService);
   });
@@ -98,10 +122,10 @@ describe('LiveClassesService (additional)', () => {
     it('deve criar aula ao vivo', async () => {
       mockPrisma.liveClass.create.mockResolvedValue(baseLiveClass);
       const result = await service.create({
-        title: 'Aula TypeScript',
+        topic: 'Aula TypeScript',
         courseId: 1,
         scheduledAt: '2026-07-15T10:00:00',
-        durationMinutes: 90,
+        duration: 90,
       } as any);
       expect(result).toBeDefined();
     });
@@ -133,14 +157,14 @@ describe('LiveClassesService (additional)', () => {
 
   describe('joinClass', () => {
     it('deve criar nova presença quando utilizador entra', async () => {
-      mockPrisma.liveAttendance.findUnique.mockResolvedValue(null);
+      mockPrisma.liveAttendance.findFirst.mockResolvedValue(null);
       mockPrisma.liveAttendance.create.mockResolvedValue({ id: 1, liveClassId: 1, userId: 2 });
       const result = await service.joinClass(1, 2);
       expect(result).toBeDefined();
     });
 
     it('deve actualizar presença existente quando utilizador re-entra', async () => {
-      mockPrisma.liveAttendance.findUnique.mockResolvedValue({ id: 1, liveClassId: 1, userId: 2 });
+      mockPrisma.liveAttendance.findFirst.mockResolvedValue({ id: 1, liveClassId: 1, userId: 2 });
       mockPrisma.liveAttendance.update.mockResolvedValue({ id: 1, joinedAt: new Date() });
       const result = await service.joinClass(1, 2);
       expect(result).toBeDefined();
@@ -151,7 +175,7 @@ describe('LiveClassesService (additional)', () => {
 
   describe('leaveClass', () => {
     it('deve registar saída da aula', async () => {
-      mockPrisma.liveAttendance.findUnique.mockResolvedValue({ id: 1 });
+      mockPrisma.liveAttendance.findFirst.mockResolvedValue({ id: 1 });
       mockPrisma.liveAttendance.update.mockResolvedValue({ id: 1, leftAt: new Date() });
       const result = await service.leaveClass(1, 2);
       expect(result).toBeDefined();
@@ -206,6 +230,142 @@ describe('LiveClassesService (additional)', () => {
         feedback: 'Boa aula',
       } as any);
       expect(result).toBeDefined();
+    });
+  });
+
+  // ─── start/postpone/cancel/duplicate (secção 2 — Ações) ────────
+
+  describe('start', () => {
+    it('marca a aula como EM_CURSO', async () => {
+      mockPrisma.liveClass.findUnique.mockResolvedValue(baseLiveClass);
+      mockPrisma.liveClass.update.mockResolvedValue({ ...baseLiveClass, status: 'EM_CURSO' });
+      const result = await service.start(1);
+      expect(mockPrisma.liveClass.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { status: 'EM_CURSO' } }),
+      );
+      expect(result).toBeDefined();
+    });
+
+    it('rejeita iniciar uma aula já cancelada', async () => {
+      mockPrisma.liveClass.findUnique.mockResolvedValue({ ...baseLiveClass, status: 'CANCELADA' });
+      await expect(service.start(1)).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('postpone', () => {
+    it('regista postponedFromAt e passa a ADIADA', async () => {
+      mockPrisma.liveClass.findUnique.mockResolvedValue(baseLiveClass);
+      mockPrisma.liveClass.update.mockResolvedValue({ ...baseLiveClass, status: 'ADIADA' });
+      await service.postpone(1, {
+        scheduledAt: '2026-08-01T10:00:00',
+        reason: 'Formador indisponível',
+      });
+      expect(mockPrisma.liveClass.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'ADIADA',
+            postponedFromAt: baseLiveClass.scheduledAt,
+            postponeReason: 'Formador indisponível',
+          }),
+        }),
+      );
+    });
+
+    it('rejeita data inválida', async () => {
+      mockPrisma.liveClass.findUnique.mockResolvedValue(baseLiveClass);
+      await expect(service.postpone(1, { scheduledAt: 'not-a-date' })).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  });
+
+  describe('cancel', () => {
+    it('marca a aula como CANCELADA com motivo', async () => {
+      mockPrisma.liveClass.findUnique.mockResolvedValue(baseLiveClass);
+      mockPrisma.liveClass.update.mockResolvedValue({ ...baseLiveClass, status: 'CANCELADA' });
+      await service.cancel(1, { reason: 'Sem inscrições suficientes' });
+      expect(mockPrisma.liveClass.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'CANCELADA',
+            cancellationReason: 'Sem inscrições suficientes',
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('duplicate', () => {
+    it('cria uma cópia com estado AGENDADA e novo código', async () => {
+      mockPrisma.liveClass.findUnique.mockResolvedValue(baseLiveClass);
+      mockPrisma.liveClass.create.mockResolvedValue({ ...baseLiveClass, id: 2, topic: 'Cópia' });
+      const result = await service.duplicate(1);
+      expect(mockPrisma.liveClass.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'AGENDADA' }) }),
+      );
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── Sessões (secção 5) ──────────────────────────────────────
+
+  describe('createSession', () => {
+    it('atribui seq incremental à primeira sessão', async () => {
+      mockPrisma.liveClass.findUnique.mockResolvedValue(baseLiveClass);
+      mockPrisma.liveClassSession.findFirst.mockResolvedValue(null);
+      mockPrisma.liveClassSession.create.mockResolvedValue({ id: 1, seq: 1 });
+      await service.createSession(1, { sessionDate: '2026-08-01T10:00:00', durationMinutes: 60 });
+      expect(mockPrisma.liveClassSession.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ seq: 1, liveClassId: 1 }) }),
+      );
+    });
+
+    it('incrementa seq a partir da última sessão existente', async () => {
+      mockPrisma.liveClass.findUnique.mockResolvedValue(baseLiveClass);
+      mockPrisma.liveClassSession.findFirst.mockResolvedValue({ seq: 3 });
+      mockPrisma.liveClassSession.create.mockResolvedValue({ id: 4, seq: 4 });
+      await service.createSession(1, { sessionDate: '2026-08-08T10:00:00', durationMinutes: 60 });
+      expect(mockPrisma.liveClassSession.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ seq: 4 }) }),
+      );
+    });
+  });
+
+  describe('listAllSessions', () => {
+    it('devolve sessões paginadas de todas as aulas', async () => {
+      mockPrisma.liveClassSession.findMany.mockResolvedValue([{ id: 1 }]);
+      mockPrisma.liveClassSession.count = jest.fn().mockResolvedValue(1);
+      const result = await service.listAllSessions({ page: 1, limit: 10 });
+      expect(result.data).toHaveLength(1);
+      expect(result.meta.total).toBe(1);
+    });
+  });
+
+  describe('deleteSession', () => {
+    it('rejeita sessão de outra aula', async () => {
+      mockPrisma.liveClassSession.findUnique.mockResolvedValue({ id: 5, liveClassId: 999 });
+      await expect(service.deleteSession(1, 5)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─── Dashboard / Calendário (secções 1 e 4) ───────────────────
+
+  describe('getDashboard', () => {
+    it('devolve cards agregados', async () => {
+      mockPrisma.liveClass.count.mockResolvedValue(2);
+      const result = await service.getDashboard();
+      expect(result.cards).toBeDefined();
+      expect(result.byModality).toEqual([]);
+    });
+  });
+
+  describe('getCalendar', () => {
+    it('combina aulas e sessões num intervalo', async () => {
+      mockPrisma.liveClass.findMany.mockResolvedValue([baseLiveClass]);
+      mockPrisma.liveClassSession.findMany.mockResolvedValue([]);
+      const result = await service.getCalendar('2026-07-01', '2026-07-31');
+      expect(result).toHaveLength(1);
+      expect(result[0].liveClassId).toBe(1);
     });
   });
 });

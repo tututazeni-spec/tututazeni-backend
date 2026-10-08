@@ -1,8 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EvaluationController } from './evaluation.controller';
 import { EvaluationService } from './evaluation.service';
+import { PdfService } from '../pdf/pdf.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+
+const mockPdf = {
+  generateExecutiveReport: jest.fn().mockResolvedValue(Buffer.from('')),
+};
 
 const mockSvc = {
   createCycle: jest.fn().mockResolvedValue({ id: 1 }),
@@ -11,11 +16,23 @@ const mockSvc = {
   updateCycle: jest.fn().mockResolvedValue({}),
   publishCycle: jest.fn().mockResolvedValue({}),
   activateCycle: jest.fn().mockResolvedValue({}),
+  pauseCycle: jest.fn().mockResolvedValue({}),
+  closeCycle: jest.fn().mockResolvedValue({}),
+  reopenCycle: jest.fn().mockResolvedValue({}),
+  remindCycleParticipants: jest.fn().mockResolvedValue({ notified: 0 }),
   createForm: jest.fn().mockResolvedValue({ id: 1 }),
   getForms: jest.fn().mockResolvedValue([]),
   getForm: jest.fn().mockResolvedValue({ id: 1 }),
   assignEvaluator: jest.fn().mockResolvedValue({}),
   bulkAssign: jest.fn().mockResolvedValue({}),
+  getEvaluationRequestsList: jest.fn().mockResolvedValue({ data: [], meta: {} }),
+  getEvaluationRequestDetail: jest.fn().mockResolvedValue({}),
+  updateEvaluationRequest: jest.fn().mockResolvedValue({}),
+  remindEvaluationRequest: jest.fn().mockResolvedValue({ notified: true }),
+  finishEvaluationRequest: jest.fn().mockResolvedValue({}),
+  reopenEvaluationRequest: jest.fn().mockResolvedValue({}),
+  advanceStage: jest.fn().mockResolvedValue({}),
+  getOverviewDashboard: jest.fn().mockResolvedValue({ scope: 'personal' }),
   submitEvaluation: jest.fn().mockResolvedValue({}),
   create: jest.fn().mockResolvedValue({ id: 1 }),
   getPendingEvaluations: jest.fn().mockResolvedValue([]),
@@ -29,6 +46,14 @@ const mockSvc = {
   getAnalyticsDashboard: jest.fn().mockResolvedValue({}),
   getTeamDashboard: jest.fn().mockResolvedValue({}),
   triggerPDIFromResults: jest.fn().mockResolvedValue({}),
+  openCalibration: jest.fn().mockResolvedValue({}),
+  confirmCalibration: jest.fn().mockResolvedValue({ advanced: 0 }),
+  getCalibrationHistory: jest.fn().mockResolvedValue([]),
+  getOneOnOne: jest.fn().mockResolvedValue(null),
+  scheduleOneOnOne: jest.fn().mockResolvedValue({}),
+  registerOneOnOne: jest.fn().mockResolvedValue({}),
+  getReportsOverview: jest.fn().mockResolvedValue({}),
+  getSettings: jest.fn().mockResolvedValue({}),
 };
 
 const mockUser = { id: 1, email: 'test@innova.com', role: { name: 'ADMIN' } };
@@ -40,7 +65,10 @@ describe('EvaluationController', () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [EvaluationController],
-      providers: [{ provide: EvaluationService, useValue: mockSvc }],
+      providers: [
+        { provide: EvaluationService, useValue: mockSvc },
+        { provide: PdfService, useValue: mockPdf },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
@@ -83,6 +111,26 @@ describe('EvaluationController', () => {
     expect(mockSvc.activateCycle).toHaveBeenCalledWith(1);
   });
 
+  it('pauseCycle → pauseCycle(id)', async () => {
+    await controller.pauseCycle(1);
+    expect(mockSvc.pauseCycle).toHaveBeenCalledWith(1);
+  });
+
+  it('closeCycle → closeCycle(id)', async () => {
+    await controller.closeCycle(1);
+    expect(mockSvc.closeCycle).toHaveBeenCalledWith(1);
+  });
+
+  it('reopenCycle → reopenCycle(id)', async () => {
+    await controller.reopenCycle(1);
+    expect(mockSvc.reopenCycle).toHaveBeenCalledWith(1);
+  });
+
+  it('remindCycle → remindCycleParticipants(id)', async () => {
+    await controller.remindCycle(1);
+    expect(mockSvc.remindCycleParticipants).toHaveBeenCalledWith(1);
+  });
+
   it('createForm → createForm(dto, userId)', async () => {
     const dto = {} as any;
     await controller.createForm(dto, mockUser as any);
@@ -109,6 +157,59 @@ describe('EvaluationController', () => {
     const dto = {} as any;
     await controller.bulkAssign(dto, mockUser as any);
     expect(mockSvc.bulkAssign).toHaveBeenCalledWith(dto, mockUser);
+  });
+
+  it('listRequests → getEvaluationRequestsList(filters)', async () => {
+    const filters = {} as any;
+    await controller.listRequests(filters);
+    expect(mockSvc.getEvaluationRequestsList).toHaveBeenCalledWith(filters);
+  });
+
+  it('getRequestDetail → getEvaluationRequestDetail(id)', async () => {
+    await controller.getRequestDetail(7);
+    expect(mockSvc.getEvaluationRequestDetail).toHaveBeenCalledWith(7);
+  });
+
+  it('updateRequest → updateEvaluationRequest(id, dto)', async () => {
+    const dto = {} as any;
+    await controller.updateRequest(7, dto);
+    expect(mockSvc.updateEvaluationRequest).toHaveBeenCalledWith(7, dto);
+  });
+
+  it('remindRequest → remindEvaluationRequest(id)', async () => {
+    await controller.remindRequest(7);
+    expect(mockSvc.remindEvaluationRequest).toHaveBeenCalledWith(7);
+  });
+
+  it('finishRequest → finishEvaluationRequest(id)', async () => {
+    await controller.finishRequest(7);
+    expect(mockSvc.finishEvaluationRequest).toHaveBeenCalledWith(7);
+  });
+
+  it('reopenRequest → reopenEvaluationRequest(id)', async () => {
+    await controller.reopenRequest(7);
+    expect(mockSvc.reopenEvaluationRequest).toHaveBeenCalledWith(7);
+  });
+
+  it('advanceStage → advanceStage(id)', async () => {
+    await controller.advanceStage(7);
+    expect(mockSvc.advanceStage).toHaveBeenCalledWith(7);
+  });
+
+  // ponto 1 do doc — overview() ramifica para KPIs organizacionais só quando
+  // o utilizador tem um dos MGMT_ROLES; caso contrário devolve o âmbito
+  // pessoal (mesmo padrão de scoping usado no resto do controller).
+  describe('overview — scoping por role', () => {
+    it('ADMIN → getOverviewDashboard(userId, true)', async () => {
+      await controller.overview(mockUser as any);
+      expect(mockSvc.getOverviewDashboard).toHaveBeenCalledWith(1, true);
+    });
+
+    it('COLABORADOR → getOverviewDashboard(userId, false)', async () => {
+      const colaborador = { id: 6, email: 'colab@innova.com', role: { name: 'COLABORADOR' } };
+      await controller.overview(colaborador as any);
+      expect(mockSvc.getOverviewDashboard).toHaveBeenCalledWith(6, false);
+    });
   });
 
   it('submit → submitEvaluation(userId, dto)', async () => {
@@ -203,7 +304,12 @@ describe('EvaluationController', () => {
 
   it('calibrationPanel → getCycleForCalibration(cycleId)', async () => {
     await controller.calibrationPanel(2);
-    expect(mockSvc.getCycleForCalibration).toHaveBeenCalledWith(2);
+    expect(mockSvc.getCycleForCalibration).toHaveBeenCalledWith(2, undefined);
+  });
+
+  it('calibrationPanel com departmentId → getCycleForCalibration(cycleId, parsed)', async () => {
+    await controller.calibrationPanel(2, '5');
+    expect(mockSvc.getCycleForCalibration).toHaveBeenCalledWith(2, 5);
   });
 
   it('calibrate → calibrateScore(cycleId, dto, userId)', async () => {

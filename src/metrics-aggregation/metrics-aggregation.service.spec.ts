@@ -719,7 +719,7 @@ describe('MetricsAggregationService', () => {
           scope: 'user',
           type: 'COMPLIANCE',
           count: 4,
-          actionUrl: '/content-library/mandatory',
+          actionUrl: '/courses',
         });
         expect(mockPrisma.course.count).toHaveBeenCalledWith({
           where: { mandatory: true, enrollments: { none: { userId: 42, status: 'COMPLETED' } } },

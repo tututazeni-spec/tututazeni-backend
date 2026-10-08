@@ -3,6 +3,8 @@ import { NotFoundException, ConflictException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { SuccessionService } from './succession.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { DevelopmentPlansService } from '../development-plans/development-plans.service';
+import { AuditService } from '../common/services/audit.service';
 
 const mockPrisma = {
   criticalPosition: {
@@ -64,6 +66,7 @@ const basePlan = {
 
 describe('SuccessionService', () => {
   let service: SuccessionService;
+  let mockAuditService: { log: jest.Mock };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -73,8 +76,21 @@ describe('SuccessionService', () => {
       },
       configurable: true,
     });
+    mockAuditService = { log: jest.fn().mockResolvedValue(undefined) };
     const module: TestingModule = await Test.createTestingModule({
-      providers: [SuccessionService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        SuccessionService,
+        { provide: PrismaService, useValue: mockPrisma },
+        {
+          provide: DevelopmentPlansService,
+          useValue: {
+            create: jest.fn().mockResolvedValue({ id: 1 }),
+            update: jest.fn(),
+            addAction: jest.fn(),
+          },
+        },
+        { provide: AuditService, useValue: mockAuditService },
+      ],
     }).compile();
     service = module.get<SuccessionService>(SuccessionService);
   });
@@ -85,16 +101,31 @@ describe('SuccessionService', () => {
       mockPrisma.criticalPosition.findUnique.mockResolvedValue(null);
       mockPrisma.criticalPosition.create.mockResolvedValue(baseCritical);
 
-      const result = await service.createCriticalPosition({
-        positionId: 1,
-        riskLevel: 'HIGH',
-      } as any);
+      const result = await service.createCriticalPosition(
+        {
+          positionId: 1,
+          riskLevel: 'HIGH',
+        } as any,
+        1,
+      );
       expect(result).toBeDefined();
+      // Histórico de sucessão: regista sempre a classificação, independente
+      // da fila de auditoria a processar (ver nota em
+      // test/integration/succession/succession.integration-spec.ts sobre a
+      // perda não-determinística do 1º job de auditoria nesse ambiente).
+      expect(mockAuditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 1,
+          action: 'CREATE',
+          entity: 'CriticalPosition',
+          entityId: baseCritical.id,
+        }),
+      );
     });
 
     it('deve lançar NotFoundException se posição não encontrada', async () => {
       mockPrisma.position.findUnique.mockResolvedValue(null);
-      await expect(service.createCriticalPosition({ positionId: 99 } as any)).rejects.toThrow(
+      await expect(service.createCriticalPosition({ positionId: 99 } as any, 1)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -102,7 +133,7 @@ describe('SuccessionService', () => {
     it('deve lançar ConflictException se já é crítica', async () => {
       mockPrisma.position.findUnique.mockResolvedValue(basePosition);
       mockPrisma.criticalPosition.findUnique.mockResolvedValue(baseCritical);
-      await expect(service.createCriticalPosition({ positionId: 1 } as any)).rejects.toThrow(
+      await expect(service.createCriticalPosition({ positionId: 1 } as any, 1)).rejects.toThrow(
         ConflictException,
       );
     });
@@ -141,17 +172,28 @@ describe('SuccessionService', () => {
     });
 
     it('deve criar plano de sucessão', async () => {
-      const result = await service.create({ criticalPositionId: 1, candidateId: 2 } as any);
+      const result = await service.create({ criticalPositionId: 1, candidateId: 2 } as any, 1);
       expect(result).toBeDefined();
+      expect(mockAuditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 1,
+          action: 'CREATE',
+          entity: 'SuccessionPlan',
+          entityId: basePlan.id,
+        }),
+      );
     });
 
     it('usa a priority do DTO quando fornecida', async () => {
-      await service.create({
-        criticalPositionId: 1,
-        candidateId: 2,
-        readinessLevel: 'READY_NOW',
-        priority: 'SECONDARY',
-      } as any);
+      await service.create(
+        {
+          criticalPositionId: 1,
+          candidateId: 2,
+          readinessLevel: 'READY_NOW',
+          priority: 'SECONDARY',
+        } as any,
+        1,
+      );
       expect(mockPrisma.successionPlan.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ priority: 'SECONDARY' }) }),
       );
@@ -160,11 +202,14 @@ describe('SuccessionService', () => {
 
     it('calcula a priority por contagem quando ausente (0 → PRIMARY)', async () => {
       mockPrisma.successionPlan.count.mockResolvedValue(0);
-      await service.create({
-        criticalPositionId: 1,
-        candidateId: 2,
-        readinessLevel: 'READY_NOW',
-      } as any);
+      await service.create(
+        {
+          criticalPositionId: 1,
+          candidateId: 2,
+          readinessLevel: 'READY_NOW',
+        } as any,
+        1,
+      );
       expect(mockPrisma.successionPlan.count).toHaveBeenCalledWith({
         where: { criticalPositionId: 1 },
       });
@@ -175,31 +220,40 @@ describe('SuccessionService', () => {
 
     it('calcula a priority por contagem (1 → SECONDARY, >=2 → TERTIARY)', async () => {
       mockPrisma.successionPlan.count.mockResolvedValue(1);
-      await service.create({
-        criticalPositionId: 1,
-        candidateId: 2,
-        readinessLevel: 'READY_NOW',
-      } as any);
+      await service.create(
+        {
+          criticalPositionId: 1,
+          candidateId: 2,
+          readinessLevel: 'READY_NOW',
+        } as any,
+        1,
+      );
       expect(mockPrisma.successionPlan.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ priority: 'SECONDARY' }) }),
       );
       mockPrisma.successionPlan.count.mockResolvedValue(5);
-      await service.create({
-        criticalPositionId: 1,
-        candidateId: 2,
-        readinessLevel: 'READY_NOW',
-      } as any);
+      await service.create(
+        {
+          criticalPositionId: 1,
+          candidateId: 2,
+          readinessLevel: 'READY_NOW',
+        } as any,
+        1,
+      );
       expect(mockPrisma.successionPlan.create).toHaveBeenLastCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ priority: 'TERTIARY' }) }),
       );
     });
 
     it('emite uma notificação SUCCESSION_PLAN_ADDED', async () => {
-      await service.create({
-        criticalPositionId: 1,
-        candidateId: 2,
-        readinessLevel: 'READY_NOW',
-      } as any);
+      await service.create(
+        {
+          criticalPositionId: 1,
+          candidateId: 2,
+          readinessLevel: 'READY_NOW',
+        } as any,
+        1,
+      );
       expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ userId: 2, type: 'SUCCESSION_PLAN_ADDED' }),
@@ -214,11 +268,14 @@ describe('SuccessionService', () => {
       });
       mockPrisma.successionPlan.create.mockRejectedValue(p2002);
       await expect(
-        service.create({
-          criticalPositionId: 1,
-          candidateId: 2,
-          readinessLevel: 'READY_NOW',
-        } as any),
+        service.create(
+          {
+            criticalPositionId: 1,
+            candidateId: 2,
+            readinessLevel: 'READY_NOW',
+          } as any,
+          1,
+        ),
       ).rejects.toThrow(ConflictException);
     });
   });

@@ -1,0 +1,6 @@
+[shell_environment_policy]
+inherit = "core"
+
+[shell_environment_policy.set]
+CLAUDE_CODE_SUBAGENT_MODEL = "claude-haiku-4-5-20251001"
+CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS = "5"

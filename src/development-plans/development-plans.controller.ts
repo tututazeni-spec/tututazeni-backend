@@ -28,6 +28,10 @@ import {
   CreateCheckpointDto,
   CompleteCheckpointDto,
   ApprovePlanDto,
+  CompletePlanDto,
+  MarkAtRiskDto,
+  AcceptPlanDto,
+  AddCompetencyGapDto,
 } from './development-plans.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -165,6 +169,23 @@ export class DevelopmentPlansController {
     return this.svc.updateGoalProgress(user, dto);
   }
 
+  // ── Competências (gap, secção 5) ──────────────────────────────────────────
+
+  @Post('competency-gaps')
+  @ApiOperation({ summary: 'Adicionar competência a desenvolver ao plano (gap actual→desejado)' })
+  addCompetencyGap(@Body() dto: AddCompetencyGapDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.addCompetencyGap(dto, user);
+  }
+
+  @Delete('competency-gaps/:gapId')
+  @ApiOperation({ summary: 'Remover competência a desenvolver do plano' })
+  removeCompetencyGap(
+    @Param('gapId', ParseIntPipe) gapId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.removeCompetencyGap(gapId, user);
+  }
+
   // ── Checkpoints ───────────────────────────────────────────────────────────
 
   @Post('checkpoints')
@@ -186,10 +207,12 @@ export class DevelopmentPlansController {
 
   @Patch(':id/complete')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Concluir plano (emite certificado + XP)' })
+  @ApiOperation({
+    summary: 'Concluir plano (emite certificado + XP; avaliação final e próximos passos no body)',
+  })
   @HttpCode(HttpStatus.OK)
-  complete(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.complete(id);
+  complete(@Param('id', ParseIntPipe) id: number, @Body() dto?: CompletePlanDto) {
+    return this.svc.complete(id, dto);
   }
 
   @Patch(':id/cancel')
@@ -199,5 +222,36 @@ export class DevelopmentPlansController {
   @ApiQuery({ name: 'reason', required: false })
   cancel(@Param('id', ParseIntPipe) id: number, @Query('reason') reason?: string) {
     return this.svc.cancel(id, reason);
+  }
+
+  @Patch(':id/at-risk')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Marcar plano activo como "em risco"' })
+  @HttpCode(HttpStatus.OK)
+  markAtRisk(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: MarkAtRiskDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.markAtRisk(id, dto, user);
+  }
+
+  @Patch(':id/resume')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Retomar plano em risco ou pausado para activo' })
+  @HttpCode(HttpStatus.OK)
+  resume(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.resume(id, user);
+  }
+
+  @Patch(':id/accept')
+  @ApiOperation({ summary: 'Aceite do colaborador ao PDI (secção 22)' })
+  @HttpCode(HttpStatus.OK)
+  acceptPlan(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AcceptPlanDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.acceptPlan(id, dto, user);
   }
 }

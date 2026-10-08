@@ -61,10 +61,10 @@ describe('EnrollmentsController', () => {
     expect(mockSvc.generateCertificate).toHaveBeenCalledWith(2, mockUser);
   });
 
-  it('findAll → findAll(filters)', async () => {
+  it('findAll → findAll(filters, user)', async () => {
     const filters = {} as any;
-    await controller.findAll(filters);
-    expect(mockSvc.findAll).toHaveBeenCalledWith(filters);
+    await controller.findAll(filters, mockUser as any);
+    expect(mockSvc.findAll).toHaveBeenCalledWith(filters, mockUser);
   });
 
   it('adminDashboard → getAdminDashboard', async () => {

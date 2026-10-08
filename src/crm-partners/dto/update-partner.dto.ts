@@ -1,10 +1,7 @@
-import { PartialType } from '@nestjs/swagger';
-import { IsEnum, IsOptional } from 'class-validator';
-import { PartnerStatus } from '@prisma/client';
+import { OmitType, PartialType } from '@nestjs/swagger';
 import { CreatePartnerDto } from './create-partner.dto';
 
-export class UpdatePartnerDto extends PartialType(CreatePartnerDto) {
-  @IsOptional()
-  @IsEnum(PartnerStatus)
-  status?: PartnerStatus;
-}
+// Contactos são geridos pelos endpoints dedicados /:id/contacts
+export class UpdatePartnerDto extends PartialType(
+  OmitType(CreatePartnerDto, ['contacts'] as const),
+) {}

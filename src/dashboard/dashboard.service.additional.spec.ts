@@ -265,14 +265,20 @@ describe('DashboardService (additional)', () => {
       const result: any = await service.getManagerDashboard(1, {});
       expect(result.teamSize).toBe(1);
       expect(result.team[0]).toEqual({
-        user: { id: 2, fullName: 'Bea', avatarUrl: null, position: null },
+        user: {
+          id: 2,
+          fullName: 'Bea',
+          avatarUrl: null,
+          position: null,
+          department: { name: 'TI' },
+        },
         xp: 0,
         enrollment: { completed: 0, inProgress: 0 },
         plan: null,
         lastScore: null,
         alert: false,
       });
-      expect(result.kpis).not.toHaveProperty('overdueActions');
+      expect(result.kpis.overdueActions).toBe(0);
       expect(result.alerts).toEqual([]);
     });
   });
@@ -323,7 +329,7 @@ describe('DashboardService (additional)', () => {
           severity: 'MEDIUM',
           message: '3 formação(ões) obrigatória(s) por concluir',
           count: 3,
-          actionUrl: '/content-library/mandatory',
+          actionUrl: '/courses',
           scope: 'user',
         },
       ]);
@@ -345,7 +351,7 @@ describe('DashboardService (additional)', () => {
           type: 'TRAINING',
           message: '3 formação(ões) obrigatória(s) por concluir',
           priority: 'ATTENTION',
-          actionUrl: '/content-library/mandatory',
+          actionUrl: '/courses',
         },
       ]);
     });

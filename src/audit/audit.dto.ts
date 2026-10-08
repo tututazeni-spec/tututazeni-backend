@@ -1,5 +1,13 @@
 // src/audit/audit.dto.ts
-import { IsString, IsInt, IsOptional, IsEnum, IsBoolean, IsDateString } from 'class-validator';
+import {
+  IsString,
+  IsInt,
+  IsOptional,
+  IsEnum,
+  IsBoolean,
+  IsDateString,
+  IsIn,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
@@ -46,10 +54,32 @@ export class AuditFilterDto extends BaseFilterDto {
   @Type(() => Number)
   entityId?: number;
 
-  @ApiPropertyOptional({ enum: AuditAction })
+  // Texto livre (contains, case-insensitive): o AuditLog guarda acções
+  // arbitrárias (ver nota acima de AuditAction), por isso o filtro não pode
+  // ficar limitado aos 12 valores do enum.
+  @ApiPropertyOptional({ description: 'Acção (contém, sem distinção de maiúsculas)' })
   @IsOptional()
-  @IsEnum(AuditAction)
-  action?: AuditAction;
+  @IsString()
+  action?: string;
+
+  @ApiPropertyOptional({ description: 'Nome, e-mail ou ID do utilizador' })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({
+    enum: ['USER', 'SYSTEM'],
+    description: 'Utilizador ou processo automático',
+  })
+  @IsOptional()
+  @IsIn(['USER', 'SYSTEM'])
+  actorType?: 'USER' | 'SYSTEM';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
 
   @ApiPropertyOptional({ enum: AuditSeverity })
   @IsOptional()
@@ -87,6 +117,18 @@ export class AuditFilterDto extends BaseFilterDto {
   criticalOnly?: boolean;
 }
 
+export const ACCESS_EVENT_TYPES = ['LOGIN', 'LOGOUT', 'FAILED', 'PASSWORD', 'PERMISSION'] as const;
+export type AccessEventType = (typeof ACCESS_EVENT_TYPES)[number];
+
+// Aba "Acessos e Sessões" (modulo_audit.md §6): mesmos filtros do AuditLog +
+// o tipo de evento de acesso.
+export class AccessFilterDto extends AuditFilterDto {
+  @ApiPropertyOptional({ enum: ACCESS_EVENT_TYPES })
+  @IsOptional()
+  @IsIn(ACCESS_EVENT_TYPES)
+  type?: AccessEventType;
+}
+
 export class LogAuditDto {
   userId!: number | null;
   action!: string;
@@ -104,10 +146,11 @@ export class LogAuditDto {
   metadata?: Record<string, unknown>;
 }
 
-// ADICIONAR NO FINAL de src/audit/audit.dto.ts
-// (depois de todas as classes existentes)
-
-// Adicionar também o campo entityId ao AuditFilterDto se não existir:
-// (dentro da classe AuditFilterDto, adiciona)
-//   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number)
-//   entityId?: number;
+// Aba "Alterações de Dados" (modulo_audit.md §7): mesmos filtros do AuditLog +
+// o nome do campo alterado.
+export class ChangesFilterDto extends AuditFilterDto {
+  @ApiPropertyOptional({ description: 'Nome do campo alterado (ex.: status, email)' })
+  @IsOptional()
+  @IsString()
+  field?: string;
+}

@@ -20,6 +20,11 @@ import {
   CloneModuleDto,
 } from './course-modules.dto';
 
+// NOTA — dois sistemas paralelos de Módulos/Lições: ver comentário equivalente
+// no topo de courses/courses.service.ts. Este service é a rota usada por
+// ModuleBuilder/ProgressModal em /courses/[id]/learn; courses.service.ts é a
+// usada por ModuleModal/ModulosView em Gestão. Gate de acesso a aulas
+// centralizado em CourseCompletionService.markLessonComplete.
 @Injectable()
 export class CourseModulesService {
   private readonly logger = new Logger(CourseModulesService.name);
@@ -127,6 +132,26 @@ export class CourseModulesService {
     // módulo desassocia silenciosamente qualquer avaliação ligada a ele. Avisar
     // em vez de bloquear (mesma convenção usada em deleteLesson()).
     const linkedAssessments = await this.prisma.read.assessment.count({ where: { moduleId: id } });
+
+    // Quiz→Lesson não tem onDelete: Cascade — activeProgress acima não cobre
+    // o caso de um quiz sem tentativas (nem LessonProgress correspondente);
+    // sem isto, o delete do módulo rebentava com 500 na cascata para Lesson.
+    // Ver o mesmo fix em deleteLesson() e em courses/courses.service.ts.
+    const quizzes = await this.prisma.read.quiz.findMany({
+      where: { lesson: { moduleId: id } },
+      include: { _count: { select: { attempts: true } } },
+    });
+    if (quizzes.some(q => q._count.attempts > 0)) {
+      throw new ForbiddenException(
+        'Uma ou mais aulas deste módulo têm quiz com tentativas de alunos. Não pode ser eliminado.',
+      );
+    }
+    if (quizzes.length > 0) {
+      await this.prisma.quizQuestion.deleteMany({
+        where: { quizId: { in: quizzes.map(q => q.id) } },
+      });
+      await this.prisma.quiz.deleteMany({ where: { id: { in: quizzes.map(q => q.id) } } });
+    }
 
     await this.prisma.courseModule.delete({ where: { id } });
     return {
@@ -297,6 +322,23 @@ export class CourseModulesService {
     // Aviso se há progresso — não bloquear, apenas informar
     const progressCount = await this.prisma.read.lessonProgress.count({ where: { lessonId: id } });
 
+    // Quiz→Lesson e QuizAttempt→Quiz não têm onDelete: Cascade — ver o mesmo
+    // fix em courses/courses.service.ts removeLesson. Bloquear só quando há
+    // tentativas reais de alunos; senão eliminar o quiz em cascata.
+    const quiz = await this.prisma.read.quiz.findUnique({
+      where: { lessonId: id },
+      include: { _count: { select: { attempts: true } } },
+    });
+    if (quiz) {
+      if (quiz._count.attempts > 0) {
+        throw new ForbiddenException(
+          `Esta aula tem um quiz com ${quiz._count.attempts} tentativa(s) de alunos. Não pode ser eliminada.`,
+        );
+      }
+      await this.prisma.quizQuestion.deleteMany({ where: { quizId: quiz.id } });
+      await this.prisma.quiz.delete({ where: { id: quiz.id } });
+    }
+
     await this.prisma.lesson.delete({ where: { id } });
     return { message: 'Aula eliminada', hadProgress: progressCount > 0, progressCount };
   }
@@ -380,6 +422,26 @@ export class CourseModulesService {
       }
     }
 
+    // Pré-requisito explícito de módulo/aula (docs/06-modulo-courses.md
+    // secção 10) — mesma regra do gate real em
+    // CourseCompletionService.assertLessonAccessible, replicada aqui para que
+    // o "locked" devolvido a /module-progress (usado pelo learn page) já
+    // reflicta o bloqueio antes do aluno tentar concluir a aula.
+    if (mod.requiredModuleId) {
+      const prereqCompleted = await this.isModuleCompleted(mod.requiredModuleId, userId);
+      if (!prereqCompleted) {
+        return { accessible: false, reason: 'Deve concluir o módulo pré-requisito primeiro' };
+      }
+    }
+    if (lesson.requiredLessonId) {
+      const prereqProgress = await this.prisma.read.lessonProgress.findUnique({
+        where: { lessonId_userId: { lessonId: lesson.requiredLessonId, userId } },
+      });
+      if (!prereqProgress?.completed) {
+        return { accessible: false, reason: 'Deve concluir a aula pré-requisito primeiro' };
+      }
+    }
+
     return { accessible: true };
   }
 
@@ -389,7 +451,11 @@ export class CourseModulesService {
   }
 
   async markLessonComplete(userId: number, dto: MarkModuleLessonCompleteDto) {
-    // Segurança: gate de progressão sequencial (efeito próprio de course-modules)
+    // Pré-verificação redundante mas inofensiva: o gate real (drip/publicação/
+    // progressão sequencial) agora vive em CourseCompletionService.markLessonComplete
+    // e corre para QUALQUER caminho de conclusão, incluindo o de courses.service.ts
+    // (ver comentário nesse ficheiro). Mantido aqui só para preservar a mensagem de
+    // erro específica quando chamado por esta rota.
     const access = await this.isLessonAccessible(dto.lessonId, userId);
     if (!access.accessible) {
       throw new ForbiddenException(access.reason ?? 'Aula não acessível');
@@ -518,6 +584,10 @@ export class CourseModulesService {
           orderBy: { seq: 'asc' },
           include: {
             progress: { where: { userId } },
+            activities: { orderBy: { seq: 'asc' } },
+            resources: { orderBy: { createdAt: 'asc' } },
+            liveInstructor: { select: { id: true, fullName: true } },
+            quiz: { select: { id: true } },
           },
         },
         materials: true,
@@ -578,6 +648,17 @@ export class CourseModulesService {
             isFree: l.isFree,
             allowDownload: l.allowDownload,
             contentUrl: canSeeContent ? l.contentUrl : null,
+            // Só disponíveis a quem está inscrito — mesma regra de canSeeContent
+            // já aplicada a contentUrl (ver comentário acima).
+            textContent: canSeeContent ? l.textContent : null,
+            captionsUrl: canSeeContent ? l.captionsUrl : null,
+            transcript: canSeeContent ? l.transcript : null,
+            liveDate: l.liveDate,
+            liveSessionUrl: canSeeContent ? l.liveSessionUrl : null,
+            liveInstructor: l.liveInstructor,
+            activities: l.activities,
+            resources: canSeeContent ? l.resources : [],
+            quizId: l.quiz?.id ?? null,
             completed: l.progress[0]?.completed ?? false,
             completedAt: l.progress[0]?.completedAt ?? null,
             resumePosition: l.progress[0]?.resumePosition ?? 0,

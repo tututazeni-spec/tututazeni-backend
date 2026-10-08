@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RoiImpactService } from './roi-impact.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+import { RoiAnalysisService } from './roi-analysis.service';
 
 // ─── MetricsAggregationService mock (Fase H — Task 8) ─────────────────────
 // calculateRoiFull tira o NÚCLEO financeiro de metrics.trainingRoi; os overlays
@@ -59,6 +60,11 @@ const mockPrisma: any = {
     aggregate: jest.fn().mockResolvedValue({ _avg: { score: null } }),
   },
   developmentPlanAction: { count: jest.fn().mockResolvedValue(0) },
+  roiAnalysis: { findMany: jest.fn().mockResolvedValue([]) },
+};
+
+const mockAnalysisSvc = {
+  resolveInitiative: jest.fn().mockResolvedValue(null),
 };
 
 describe('RoiImpactService (additional)', () => {
@@ -78,6 +84,7 @@ describe('RoiImpactService (additional)', () => {
         RoiImpactService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: MetricsAggregationService, useValue: mockMetrics },
+        { provide: RoiAnalysisService, useValue: mockAnalysisSvc },
       ],
     }).compile();
     service = module.get<RoiImpactService>(RoiImpactService);
@@ -196,6 +203,79 @@ describe('RoiImpactService (additional)', () => {
       mockPrisma.user.count.mockResolvedValue(600);
       const result = await service.getExecutiveDashboard({ from: '2026-01-01', to: '2026-12-31' });
       expect(result).toBeDefined();
+      expect(result.byDepartment).toEqual([]);
+      expect(result.topInitiatives).toEqual([]);
+    });
+
+    it('agrega iniciativas ativas, ROI positivo/negativo e alertas a partir das RoiAnalysis', async () => {
+      mockPrisma.roiAnalysis.findMany.mockResolvedValue([
+        {
+          id: 1,
+          status: 'EM_MEDICAO',
+          roiPercent: null,
+          initiativeType: 'CURSO',
+          departmentId: 1,
+          unit: 'Luanda',
+          createdAt: new Date('2026-03-01'),
+          initiativeId: 1,
+          computedBenefit: null,
+          costDirect: 100,
+          costIndirect: 0,
+          costOpportunity: 0,
+        },
+        {
+          id: 2,
+          status: 'CALCULADO',
+          roiPercent: 120,
+          initiativeType: 'CURSO',
+          departmentId: 1,
+          unit: 'Luanda',
+          createdAt: new Date('2026-04-01'),
+          initiativeId: 2,
+          computedBenefit: 5000,
+          costDirect: 1000,
+          costIndirect: 0,
+          costOpportunity: 0,
+        },
+        {
+          id: 3,
+          status: 'DADOS_INSUFICIENTES',
+          roiPercent: null,
+          initiativeType: 'EVENTO',
+          departmentId: 2,
+          unit: 'Benguela',
+          createdAt: new Date('2026-04-15'),
+          initiativeId: 3,
+          computedBenefit: null,
+          costDirect: 500,
+          costIndirect: 0,
+          costOpportunity: 0,
+        },
+      ]);
+      mockAnalysisSvc.resolveInitiative.mockResolvedValue({
+        label: 'Curso X',
+        participants: 10,
+        departmentId: 1,
+      });
+
+      const result = await service.getExecutiveDashboard({ from: '2026-01-01', to: '2026-12-31' });
+
+      expect(result.headline.activeMeasuring).toBe(1);
+      expect(result.headline.positiveRoiInitiatives).toBe(1);
+      expect(result.headline.negativeOrIndeterminateInitiatives).toBe(1);
+      expect(result.byInitiativeType).toEqual(
+        expect.arrayContaining([{ key: 'CURSO', avgRoi: 120, count: 1 }]),
+      );
+      expect(result.topInitiatives).toHaveLength(1);
+      expect(result.topInitiatives[0]).toEqual(
+        expect.objectContaining({ id: 2, initiative: 'Curso X', roiPercent: 120 }),
+      );
+      expect(result.alerts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ message: expect.stringContaining('dados insuficientes') }),
+          expect.objectContaining({ message: expect.stringContaining('sem retorno demonstrado') }),
+        ]),
+      );
     });
   });
 

@@ -4,6 +4,7 @@ import { EnrollmentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RoiFilterDto, CalculateRoiDto, WhatIfDto, RoiConfidence } from './roi-impact.dto';
 import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+import { RoiAnalysisService } from './roi-analysis.service';
 
 // ─────────────────────────────────────────────────────────────────
 // CONSTANTS & HELPERS
@@ -37,6 +38,26 @@ function dateRange(filter: RoiFilterDto): { gte: Date; lte: Date } {
   return { gte, lte };
 }
 
+function groupAvgRoi<T extends { roiPercent: number | null }, K>(
+  rows: T[],
+  keyFn: (row: T) => K,
+): { key: K; avgRoi: number; count: number }[] {
+  const map = new Map<K, { sum: number; count: number }>();
+  for (const row of rows) {
+    if (row.roiPercent == null) continue;
+    const key = keyFn(row);
+    const entry = map.get(key) ?? { sum: 0, count: 0 };
+    entry.sum += row.roiPercent;
+    entry.count += 1;
+    map.set(key, entry);
+  }
+  return Array.from(map.entries()).map(([key, { sum, count }]) => ({
+    key,
+    avgRoi: +(sum / count).toFixed(1),
+    count,
+  }));
+}
+
 function confidenceLevel(sampleSize: number, dataPoints: number): RoiConfidence {
   if (sampleSize >= 50 && dataPoints >= 3) return RoiConfidence.HIGH;
   if (sampleSize >= 20 && dataPoints >= 2) return RoiConfidence.MEDIUM;
@@ -65,6 +86,7 @@ export class RoiImpactService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly metrics: MetricsAggregationService,
+    private readonly analysisSvc: RoiAnalysisService,
   ) {}
 
   // ══════════════════════════════════════════════════════
@@ -123,6 +145,7 @@ export class RoiImpactService {
       turnoverBefore,
       turnoverAfter,
       competencyEvolution,
+      uniqueLearnerRows,
     ] = await Promise.all([
       this.prisma.read.enrollment.count({
         where: { ...where, status: EnrollmentStatus.IN_PROGRESS },
@@ -204,6 +227,11 @@ export class RoiImpactService {
           });
           return { _avg: { currentLevel: null } };
         }),
+      this.prisma.read.enrollment.findMany({
+        where,
+        select: { userId: true },
+        distinct: ['userId'],
+      }),
     ]);
 
     // Núcleo financeiro canónico (com degradação all-zero em caso de falha).
@@ -239,7 +267,7 @@ export class RoiImpactService {
         completed,
         inProgress,
         completionRate,
-        uniqueLearners: 0, // would need distinct query
+        uniqueLearners: uniqueLearnerRows.length,
         totalHours,
         avgScore: avgAssessmentScore._avg.score ? +avgAssessmentScore._avg.score.toFixed(1) : null,
       },
@@ -831,11 +859,12 @@ export class RoiImpactService {
   // ══════════════════════════════════════════════════════
 
   async getExecutiveDashboard(filter: RoiFilterDto = {}) {
-    const [roi, retention, performance, learning] = await Promise.all([
+    const [roi, retention, performance, learning, analysisOverview] = await Promise.all([
       this.calculateRoiFull(filter, {}),
       this.getRetentionImpact(filter),
       this.getPerformanceImpact(filter),
       this.getLearningImpact(filter),
+      this.getRoiAnalysisOverview(filter),
     ]);
 
     const totalBenefit =
@@ -844,8 +873,12 @@ export class RoiImpactService {
       (performance.monetised?.productivityBenefit ?? 0);
     const totalCost = roi.financial.totalCost ?? 0;
     const overallRoi = roiFormula(totalBenefit, totalCost);
+    const costPerLearner =
+      roi.volume.uniqueLearners > 0 ? +(totalCost / roi.volume.uniqueLearners).toFixed(2) : null;
+    const costPerHour =
+      roi.volume.totalHours > 0 ? +(totalCost / roi.volume.totalHours).toFixed(2) : null;
 
-    const alerts = [];
+    const alerts = [...analysisOverview.alerts];
     if (roi.financial.roi < 0)
       alerts.push({ severity: 'HIGH', message: 'ROI de formação negativo — rever investimento' });
     if (retention.turnoverRate > 15)
@@ -860,6 +893,12 @@ export class RoiImpactService {
         overallRoi,
         totalBenefit,
         totalCost,
+        costPerLearner,
+        costPerHour,
+        impactedEmployees: roi.volume.uniqueLearners,
+        activeMeasuring: analysisOverview.activeMeasuring,
+        positiveRoiInitiatives: analysisOverview.positive,
+        negativeOrIndeterminateInitiatives: analysisOverview.negativeOrInsufficient,
         status: overallRoi >= 100 ? '🟢' : overallRoi >= 0 ? '🟡' : '🔴',
         narrative: buildNarrative(overallRoi, totalBenefit, totalCost, roi.volume.completed),
       },
@@ -875,6 +914,15 @@ export class RoiImpactService {
           benefit: performance.monetised?.productivityBenefit ?? 0,
         },
       },
+      // Segmentação e evolução vêm das análises formais de ROI (secção 2 do
+      // spec) — começam vazias até o RH criar a primeira "Nova Análise de
+      // ROI"; não se inventa segmentação a partir do cálculo agregado de
+      // cursos acima, que não tem departamento/tipo de iniciativa fiável.
+      byDepartment: analysisOverview.byDepartment,
+      byUnit: analysisOverview.byUnit,
+      byInitiativeType: analysisOverview.byType,
+      roiEvolution: analysisOverview.evolution,
+      topInitiatives: analysisOverview.top10,
       topInsights: [
         ...(roi.narrative ? [roi.narrative] : []),
         ...(retention.insights ?? []),
@@ -883,6 +931,80 @@ export class RoiImpactService {
       ].slice(0, 5),
       alerts,
       confidence: roi.confidence,
+    };
+  }
+
+  // ══════════════════════════════════════════════════════
+  // ANÁLISES DE ROI — agregados para a Visão Geral (docs/roi-impact.md §1)
+  // ══════════════════════════════════════════════════════
+
+  async getRoiAnalysisOverview(filter: RoiFilterDto = {}) {
+    const range = dateRange(filter);
+    const analyses = await this.prisma.read.roiAnalysis.findMany({
+      where: {
+        createdAt: { gte: range.gte, lte: range.lte },
+        ...(filter.departmentId ? { departmentId: filter.departmentId } : {}),
+      },
+    });
+
+    const activeMeasuring = analyses.filter(a => a.status === 'EM_MEDICAO').length;
+    const positive = analyses.filter(a => a.roiPercent != null && a.roiPercent > 0).length;
+    const insufficientCount = analyses.filter(a => a.status === 'DADOS_INSUFICIENTES').length;
+    const negativeOrInsufficient = analyses.filter(
+      a => a.status === 'DADOS_INSUFICIENTES' || (a.roiPercent != null && a.roiPercent <= 0),
+    ).length;
+
+    const byType = groupAvgRoi(analyses, a => a.initiativeType);
+    const byDepartment = groupAvgRoi(analyses, a => a.departmentId);
+    const byUnit = groupAvgRoi(analyses, a => a.unit);
+    const evolution = groupAvgRoi(analyses, a => a.createdAt.toISOString().slice(0, 7));
+
+    const top10Source = [...analyses]
+      .filter(a => a.computedBenefit != null)
+      .sort((a, b) => (b.computedBenefit ?? 0) - (a.computedBenefit ?? 0))
+      .slice(0, 10);
+    const top10 = await Promise.all(
+      top10Source.map(async a => ({
+        id: a.id,
+        name: a.name,
+        initiativeType: a.initiativeType,
+        initiative:
+          (await this.analysisSvc.resolveInitiative(a.initiativeType, a.initiativeId))?.label ??
+          null,
+        roiPercent: a.roiPercent,
+        computedBenefit: a.computedBenefit,
+      })),
+    );
+
+    const expensiveNoReturn = analyses.filter(
+      a =>
+        a.status === 'DADOS_INSUFICIENTES' &&
+        [a.costDirect, a.costIndirect, a.costOpportunity].some(v => (v ?? 0) > 0),
+    ).length;
+
+    const alerts: { severity: string; message: string }[] = [];
+    if (insufficientCount > 0)
+      alerts.push({
+        severity: 'MEDIUM',
+        message: `${insufficientCount} análise(s) de ROI com dados insuficientes para calcular`,
+      });
+    if (expensiveNoReturn > 0)
+      alerts.push({
+        severity: 'HIGH',
+        message: `${expensiveNoReturn} iniciativa(s) com custo registado e sem retorno demonstrado`,
+      });
+
+    return {
+      total: analyses.length,
+      activeMeasuring,
+      positive,
+      negativeOrInsufficient,
+      byType,
+      byDepartment,
+      byUnit,
+      evolution,
+      top10,
+      alerts,
     };
   }
 

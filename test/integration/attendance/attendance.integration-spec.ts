@@ -145,8 +145,14 @@ describe('Attendance Integration', () => {
 
   describe('POST /attendance/leaves → consolidação com leave-management (Fase B)', () => {
     it('licença aprovada automaticamente (sem gestor atribuído) deduz o saldo real de LeaveBalance', async () => {
-      const start = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      const end = new Date(Date.now() + 61 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      // Um único dia útil, pelo menos 60 dias no futuro — nunca +60/+61 fixos,
+      // que podem cair num fim-de-semana (workDays conta 0 dias úteis, o
+      // saldo não é deduzido e a asserção abaixo falha de forma intermitente
+      // consoante a data em que os testes correm).
+      const day = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+      while (day.getDay() === 0 || day.getDay() === 6) day.setDate(day.getDate() + 1);
+      const start = day.toISOString().split('T')[0];
+      const end = start;
 
       const before = await request(app.getHttpServer())
         .get('/attendance/my/leave-balance')

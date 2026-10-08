@@ -315,6 +315,171 @@ describe('Departments Integration', () => {
     });
   });
 
+  describe('Colaboradores — docs/modulo_departments.md Ponto 5 (GET /departments/employees)', () => {
+    it('colaborador → 403 (módulo oculto para COLABORADOR)', async () => {
+      await request(app.getHttpServer())
+        .get('/departments/employees')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
+    });
+
+    it('RH → 200, inclui o colaborador transferido para o departamento e indicadores agregados', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/departments/employees')
+        .query({ departmentId, limit: 50 })
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.body.data.some((e: any) => e.id === employeeId)).toBe(true);
+      expect(res.body.indicators.total).toBeGreaterThanOrEqual(1);
+      expect(Array.isArray(res.body.indicators.byContractType)).toBe(true);
+
+      const row = res.body.data.find((e: any) => e.id === employeeId);
+      expect(row.department.id).toBe(departmentId);
+    });
+
+    it('filtro por contractType inexistente → 200 com lista vazia', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/departments/employees')
+        .query({ departmentId, contractType: 'APPRENTICESHIP' })
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.body.data.some((e: any) => e.id === employeeId)).toBe(false);
+    });
+  });
+
+  describe('Cargos & Funções — docs/modulo_departments.md Ponto 6 (GET /departments/positions)', () => {
+    it('colaborador → 403 (módulo oculto para COLABORADOR)', async () => {
+      await request(app.getHttpServer())
+        .get('/departments/positions')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
+    });
+
+    it('RH actualiza o cargo com os campos do Ponto 6 (função, família, responsabilidades, reporte)', async () => {
+      const res = await request(app.getHttpServer())
+        .put(`/positions/${positionId}`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({
+          jobFunction: 'Gestão administrativa',
+          jobFamily: 'Recursos Humanos',
+          responsibilities: 'Acompanhar processos de RH',
+          requiredExperience: '2 anos',
+        })
+        .expect(200);
+      expect(res.body.jobFunction).toBe('Gestão administrativa');
+      expect(res.body.jobFamily).toBe('Recursos Humanos');
+      expect(res.body.active).toBe(true);
+    });
+
+    it('RH → 200, catálogo inclui o cargo actualizado com headcount e indicadores', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/departments/positions')
+        .query({ departmentId })
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      const row = res.body.data.find((p: any) => p.id === positionId);
+      expect(row).toBeDefined();
+      expect(row.jobFamily).toBe('Recursos Humanos');
+      expect(row.headcountPlanned).toBe(1);
+      expect(row.headcountOccupied).toBe(0);
+      expect(row.vacancies).toBe(1);
+      expect(res.body.indicators.byJobFamily.some((b: any) => b.label === 'Recursos Humanos')).toBe(
+        true,
+      );
+    });
+
+    it('filtro jobFamily inexistente → 200 com lista vazia', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/departments/positions')
+        .query({ jobFamily: 'Família Inexistente XYZ' })
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.body.data).toHaveLength(0);
+    });
+
+    it('GET /positions/:id — detalhe inclui responsabilidades e estrutura salarial', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/positions/${positionId}`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      expect(res.body.responsibilities).toBe('Acompanhar processos de RH');
+      expect(res.body.salaryMin).toBe(1000);
+      expect(res.body.salaryMax).toBe(2000);
+      expect(res.body.headcountOccupied).toBe(0);
+      expect(res.body.vacancies).toBe(1);
+    });
+  });
+
+  describe('Hierarquia/Histórico/Relatórios — docs/modulo_departments.md Pontos 7/8/9', () => {
+    it('GET /departments/hierarchy — RH → 200, inclui o colaborador transferido com a sua cadeia de reporte', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/departments/hierarchy')
+        .query({ departmentId })
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      const row = res.body.data.find((u: any) => u.id === employeeId);
+      expect(row).toBeDefined();
+      expect(row.department.id).toBe(departmentId);
+      expect(Array.isArray(row.reportingChain)).toBe(true);
+      expect(row.reportingChain).toContain(row.fullName);
+    });
+
+    it('GET /departments/hierarchy — colaborador → 403 (módulo oculto para COLABORADOR)', async () => {
+      await request(app.getHttpServer())
+        .get('/departments/hierarchy')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
+    });
+
+    it('GET /departments/history — RH → 200, inclui a criação do departamento e do sub-departamento', async () => {
+      // CREATE/CHILD_CREATED passam pela fila 'audit' (Bull) — escrita
+      // assíncrona, ao contrário de DepartmentTransferLog (síncrono). Poll
+      // curto em vez de assumir que já foram processados.
+      let types: string[] = [];
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const res = await request(app.getHttpServer())
+          .get('/departments/history')
+          .query({ departmentId })
+          .set('Authorization', `Bearer ${rhToken}`)
+          .expect(200);
+        types = res.body.data.map((e: any) => e.type);
+        if (types.includes('Departamento criado') && types.includes('Subdepartamento criado')) break;
+        await new Promise((r) => setTimeout(r, 300));
+      }
+      expect(types).toContain('Departamento criado');
+      expect(types).toContain('Subdepartamento criado');
+      expect(types).toContain('Colaborador transferido');
+    });
+
+    it('GET /departments/history — colaborador → 403', async () => {
+      await request(app.getHttpServer())
+        .get('/departments/history')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
+    });
+
+    it('GET /departments/reports — RH → 200, headcount do departamento inclui o colaborador transferido', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/departments/reports')
+        .query({ departmentId })
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      const row = res.body.headcountByDepartment.find((d: any) => d.id === departmentId);
+      expect(row).toBeDefined();
+      expect(row.actual).toBeGreaterThanOrEqual(1);
+      expect(res.body).toHaveProperty('positionsOccupiedVsVacant');
+      expect(res.body).toHaveProperty('employeeDistribution');
+      expect(res.body).toHaveProperty('turnoverRate');
+    });
+
+    it('GET /departments/reports — colaborador → 403', async () => {
+      await request(app.getHttpServer())
+        .get('/departments/reports')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
+    });
+  });
+
   describe('Roles & Permissions — verifica correcção (assignPermissionToRole sem @@unique)', () => {
     it('RH não pode criar role → 403', async () => {
       await request(app.getHttpServer())
