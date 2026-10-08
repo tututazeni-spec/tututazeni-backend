@@ -229,7 +229,6 @@ export class EventsService {
         tags: dto.tags ?? [],
         restrictedDeptIds: dto.restrictedDeptIds ?? [],
         mandatory: dto.mandatory ?? false,
-        restrictedDeptIds: dto.restrictedDeptIds ?? [],
         courseId: dto.courseId,
         responsibleId: dto.responsibleId,
         departmentId: dto.departmentId,
