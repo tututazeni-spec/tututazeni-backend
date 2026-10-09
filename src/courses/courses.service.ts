@@ -1644,6 +1644,27 @@ export class CoursesService {
     }));
   }
 
+  /** Turmas com inscrições abertas, de todos os cursos. INSTRUCTOR vê só as suas. */
+  async listOpenCohorts(user: CurrentUserData) {
+    const cohorts = await this.prisma.read.courseCohort.findMany({
+      where: {
+        status: 'OPEN',
+        ...(this.privilegedForCohorts(user) ? {} : { instructorId: user.id }),
+      },
+      include: {
+        course: { select: { id: true, title: true } },
+        instructor: { select: { id: true, fullName: true, avatarUrl: true } },
+        _count: { select: { participants: true } },
+      },
+      orderBy: { startDate: 'asc' },
+    });
+    return cohorts.map(c => ({
+      ...c,
+      enrolled: c._count.participants,
+      availableSlots: Math.max(0, c.capacity - c._count.participants),
+    }));
+  }
+
   async getCohort(id: number, user: CurrentUserData) {
     const cohort = await this.prisma.read.courseCohort.findUnique({
       where: { id },
