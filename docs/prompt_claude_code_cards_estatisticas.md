@@ -179,4 +179,6 @@ Não redesenhes o dashboard inteiro. Modifica **exclusivamente** os cards de est
 
 - [x] Analytics — 10 vistas (`components/analytics/*`: Overview, RH, Pessoas, Engagement, Cursos, Learning, PDI, Riscos, ROI, Gestor); sparklines/barras/funil/gauges removidos (funil → `sub`), `MOCK_TURNOVER_TREND` apagado; tom por limiar no card do Gestor
 
-**Pendentes:** restantes módulos que usam `TopBarCard` (cursos, executive-reports, crm), apenas cards.
+- [x] Reports — `components/reports/ReportOutput.tsx` (KPIs de resumo) e `components/executive-reports/*` (ExecutiveKpiCard, KpiCard, 12 indicadores do OverviewPanel); sparkline e badge de estado removidos (estado/comparação/meta → `sub`), tom pelo semáforo do KPI (`gold`→`orange`)
+
+**Pendentes:** restantes módulos que usam `TopBarCard` (cursos, crm), apenas cards.
