@@ -190,4 +190,6 @@ Não redesenhes o dashboard inteiro. Modifica **exclusivamente** os cards de est
 
 - [x] Content Library — Analytics (4 cards) e O Meu Percurso (4) em `components/content-library/*`; `KpiCard` → `NavyStatCard`, tons por significado (concluídos/activos verde, visualizações azul ou laranja); sem valores alterados
 
+- [x] AI Tutor — Visão Geral (7 cards), Analytics (6) e Base de Conhecimento (4) em `components/ai-tutor/*`; `KpiCard`/`Card` locais → `NavyStatCard`, tons por significado (taxas/aceites verde, tempo/horas laranja); sem valores alterados
+
 **Pendentes:** restantes módulos que usam `TopBarCard` (crm), apenas cards.
