@@ -705,32 +705,51 @@ export class AnalyticsService {
     const planWhere: Prisma.DevelopmentPlanWhereInput = {};
     if (filters.departmentId) planWhere.user = { departmentId: filters.departmentId };
 
-    const [byStatus, avgProgress, overdueCount, completedThisMonth] = await Promise.all([
-      this.prisma.read.developmentPlan.groupBy({
-        by: ['status'],
-        where: planWhere,
-        _count: true,
-      }),
-      this.prisma.read.developmentPlan.aggregate({
-        where: { ...planWhere, status: 'ACTIVE' },
-        _avg: { overallProgress: true },
-      }),
-      // FIX: pdiAction → developmentPlanAction
-      this.prisma.read.developmentPlanAction.count({
-        where: {
-          plan: planWhere,
-          status: { not: 'COMPLETED' },
-          dueDate: { lt: new Date() },
-        },
-      }),
-      this.prisma.read.developmentPlan.count({
-        where: {
-          ...planWhere,
-          status: 'COMPLETED',
-          completedAt: { gte: new Date(new Date().setDate(1)) },
-        },
-      }),
-    ]);
+    const now = new Date();
+    const staleDraftCutoff = new Date(now.getTime() - 30 * 24 * 3600 * 1000);
+
+    const [byStatus, avgProgress, overdueCount, completedThisMonth, overduePlans, staleDrafts] =
+      await Promise.all([
+        this.prisma.read.developmentPlan.groupBy({
+          by: ['status'],
+          where: planWhere,
+          _count: true,
+        }),
+        this.prisma.read.developmentPlan.aggregate({
+          where: { ...planWhere, status: 'ACTIVE' },
+          _avg: { overallProgress: true },
+        }),
+        // FIX: pdiAction → developmentPlanAction
+        this.prisma.read.developmentPlanAction.count({
+          where: {
+            plan: planWhere,
+            status: { not: 'COMPLETED' },
+            dueDate: { lt: new Date() },
+          },
+        }),
+        this.prisma.read.developmentPlan.count({
+          where: {
+            ...planWhere,
+            status: 'COMPLETED',
+            completedAt: { gte: new Date(new Date().setDate(1)) },
+          },
+        }),
+        // PDIs activos com prazo final já ultrapassado (mesma regra de getRiskAlerts).
+        this.prisma.read.developmentPlan.count({
+          where: { ...planWhere, status: 'ACTIVE', endDate: { lt: now } },
+        }),
+        // Rascunhos criados há mais de 30 dias e nunca submetidos.
+        this.prisma.read.developmentPlan.count({
+          where: { ...planWhere, status: 'DRAFT', createdAt: { lt: staleDraftCutoff } },
+        }),
+      ]);
+
+    const statusCounts = Object.fromEntries(byStatus.map(s => [s.status, s._count]));
+    const completedCount = statusCounts['COMPLETED'] ?? 0;
+    // Universo da taxa: PDIs que saíram de rascunho e não foram cancelados.
+    const submittedCount = byStatus
+      .filter(s => s.status !== 'DRAFT' && s.status !== 'CANCELLED')
+      .reduce((sum, s) => sum + s._count, 0);
 
     // FIX: pdiAction → developmentPlanAction; add explicit types
     const actionStats = await this.prisma.read.developmentPlanAction.groupBy({
@@ -741,8 +760,11 @@ export class AnalyticsService {
     });
 
     return {
-      byStatus: Object.fromEntries(byStatus.map(s => [s.status, s._count])),
+      byStatus: statusCounts,
       avgProgress: Math.round((avgProgress._avg.overallProgress ?? 0) * 10) / 10,
+      completionRate: submittedCount > 0 ? Math.round((completedCount / submittedCount) * 100) : 0,
+      overduePlans,
+      staleDrafts,
       overdueActions: overdueCount,
       completedThisMonth,
       // FIX: explicit type annotation

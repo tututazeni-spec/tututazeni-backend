@@ -222,6 +222,20 @@ describe('AnalyticsService', () => {
       const result = await service.getPDIAnalytics({});
       expect(result).toBeDefined();
     });
+
+    it('calcula taxa de conclusão sem rascunhos/cancelados e devolve contagens de atraso e rascunhos parados', async () => {
+      mockPrismaProxy.developmentPlan.groupBy.mockResolvedValueOnce([
+        { status: 'DRAFT', _count: 5 },
+        { status: 'ACTIVE', _count: 3 },
+        { status: 'COMPLETED', _count: 1 },
+        { status: 'CANCELLED', _count: 2 },
+      ]);
+      mockPrismaProxy.developmentPlan.count.mockResolvedValue(2);
+      const result = await service.getPDIAnalytics({});
+      expect(result.completionRate).toBe(25);
+      expect(result.overduePlans).toBe(2);
+      expect(result.staleDrafts).toBe(2);
+    });
   });
 
   // ─── getRiskAlerts ────────────────────────────────────────────────────────
