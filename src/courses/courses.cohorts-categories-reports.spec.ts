@@ -178,9 +178,9 @@ describe('CoursesService — Turmas/Categorias/Relatórios', () => {
     it('rejeita capacidade inferior ao número de participantes', async () => {
       mockPrisma.courseCohort.findUnique.mockResolvedValue({ id: 1, instructorId: null });
       mockPrisma.courseCohortParticipant.count.mockResolvedValue(8);
-      await expect(
-        service.updateCohort(1, { capacity: 5 } as any, admin),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.updateCohort(1, { capacity: 5 } as any, admin)).rejects.toThrow(
+        ConflictException,
+      );
     });
 
     it('encerra a turma (status CLOSED)', async () => {
