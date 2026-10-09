@@ -540,9 +540,14 @@ export class CoursesController {
 
   @Get('cohorts/open')
   @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
-  @ApiOperation({ summary: 'Listar todas as turmas abertas (de todos os cursos)' })
-  listOpenCohorts(@CurrentUser() user: CurrentUserData) {
-    return this.svc.listOpenCohorts(user);
+  @ApiOperation({
+    summary: 'Listar turmas abertas (OPEN) ou activas (ACTIVE) de todos os cursos',
+  })
+  listOpenCohorts(
+    @CurrentUser() user: CurrentUserData,
+    @Query('status') status?: string,
+  ) {
+    return this.svc.listOpenCohorts(user, status);
   }
 
   @Get('cohorts/:cohortId')
