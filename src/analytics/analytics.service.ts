@@ -158,6 +158,8 @@ export class AnalyticsService {
       };
     });
 
+    const learningSequence = await this.getLearningSequence(userId, myEnrollments);
+
     return {
       learning: { completed, inProgress, totalHours, totalCourses: myEnrollments.length },
       xp: { total: myPoints?.points ?? 0, badges: myBadges },
@@ -165,6 +167,7 @@ export class AnalyticsService {
         current: myStreak?.currentStreak ?? 0,
         longest: myStreak?.longestStreak ?? 0,
       },
+      learningSequence,
       pdi: pdiProgress,
       competencies: myCompetencies.map(c => ({
         name: c.competency.name,
@@ -173,6 +176,77 @@ export class AnalyticsService {
         targetLevel: c.targetLevel,
       })),
       recentAssessments: myAssessments,
+    };
+  }
+
+  /**
+   * Sequência de aprendizagem do colaborador: cursos do percurso activo (em
+   * curso > por iniciar > mais recente concluído), por ordem `seq`. O primeiro
+   * curso não concluído é o "current"; os seguintes ficam "locked".
+   */
+  private async getLearningSequence(
+    userId: number,
+    myEnrollments: Array<{
+      courseId: number;
+      status: string;
+      progress: number;
+      completedAt: Date | null;
+    }>,
+  ) {
+    const pathEnrollments = await this.prisma.read.learningPathEnrollment.findMany({
+      where: { userId, status: { in: ['IN_PROGRESS', 'NOT_STARTED', 'COMPLETED'] } },
+      include: {
+        learningPath: {
+          select: {
+            id: true,
+            title: true,
+            courses: {
+              orderBy: { seq: 'asc' },
+              select: {
+                courseId: true,
+                deadlineDays: true,
+                course: { select: { title: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { enrolledAt: 'desc' },
+    });
+    const rank: Record<string, number> = { IN_PROGRESS: 0, NOT_STARTED: 1, COMPLETED: 2 };
+    const active = [...pathEnrollments].sort(
+      (a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9),
+    )[0];
+    if (!active) return null;
+
+    const byCourse = new Map(myEnrollments.map(e => [e.courseId, e]));
+    let currentAssigned = false;
+    const milestones = active.learningPath.courses.map(pc => {
+      const e = byCourse.get(pc.courseId);
+      const done = e?.status === 'COMPLETED';
+      let status: 'completed' | 'current' | 'locked' = 'locked';
+      if (done) status = 'completed';
+      else if (!currentAssigned) {
+        status = 'current';
+        currentAssigned = true;
+      }
+      return {
+        id: String(pc.courseId),
+        label: pc.course.title,
+        status,
+        progress: done ? 100 : (e?.progress ?? 0),
+        date: done
+          ? (e?.completedAt ?? null)
+          : pc.deadlineDays
+            ? new Date(active.enrolledAt.getTime() + pc.deadlineDays * 86_400_000)
+            : (active.deadline ?? null),
+      };
+    });
+
+    return {
+      pathId: active.learningPath.id,
+      title: active.learningPath.title,
+      milestones,
     };
   }
 
