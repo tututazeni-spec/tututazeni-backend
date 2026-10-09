@@ -609,7 +609,7 @@ export class DashboardRhService {
       assessmentRate: pct(assessed, totalUsers),
       totalCompetencies: skillData.length,
       criticalGaps: skillData.filter(s => s.avgGap >= 2).length,
-      topGaps: skillData.slice(0, 8),
+      topGaps: skillData.filter(s => s.avgGap > 0).slice(0, 8),
       topStrengths: [...skillData].sort((a, b) => b.avgLevel - a.avgLevel).slice(0, 5),
     };
   }
