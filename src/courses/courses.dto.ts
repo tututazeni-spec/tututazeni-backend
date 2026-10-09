@@ -813,6 +813,21 @@ export class CreateCourseCohortDto {
   @IsOptional()
   @IsDateString()
   endDate?: string;
+
+  @ApiPropertyOptional({ type: [Number] })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  userIds?: number[];
+
+  @ApiPropertyOptional({
+    type: [Number],
+    description: 'Adiciona todos os colaboradores activos destes departamentos',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  departmentIds?: number[];
 }
 
 export class UpdateCourseCohortDto extends PartialType(CreateCourseCohortDto) {
@@ -823,11 +838,20 @@ export class UpdateCourseCohortDto extends PartialType(CreateCourseCohortDto) {
 }
 
 export class AddCohortParticipantsDto {
-  @ApiProperty({ type: [Number] })
+  @ApiPropertyOptional({ type: [Number] })
+  @IsOptional()
   @IsArray()
-  @ArrayMinSize(1)
   @IsInt({ each: true })
-  userIds!: number[];
+  userIds?: number[];
+
+  @ApiPropertyOptional({
+    type: [Number],
+    description: 'Adiciona todos os colaboradores activos destes departamentos',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  departmentIds?: number[];
 }
 
 export class MarkCohortAttendanceDto {

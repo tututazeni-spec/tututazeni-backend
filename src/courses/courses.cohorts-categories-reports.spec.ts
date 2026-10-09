@@ -6,7 +6,12 @@
 // courses.service.progress.spec.ts.
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { CoursesService } from './courses.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CourseCompletionService } from '../course-completion/course-completion.service';
@@ -14,6 +19,7 @@ import type { CurrentUserData } from '../common/types/current-user';
 
 const mockPrisma = {
   $transaction: jest.fn(),
+  user: { findMany: jest.fn() },
   course: {
     findUnique: jest.fn(),
     findMany: jest.fn(),
@@ -203,10 +209,85 @@ describe('CoursesService — Turmas/Categorias/Relatórios', () => {
       });
       mockPrisma.courseCohortParticipant.findMany.mockResolvedValue([{ userId: 1 }]);
       const result = await service.addCohortParticipants(1, { userIds: [1, 2] } as any, admin);
-      expect(result).toEqual({ added: 1 });
+      expect(result).toEqual({ added: 1, alreadyIn: 1 });
       expect(mockPrisma.courseCohortParticipant.createMany).toHaveBeenCalledWith({
         data: [{ cohortId: 1, userId: 2 }],
       });
+    });
+  });
+
+  describe('participantes por departamento', () => {
+    it('addCohortParticipants expande departamento e junta userIds sem duplicar', async () => {
+      mockPrisma.courseCohort.findUnique.mockResolvedValue({
+        id: 1,
+        instructorId: null,
+        capacity: 30,
+        _count: { participants: 0 },
+      });
+      mockPrisma.user.findMany.mockResolvedValue([{ id: 2 }, { id: 3 }]);
+      mockPrisma.courseCohortParticipant.findMany.mockResolvedValue([{ userId: 3 }]);
+      const result = await service.addCohortParticipants(
+        1,
+        { userIds: [1, 2], departmentIds: [9] } as any,
+        admin,
+      );
+      expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { departmentId: { in: [9] }, active: true },
+        }),
+      );
+      expect(result).toEqual({ added: 2, alreadyIn: 1 });
+      expect(mockPrisma.courseCohortParticipant.createMany).toHaveBeenCalledWith({
+        data: [
+          { cohortId: 1, userId: 1 },
+          { cohortId: 1, userId: 2 },
+        ],
+      });
+    });
+
+    it('addCohortParticipants rejeita departamento sem colaboradores activos', async () => {
+      mockPrisma.courseCohort.findUnique.mockResolvedValue({
+        id: 1,
+        instructorId: null,
+        capacity: 30,
+        _count: { participants: 0 },
+      });
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      await expect(
+        service.addCohortParticipants(1, { departmentIds: [9] } as any, admin),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('createCohort cria participantes do departamento na mesma operação', async () => {
+      mockPrisma.course.findUnique.mockResolvedValue({ id: 5, category: null, competencies: [] });
+      mockPrisma.user.findMany.mockResolvedValue([{ id: 4 }, { id: 5 }]);
+      mockPrisma.courseCohort.create.mockResolvedValue({ id: 1 });
+      await service.createCohort(5, {
+        name: 'T',
+        startDate: '2026-10-01',
+        userIds: [4],
+        departmentIds: [2],
+      } as any);
+      expect(mockPrisma.courseCohort.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            participants: { create: [{ userId: 4 }, { userId: 5 }] },
+          }),
+        }),
+      );
+    });
+
+    it('createCohort rejeita departamento maior que a capacidade', async () => {
+      mockPrisma.course.findUnique.mockResolvedValue({ id: 5, category: null, competencies: [] });
+      mockPrisma.user.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }, { id: 3 }]);
+      await expect(
+        service.createCohort(5, {
+          name: 'T',
+          startDate: '2026-10-01',
+          capacity: 2,
+          departmentIds: [2],
+        } as any),
+      ).rejects.toThrow(ConflictException);
     });
   });
 
