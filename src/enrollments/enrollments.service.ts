@@ -142,7 +142,9 @@ export class EnrollmentsService {
     const where: Prisma.EnrollmentWhereInput = {};
     if (userId) where.userId = userId;
     if (courseId) where.courseId = courseId;
-    if (status) where.status = status;
+    // "Remover inscrição" é um cancelamento (soft) — por omissão as canceladas
+    // saem da lista; ficam acessíveis ao filtrar explicitamente por "Cancelado".
+    where.status = status ? status : { not: 'CANCELLED' };
     if (origin) where.origin = origin;
     if (mandatory !== undefined) where.mandatory = mandatory;
     if (departmentId || unitId) {
