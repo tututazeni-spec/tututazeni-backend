@@ -184,4 +184,6 @@ Não redesenhes o dashboard inteiro. Modifica **exclusivamente** os cards de est
 
 - [x] Courses — Dashboard Admin (`components/courses/AdminDashboardView.tsx`, 18 cards; gauges de conclusão/aprovação → `NavyStatCard` com tom por limiar via `rateTone`) e Relatórios (`RelatoriosView.tsx`, 7 cards; sparkline mock, histograma estimado e barra de meta removidos; "Meta" → fora)
 
+- [x] Evaluation — Visão Geral (10 cards, org + pessoais), Analytics (4), Relatórios (4), Competências (3) e Configurações (3) em `components/evaluation/*`; tom do Score Médio por limiar via `SCORE_TONE` (constants.ts); distribuição de performance e matriz de concordância não migradas (gráficos)
+
 **Pendentes:** restantes módulos que usam `TopBarCard` (crm), apenas cards.
