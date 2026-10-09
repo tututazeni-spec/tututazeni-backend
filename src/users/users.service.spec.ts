@@ -322,6 +322,22 @@ describe('UsersService', () => {
       const result = await service.getDirectory();
       expect(result).toBeDefined();
     });
+
+    it('departamento sem pesquisa não tem limite', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      await service.getDirectory(undefined, 5);
+      expect(mockPrisma.user.findMany).toHaveBeenLastCalledWith(
+        expect.objectContaining({ take: undefined }),
+      );
+    });
+
+    it('pesquisa livre continua limitada a 100', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      await service.getDirectory('Ana', 5);
+      expect(mockPrisma.user.findMany).toHaveBeenLastCalledWith(
+        expect.objectContaining({ take: 100 }),
+      );
+    });
   });
 
   // ─── getAdminDashboard ────────────────────────────────────────────────────

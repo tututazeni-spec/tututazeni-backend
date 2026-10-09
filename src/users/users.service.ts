@@ -729,7 +729,9 @@ export class UsersService {
         department: { select: { name: true } },
       },
       orderBy: { fullName: 'asc' },
-      take: 100,
+      // Listar um departamento inteiro (sem pesquisa) não tem limite — é usado
+      // para adicionar todos os membros a uma turma. Pesquisa livre fica a 100.
+      take: departmentId && !search ? undefined : 100,
     });
   }
 
