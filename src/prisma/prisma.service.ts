@@ -99,12 +99,13 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   private readonly warmPools: Pool[];
 
   /**
-   * Abre várias ligações em paralelo antes do primeiro tick de cron. Sem isto o
+   * Abre várias ligações em paralelo antes do primeiro tick de cron (o fan-out do
+   * tick de alertas de scalability é ~40 queries, por isso 40 e não 10). Sem isto o
    * primeiro fan-out (~40 queries em simultâneo) paga o handshake TCP/SCRAM de
    * cada ligação nova e todas aparecem como "slow query" (700–1500 ms) mesmo
    * sendo triviais.
    */
-  private async warmUpPools(size = 10) {
+  private async warmUpPools(size = 40) {
     await Promise.all(
       this.warmPools.map(async pool => {
         const n = Math.min(size, pool.options.max ?? size);

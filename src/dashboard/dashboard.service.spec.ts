@@ -82,6 +82,10 @@ const mockPrisma = {
   stepProgress: { count: makeCount() },
   workDeclSubmission: { count: makeCount() },
   evaluatorAssignment: { count: makeCount() },
+  liveClass: { count: makeCount() },
+  aiTutorSession: { count: makeCount() },
+  leaveRequest: { count: makeCount() },
+  trainingParticipant: { count: makeCount() },
 };
 
 const baseUser = {

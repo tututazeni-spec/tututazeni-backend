@@ -61,6 +61,16 @@ export class DashboardService {
   // COLABORADOR — personal dashboard
   // ══════════════════════════════════════════════════════
 
+  private dashboardCountFallback(userId: number, key: string, e: unknown): number {
+    this.logger.warn({
+      userId,
+      action: `DASHBOARD_MY_${key}`,
+      err: { message: e instanceof Error ? e.message : String(e) },
+      msg: 'Falha ao obter contagem para o dashboard pessoal',
+    });
+    return 0;
+  }
+
   async getMyDashboard(userId: number) {
     // FIX: `.catch()` a seguir a uma promise Prisma colapsa o tipo inteiro
     // para `any` sem isto — a query extraída para variável preserva o tipo
@@ -90,6 +100,10 @@ export class DashboardService {
       pendingProcessTasks,
       pendingWorkDeclarations,
       pending360Assignments,
+      scheduledLiveClasses,
+      aiTutorSessions,
+      pendingLeaveRequests,
+      myTrainings,
     ] = await Promise.all([
       this.prisma.read.user.findUnique({
         where: { id: userId },
@@ -215,6 +229,28 @@ export class DashboardService {
           });
           return 0;
         }),
+      // Aulas ao vivo agendadas em que o utilizador está inscrito
+      this.prisma.read.liveClass
+        .count({
+          where: {
+            status: { in: ['AGENDADA', 'EM_PREPARACAO'] },
+            scheduledAt: { gte: new Date() },
+            attendances: { some: { userId } },
+          },
+        })
+        .catch((e: unknown) => this.dashboardCountFallback(userId, 'LIVE_CLASSES', e)),
+      this.prisma.read.aiTutorSession
+        .count({ where: { userId } })
+        .catch((e: unknown) => this.dashboardCountFallback(userId, 'AI_TUTOR_SESSIONS', e)),
+      this.prisma.read.leaveRequest
+        .count({ where: { userId, status: 'PENDING' } })
+        .catch((e: unknown) => this.dashboardCountFallback(userId, 'LEAVE_REQUESTS', e)),
+      // Formações (Training) em que o utilizador participa e ainda não terminaram
+      this.prisma.read.trainingParticipant
+        .count({
+          where: { userId, status: { in: ['PENDING_APPROVAL', 'REGISTERED', 'ATTENDED'] } },
+        })
+        .catch((e: unknown) => this.dashboardCountFallback(userId, 'MY_TRAININGS', e)),
     ]);
 
     // PDI stats
@@ -313,6 +349,13 @@ export class DashboardService {
       engagement: {
         pendingSurveys: recentSurveys.length,
         surveys: recentSurveys,
+      },
+      overview: {
+        pendingEvaluations: pendingAssessments + pendingEvals + pending360Assignments,
+        scheduledLiveClasses,
+        aiTutorSessions,
+        pendingLeaveRequests,
+        myTrainings,
       },
       gamification: {
         totalPoints: points?.points ?? 0,
@@ -446,9 +489,11 @@ export class DashboardService {
     ] = await Promise.all([
       this.prisma.read.user.count({ where: { ...deptFilter } }),
       this.prisma.read.user.count({ where: { active: true, ...deptFilter } }),
-      this.prisma.read.user.count({ where: { createdAt: { gte: since }, ...deptFilter } }),
       this.prisma.read.user.count({
-        where: { createdAt: { gte: prev, lt: since }, ...deptFilter },
+        where: { active: true, createdAt: { gte: since }, ...deptFilter },
+      }),
+      this.prisma.read.user.count({
+        where: { active: true, createdAt: { gte: prev, lt: since }, ...deptFilter },
       }),
       // Course não tem campo `active` — usa `status` (causava 500 em /dashboard/organization)
       this.prisma.course.count({ where: { status: 'PUBLISHED' } }),
@@ -460,12 +505,16 @@ export class DashboardService {
         where: { enrolledAt: { gte: prev, lt: since }, user: deptFilter },
       }),
       this.prisma.read.enrollment.count({
-        where: { status: EnrollmentStatus.COMPLETED, enrolledAt: { gte: since }, user: deptFilter },
+        where: {
+          status: EnrollmentStatus.COMPLETED,
+          completedAt: { gte: since },
+          user: deptFilter,
+        },
       }),
       this.prisma.read.enrollment.count({
         where: {
           status: EnrollmentStatus.COMPLETED,
-          enrolledAt: { gte: prev, lt: since },
+          completedAt: { gte: prev, lt: since },
           user: deptFilter,
         },
       }),
@@ -560,16 +609,26 @@ export class DashboardService {
         });
         return [];
       }),
-      // Training hours estimate (completions × avg course workload)
+      // Horas de formação: soma da carga horária (workloadHours) dos cursos concluídos no período
       this.prisma.enrollment
-        .count({
+        .groupBy({
+          by: ['courseId'],
           where: {
             status: EnrollmentStatus.COMPLETED,
             user: deptFilter,
-            enrolledAt: { gte: since },
+            completedAt: { gte: since },
           },
+          _count: { _all: true },
         })
-        .then(c => c * 2)
+        .then(async groups => {
+          if (!groups.length) return 0;
+          const courses = await this.prisma.read.course.findMany({
+            where: { id: { in: groups.map(g => g.courseId) } },
+            select: { id: true, workloadHours: true },
+          });
+          const hours = new Map(courses.map(c => [c.id, c.workloadHours ?? 0]));
+          return groups.reduce((sum, g) => sum + (hours.get(g.courseId) ?? 0) * g._count._all, 0);
+        })
         .catch((e: unknown) => {
           this.logger.warn({
             departmentId: filters.departmentId,
@@ -579,7 +638,7 @@ export class DashboardService {
             msg: 'Falha ao calcular estimativa de horas de formação organizacional',
           });
           return 0;
-        }), // ~2h avg
+        }),
     ]);
 
     // Enrich top content
@@ -617,7 +676,7 @@ export class DashboardService {
         development: {
           activePlans,
           completedPlans,
-          coverage: totalUsers > 0 ? +((activePlans / totalUsers) * 100).toFixed(1) : 0,
+          coverage: activeUsers > 0 ? +((activePlans / activeUsers) * 100).toFixed(1) : 0,
         },
         talent: { hiPos: hiPoCount, successionCoverage },
         pending: { evaluations: pendingEvals },

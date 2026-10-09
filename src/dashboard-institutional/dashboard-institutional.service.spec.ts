@@ -21,7 +21,7 @@ const mockPrisma = {
   partner: { count: jest.fn() },
   partnerMilestone: { count: jest.fn() },
   funder: { count: jest.fn() },
-  fundingGrant: { aggregate: jest.fn() },
+  fundingGrant: { aggregate: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
   funderReport: { count: jest.fn() },
   libraryItem: { count: jest.fn() },
   certificate: { count: jest.fn() },
@@ -85,7 +85,7 @@ const mockAutomation = {
 const mockScalability = {
   resolveTenantId: jest.fn().mockResolvedValue('tenant-1'),
   getDashboard: jest.fn().mockResolvedValue({
-    performanceSummary: { uptimePercent: 99.9 },
+    performanceSummary: { uptimePercent: 99.9, hasMetrics: true },
     alerts: { open: 2, critical: 0, warning: 2, info: 0 },
     integrations: { total: 4, active: 3, withErrors: 1 },
   }),

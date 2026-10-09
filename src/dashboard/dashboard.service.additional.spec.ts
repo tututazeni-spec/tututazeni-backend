@@ -24,7 +24,11 @@ const mockPrisma: any = {
     findMany: jest.fn().mockResolvedValue([]),
     count: jest.fn().mockResolvedValue(0),
   },
-  enrollment: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
+  enrollment: {
+    count: jest.fn().mockResolvedValue(0),
+    findMany: jest.fn().mockResolvedValue([]),
+    groupBy: jest.fn().mockResolvedValue([]),
+  },
   userPoints: { findUnique: jest.fn().mockResolvedValue(null) },
   badgeAward: { findMany: jest.fn().mockResolvedValue([]) },
   assessmentAttempt: { count: jest.fn().mockResolvedValue(0) },
@@ -98,6 +102,10 @@ const mockPrisma: any = {
   stepProgress: { count: jest.fn().mockResolvedValue(0) },
   workDeclSubmission: { count: jest.fn().mockResolvedValue(0) },
   evaluatorAssignment: { count: jest.fn().mockResolvedValue(0) },
+  liveClass: { count: jest.fn().mockResolvedValue(0) },
+  aiTutorSession: { count: jest.fn().mockResolvedValue(0) },
+  leaveRequest: { count: jest.fn().mockResolvedValue(0) },
+  trainingParticipant: { count: jest.fn().mockResolvedValue(0) },
 };
 
 // Proxy para safeM — garante que modelos opcionais existem

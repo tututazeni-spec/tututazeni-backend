@@ -454,6 +454,8 @@ export class ScalabilityDashboardDto {
   };
   performanceSummary: {
     uptimePercent: number;
+    /** false quando não existe nenhuma métrica recolhida (uptimePercent é então só o valor por omissão). */
+    hasMetrics: boolean;
     avgLatencyMs: number;
     errorRate: number;
     activeSessionsNow: number;

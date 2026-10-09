@@ -102,6 +102,22 @@ export class DashboardInstitutionalService {
         ]);
 
         const totalFunding = totalFundingAgg?._sum?.amount || 0;
+
+        // Financiamento activo do ano corrente por trimestre de início (T1..T4).
+        const grantsThisYear = await this.prisma.read.fundingGrant.findMany({
+          where: {
+            status: 'ACTIVE',
+            deletedAt: null,
+            startDate: { gte: startOfYear },
+          },
+          select: { amount: true, startDate: true },
+        });
+        const fundingByQuarter = [0, 1, 2, 3].map(q => ({
+          label: `T${q + 1}`,
+          value: grantsThisYear
+            .filter(g => Math.floor(g.startDate.getMonth() / 3) === q)
+            .reduce((s, g) => s + g.amount, 0),
+        }));
         const completionRate = users > 0 ? (completedThisYear / users) * 100 : 0;
 
         return {
@@ -117,6 +133,7 @@ export class DashboardInstitutionalService {
             partners,
             funders,
             totalFunding,
+            fundingByQuarter,
           },
           knowledge: { libraryItems, certificates, badgesIssued },
         };
@@ -253,21 +270,27 @@ export class DashboardInstitutionalService {
 
     const summary = await this.getExecutiveSummary();
 
-    const snapshot = await this.prisma.institutionalSnapshot.create({
-      data: {
-        period: dto.period,
-        type: dto.type || 'MONTHLY',
-        notes: dto.notes,
-        metrics: JSON.stringify(summary),
-        totalUsers: summary.people.total,
-        totalEnrollments: summary.learning.activeEnrollments,
-        totalBeneficiaries: summary.crm.beneficiaries,
-        totalFunding: summary.crm.totalFunding,
-        totalCertificates: summary.knowledge.certificates,
-        completionRate: summary.learning.completionRate,
-        createdById: userId,
-      },
-    });
+    const data = {
+      notes: dto.notes,
+      metrics: JSON.stringify(summary),
+      totalUsers: summary.people.total,
+      totalEnrollments: summary.learning.activeEnrollments,
+      totalBeneficiaries: summary.crm.beneficiaries,
+      totalFunding: summary.crm.totalFunding,
+      totalCertificates: summary.knowledge.certificates,
+      completionRate: summary.learning.completionRate,
+      createdById: userId,
+    };
+    // @@unique([period, type]): um snapshot apagado (soft-delete) ocupa a
+    // chave — reaproveita a linha em vez de rebentar com P2002.
+    const snapshot = existing
+      ? await this.prisma.institutionalSnapshot.update({
+          where: { id: existing.id },
+          data: { ...data, deletedAt: null, createdAt: new Date() },
+        })
+      : await this.prisma.institutionalSnapshot.create({
+          data: { period: dto.period, type: dto.type || 'MONTHLY', ...data },
+        });
     await this.audit.logEntity(userId, 'CREATE', 'InstitutionalSnapshot', snapshot.id, {
       period: dto.period,
     });
@@ -292,6 +315,21 @@ export class DashboardInstitutionalService {
     return { data: pageData, ...meta };
   }
 
+  async deleteSnapshot(id: string, userId: number) {
+    const snapshot = await this.prisma.institutionalSnapshot.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!snapshot) throw new NotFoundException('Snapshot não encontrado');
+    await this.prisma.institutionalSnapshot.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+    await this.audit.logEntity(userId, 'DELETE', 'InstitutionalSnapshot', id, {
+      period: snapshot.period,
+    });
+    return { message: 'Snapshot removido com sucesso' };
+  }
+
   async compareSnapshots(period1: string, period2: string, type: string = SnapshotType.MONTHLY) {
     // `type` chega da query string sem validação de DTO (ver controller) — antes
     // disto era passado directo com `as any`, o que deixava um valor inválido
@@ -309,7 +347,12 @@ export class DashboardInstitutionalService {
         where: { period_type: { period: period2, type: snapshotType } },
       }),
     ]);
-    if (!s1 || !s2) throw new NotFoundException('Um dos snapshots não existe');
+    if (!s1 || s1.deletedAt) {
+      throw new NotFoundException(`Não existe snapshot para ${period1}`);
+    }
+    if (!s2 || s2.deletedAt) {
+      throw new NotFoundException(`Não existe snapshot para ${period2}`);
+    }
 
     const delta = (a: number, b: number) => ({
       from: a,
@@ -486,7 +529,9 @@ export class DashboardInstitutionalService {
             successRate: auto.executions.successRate,
           },
           platform: plat && {
-            uptimePercent: plat.performanceSummary.uptimePercent,
+            uptimePercent: plat.performanceSummary.hasMetrics
+              ? plat.performanceSummary.uptimePercent
+              : null,
             openAlerts: plat.alerts.open,
             criticalAlerts: plat.alerts.critical,
             integrationsWithErrors: plat.integrations.withErrors,

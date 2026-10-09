@@ -1264,6 +1264,7 @@ export class ScalabilityService {
       },
       performanceSummary: {
         uptimePercent: uptimeNow,
+        hasMetrics: !!latestMetric,
         avgLatencyMs: latencyNow,
         errorRate: latestMetric?.errorRate ?? 0,
         activeSessionsNow: latestMetric?.concurrentSessions ?? 0,
