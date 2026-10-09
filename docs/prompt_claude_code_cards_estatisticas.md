@@ -194,4 +194,6 @@ Não redesenhes o dashboard inteiro. Modifica **exclusivamente** os cards de est
 
 - [x] Avatar Training — Visão Geral (indicadores, até 16 cards) em `components/avatar-training/OverviewTab.tsx`; `Card` local → `NavyStatCard`, ícone/tom por código do indicador (positivos verde, consumo/tempo laranja, problemas vermelho); tooltip fórmula/fonte mantido, «Sem dados»/«Restrito» preservados; sem valores alterados
 
+- [x] Departments — Dashboard (3 cards), Detalhe/Métricas (4), Colaboradores (3), Cargos (3) e Relatórios (6) em `components/departments/*`; `KpiCard` → `NavyStatCard`, tons por significado (activos/admissões verde, inactivos/rotatividade laranja, saídas vermelho se > 0, vagas laranja se > 0); `BreakdownCard`s (barras) não migrados; sem valores alterados
+
 **Pendentes:** restantes módulos que usam `TopBarCard` (crm), apenas cards.
