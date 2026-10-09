@@ -538,6 +538,13 @@ export class CoursesController {
     return this.svc.createCohort(id, dto);
   }
 
+  @Get('cohorts/open')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Listar todas as turmas abertas (de todos os cursos)' })
+  listOpenCohorts(@CurrentUser() user: CurrentUserData) {
+    return this.svc.listOpenCohorts(user);
+  }
+
   @Get('cohorts/:cohortId')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR, Role.INSTRUCTOR)
   @ApiOperation({ summary: 'Detalhe da turma (com participantes)' })
