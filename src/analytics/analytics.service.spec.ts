@@ -157,8 +157,11 @@ describe('AnalyticsService', () => {
         .mockResolvedValueOnce(90)
         .mockResolvedValueOnce(5)
         .mockResolvedValueOnce(3);
+      mockPrisma.user.findMany.mockResolvedValue([]);
       const result = await service.getHRDashboard({});
       expect(result).toBeDefined();
+      expect(result.people.turnoverTrend).toHaveLength(6);
+      expect(result.pdi.funnel).toEqual(expect.objectContaining({ eligible: expect.any(Number) }));
     });
   });
 
@@ -218,6 +221,20 @@ describe('AnalyticsService', () => {
     it('deve retornar analytics de PDI', async () => {
       const result = await service.getPDIAnalytics({});
       expect(result).toBeDefined();
+    });
+
+    it('calcula taxa de conclusão sem rascunhos/cancelados e devolve contagens de atraso e rascunhos parados', async () => {
+      mockPrismaProxy.developmentPlan.groupBy.mockResolvedValueOnce([
+        { status: 'DRAFT', _count: 5 },
+        { status: 'ACTIVE', _count: 3 },
+        { status: 'COMPLETED', _count: 1 },
+        { status: 'CANCELLED', _count: 2 },
+      ]);
+      mockPrismaProxy.developmentPlan.count.mockResolvedValue(2);
+      const result = await service.getPDIAnalytics({});
+      expect(result.completionRate).toBe(25);
+      expect(result.overduePlans).toBe(2);
+      expect(result.staleDrafts).toBe(2);
     });
   });
 
@@ -331,6 +348,13 @@ describe('AnalyticsService', () => {
     it('deve retornar performance dos cursos', async () => {
       const result = await service.getCoursePerformance();
       expect(result).toBeDefined();
+    });
+
+    it('deve listar apenas cursos activos (publicados)', async () => {
+      await service.getCoursePerformance();
+      expect(mockPrisma.courseAnalytics.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { course: { status: 'PUBLISHED' } } }),
+      );
     });
   });
 });

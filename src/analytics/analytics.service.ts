@@ -158,6 +158,8 @@ export class AnalyticsService {
       };
     });
 
+    const learningSequence = await this.getLearningSequence(userId, myEnrollments);
+
     return {
       learning: { completed, inProgress, totalHours, totalCourses: myEnrollments.length },
       xp: { total: myPoints?.points ?? 0, badges: myBadges },
@@ -165,6 +167,7 @@ export class AnalyticsService {
         current: myStreak?.currentStreak ?? 0,
         longest: myStreak?.longestStreak ?? 0,
       },
+      learningSequence,
       pdi: pdiProgress,
       competencies: myCompetencies.map(c => ({
         name: c.competency.name,
@@ -173,6 +176,77 @@ export class AnalyticsService {
         targetLevel: c.targetLevel,
       })),
       recentAssessments: myAssessments,
+    };
+  }
+
+  /**
+   * Sequência de aprendizagem do colaborador: cursos do percurso activo (em
+   * curso > por iniciar > mais recente concluído), por ordem `seq`. O primeiro
+   * curso não concluído é o "current"; os seguintes ficam "locked".
+   */
+  private async getLearningSequence(
+    userId: number,
+    myEnrollments: Array<{
+      courseId: number;
+      status: string;
+      progress: number;
+      completedAt: Date | null;
+    }>,
+  ) {
+    const pathEnrollments = await this.prisma.read.learningPathEnrollment.findMany({
+      where: { userId, status: { in: ['IN_PROGRESS', 'NOT_STARTED', 'COMPLETED'] } },
+      include: {
+        learningPath: {
+          select: {
+            id: true,
+            title: true,
+            courses: {
+              orderBy: { seq: 'asc' },
+              select: {
+                courseId: true,
+                deadlineDays: true,
+                course: { select: { title: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { enrolledAt: 'desc' },
+    });
+    const rank: Record<string, number> = { IN_PROGRESS: 0, NOT_STARTED: 1, COMPLETED: 2 };
+    const active = [...pathEnrollments].sort(
+      (a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9),
+    )[0];
+    if (!active) return null;
+
+    const byCourse = new Map(myEnrollments.map(e => [e.courseId, e]));
+    let currentAssigned = false;
+    const milestones = active.learningPath.courses.map(pc => {
+      const e = byCourse.get(pc.courseId);
+      const done = e?.status === 'COMPLETED';
+      let status: 'completed' | 'current' | 'locked' = 'locked';
+      if (done) status = 'completed';
+      else if (!currentAssigned) {
+        status = 'current';
+        currentAssigned = true;
+      }
+      return {
+        id: String(pc.courseId),
+        label: pc.course.title,
+        status,
+        progress: done ? 100 : (e?.progress ?? 0),
+        date: done
+          ? (e?.completedAt ?? null)
+          : pc.deadlineDays
+            ? new Date(active.enrolledAt.getTime() + pc.deadlineDays * 86_400_000)
+            : (active.deadline ?? null),
+      };
+    });
+
+    return {
+      pathId: active.learningPath.id,
+      title: active.learningPath.title,
+      milestones,
     };
   }
 
@@ -294,6 +368,25 @@ export class AnalyticsService {
     };
   }
 
+  private sixMonthsStart(): Date {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth() - 5, 1);
+  }
+
+  /** Taxa de rotatividade (%) dos últimos 6 meses, do mais antigo ao mais recente. */
+  private buildTurnoverTrend(exits: { exitDate: Date | null }[], totalActive: number): number[] {
+    const start = this.sixMonthsStart();
+    const buckets = new Array<number>(6).fill(0);
+    for (const e of exits) {
+      if (!e.exitDate) continue;
+      const idx =
+        (e.exitDate.getFullYear() - start.getFullYear()) * 12 +
+        (e.exitDate.getMonth() - start.getMonth());
+      if (idx >= 0 && idx < 6) buckets[idx]++;
+    }
+    return buckets.map(n => (totalActive > 0 ? Math.round((n / totalActive) * 1000) / 10 : 0));
+  }
+
   async getHRDashboard(filters: AnalyticsFilterDto) {
     const { from, to } = this.getDateRange(filters.period, filters.fromDate, filters.toDate);
     const userWhere: Prisma.UserWhereInput = { active: true };
@@ -312,6 +405,9 @@ export class AnalyticsService {
       avgPerformance,
       topDepts,
       learningPathStats,
+      pdiStartedUsers,
+      pdiAdoptedUsers,
+      exitsLast6Months,
     ] = await Promise.all([
       this.prisma.read.user.count({ where: userWhere }),
       this.prisma.read.user.count({ where: { ...userWhere, hireDate: { gte: from, lte: to } } }),
@@ -337,16 +433,39 @@ export class AnalyticsService {
         _avg: { score: true },
       }),
       this.prisma.read.department.findMany({
-        where: { status: 'ACTIVE' },
+        // Todos os departamentos activos, excepto o(s) de testes (seed de
+        // carga: 'Departamento de Testes').
+        where: { status: 'ACTIVE', NOT: { name: { contains: 'teste', mode: 'insensitive' } } },
         include: { _count: { select: { users: true } } },
         orderBy: { users: { _count: 'desc' } },
-        take: 8,
       }),
       this.prisma.read.learningPathEnrollment.groupBy({
         by: ['status'],
         _count: true,
       }),
+      // Funil de adopção de PDI (utilizadores distintos): iniciaram = têm
+      // algum PDI que saiu de rascunho e não foi cancelado; adoptaram = têm
+      // um PDI activo.
+      this.prisma.read.user.count({
+        where: {
+          ...userWhere,
+          developmentPlans: {
+            some: { isTemplate: false, status: { notIn: ['DRAFT', 'CANCELLED'] } },
+          },
+        },
+      }),
+      this.prisma.read.user.count({
+        where: { ...userWhere, developmentPlans: { some: { status: 'ACTIVE' } } },
+      }),
+      // Saídas dos últimos 6 meses (mesmo critério de `terminated`) para a
+      // tendência mensal da rotatividade.
+      this.prisma.read.user.findMany({
+        where: { active: false, exitDate: { gte: this.sixMonthsStart() } },
+        select: { exitDate: true },
+      }),
     ]);
+
+    const turnoverTrend = this.buildTurnoverTrend(exitsLast6Months, totalActive);
 
     const turnoverRate =
       totalActive > 0 ? Math.round((terminated / totalActive) * 100 * 10) / 10 : 0;
@@ -367,6 +486,7 @@ export class AnalyticsService {
         hired,
         terminated,
         turnoverRate,
+        turnoverTrend,
       },
       learning: {
         enrollments: totalEnrollments,
@@ -380,6 +500,11 @@ export class AnalyticsService {
         completed: completedPDIs,
         pendingApproval: pendingApprovalPDIs,
         adoptionRate: totalActive > 0 ? Math.round((activePDIs / totalActive) * 100) : 0,
+        funnel: {
+          eligible: totalActive,
+          started: pdiStartedUsers,
+          adopted: pdiAdoptedUsers,
+        },
       },
       performance: {
         avgScore: Math.round((avgPerformance._avg.score ?? 0) * 10) / 10,
@@ -398,7 +523,7 @@ export class AnalyticsService {
 
     const [
       byStatus,
-      topCourses,
+      enrollmentsByCourse,
       completionByCourse,
       avgAssessmentScore,
       certificationCount,
@@ -409,12 +534,11 @@ export class AnalyticsService {
         where: enrollWhere,
         _count: true,
       }),
-      this.prisma.read.courseAnalytics.findMany({
-        include: {
-          course: { select: { id: true, title: true, category: true, workloadHours: true } },
-        },
-        orderBy: { totalCompleted: 'desc' },
-        take: 10,
+      // Contagens ao vivo por curso (a tabela denormalizada `courseAnalytics`
+      // só incrementa e desvia-se); `avgRating` continua a vir dela.
+      this.prisma.read.enrollment.groupBy({
+        by: ['courseId', 'status'],
+        _count: true,
       }),
       // FIX: chamava-se `completionByCategory` mas agrupa por `courseId`, não
       // por categoria (Prisma `groupBy` não agrupa por campo de relação); era
@@ -448,6 +572,33 @@ export class AnalyticsService {
       include: { course: { select: { workloadHours: true } } },
     });
     const totalHours = completedEnrollments.reduce((s, e) => s + (e.course.workloadHours ?? 0), 0);
+
+    const liveCounts = new Map<number, { total: number; completed: number }>();
+    for (const r of enrollmentsByCourse) {
+      const cur = liveCounts.get(r.courseId) ?? { total: 0, completed: 0 };
+      cur.total += r._count;
+      if (r.status === 'COMPLETED') cur.completed += r._count;
+      liveCounts.set(r.courseId, cur);
+    }
+    const topIds = [...liveCounts.entries()]
+      .sort((a, b) => b[1].completed - a[1].completed || b[1].total - a[1].total)
+      .slice(0, 10)
+      .map(([id]) => id);
+    const topRows = await this.prisma.read.courseAnalytics.findMany({
+      where: { courseId: { in: topIds } },
+      include: {
+        course: { select: { id: true, title: true, category: true, workloadHours: true } },
+      },
+    });
+    const topCourses = topRows
+      .map(r => ({
+        ...r,
+        totalEnrollments: liveCounts.get(r.courseId)?.total ?? 0,
+        totalCompleted: liveCounts.get(r.courseId)?.completed ?? 0,
+      }))
+      .sort(
+        (a, b) => b.totalCompleted - a.totalCompleted || b.totalEnrollments - a.totalEnrollments,
+      );
 
     const completionCourses = await this.prisma.read.course.findMany({
       where: { id: { in: completionByCourse.map(c => c.courseId) } },
@@ -554,32 +705,51 @@ export class AnalyticsService {
     const planWhere: Prisma.DevelopmentPlanWhereInput = {};
     if (filters.departmentId) planWhere.user = { departmentId: filters.departmentId };
 
-    const [byStatus, avgProgress, overdueCount, completedThisMonth] = await Promise.all([
-      this.prisma.read.developmentPlan.groupBy({
-        by: ['status'],
-        where: planWhere,
-        _count: true,
-      }),
-      this.prisma.read.developmentPlan.aggregate({
-        where: { ...planWhere, status: 'ACTIVE' },
-        _avg: { overallProgress: true },
-      }),
-      // FIX: pdiAction → developmentPlanAction
-      this.prisma.read.developmentPlanAction.count({
-        where: {
-          plan: planWhere,
-          status: { not: 'COMPLETED' },
-          dueDate: { lt: new Date() },
-        },
-      }),
-      this.prisma.read.developmentPlan.count({
-        where: {
-          ...planWhere,
-          status: 'COMPLETED',
-          completedAt: { gte: new Date(new Date().setDate(1)) },
-        },
-      }),
-    ]);
+    const now = new Date();
+    const staleDraftCutoff = new Date(now.getTime() - 30 * 24 * 3600 * 1000);
+
+    const [byStatus, avgProgress, overdueCount, completedThisMonth, overduePlans, staleDrafts] =
+      await Promise.all([
+        this.prisma.read.developmentPlan.groupBy({
+          by: ['status'],
+          where: planWhere,
+          _count: true,
+        }),
+        this.prisma.read.developmentPlan.aggregate({
+          where: { ...planWhere, status: 'ACTIVE' },
+          _avg: { overallProgress: true },
+        }),
+        // FIX: pdiAction → developmentPlanAction
+        this.prisma.read.developmentPlanAction.count({
+          where: {
+            plan: planWhere,
+            status: { not: 'COMPLETED' },
+            dueDate: { lt: new Date() },
+          },
+        }),
+        this.prisma.read.developmentPlan.count({
+          where: {
+            ...planWhere,
+            status: 'COMPLETED',
+            completedAt: { gte: new Date(new Date().setDate(1)) },
+          },
+        }),
+        // PDIs activos com prazo final já ultrapassado (mesma regra de getRiskAlerts).
+        this.prisma.read.developmentPlan.count({
+          where: { ...planWhere, status: 'ACTIVE', endDate: { lt: now } },
+        }),
+        // Rascunhos criados há mais de 30 dias e nunca submetidos.
+        this.prisma.read.developmentPlan.count({
+          where: { ...planWhere, status: 'DRAFT', createdAt: { lt: staleDraftCutoff } },
+        }),
+      ]);
+
+    const statusCounts = Object.fromEntries(byStatus.map(s => [s.status, s._count]));
+    const completedCount = statusCounts['COMPLETED'] ?? 0;
+    // Universo da taxa: PDIs que saíram de rascunho e não foram cancelados.
+    const submittedCount = byStatus
+      .filter(s => s.status !== 'DRAFT' && s.status !== 'CANCELLED')
+      .reduce((sum, s) => sum + s._count, 0);
 
     // FIX: pdiAction → developmentPlanAction; add explicit types
     const actionStats = await this.prisma.read.developmentPlanAction.groupBy({
@@ -590,8 +760,11 @@ export class AnalyticsService {
     });
 
     return {
-      byStatus: Object.fromEntries(byStatus.map(s => [s.status, s._count])),
+      byStatus: statusCounts,
       avgProgress: Math.round((avgProgress._avg.overallProgress ?? 0) * 10) / 10,
+      completionRate: submittedCount > 0 ? Math.round((completedCount / submittedCount) * 100) : 0,
+      overduePlans,
+      staleDrafts,
       overdueActions: overdueCount,
       completedThisMonth,
       // FIX: explicit type annotation
@@ -692,6 +865,8 @@ export class AnalyticsService {
   async getCoursePerformance(courseId?: number) {
     const where: Prisma.CourseAnalyticsWhereInput = {};
     if (courseId) where.courseId = courseId;
+    // A lista só mostra cursos activos (publicados).
+    else where.course = { status: 'PUBLISHED' };
 
     const [analytics, feedbackStats, assessmentStats] = await Promise.all([
       this.prisma.read.courseAnalytics.findMany({
