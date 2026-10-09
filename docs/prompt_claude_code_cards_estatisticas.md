@@ -188,4 +188,6 @@ Não redesenhes o dashboard inteiro. Modifica **exclusivamente** os cards de est
 
 - [x] Live Classes — Dashboard (11 cards, incl. "Gravações disponíveis"), Avaliações (6) e Relatórios (4 + 5 + 1) em `components/live-classes/*`; tons por significado (agendadas/participantes azul, em curso vermelho, concluídas/presenças verde, canceladas/horas laranja); sem valores alterados
 
+- [x] Content Library — Analytics (4 cards) e O Meu Percurso (4) em `components/content-library/*`; `KpiCard` → `NavyStatCard`, tons por significado (concluídos/activos verde, visualizações azul ou laranja); sem valores alterados
+
 **Pendentes:** restantes módulos que usam `TopBarCard` (crm), apenas cards.
