@@ -489,9 +489,11 @@ export class DashboardService {
     ] = await Promise.all([
       this.prisma.read.user.count({ where: { ...deptFilter } }),
       this.prisma.read.user.count({ where: { active: true, ...deptFilter } }),
-      this.prisma.read.user.count({ where: { createdAt: { gte: since }, ...deptFilter } }),
       this.prisma.read.user.count({
-        where: { createdAt: { gte: prev, lt: since }, ...deptFilter },
+        where: { active: true, createdAt: { gte: since }, ...deptFilter },
+      }),
+      this.prisma.read.user.count({
+        where: { active: true, createdAt: { gte: prev, lt: since }, ...deptFilter },
       }),
       // Course não tem campo `active` — usa `status` (causava 500 em /dashboard/organization)
       this.prisma.course.count({ where: { status: 'PUBLISHED' } }),
@@ -503,12 +505,16 @@ export class DashboardService {
         where: { enrolledAt: { gte: prev, lt: since }, user: deptFilter },
       }),
       this.prisma.read.enrollment.count({
-        where: { status: EnrollmentStatus.COMPLETED, enrolledAt: { gte: since }, user: deptFilter },
+        where: {
+          status: EnrollmentStatus.COMPLETED,
+          completedAt: { gte: since },
+          user: deptFilter,
+        },
       }),
       this.prisma.read.enrollment.count({
         where: {
           status: EnrollmentStatus.COMPLETED,
-          enrolledAt: { gte: prev, lt: since },
+          completedAt: { gte: prev, lt: since },
           user: deptFilter,
         },
       }),
@@ -603,16 +609,26 @@ export class DashboardService {
         });
         return [];
       }),
-      // Training hours estimate (completions × avg course workload)
+      // Horas de formação: soma da carga horária (workloadHours) dos cursos concluídos no período
       this.prisma.enrollment
-        .count({
+        .groupBy({
+          by: ['courseId'],
           where: {
             status: EnrollmentStatus.COMPLETED,
             user: deptFilter,
-            enrolledAt: { gte: since },
+            completedAt: { gte: since },
           },
+          _count: { _all: true },
         })
-        .then(c => c * 2)
+        .then(async groups => {
+          if (!groups.length) return 0;
+          const courses = await this.prisma.read.course.findMany({
+            where: { id: { in: groups.map(g => g.courseId) } },
+            select: { id: true, workloadHours: true },
+          });
+          const hours = new Map(courses.map(c => [c.id, c.workloadHours ?? 0]));
+          return groups.reduce((sum, g) => sum + (hours.get(g.courseId) ?? 0) * g._count._all, 0);
+        })
         .catch((e: unknown) => {
           this.logger.warn({
             departmentId: filters.departmentId,
@@ -622,7 +638,7 @@ export class DashboardService {
             msg: 'Falha ao calcular estimativa de horas de formação organizacional',
           });
           return 0;
-        }), // ~2h avg
+        }),
     ]);
 
     // Enrich top content
