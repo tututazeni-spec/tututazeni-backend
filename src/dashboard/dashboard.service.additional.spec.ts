@@ -24,7 +24,7 @@ const mockPrisma: any = {
     findMany: jest.fn().mockResolvedValue([]),
     count: jest.fn().mockResolvedValue(0),
   },
-  enrollment: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
+  enrollment: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]), groupBy: jest.fn().mockResolvedValue([]) },
   userPoints: { findUnique: jest.fn().mockResolvedValue(null) },
   badgeAward: { findMany: jest.fn().mockResolvedValue([]) },
   assessmentAttempt: { count: jest.fn().mockResolvedValue(0) },
