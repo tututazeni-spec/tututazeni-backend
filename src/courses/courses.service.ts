@@ -1667,8 +1667,35 @@ export class CoursesService {
     };
   }
 
+  /** userIds explícitos + colaboradores activos dos departamentos, sem duplicados. */
+  private async resolveParticipantIds(dto: {
+    userIds?: number[];
+    departmentIds?: number[];
+  }): Promise<number[]> {
+    const ids = new Set(dto.userIds ?? []);
+    if (dto.departmentIds?.length) {
+      const members = await this.prisma.user.findMany({
+        where: { departmentId: { in: dto.departmentIds }, active: true },
+        select: { id: true },
+      });
+      for (const m of members) ids.add(m.id);
+    }
+    return [...ids];
+  }
+
+  private assertCohortCapacity(availableSlots: number, requested: number) {
+    if (requested > availableSlots) {
+      throw new ConflictException(
+        `Capacidade insuficiente: ${availableSlots} vaga(s) disponível(eis) para ${requested} participante(s) — faltam ${requested - availableSlots} vaga(s). Aumenta a capacidade ou remove participantes.`,
+      );
+    }
+  }
+
   async createCohort(courseId: number, dto: CreateCourseCohortDto) {
     await this.findOne(courseId);
+    const participantIds = await this.resolveParticipantIds(dto);
+    const capacity = dto.capacity ?? 30;
+    this.assertCohortCapacity(capacity, participantIds.length);
     return this.prisma.courseCohort.create({
       data: {
         courseId,
@@ -1677,9 +1704,13 @@ export class CoursesService {
         location: dto.location,
         room: dto.room,
         schedule: dto.schedule,
-        capacity: dto.capacity ?? 30,
+        capacity,
         startDate: new Date(dto.startDate),
         endDate: dto.endDate ? new Date(dto.endDate) : null,
+        // Nested create: turma e participantes gravados atomicamente.
+        participants: {
+          create: participantIds.map(userId => ({ userId })),
+        },
       },
     });
   }
@@ -1732,25 +1763,28 @@ export class CoursesService {
     if (!cohort) throw new NotFoundException('Turma não encontrada');
     this.assertCohortAccess(cohort, user);
 
+    const requestedIds = await this.resolveParticipantIds(dto);
+    if (requestedIds.length === 0) {
+      throw new BadRequestException(
+        'Indica colaboradores ou departamentos com colaboradores activos',
+      );
+    }
     const alreadyIn = await this.prisma.courseCohortParticipant.findMany({
-      where: { cohortId, userId: { in: dto.userIds } },
+      where: { cohortId, userId: { in: requestedIds } },
       select: { userId: true },
     });
     const alreadyInIds = new Set(alreadyIn.map(p => p.userId));
-    const newUserIds = dto.userIds.filter(id => !alreadyInIds.has(id));
+    const newUserIds = requestedIds.filter(id => !alreadyInIds.has(id));
 
-    const availableSlots = cohort.capacity - cohort._count.participants;
-    if (newUserIds.length > availableSlots) {
-      throw new ConflictException(
-        `Capacidade insuficiente: ${availableSlots} vaga(s) disponível(eis) para ${newUserIds.length} participante(s)`,
-      );
+    this.assertCohortCapacity(cohort.capacity - cohort._count.participants, newUserIds.length);
+    if (newUserIds.length === 0) {
+      return { added: 0, alreadyIn: alreadyInIds.size };
     }
-    if (newUserIds.length === 0) return { added: 0 };
 
     await this.prisma.courseCohortParticipant.createMany({
       data: newUserIds.map(userId => ({ cohortId, userId })),
     });
-    return { added: newUserIds.length };
+    return { added: newUserIds.length, alreadyIn: alreadyInIds.size };
   }
 
   async removeCohortParticipant(cohortId: number, userId: number, user: CurrentUserData) {
