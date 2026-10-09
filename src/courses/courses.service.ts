@@ -1835,7 +1835,49 @@ export class CoursesService {
   async updateCategory(id: number, dto: UpdateCourseCategoryDto) {
     const category = await this.prisma.courseCategory.findUnique({ where: { id } });
     if (!category) throw new NotFoundException('Categoria não encontrada');
+    const renamed = dto.name !== undefined && dto.name !== category.name;
+    if (renamed) {
+      const clash = await this.prisma.courseCategory.findUnique({ where: { name: dto.name } });
+      if (clash) throw new ConflictException(`Categoria "${dto.name}" já existe`);
+      // Course.category liga por nome — renomear sem migrar os cursos deixava-os órfãos.
+      const [, updated] = await this.prisma.$transaction([
+        this.prisma.course.updateMany({
+          where: { category: category.name },
+          data: { category: dto.name },
+        }),
+        this.prisma.courseCategory.update({ where: { id }, data: dto }),
+      ]);
+      return updated;
+    }
     return this.prisma.courseCategory.update({ where: { id }, data: dto });
+  }
+
+  async listCategoryCourses(id: number) {
+    const category = await this.prisma.courseCategory.findUnique({ where: { id } });
+    if (!category) throw new NotFoundException('Categoria não encontrada');
+    const courses = await this.prisma.read.course.findMany({
+      select: { id: true, title: true, status: true, category: true },
+      orderBy: { title: 'asc' },
+    });
+    return courses.map(c => ({ ...c, inCategory: c.category === category.name }));
+  }
+
+  async setCategoryCourses(id: number, courseIds: number[]) {
+    const category = await this.prisma.courseCategory.findUnique({ where: { id } });
+    if (!category) throw new NotFoundException('Categoria não encontrada');
+    const ids = [...new Set(courseIds)];
+    const [, assigned] = await this.prisma.$transaction([
+      // Remove da categoria os cursos desmarcados (só os que pertencem a esta).
+      this.prisma.course.updateMany({
+        where: { category: category.name, id: { notIn: ids } },
+        data: { category: null },
+      }),
+      this.prisma.course.updateMany({
+        where: { id: { in: ids } },
+        data: { category: category.name },
+      }),
+    ]);
+    return { categoryId: id, courseCount: assigned.count };
   }
 
   async removeCategory(id: number) {
