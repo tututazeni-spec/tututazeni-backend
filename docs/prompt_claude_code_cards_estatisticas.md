@@ -175,4 +175,6 @@ Não redesenhes o dashboard inteiro. Modifica **exclusivamente** os cards de est
 - [x] Gestor — `ManagerDashboard.tsx` (8 cards)
 - [x] Executivo — `OrgDashboard.tsx` (4 + 7 cards; as barras trimestrais do card Financiamento foram removidas)
 
-**Pendentes:** restantes módulos que usam `TopBarCard` (cursos, analytics, dashboard-rh, executive-reports, crm), apenas cards.
+- [x] Dashboard RH — 14 painéis (`components/dashboard-rh/*`); gauges, termómetro de risco, sparkline mock e barra de progresso removidos; cor por limiar via `rateTone.ts`
+
+**Pendentes:** restantes módulos que usam `TopBarCard` (cursos, analytics, executive-reports, crm), apenas cards.
