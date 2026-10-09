@@ -61,6 +61,16 @@ export class DashboardService {
   // COLABORADOR — personal dashboard
   // ══════════════════════════════════════════════════════
 
+  private dashboardCountFallback(userId: number, key: string, e: unknown): number {
+    this.logger.warn({
+      userId,
+      action: `DASHBOARD_MY_${key}`,
+      err: { message: e instanceof Error ? e.message : String(e) },
+      msg: 'Falha ao obter contagem para o dashboard pessoal',
+    });
+    return 0;
+  }
+
   async getMyDashboard(userId: number) {
     // FIX: `.catch()` a seguir a uma promise Prisma colapsa o tipo inteiro
     // para `any` sem isto — a query extraída para variável preserva o tipo
@@ -90,6 +100,10 @@ export class DashboardService {
       pendingProcessTasks,
       pendingWorkDeclarations,
       pending360Assignments,
+      scheduledLiveClasses,
+      aiTutorSessions,
+      pendingLeaveRequests,
+      myTrainings,
     ] = await Promise.all([
       this.prisma.read.user.findUnique({
         where: { id: userId },
@@ -215,6 +229,28 @@ export class DashboardService {
           });
           return 0;
         }),
+      // Aulas ao vivo agendadas em que o utilizador está inscrito
+      this.prisma.read.liveClass
+        .count({
+          where: {
+            status: { in: ['AGENDADA', 'EM_PREPARACAO'] },
+            scheduledAt: { gte: new Date() },
+            attendances: { some: { userId } },
+          },
+        })
+        .catch((e: unknown) => this.dashboardCountFallback(userId, 'LIVE_CLASSES', e)),
+      this.prisma.read.aiTutorSession
+        .count({ where: { userId } })
+        .catch((e: unknown) => this.dashboardCountFallback(userId, 'AI_TUTOR_SESSIONS', e)),
+      this.prisma.read.leaveRequest
+        .count({ where: { userId, status: 'PENDING' } })
+        .catch((e: unknown) => this.dashboardCountFallback(userId, 'LEAVE_REQUESTS', e)),
+      // Formações (Training) em que o utilizador participa e ainda não terminaram
+      this.prisma.read.trainingParticipant
+        .count({
+          where: { userId, status: { in: ['PENDING_APPROVAL', 'REGISTERED', 'ATTENDED'] } },
+        })
+        .catch((e: unknown) => this.dashboardCountFallback(userId, 'MY_TRAININGS', e)),
     ]);
 
     // PDI stats
@@ -313,6 +349,13 @@ export class DashboardService {
       engagement: {
         pendingSurveys: recentSurveys.length,
         surveys: recentSurveys,
+      },
+      overview: {
+        pendingEvaluations: pendingAssessments + pendingEvals + pending360Assignments,
+        scheduledLiveClasses,
+        aiTutorSessions,
+        pendingLeaveRequests,
+        myTrainings,
       },
       gamification: {
         totalPoints: points?.points ?? 0,
