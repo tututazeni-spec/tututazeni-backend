@@ -177,4 +177,6 @@ Não redesenhes o dashboard inteiro. Modifica **exclusivamente** os cards de est
 
 - [x] Dashboard RH — 14 painéis (`components/dashboard-rh/*`); gauges, termómetro de risco, sparkline mock e barra de progresso removidos; cor por limiar via `rateTone.ts`
 
-**Pendentes:** restantes módulos que usam `TopBarCard` (cursos, analytics, executive-reports, crm), apenas cards.
+- [x] Analytics — 10 vistas (`components/analytics/*`: Overview, RH, Pessoas, Engagement, Cursos, Learning, PDI, Riscos, ROI, Gestor); sparklines/barras/funil/gauges removidos (funil → `sub`), `MOCK_TURNOVER_TREND` apagado; tom por limiar no card do Gestor
+
+**Pendentes:** restantes módulos que usam `TopBarCard` (cursos, executive-reports, crm), apenas cards.
