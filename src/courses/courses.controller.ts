@@ -42,6 +42,7 @@ import {
   MarkCohortAttendanceDto,
   CreateCourseCategoryDto,
   UpdateCourseCategoryDto,
+  SetCategoryCoursesDto,
 } from './courses.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -642,6 +643,23 @@ export class CoursesController {
     @Body() dto: UpdateCourseCategoryDto,
   ) {
     return this.svc.updateCategory(categoryId, dto);
+  }
+
+  @Get('categories/:categoryId/courses')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Cursos do catálogo com indicação de pertença à categoria' })
+  listCategoryCourses(@Param('categoryId', ParseIntPipe) categoryId: number) {
+    return this.svc.listCategoryCourses(categoryId);
+  }
+
+  @Put('categories/:categoryId/courses')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Definir os cursos que pertencem à categoria' })
+  setCategoryCourses(
+    @Param('categoryId', ParseIntPipe) categoryId: number,
+    @Body() dto: SetCategoryCoursesDto,
+  ) {
+    return this.svc.setCategoryCourses(categoryId, dto.courseIds);
   }
 
   @Delete('categories/:categoryId')

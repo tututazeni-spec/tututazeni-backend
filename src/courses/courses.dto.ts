@@ -880,4 +880,11 @@ export class UpdateCourseCategoryDto extends PartialType(CreateCourseCategoryDto
   isActive?: boolean;
 }
 
+export class SetCategoryCoursesDto {
+  @ApiProperty({ type: [Number] })
+  @IsArray()
+  @IsInt({ each: true })
+  courseIds!: number[];
+}
+
 export class UpdateCourseAudienceGroupDto extends PartialType(CreateCourseAudienceGroupDto) {}
