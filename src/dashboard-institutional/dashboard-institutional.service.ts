@@ -102,6 +102,22 @@ export class DashboardInstitutionalService {
         ]);
 
         const totalFunding = totalFundingAgg?._sum?.amount || 0;
+
+        // Financiamento activo do ano corrente por trimestre de início (T1..T4).
+        const grantsThisYear = await this.prisma.read.fundingGrant.findMany({
+          where: {
+            status: 'ACTIVE',
+            deletedAt: null,
+            startDate: { gte: startOfYear },
+          },
+          select: { amount: true, startDate: true },
+        });
+        const fundingByQuarter = [0, 1, 2, 3].map(q => ({
+          label: `T${q + 1}`,
+          value: grantsThisYear
+            .filter(g => Math.floor(g.startDate.getMonth() / 3) === q)
+            .reduce((s, g) => s + g.amount, 0),
+        }));
         const completionRate = users > 0 ? (completedThisYear / users) * 100 : 0;
 
         return {
@@ -117,6 +133,7 @@ export class DashboardInstitutionalService {
             partners,
             funders,
             totalFunding,
+            fundingByQuarter,
           },
           knowledge: { libraryItems, certificates, badgesIssued },
         };
@@ -486,7 +503,9 @@ export class DashboardInstitutionalService {
             successRate: auto.executions.successRate,
           },
           platform: plat && {
-            uptimePercent: plat.performanceSummary.uptimePercent,
+            uptimePercent: plat.performanceSummary.hasMetrics
+              ? plat.performanceSummary.uptimePercent
+              : null,
             openAlerts: plat.alerts.open,
             criticalAlerts: plat.alerts.critical,
             integrationsWithErrors: plat.integrations.withErrors,
