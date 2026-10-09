@@ -186,4 +186,6 @@ Não redesenhes o dashboard inteiro. Modifica **exclusivamente** os cards de est
 
 - [x] Evaluation — Visão Geral (10 cards, org + pessoais), Analytics (4), Relatórios (4), Competências (3) e Configurações (3) em `components/evaluation/*`; tom do Score Médio por limiar via `SCORE_TONE` (constants.ts); distribuição de performance e matriz de concordância não migradas (gráficos)
 
+- [x] Live Classes — Dashboard (11 cards, incl. "Gravações disponíveis"), Avaliações (6) e Relatórios (4 + 5 + 1) em `components/live-classes/*`; tons por significado (agendadas/participantes azul, em curso vermelho, concluídas/presenças verde, canceladas/horas laranja); sem valores alterados
+
 **Pendentes:** restantes módulos que usam `TopBarCard` (crm), apenas cards.
