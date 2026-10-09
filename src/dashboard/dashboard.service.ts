@@ -676,7 +676,7 @@ export class DashboardService {
         development: {
           activePlans,
           completedPlans,
-          coverage: totalUsers > 0 ? +((activePlans / totalUsers) * 100).toFixed(1) : 0,
+          coverage: activeUsers > 0 ? +((activePlans / activeUsers) * 100).toFixed(1) : 0,
         },
         talent: { hiPos: hiPoCount, successionCoverage },
         pending: { evaluations: pendingEvals },
