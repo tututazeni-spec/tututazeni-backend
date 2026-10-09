@@ -1030,7 +1030,6 @@ export class DashboardRhService {
     const users = await this.prisma.read.user.findMany({
       where: { active: true },
       select: { id: true, createdAt: true },
-      take: 500,
     });
     const userIds = users.map(u => u.id);
 
@@ -1050,11 +1049,24 @@ export class DashboardRhService {
     ]);
 
     // Group by user
-    const byUser = userIds
-      .map(id => {
-        const perf = perfReviews.filter(r => r.userId === id);
-        const courses = enrollments.filter(e => e.userId === id).length;
-        const surveys = surveyResponses.filter(s => s.userId === id);
+    const groupBy = <T extends { userId: number }>(rows: T[]) => {
+      const map = new Map<number, T[]>();
+      for (const row of rows) {
+        const list = map.get(row.userId);
+        if (list) list.push(row);
+        else map.set(row.userId, [row]);
+      }
+      return map;
+    };
+    const perfByUser = groupBy(perfReviews);
+    const enrollByUser = groupBy(enrollments);
+    const surveyByUser = groupBy(surveyResponses);
+
+    const byUser = users
+      .map(({ id, createdAt }) => {
+        const perf = perfByUser.get(id) ?? [];
+        const courses = (enrollByUser.get(id) ?? []).length;
+        const surveys = surveyByUser.get(id) ?? [];
         const avgPerf = perf.length
           ? perf.reduce((a, r) => a + (r.score ?? 0), 0) / perf.length
           : 0;
@@ -1066,12 +1078,12 @@ export class DashboardRhService {
           avgPerf,
           courses,
           avgEng,
-          tenureMonths: tenureMonths(users.find(u => u.id === id).createdAt),
+          tenureMonths: tenureMonths(createdAt),
         };
       })
       .filter(u => u.avgPerf > 0);
 
-    // Segment: high training (>3 courses) vs low training
+    // Segment: high training (3+ courses) vs low training
     const highTraining = byUser.filter(u => u.courses >= 3);
     const lowTraining = byUser.filter(u => u.courses < 3);
     const avgPerfHigh = highTraining.length
@@ -1099,7 +1111,7 @@ export class DashboardRhService {
         lift: +(avgPerfHigh - avgPerfLow).toFixed(2),
         insight:
           avgPerfHigh > avgPerfLow
-            ? `Colaboradores com +3 cursos concluídos têm performance média ${((avgPerfHigh / Math.max(avgPerfLow, 0.01) - 1) * 100).toFixed(0)}% superior`
+            ? `Colaboradores com 3 ou mais cursos concluídos têm performance média ${((avgPerfHigh / Math.max(avgPerfLow, 0.01) - 1) * 100).toFixed(0)}% superior`
             : 'Dados insuficientes para correlação',
       },
       engagementVsPerformance: {
@@ -1108,7 +1120,7 @@ export class DashboardRhService {
         lift: +(avgPerfHighE - avgPerfLowE).toFixed(2),
         insight:
           avgPerfHighE > avgPerfLowE
-            ? `Colaboradores com alto engagement têm score de performance médio de ${avgPerfHighE}/5 vs ${avgPerfLowE}/5`
+            ? `Colaboradores com alto compromisso têm score de performance médio de ${avgPerfHighE}/5 vs ${avgPerfLowE}/5`
             : 'Dados insuficientes para correlação',
       },
       sampleSize: byUser.length,
