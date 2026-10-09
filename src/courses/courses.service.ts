@@ -1883,15 +1883,15 @@ export class CoursesService {
   async removeCategory(id: number) {
     const category = await this.prisma.courseCategory.findUnique({ where: { id } });
     if (!category) throw new NotFoundException('Categoria não encontrada');
-    const coursesUsing = await this.prisma.read.course.count({
-      where: { category: category.name },
-    });
-    if (coursesUsing > 0) {
-      throw new ConflictException(
-        `Não é possível remover: ${coursesUsing} curso(s) usam esta categoria. Desactive-a em vez disso.`,
-      );
-    }
-    return this.prisma.courseCategory.delete({ where: { id } });
+    // Os cursos não são apagados: só perdem a associação à categoria.
+    const [, deleted] = await this.prisma.$transaction([
+      this.prisma.course.updateMany({
+        where: { category: category.name },
+        data: { category: null },
+      }),
+      this.prisma.courseCategory.delete({ where: { id } }),
+    ]);
+    return deleted;
   }
 
   // ─── Relatórios (docs/modulo_courses.md secção 7) ───────────────────────

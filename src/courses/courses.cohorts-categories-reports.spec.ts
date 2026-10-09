@@ -13,11 +13,13 @@ import { CourseCompletionService } from '../course-completion/course-completion.
 import type { CurrentUserData } from '../common/types/current-user';
 
 const mockPrisma = {
+  $transaction: jest.fn(),
   course: {
     findUnique: jest.fn(),
     findMany: jest.fn(),
     count: jest.fn(),
     groupBy: jest.fn(),
+    updateMany: jest.fn(),
   },
   courseCohort: {
     findMany: jest.fn(),
@@ -272,18 +274,16 @@ describe('CoursesService — Turmas/Categorias/Relatórios', () => {
   });
 
   describe('removeCategory', () => {
-    it('rejeita remover categoria com cursos associados', async () => {
+    it('remove a categoria e desassocia os cursos sem os apagar', async () => {
       mockPrisma.courseCategory.findUnique.mockResolvedValue({ id: 1, name: 'Liderança' });
-      mockPrisma.course.count.mockResolvedValue(3);
-      await expect(service.removeCategory(1)).rejects.toThrow(ConflictException);
-      expect(mockPrisma.courseCategory.delete).not.toHaveBeenCalled();
-    });
-
-    it('remove categoria sem cursos associados', async () => {
-      mockPrisma.courseCategory.findUnique.mockResolvedValue({ id: 1, name: 'Vazia' });
-      mockPrisma.course.count.mockResolvedValue(0);
+      mockPrisma.course.updateMany.mockResolvedValue({ count: 3 });
       mockPrisma.courseCategory.delete.mockResolvedValue({ id: 1 });
+      mockPrisma.$transaction.mockImplementation((ops: unknown[]) => Promise.all(ops));
       await service.removeCategory(1);
+      expect(mockPrisma.course.updateMany).toHaveBeenCalledWith({
+        where: { category: 'Liderança' },
+        data: { category: null },
+      });
       expect(mockPrisma.courseCategory.delete).toHaveBeenCalledWith({ where: { id: 1 } });
     });
   });
