@@ -843,6 +843,8 @@ export class AnalyticsService {
   async getCoursePerformance(courseId?: number) {
     const where: Prisma.CourseAnalyticsWhereInput = {};
     if (courseId) where.courseId = courseId;
+    // A lista só mostra cursos activos (publicados).
+    else where.course = { status: 'PUBLISHED' };
 
     const [analytics, feedbackStats, assessmentStats] = await Promise.all([
       this.prisma.read.courseAnalytics.findMany({

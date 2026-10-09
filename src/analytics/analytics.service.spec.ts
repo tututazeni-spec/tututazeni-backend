@@ -335,5 +335,12 @@ describe('AnalyticsService', () => {
       const result = await service.getCoursePerformance();
       expect(result).toBeDefined();
     });
+
+    it('deve listar apenas cursos activos (publicados)', async () => {
+      await service.getCoursePerformance();
+      expect(mockPrisma.courseAnalytics.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { course: { status: 'PUBLISHED' } } }),
+      );
+    });
   });
 });
