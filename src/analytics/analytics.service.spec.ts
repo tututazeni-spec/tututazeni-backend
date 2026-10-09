@@ -157,8 +157,13 @@ describe('AnalyticsService', () => {
         .mockResolvedValueOnce(90)
         .mockResolvedValueOnce(5)
         .mockResolvedValueOnce(3);
+      mockPrisma.user.findMany.mockResolvedValue([]);
       const result = await service.getHRDashboard({});
       expect(result).toBeDefined();
+      expect(result.people.turnoverTrend).toHaveLength(6);
+      expect(result.pdi.funnel).toEqual(
+        expect.objectContaining({ eligible: expect.any(Number) }),
+      );
     });
   });
 

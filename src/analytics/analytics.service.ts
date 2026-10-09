@@ -368,6 +368,25 @@ export class AnalyticsService {
     };
   }
 
+  private sixMonthsStart(): Date {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth() - 5, 1);
+  }
+
+  /** Taxa de rotatividade (%) dos últimos 6 meses, do mais antigo ao mais recente. */
+  private buildTurnoverTrend(exits: { exitDate: Date | null }[], totalActive: number): number[] {
+    const start = this.sixMonthsStart();
+    const buckets = new Array<number>(6).fill(0);
+    for (const e of exits) {
+      if (!e.exitDate) continue;
+      const idx =
+        (e.exitDate.getFullYear() - start.getFullYear()) * 12 +
+        (e.exitDate.getMonth() - start.getMonth());
+      if (idx >= 0 && idx < 6) buckets[idx]++;
+    }
+    return buckets.map(n => (totalActive > 0 ? Math.round((n / totalActive) * 1000) / 10 : 0));
+  }
+
   async getHRDashboard(filters: AnalyticsFilterDto) {
     const { from, to } = this.getDateRange(filters.period, filters.fromDate, filters.toDate);
     const userWhere: Prisma.UserWhereInput = { active: true };
@@ -386,6 +405,9 @@ export class AnalyticsService {
       avgPerformance,
       topDepts,
       learningPathStats,
+      pdiStartedUsers,
+      pdiAdoptedUsers,
+      exitsLast6Months,
     ] = await Promise.all([
       this.prisma.read.user.count({ where: userWhere }),
       this.prisma.read.user.count({ where: { ...userWhere, hireDate: { gte: from, lte: to } } }),
@@ -420,7 +442,29 @@ export class AnalyticsService {
         by: ['status'],
         _count: true,
       }),
+      // Funil de adopção de PDI (utilizadores distintos): iniciaram = têm
+      // algum PDI que saiu de rascunho e não foi cancelado; adoptaram = têm
+      // um PDI activo.
+      this.prisma.read.user.count({
+        where: {
+          ...userWhere,
+          developmentPlans: {
+            some: { isTemplate: false, status: { notIn: ['DRAFT', 'CANCELLED'] } },
+          },
+        },
+      }),
+      this.prisma.read.user.count({
+        where: { ...userWhere, developmentPlans: { some: { status: 'ACTIVE' } } },
+      }),
+      // Saídas dos últimos 6 meses (mesmo critério de `terminated`) para a
+      // tendência mensal da rotatividade.
+      this.prisma.read.user.findMany({
+        where: { active: false, exitDate: { gte: this.sixMonthsStart() } },
+        select: { exitDate: true },
+      }),
     ]);
+
+    const turnoverTrend = this.buildTurnoverTrend(exitsLast6Months, totalActive);
 
     const turnoverRate =
       totalActive > 0 ? Math.round((terminated / totalActive) * 100 * 10) / 10 : 0;
@@ -441,6 +485,7 @@ export class AnalyticsService {
         hired,
         terminated,
         turnoverRate,
+        turnoverTrend,
       },
       learning: {
         enrollments: totalEnrollments,
@@ -454,6 +499,11 @@ export class AnalyticsService {
         completed: completedPDIs,
         pendingApproval: pendingApprovalPDIs,
         adoptionRate: totalActive > 0 ? Math.round((activePDIs / totalActive) * 100) : 0,
+        funnel: {
+          eligible: totalActive,
+          started: pdiStartedUsers,
+          adopted: pdiAdoptedUsers,
+        },
       },
       performance: {
         avgScore: Math.round((avgPerformance._avg.score ?? 0) * 10) / 10,
