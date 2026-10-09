@@ -6994,7 +6994,7 @@ enum LiveAttendanceStatus {
 
 model LiveClass {
   id            Int      @id @default(autoincrement())
-  courseId      Int
+  courseId      Int?
   zoomMeetingId String?  @db.Text
   topic         String   @db.Text
   scheduledAt   DateTime
@@ -7069,7 +7069,7 @@ model LiveClass {
   cancelledAt        DateTime?
   cancellationReason String?
 
-  course         Course                     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course         Course?                    @relation(fields: [courseId], references: [id], onDelete: Cascade)
   module         CourseModule?              @relation(fields: [moduleId], references: [id], onDelete: SetNull)
   lesson         Lesson?                    @relation(fields: [lessonId], references: [id], onDelete: SetNull)
   instructor     TrainingInstructorProfile? @relation("LiveClassInstructor", fields: [instructorId], references: [id], onDelete: SetNull)

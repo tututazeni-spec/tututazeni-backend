@@ -1,0 +1,1 @@
+ALTER TABLE "LiveClass" ALTER COLUMN "courseId" DROP NOT NULL;

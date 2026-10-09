@@ -39,7 +39,7 @@ export {
 
 export class CreateLiveClassDto {
   // Etapa 1 — Informações gerais
-  @ApiProperty() @IsInt() courseId!: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() courseId?: number;
   @ApiProperty() @IsString() topic!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() code?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
