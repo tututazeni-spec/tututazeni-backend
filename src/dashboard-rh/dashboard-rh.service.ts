@@ -143,7 +143,13 @@ export class DashboardRhService {
             });
             return { _avg: { score: null } };
           }),
-        this.prisma.read.developmentPlan.count({ where: { status: 'ACTIVE', isTemplate: false } }),
+        this.prisma.read.developmentPlan
+          .findMany({
+            where: { status: 'ACTIVE', isTemplate: false, user: { active: true } },
+            distinct: ['userId'],
+            select: { userId: true },
+          })
+          .then(rows => rows.length),
         this.prisma.read.enrollment.count({
           where: { status: EnrollmentStatus.COMPLETED, enrolledAt: { gte: mS } },
         }),
@@ -484,9 +490,13 @@ export class DashboardRhService {
           });
           return 0;
         }),
-      this.prisma.read.developmentPlan.count({
-        where: { status: 'ACTIVE', isTemplate: false, user: uWhere },
-      }),
+      this.prisma.read.developmentPlan
+        .findMany({
+          where: { status: 'ACTIVE', isTemplate: false, user: uWhere },
+          distinct: ['userId'],
+          select: { userId: true },
+        })
+        .then(rows => rows.length),
     ]);
 
     const scores = reviews.map(r => r.score ?? 0).filter(s => s > 0);
@@ -543,7 +553,12 @@ export class DashboardRhService {
   // ══════════════════════════════════════════════════════
 
   async getSkillsPanel(departmentId?: number) {
-    const uWhere = departmentId ? { user: { departmentId } } : {};
+    // Só colaboradores activos e competências activas do catálogo — mesma base
+    // do denominador (totalUsers), para a taxa de avaliação não passar de 100%.
+    const uWhere = {
+      user: { active: true, ...(departmentId ? { departmentId } : {}) },
+      competency: { isActive: true },
+    };
 
     // FIX: legacyEmployeeSkill era pedido aqui mas nunca usado no resto da
     // função (achado ao tipar) — query removida, deixou de desperdiçar uma
@@ -551,14 +566,17 @@ export class DashboardRhService {
     const [competencies, totalUsers] = await Promise.all([
       this.prisma.userCompetency.findMany({
         where: uWhere,
-        include: { competency: { select: { id: true, name: true, type: true } } },
+        include: {
+          competency: {
+            select: { id: true, name: true, type: true, scaleMax: true },
+          },
+        },
       }),
       this.prisma.read.user.count({
         where: { active: true, ...(departmentId ? { departmentId } : {}) },
       }),
     ]);
 
-    const TARGET = 5;
     type CompetencyRef = (typeof competencies)[number]['competency'];
     const byComp: Record<
       string,
@@ -569,7 +587,9 @@ export class DashboardRhService {
       if (!byComp[n]) byComp[n] = { comp: c.competency, count: 0, totalGap: 0, avgLevel: 0 };
       byComp[n].count++;
       byComp[n].avgLevel += c.currentLevel;
-      const gap = TARGET - c.currentLevel;
+      // Gap real: nível alvo do colaborador nesta competência; sem alvo
+      // definido, o topo da escala da competência.
+      const gap = (c.targetLevel ?? c.competency.scaleMax) - c.currentLevel;
       if (gap > 0) byComp[n].totalGap += gap;
     }
     const skillData = Object.values(byComp)
@@ -589,7 +609,7 @@ export class DashboardRhService {
       assessmentRate: pct(assessed, totalUsers),
       totalCompetencies: skillData.length,
       criticalGaps: skillData.filter(s => s.avgGap >= 2).length,
-      topGaps: skillData.slice(0, 8),
+      topGaps: skillData.filter(s => s.avgGap > 0).slice(0, 8),
       topStrengths: [...skillData].sort((a, b) => b.avgLevel - a.avgLevel).slice(0, 5),
     };
   }
@@ -1010,7 +1030,6 @@ export class DashboardRhService {
     const users = await this.prisma.read.user.findMany({
       where: { active: true },
       select: { id: true, createdAt: true },
-      take: 500,
     });
     const userIds = users.map(u => u.id);
 
@@ -1030,11 +1049,24 @@ export class DashboardRhService {
     ]);
 
     // Group by user
-    const byUser = userIds
-      .map(id => {
-        const perf = perfReviews.filter(r => r.userId === id);
-        const courses = enrollments.filter(e => e.userId === id).length;
-        const surveys = surveyResponses.filter(s => s.userId === id);
+    const groupBy = <T extends { userId: number }>(rows: T[]) => {
+      const map = new Map<number, T[]>();
+      for (const row of rows) {
+        const list = map.get(row.userId);
+        if (list) list.push(row);
+        else map.set(row.userId, [row]);
+      }
+      return map;
+    };
+    const perfByUser = groupBy(perfReviews);
+    const enrollByUser = groupBy(enrollments);
+    const surveyByUser = groupBy(surveyResponses);
+
+    const byUser = users
+      .map(({ id, createdAt }) => {
+        const perf = perfByUser.get(id) ?? [];
+        const courses = (enrollByUser.get(id) ?? []).length;
+        const surveys = surveyByUser.get(id) ?? [];
         const avgPerf = perf.length
           ? perf.reduce((a, r) => a + (r.score ?? 0), 0) / perf.length
           : 0;
@@ -1046,12 +1078,12 @@ export class DashboardRhService {
           avgPerf,
           courses,
           avgEng,
-          tenureMonths: tenureMonths(users.find(u => u.id === id).createdAt),
+          tenureMonths: tenureMonths(createdAt),
         };
       })
       .filter(u => u.avgPerf > 0);
 
-    // Segment: high training (>3 courses) vs low training
+    // Segment: high training (3+ courses) vs low training
     const highTraining = byUser.filter(u => u.courses >= 3);
     const lowTraining = byUser.filter(u => u.courses < 3);
     const avgPerfHigh = highTraining.length
@@ -1079,7 +1111,7 @@ export class DashboardRhService {
         lift: +(avgPerfHigh - avgPerfLow).toFixed(2),
         insight:
           avgPerfHigh > avgPerfLow
-            ? `Colaboradores com +3 cursos concluídos têm performance média ${((avgPerfHigh / Math.max(avgPerfLow, 0.01) - 1) * 100).toFixed(0)}% superior`
+            ? `Colaboradores com 3 ou mais cursos concluídos têm performance média ${((avgPerfHigh / Math.max(avgPerfLow, 0.01) - 1) * 100).toFixed(0)}% superior`
             : 'Dados insuficientes para correlação',
       },
       engagementVsPerformance: {
@@ -1088,7 +1120,7 @@ export class DashboardRhService {
         lift: +(avgPerfHighE - avgPerfLowE).toFixed(2),
         insight:
           avgPerfHighE > avgPerfLowE
-            ? `Colaboradores com alto engagement têm score de performance médio de ${avgPerfHighE}/5 vs ${avgPerfLowE}/5`
+            ? `Colaboradores com alto compromisso têm score de performance médio de ${avgPerfHighE}/5 vs ${avgPerfLowE}/5`
             : 'Dados insuficientes para correlação',
       },
       sampleSize: byUser.length,
