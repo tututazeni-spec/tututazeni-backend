@@ -182,4 +182,6 @@ Não redesenhes o dashboard inteiro. Modifica **exclusivamente** os cards de est
 - [x] Reports — `components/reports/ReportOutput.tsx` (KPIs de resumo) e `components/executive-reports/*` (ExecutiveKpiCard, KpiCard, 12 indicadores do OverviewPanel); sparkline e badge de estado removidos (estado/comparação/meta → `sub`), tom pelo semáforo do KPI (`gold`→`orange`)
 - [x] Reports — Central de Relatórios: 10 cards de modelo (`components/reports/TemplateCard.tsx`) no desenho Navy (variante local com descrição + "Executar →", pois não têm valor numérico); tom por categoria
 
-**Pendentes:** restantes módulos que usam `TopBarCard` (cursos, crm), apenas cards.
+- [x] Courses — Dashboard Admin (`components/courses/AdminDashboardView.tsx`, 18 cards; gauges de conclusão/aprovação → `NavyStatCard` com tom por limiar via `rateTone`) e Relatórios (`RelatoriosView.tsx`, 7 cards; sparkline mock, histograma estimado e barra de meta removidos; "Meta" → fora)
+
+**Pendentes:** restantes módulos que usam `TopBarCard` (crm), apenas cards.
