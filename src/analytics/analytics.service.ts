@@ -433,10 +433,11 @@ export class AnalyticsService {
         _avg: { score: true },
       }),
       this.prisma.read.department.findMany({
-        where: { status: 'ACTIVE' },
+        // Todos os departamentos activos, excepto o(s) de testes (seed de
+        // carga: 'Departamento de Testes').
+        where: { status: 'ACTIVE', NOT: { name: { contains: 'teste', mode: 'insensitive' } } },
         include: { _count: { select: { users: true } } },
         orderBy: { users: { _count: 'desc' } },
-        take: 8,
       }),
       this.prisma.read.learningPathEnrollment.groupBy({
         by: ['status'],
