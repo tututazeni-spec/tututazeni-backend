@@ -35,6 +35,7 @@ const mockPrisma = {
   },
   courseCohortParticipant: {
     findMany: jest.fn(),
+    count: jest.fn(),
     createMany: jest.fn(),
     deleteMany: jest.fn(),
   },
@@ -172,6 +173,14 @@ describe('CoursesService — Turmas/Categorias/Relatórios', () => {
         service.updateCohort(1, { name: 'Nova' } as any, instructorOther),
       ).rejects.toThrow(ForbiddenException);
       await expect(service.closeCohort(1, instructorOther)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('rejeita capacidade inferior ao número de participantes', async () => {
+      mockPrisma.courseCohort.findUnique.mockResolvedValue({ id: 1, instructorId: null });
+      mockPrisma.courseCohortParticipant.count.mockResolvedValue(8);
+      await expect(
+        service.updateCohort(1, { capacity: 5 } as any, admin),
+      ).rejects.toThrow(ConflictException);
     });
 
     it('encerra a turma (status CLOSED)', async () => {
