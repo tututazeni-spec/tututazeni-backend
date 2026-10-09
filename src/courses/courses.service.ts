@@ -1719,6 +1719,16 @@ export class CoursesService {
     const cohort = await this.prisma.courseCohort.findUnique({ where: { id } });
     if (!cohort) throw new NotFoundException('Turma não encontrada');
     this.assertCohortAccess(cohort, user);
+    if (dto.capacity !== undefined) {
+      const enrolled = await this.prisma.courseCohortParticipant.count({
+        where: { cohortId: id },
+      });
+      if (dto.capacity < enrolled) {
+        throw new ConflictException(
+          `A turma já tem ${enrolled} participante(s) — a capacidade não pode ser inferior`,
+        );
+      }
+    }
     return this.prisma.courseCohort.update({
       where: { id },
       data: {
