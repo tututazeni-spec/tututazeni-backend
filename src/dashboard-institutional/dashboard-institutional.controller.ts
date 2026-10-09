@@ -110,6 +110,14 @@ export class DashboardInstitutionalController {
     return this.service.compareSnapshots(period1, period2, type);
   }
 
+  @Delete('snapshots/:id')
+  @Roles(Role.ADMIN, Role.RH)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Apagar snapshot (soft-delete)' })
+  deleteSnapshot(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.service.deleteSnapshot(id, user.id);
+  }
+
   // ─── WIDGETS ─────────────────────────────────────────
 
   @Post('widgets')
