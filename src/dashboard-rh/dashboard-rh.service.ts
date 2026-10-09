@@ -143,7 +143,13 @@ export class DashboardRhService {
             });
             return { _avg: { score: null } };
           }),
-        this.prisma.read.developmentPlan.count({ where: { status: 'ACTIVE', isTemplate: false } }),
+        this.prisma.read.developmentPlan
+          .findMany({
+            where: { status: 'ACTIVE', isTemplate: false, user: { active: true } },
+            distinct: ['userId'],
+            select: { userId: true },
+          })
+          .then(rows => rows.length),
         this.prisma.read.enrollment.count({
           where: { status: EnrollmentStatus.COMPLETED, enrolledAt: { gte: mS } },
         }),
@@ -484,9 +490,13 @@ export class DashboardRhService {
           });
           return 0;
         }),
-      this.prisma.read.developmentPlan.count({
-        where: { status: 'ACTIVE', isTemplate: false, user: uWhere },
-      }),
+      this.prisma.read.developmentPlan
+        .findMany({
+          where: { status: 'ACTIVE', isTemplate: false, user: uWhere },
+          distinct: ['userId'],
+          select: { userId: true },
+        })
+        .then(rows => rows.length),
     ]);
 
     const scores = reviews.map(r => r.score ?? 0).filter(s => s > 0);
