@@ -553,7 +553,12 @@ export class DashboardRhService {
   // ══════════════════════════════════════════════════════
 
   async getSkillsPanel(departmentId?: number) {
-    const uWhere = departmentId ? { user: { departmentId } } : {};
+    // Só colaboradores activos e competências activas do catálogo — mesma base
+    // do denominador (totalUsers), para a taxa de avaliação não passar de 100%.
+    const uWhere = {
+      user: { active: true, ...(departmentId ? { departmentId } : {}) },
+      competency: { isActive: true },
+    };
 
     // FIX: legacyEmployeeSkill era pedido aqui mas nunca usado no resto da
     // função (achado ao tipar) — query removida, deixou de desperdiçar uma
@@ -561,14 +566,17 @@ export class DashboardRhService {
     const [competencies, totalUsers] = await Promise.all([
       this.prisma.userCompetency.findMany({
         where: uWhere,
-        include: { competency: { select: { id: true, name: true, type: true } } },
+        include: {
+          competency: {
+            select: { id: true, name: true, type: true, scaleMax: true },
+          },
+        },
       }),
       this.prisma.read.user.count({
         where: { active: true, ...(departmentId ? { departmentId } : {}) },
       }),
     ]);
 
-    const TARGET = 5;
     type CompetencyRef = (typeof competencies)[number]['competency'];
     const byComp: Record<
       string,
@@ -579,7 +587,9 @@ export class DashboardRhService {
       if (!byComp[n]) byComp[n] = { comp: c.competency, count: 0, totalGap: 0, avgLevel: 0 };
       byComp[n].count++;
       byComp[n].avgLevel += c.currentLevel;
-      const gap = TARGET - c.currentLevel;
+      // Gap real: nível alvo do colaborador nesta competência; sem alvo
+      // definido, o topo da escala da competência.
+      const gap = (c.targetLevel ?? c.competency.scaleMax) - c.currentLevel;
       if (gap > 0) byComp[n].totalGap += gap;
     }
     const skillData = Object.values(byComp)
