@@ -523,7 +523,7 @@ export class AnalyticsService {
 
     const [
       byStatus,
-      topCourses,
+      enrollmentsByCourse,
       completionByCourse,
       avgAssessmentScore,
       certificationCount,
@@ -534,12 +534,11 @@ export class AnalyticsService {
         where: enrollWhere,
         _count: true,
       }),
-      this.prisma.read.courseAnalytics.findMany({
-        include: {
-          course: { select: { id: true, title: true, category: true, workloadHours: true } },
-        },
-        orderBy: { totalCompleted: 'desc' },
-        take: 10,
+      // Contagens ao vivo por curso (a tabela denormalizada `courseAnalytics`
+      // só incrementa e desvia-se); `avgRating` continua a vir dela.
+      this.prisma.read.enrollment.groupBy({
+        by: ['courseId', 'status'],
+        _count: true,
       }),
       // FIX: chamava-se `completionByCategory` mas agrupa por `courseId`, não
       // por categoria (Prisma `groupBy` não agrupa por campo de relação); era
@@ -573,6 +572,33 @@ export class AnalyticsService {
       include: { course: { select: { workloadHours: true } } },
     });
     const totalHours = completedEnrollments.reduce((s, e) => s + (e.course.workloadHours ?? 0), 0);
+
+    const liveCounts = new Map<number, { total: number; completed: number }>();
+    for (const r of enrollmentsByCourse) {
+      const cur = liveCounts.get(r.courseId) ?? { total: 0, completed: 0 };
+      cur.total += r._count;
+      if (r.status === 'COMPLETED') cur.completed += r._count;
+      liveCounts.set(r.courseId, cur);
+    }
+    const topIds = [...liveCounts.entries()]
+      .sort((a, b) => b[1].completed - a[1].completed || b[1].total - a[1].total)
+      .slice(0, 10)
+      .map(([id]) => id);
+    const topRows = await this.prisma.read.courseAnalytics.findMany({
+      where: { courseId: { in: topIds } },
+      include: {
+        course: { select: { id: true, title: true, category: true, workloadHours: true } },
+      },
+    });
+    const topCourses = topRows
+      .map(r => ({
+        ...r,
+        totalEnrollments: liveCounts.get(r.courseId)?.total ?? 0,
+        totalCompleted: liveCounts.get(r.courseId)?.completed ?? 0,
+      }))
+      .sort(
+        (a, b) => b.totalCompleted - a.totalCompleted || b.totalEnrollments - a.totalEnrollments,
+      );
 
     const completionCourses = await this.prisma.read.course.findMany({
       where: { id: { in: completionByCourse.map(c => c.courseId) } },
