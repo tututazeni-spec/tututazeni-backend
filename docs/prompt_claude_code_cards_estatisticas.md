@@ -192,4 +192,6 @@ Não redesenhes o dashboard inteiro. Modifica **exclusivamente** os cards de est
 
 - [x] AI Tutor — Visão Geral (7 cards), Analytics (6) e Base de Conhecimento (4) em `components/ai-tutor/*`; `KpiCard`/`Card` locais → `NavyStatCard`, tons por significado (taxas/aceites verde, tempo/horas laranja); sem valores alterados
 
+- [x] Avatar Training — Visão Geral (indicadores, até 16 cards) em `components/avatar-training/OverviewTab.tsx`; `Card` local → `NavyStatCard`, ícone/tom por código do indicador (positivos verde, consumo/tempo laranja, problemas vermelho); tooltip fórmula/fonte mantido, «Sem dados»/«Restrito» preservados; sem valores alterados
+
 **Pendentes:** restantes módulos que usam `TopBarCard` (crm), apenas cards.
