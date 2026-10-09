@@ -1667,8 +1667,35 @@ export class CoursesService {
     };
   }
 
+  /** userIds explícitos + colaboradores activos dos departamentos, sem duplicados. */
+  private async resolveParticipantIds(dto: {
+    userIds?: number[];
+    departmentIds?: number[];
+  }): Promise<number[]> {
+    const ids = new Set(dto.userIds ?? []);
+    if (dto.departmentIds?.length) {
+      const members = await this.prisma.user.findMany({
+        where: { departmentId: { in: dto.departmentIds }, active: true },
+        select: { id: true },
+      });
+      for (const m of members) ids.add(m.id);
+    }
+    return [...ids];
+  }
+
+  private assertCohortCapacity(availableSlots: number, requested: number) {
+    if (requested > availableSlots) {
+      throw new ConflictException(
+        `Capacidade insuficiente: ${availableSlots} vaga(s) disponível(eis) para ${requested} participante(s) — faltam ${requested - availableSlots} vaga(s). Aumenta a capacidade ou remove participantes.`,
+      );
+    }
+  }
+
   async createCohort(courseId: number, dto: CreateCourseCohortDto) {
     await this.findOne(courseId);
+    const participantIds = await this.resolveParticipantIds(dto);
+    const capacity = dto.capacity ?? 30;
+    this.assertCohortCapacity(capacity, participantIds.length);
     return this.prisma.courseCohort.create({
       data: {
         courseId,
@@ -1677,9 +1704,13 @@ export class CoursesService {
         location: dto.location,
         room: dto.room,
         schedule: dto.schedule,
-        capacity: dto.capacity ?? 30,
+        capacity,
         startDate: new Date(dto.startDate),
         endDate: dto.endDate ? new Date(dto.endDate) : null,
+        // Nested create: turma e participantes gravados atomicamente.
+        participants: {
+          create: participantIds.map(userId => ({ userId })),
+        },
       },
     });
   }
@@ -1688,6 +1719,16 @@ export class CoursesService {
     const cohort = await this.prisma.courseCohort.findUnique({ where: { id } });
     if (!cohort) throw new NotFoundException('Turma não encontrada');
     this.assertCohortAccess(cohort, user);
+    if (dto.capacity !== undefined) {
+      const enrolled = await this.prisma.courseCohortParticipant.count({
+        where: { cohortId: id },
+      });
+      if (dto.capacity < enrolled) {
+        throw new ConflictException(
+          `A turma já tem ${enrolled} participante(s) — a capacidade não pode ser inferior`,
+        );
+      }
+    }
     return this.prisma.courseCohort.update({
       where: { id },
       data: {
@@ -1732,25 +1773,28 @@ export class CoursesService {
     if (!cohort) throw new NotFoundException('Turma não encontrada');
     this.assertCohortAccess(cohort, user);
 
+    const requestedIds = await this.resolveParticipantIds(dto);
+    if (requestedIds.length === 0) {
+      throw new BadRequestException(
+        'Indica colaboradores ou departamentos com colaboradores activos',
+      );
+    }
     const alreadyIn = await this.prisma.courseCohortParticipant.findMany({
-      where: { cohortId, userId: { in: dto.userIds } },
+      where: { cohortId, userId: { in: requestedIds } },
       select: { userId: true },
     });
     const alreadyInIds = new Set(alreadyIn.map(p => p.userId));
-    const newUserIds = dto.userIds.filter(id => !alreadyInIds.has(id));
+    const newUserIds = requestedIds.filter(id => !alreadyInIds.has(id));
 
-    const availableSlots = cohort.capacity - cohort._count.participants;
-    if (newUserIds.length > availableSlots) {
-      throw new ConflictException(
-        `Capacidade insuficiente: ${availableSlots} vaga(s) disponível(eis) para ${newUserIds.length} participante(s)`,
-      );
+    this.assertCohortCapacity(cohort.capacity - cohort._count.participants, newUserIds.length);
+    if (newUserIds.length === 0) {
+      return { added: 0, alreadyIn: alreadyInIds.size };
     }
-    if (newUserIds.length === 0) return { added: 0 };
 
     await this.prisma.courseCohortParticipant.createMany({
       data: newUserIds.map(userId => ({ cohortId, userId })),
     });
-    return { added: newUserIds.length };
+    return { added: newUserIds.length, alreadyIn: alreadyInIds.size };
   }
 
   async removeCohortParticipant(cohortId: number, userId: number, user: CurrentUserData) {
@@ -1835,21 +1879,63 @@ export class CoursesService {
   async updateCategory(id: number, dto: UpdateCourseCategoryDto) {
     const category = await this.prisma.courseCategory.findUnique({ where: { id } });
     if (!category) throw new NotFoundException('Categoria não encontrada');
+    const renamed = dto.name !== undefined && dto.name !== category.name;
+    if (renamed) {
+      const clash = await this.prisma.courseCategory.findUnique({ where: { name: dto.name } });
+      if (clash) throw new ConflictException(`Categoria "${dto.name}" já existe`);
+      // Course.category liga por nome — renomear sem migrar os cursos deixava-os órfãos.
+      const [, updated] = await this.prisma.$transaction([
+        this.prisma.course.updateMany({
+          where: { category: category.name },
+          data: { category: dto.name },
+        }),
+        this.prisma.courseCategory.update({ where: { id }, data: dto }),
+      ]);
+      return updated;
+    }
     return this.prisma.courseCategory.update({ where: { id }, data: dto });
+  }
+
+  async listCategoryCourses(id: number) {
+    const category = await this.prisma.courseCategory.findUnique({ where: { id } });
+    if (!category) throw new NotFoundException('Categoria não encontrada');
+    const courses = await this.prisma.read.course.findMany({
+      select: { id: true, title: true, status: true, category: true },
+      orderBy: { title: 'asc' },
+    });
+    return courses.map(c => ({ ...c, inCategory: c.category === category.name }));
+  }
+
+  async setCategoryCourses(id: number, courseIds: number[]) {
+    const category = await this.prisma.courseCategory.findUnique({ where: { id } });
+    if (!category) throw new NotFoundException('Categoria não encontrada');
+    const ids = [...new Set(courseIds)];
+    const [, assigned] = await this.prisma.$transaction([
+      // Remove da categoria os cursos desmarcados (só os que pertencem a esta).
+      this.prisma.course.updateMany({
+        where: { category: category.name, id: { notIn: ids } },
+        data: { category: null },
+      }),
+      this.prisma.course.updateMany({
+        where: { id: { in: ids } },
+        data: { category: category.name },
+      }),
+    ]);
+    return { categoryId: id, courseCount: assigned.count };
   }
 
   async removeCategory(id: number) {
     const category = await this.prisma.courseCategory.findUnique({ where: { id } });
     if (!category) throw new NotFoundException('Categoria não encontrada');
-    const coursesUsing = await this.prisma.read.course.count({
-      where: { category: category.name },
-    });
-    if (coursesUsing > 0) {
-      throw new ConflictException(
-        `Não é possível remover: ${coursesUsing} curso(s) usam esta categoria. Desactive-a em vez disso.`,
-      );
-    }
-    return this.prisma.courseCategory.delete({ where: { id } });
+    // Os cursos não são apagados: só perdem a associação à categoria.
+    const [, deleted] = await this.prisma.$transaction([
+      this.prisma.course.updateMany({
+        where: { category: category.name },
+        data: { category: null },
+      }),
+      this.prisma.courseCategory.delete({ where: { id } }),
+    ]);
+    return deleted;
   }
 
   // ─── Relatórios (docs/modulo_courses.md secção 7) ───────────────────────

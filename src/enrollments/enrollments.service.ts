@@ -142,7 +142,9 @@ export class EnrollmentsService {
     const where: Prisma.EnrollmentWhereInput = {};
     if (userId) where.userId = userId;
     if (courseId) where.courseId = courseId;
-    if (status) where.status = status;
+    // "Remover inscrição" é um cancelamento (soft) — por omissão as canceladas
+    // saem da lista; ficam acessíveis ao filtrar explicitamente por "Cancelado".
+    where.status = status ? status : { not: 'CANCELLED' };
     if (origin) where.origin = origin;
     if (mandatory !== undefined) where.mandatory = mandatory;
     if (departmentId || unitId) {
@@ -636,12 +638,13 @@ export class EnrollmentsService {
       this.prisma.read.unit.findMany({ select: { id: true, name: true } }),
     ]);
 
-    async function statsFor(prisma: PrismaService, where: Prisma.EnrollmentWhereInput) {
-      const [total, completed, inProgress, overdue] = await Promise.all([
-        prisma.read.enrollment.count({ where }),
-        prisma.read.enrollment.count({ where: { ...where, status: 'COMPLETED' } }),
-        prisma.read.enrollment.count({ where: { ...where, status: 'IN_PROGRESS' } }),
-        prisma.read.enrollment.count({
+    // Sequencial de propósito: o fan-out anterior (4 counts × cada departamento/
+    // unidade, tudo em Promise.all) abria ~100 ligações de uma vez e esgotava o
+    // max_connections do Postgres → 500 "too many clients already".
+    const statsFor = async (where: Prisma.EnrollmentWhereInput) => {
+      const [byStatus, overdue] = await Promise.all([
+        this.prisma.read.enrollment.groupBy({ by: ['status'], where, _count: { _all: true } }),
+        this.prisma.read.enrollment.count({
           where: {
             ...where,
             deadline: { lt: new Date() },
@@ -649,31 +652,31 @@ export class EnrollmentsService {
           },
         }),
       ]);
+      const countOf = (st: string) => byStatus.find(r => r.status === st)?._count._all ?? 0;
+      const total = byStatus.reduce((sum, r) => sum + r._count._all, 0);
+      const completed = countOf('COMPLETED');
       return {
         total,
         completed,
-        inProgress,
+        inProgress: countOf('IN_PROGRESS'),
         overdue,
         completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
       };
-    }
+    };
 
-    const [byDepartment, byUnit] = await Promise.all([
-      Promise.all(
-        departments.map(async d => ({
-          id: d.id,
-          name: d.name,
-          ...(await statsFor(this.prisma, { user: { departmentId: d.id } })),
-        })),
-      ),
-      Promise.all(
-        units.map(async u => ({
-          id: u.id,
-          name: u.name,
-          ...(await statsFor(this.prisma, { user: { unitId: u.id } })),
-        })),
-      ),
-    ]);
+    const byDepartment: Array<{ id: number; name: string } & Awaited<ReturnType<typeof statsFor>>> =
+      [];
+    for (const d of departments) {
+      byDepartment.push({
+        id: d.id,
+        name: d.name,
+        ...(await statsFor({ user: { departmentId: d.id } })),
+      });
+    }
+    const byUnit: Array<{ id: number; name: string } & Awaited<ReturnType<typeof statsFor>>> = [];
+    for (const u of units) {
+      byUnit.push({ id: u.id, name: u.name, ...(await statsFor({ user: { unitId: u.id } })) });
+    }
 
     return {
       byDepartment: byDepartment.filter(d => d.total > 0),
