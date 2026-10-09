@@ -161,9 +161,7 @@ describe('AnalyticsService', () => {
       const result = await service.getHRDashboard({});
       expect(result).toBeDefined();
       expect(result.people.turnoverTrend).toHaveLength(6);
-      expect(result.pdi.funnel).toEqual(
-        expect.objectContaining({ eligible: expect.any(Number) }),
-      );
+      expect(result.pdi.funnel).toEqual(expect.objectContaining({ eligible: expect.any(Number) }));
     });
   });
 
