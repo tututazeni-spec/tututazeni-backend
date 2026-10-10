@@ -65,3 +65,42 @@ describe('IsAllowedFileUrl', () => {
     expect((await errorsFor('not-a-url', 'storage.innova.ao')).length).toBeGreaterThan(0);
   });
 });
+
+describe('IsAllowedFileUrl — allowPdfDataUrl', () => {
+  const MAX = 100;
+  class PdfDto {
+    @IsAllowedFileUrl(undefined, { allowPdfDataUrl: MAX })
+    fileUrl!: string;
+  }
+  const errors = async (v: string) => {
+    const d = new PdfDto();
+    d.fileUrl = v;
+    return validate(d);
+  };
+
+  it('aceita PDF em data URL dentro do limite', async () => {
+    expect(await errors('data:application/pdf;base64,JVBERi0xLjQ=')).toHaveLength(0);
+  });
+
+  it('recusa PDF acima do limite', async () => {
+    expect((await errors('data:application/pdf;base64,' + 'A'.repeat(MAX))).length).toBeGreaterThan(
+      0,
+    );
+  });
+
+  it('recusa data URL que não é PDF', async () => {
+    expect((await errors('data:text/html;base64,PGgxPg==')).length).toBeGreaterThan(0);
+  });
+
+  it('recusa base64 inválido', async () => {
+    expect((await errors('data:application/pdf;base64,<script>')).length).toBeGreaterThan(0);
+  });
+
+  it('continua a aceitar URL https', async () => {
+    expect(await errors('https://exemplo.com/a.pdf')).toHaveLength(0);
+  });
+
+  it('sem a opção, data URL continua recusado', async () => {
+    expect((await errorsFor('data:application/pdf;base64,JVBERi0=', '')).length).toBeGreaterThan(0);
+  });
+});
