@@ -182,4 +182,18 @@ Não redesenhes o dashboard inteiro. Modifica **exclusivamente** os cards de est
 - [x] Reports — `components/reports/ReportOutput.tsx` (KPIs de resumo) e `components/executive-reports/*` (ExecutiveKpiCard, KpiCard, 12 indicadores do OverviewPanel); sparkline e badge de estado removidos (estado/comparação/meta → `sub`), tom pelo semáforo do KPI (`gold`→`orange`)
 - [x] Reports — Central de Relatórios: 10 cards de modelo (`components/reports/TemplateCard.tsx`) no desenho Navy (variante local com descrição + "Executar →", pois não têm valor numérico); tom por categoria
 
-**Pendentes:** restantes módulos que usam `TopBarCard` (cursos, crm), apenas cards.
+- [x] Courses — Dashboard Admin (`components/courses/AdminDashboardView.tsx`, 18 cards; gauges de conclusão/aprovação → `NavyStatCard` com tom por limiar via `rateTone`) e Relatórios (`RelatoriosView.tsx`, 7 cards; sparkline mock, histograma estimado e barra de meta removidos; "Meta" → fora)
+
+- [x] Evaluation — Visão Geral (10 cards, org + pessoais), Analytics (4), Relatórios (4), Competências (3) e Configurações (3) em `components/evaluation/*`; tom do Score Médio por limiar via `SCORE_TONE` (constants.ts); distribuição de performance e matriz de concordância não migradas (gráficos)
+
+- [x] Live Classes — Dashboard (11 cards, incl. "Gravações disponíveis"), Avaliações (6) e Relatórios (4 + 5 + 1) em `components/live-classes/*`; tons por significado (agendadas/participantes azul, em curso vermelho, concluídas/presenças verde, canceladas/horas laranja); sem valores alterados
+
+- [x] Content Library — Analytics (4 cards) e O Meu Percurso (4) em `components/content-library/*`; `KpiCard` → `NavyStatCard`, tons por significado (concluídos/activos verde, visualizações azul ou laranja); sem valores alterados
+
+- [x] AI Tutor — Visão Geral (7 cards), Analytics (6) e Base de Conhecimento (4) em `components/ai-tutor/*`; `KpiCard`/`Card` locais → `NavyStatCard`, tons por significado (taxas/aceites verde, tempo/horas laranja); sem valores alterados
+
+- [x] Avatar Training — Visão Geral (indicadores, até 16 cards) em `components/avatar-training/OverviewTab.tsx`; `Card` local → `NavyStatCard`, ícone/tom por código do indicador (positivos verde, consumo/tempo laranja, problemas vermelho); tooltip fórmula/fonte mantido, «Sem dados»/«Restrito» preservados; sem valores alterados
+
+- [x] Departments — Dashboard (3 cards), Detalhe/Métricas (4), Colaboradores (3), Cargos (3) e Relatórios (6) em `components/departments/*`; `KpiCard` → `NavyStatCard`, tons por significado (activos/admissões verde, inactivos/rotatividade laranja, saídas vermelho se > 0, vagas laranja se > 0); `BreakdownCard`s (barras) não migrados; sem valores alterados
+
+**Pendentes:** restantes módulos que usam `TopBarCard` (crm), apenas cards.
