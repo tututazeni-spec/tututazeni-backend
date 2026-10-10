@@ -1365,8 +1365,22 @@ export class CompetenciesService {
     for (const c of byCategory) categoryCounts[c.category] = c._count.category;
 
     const allUC = await this.prisma.read.userCompetency.findMany({
-      select: { userId: true, competencyId: true, currentLevel: true, targetLevel: true },
+      select: {
+        userId: true,
+        competencyId: true,
+        currentLevel: true,
+        targetLevel: true,
+        selfLevel: true,
+        managerLevel: true,
+      },
     });
+
+    // Avaliação pendente = autoavaliação já submetida que ainda aguarda a
+    // avaliação do gestor (UserCompetency.selfLevel preenchido, managerLevel
+    // por preencher).
+    const pendingEvaluations = allUC.filter(
+      uc => uc.selfLevel != null && uc.managerLevel == null,
+    ).length;
 
     const avgProficiency = allUC.length
       ? Math.round((allUC.reduce((sum, uc) => sum + uc.currentLevel, 0) / allUC.length) * 10) / 10
@@ -1414,9 +1428,7 @@ export class CompetenciesService {
       biggestGaps,
       criticalAlerts,
       topCompetencies: await this.getTopCompetencies(5),
-      // Depende do tab 6 (Avaliações), ainda não construído neste módulo —
-      // null ≠ 0: a UI mostra "—", nunca afirma "0 pendentes".
-      pendingEvaluations: null as number | null,
+      pendingEvaluations,
     };
   }
 
