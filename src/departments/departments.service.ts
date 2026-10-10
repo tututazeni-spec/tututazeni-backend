@@ -1549,7 +1549,8 @@ export class DepartmentsService {
           expectedEmployees: true,
           maxEmployees: true,
           unit: { select: { id: true, name: true } },
-          _count: { select: { users: true } },
+          // Headcount = colaboradores activos (mesma base do limite aplicado em transferMember)
+          _count: { select: { users: { where: { active: true } } } },
         },
         orderBy: { name: 'asc' },
       }),
