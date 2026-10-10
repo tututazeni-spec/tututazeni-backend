@@ -43,7 +43,7 @@ export class DepartmentsService {
     { key: 'location', label: 'Localização' },
     { key: 'costCenter', label: 'Centro de custo' },
     { key: 'maxEmployees', label: 'Limite máximo de colaboradores' },
-    { key: 'expectedEmployees', label: 'Headcount previsto' },
+    { key: 'expectedEmployees', label: 'Número de colaboradores previsto' },
     { key: 'businessArea', label: 'Área de negócio' },
     { key: 'functionalArea', label: 'Área funcional' },
     { key: 'objective', label: 'Objectivo' },
@@ -381,7 +381,7 @@ export class DepartmentsService {
     const nextExpected =
       dto.expectedEmployees !== undefined ? dto.expectedEmployees : existing.expectedEmployees;
     if (nextMax != null && nextExpected != null && nextExpected > nextMax) {
-      throw new BadRequestException('O headcount previsto não pode exceder o limite máximo');
+      throw new BadRequestException('O número de colaboradores previsto não pode exceder o limite máximo');
     }
     if (dto.maxEmployees != null && dto.maxEmployees !== existing.maxEmployees) {
       const current = await this.prisma.user.count({
