@@ -43,7 +43,7 @@ export class DepartmentsService {
     { key: 'location', label: 'Localização' },
     { key: 'costCenter', label: 'Centro de custo' },
     { key: 'maxEmployees', label: 'Limite máximo de colaboradores' },
-    { key: 'expectedEmployees', label: 'Headcount previsto' },
+    { key: 'expectedEmployees', label: 'Número de colaboradores previsto' },
     { key: 'businessArea', label: 'Área de negócio' },
     { key: 'functionalArea', label: 'Área funcional' },
     { key: 'objective', label: 'Objectivo' },
@@ -376,6 +376,26 @@ export class DepartmentsService {
       if (codeExists) throw new ConflictException(`Código ${nextCode} já em uso`);
     }
 
+    // Headcount: limite não pode ser inferior ao previsto nem à ocupação actual
+    const nextMax = dto.maxEmployees !== undefined ? dto.maxEmployees : existing.maxEmployees;
+    const nextExpected =
+      dto.expectedEmployees !== undefined ? dto.expectedEmployees : existing.expectedEmployees;
+    if (nextMax != null && nextExpected != null && nextExpected > nextMax) {
+      throw new BadRequestException(
+        'O número de colaboradores previsto não pode exceder o limite máximo',
+      );
+    }
+    if (dto.maxEmployees != null && dto.maxEmployees !== existing.maxEmployees) {
+      const current = await this.prisma.user.count({
+        where: { departmentId: id, active: true },
+      });
+      if (dto.maxEmployees < current) {
+        throw new BadRequestException(
+          `O limite não pode ser inferior aos colaboradores activos actuais (${current})`,
+        );
+      }
+    }
+
     // Validar hierarquia circular
     if (dto.parentId && dto.parentId === id) {
       throw new BadRequestException('Departamento não pode ser pai de si próprio');
@@ -601,6 +621,18 @@ export class DepartmentsService {
 
     const previousDeptId = user.departmentId;
 
+    // Limite máximo de colaboradores (activos) do departamento de destino
+    if (target.maxEmployees != null && previousDeptId !== target.id && user.active) {
+      const current = await this.prisma.user.count({
+        where: { departmentId: target.id, active: true },
+      });
+      if (current >= target.maxEmployees) {
+        throw new BadRequestException(
+          `Limite de colaboradores atingido em "${target.name}" (${current}/${target.maxEmployees})`,
+        );
+      }
+    }
+
     await this.prisma.user.update({
       where: { id: dto.userId },
       data: { departmentId: dto.targetDepartmentId },
@@ -653,7 +685,7 @@ export class DepartmentsService {
 
   // Métricas do departamento
   async getMetrics(id: number) {
-    await this.findOne(id);
+    const dept = await this.findOne(id);
 
     const [totalUsers, activeUsers, transfersIn, transfersOut] = await Promise.all([
       this.prisma.read.user.count({ where: { departmentId: id } }),
@@ -670,6 +702,8 @@ export class DepartmentsService {
       totalUsers,
       activeUsers,
       inactiveUsers: totalUsers - activeUsers,
+      expectedEmployees: dept.expectedEmployees ?? null,
+      maxEmployees: dept.maxEmployees ?? null,
       transfers: { in: transfersIn, out: transfersOut },
       breadcrumb,
     };
@@ -1517,7 +1551,8 @@ export class DepartmentsService {
           expectedEmployees: true,
           maxEmployees: true,
           unit: { select: { id: true, name: true } },
-          _count: { select: { users: true } },
+          // Headcount = colaboradores activos (mesma base do limite aplicado em transferMember)
+          _count: { select: { users: { where: { active: true } } } },
         },
         orderBy: { name: 'asc' },
       }),
