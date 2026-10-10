@@ -543,10 +543,7 @@ export class CoursesController {
   @ApiOperation({
     summary: 'Listar turmas abertas (OPEN) ou activas (ACTIVE) de todos os cursos',
   })
-  listOpenCohorts(
-    @CurrentUser() user: CurrentUserData,
-    @Query('status') status?: string,
-  ) {
+  listOpenCohorts(@CurrentUser() user: CurrentUserData, @Query('status') status?: string) {
     return this.svc.listOpenCohorts(user, status);
   }
 
