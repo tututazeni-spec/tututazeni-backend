@@ -314,8 +314,22 @@ describe('CompetenciesService', () => {
         { category: 'SOFT_SKILL', _count: { category: 3 } },
       ]);
       mockPrisma.userCompetency.findMany.mockResolvedValue([
-        { userId: 1, competencyId: 1, currentLevel: 2, targetLevel: 4 },
-        { userId: 2, competencyId: 1, currentLevel: 4, targetLevel: 4 },
+        {
+          userId: 1,
+          competencyId: 1,
+          currentLevel: 2,
+          targetLevel: 4,
+          selfLevel: 3,
+          managerLevel: null,
+        },
+        {
+          userId: 2,
+          competencyId: 1,
+          currentLevel: 4,
+          targetLevel: 4,
+          selfLevel: 4,
+          managerLevel: 4,
+        },
       ]);
       mockPrisma.competency.findMany.mockResolvedValue([
         { id: 1, name: 'TypeScript', category: 'HARD_SKILL', isCritical: true },
@@ -333,7 +347,8 @@ describe('CompetenciesService', () => {
       expect(result.evaluatedUsers).toBe(2);
       expect(result.biggestGaps[0]).toMatchObject({ id: 1, usersWithGap: 1 });
       expect(result.criticalAlerts).toHaveLength(1);
-      expect(result.pendingEvaluations).toBeNull();
+      // só o utilizador 1 tem autoavaliação sem avaliação do gestor
+      expect(result.pendingEvaluations).toBe(1);
     });
   });
 
