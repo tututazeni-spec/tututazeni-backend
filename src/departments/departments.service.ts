@@ -381,7 +381,9 @@ export class DepartmentsService {
     const nextExpected =
       dto.expectedEmployees !== undefined ? dto.expectedEmployees : existing.expectedEmployees;
     if (nextMax != null && nextExpected != null && nextExpected > nextMax) {
-      throw new BadRequestException('O número de colaboradores previsto não pode exceder o limite máximo');
+      throw new BadRequestException(
+        'O número de colaboradores previsto não pode exceder o limite máximo',
+      );
     }
     if (dto.maxEmployees != null && dto.maxEmployees !== existing.maxEmployees) {
       const current = await this.prisma.user.count({
