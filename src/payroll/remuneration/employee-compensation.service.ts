@@ -66,6 +66,7 @@ export class EmployeeCompensationService {
               id: true,
               fullName: true,
               employeeNumber: true,
+              avatarUrl: true,
               department: { select: { id: true, name: true } },
             },
           },
