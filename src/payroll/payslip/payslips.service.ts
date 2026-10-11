@@ -216,6 +216,7 @@ export class PayslipsService {
               id: true,
               fullName: true,
               employeeNumber: true,
+              avatarUrl: true,
               position: true,
               department: true,
             },
