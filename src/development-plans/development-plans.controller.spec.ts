@@ -121,9 +121,10 @@ describe('DevelopmentPlansController', () => {
     expect(mockSvc.cancel).toHaveBeenCalledWith(5, 'motivo');
   });
 
-  it('remove → remove(id)', async () => {
-    await controller.remove(1);
-    expect(mockSvc.remove).toHaveBeenCalledWith(1);
+  it('remove → remove(id, user)', async () => {
+    const user = { id: 1 } as never;
+    await controller.remove(1, user);
+    expect(mockSvc.remove).toHaveBeenCalledWith(1, user);
   });
 
   it('addAction → addAction(dto, user)', async () => {

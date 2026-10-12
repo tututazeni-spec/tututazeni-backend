@@ -516,8 +516,8 @@ export class DevelopmentPlansService {
     });
   }
 
-  async remove(id: number) {
-    const plan = await this.findOne(id);
+  async remove(id: number, user?: CurrentUserData) {
+    const plan = await this.findOne(id, user);
     if (plan.status === 'ACTIVE') {
       throw new ForbiddenException('Plano activo não pode ser eliminado. Cancele-o primeiro.');
     }
@@ -787,8 +787,10 @@ export class DevelopmentPlansService {
     const plans = await this.prisma.read.developmentPlan.findMany({
       where: { userId },
       include: {
+        user: { select: { id: true, fullName: true, avatarUrl: true } },
         actions: { select: { status: true, dueDate: true } },
         goals: { select: { progress: true } },
+        _count: { select: { actions: true, goals: true, checkpoints: true } },
         checkpoints: {
           where: { status: 'PENDING', scheduledAt: { gte: new Date() } },
           orderBy: { scheduledAt: 'asc' },

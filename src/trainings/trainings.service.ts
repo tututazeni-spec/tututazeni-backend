@@ -1590,7 +1590,15 @@ export class TrainingService {
         where: { status: { in: ['REGISTERED', 'WAITLIST', 'PENDING_APPROVAL'] } },
       }),
       this.prisma.read.trainingParticipant.count({
-        where: { status: { in: ['REGISTERED', 'ATTENDED'] } },
+        // "Em formação": só participantes cuja formação está efectivamente a decorrer.
+        where: {
+          status: { in: ['REGISTERED', 'ATTENDED'] },
+          training: {
+            status: 'PUBLISHED',
+            startDate: { lte: now },
+            OR: [{ endDate: null }, { endDate: { gte: now } }],
+          },
+        },
       }),
       this.prisma.read.trainingParticipant.count({ where: { status: 'COMPLETED' } }),
       this.prisma.read.trainingParticipant.count({ where: { status: { not: 'WAITLIST' } } }),

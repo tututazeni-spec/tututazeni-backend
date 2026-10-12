@@ -694,6 +694,22 @@ const CompetencySource = {
 };
 
 const MappingPriority = { MANDATORY: 'MANDATORY', OPTIONAL: 'OPTIONAL' };
+// Requisitos por cargo + qualificações do colaborador (migration 20261113000000)
+const RequirementCategory = {
+  ACADEMIC: 'ACADEMIC',
+  EXPERIENCE: 'EXPERIENCE',
+  LANGUAGE: 'LANGUAGE',
+  CERTIFICATION: 'CERTIFICATION',
+};
+const AcademicDegree = {
+  TECNICO: 'TECNICO',
+  BACHARELATO: 'BACHARELATO',
+  LICENCIATURA: 'LICENCIATURA',
+  POS_GRADUACAO: 'POS_GRADUACAO',
+  MESTRADO: 'MESTRADO',
+  DOUTORAMENTO: 'DOUTORAMENTO',
+};
+const CefrLevel = { A1: 'A1', A2: 'A2', B1: 'B1', B2: 'B2', C1: 'C1', C2: 'C2' };
 
 const AccountStatus = {
   ACTIVE: 'ACTIVE',
@@ -3033,6 +3049,9 @@ module.exports = {
   CompetencyStatus,
   CompetencySource,
   MappingPriority,
+  RequirementCategory,
+  AcademicDegree,
+  CefrLevel,
   AccountStatus,
   HrStatus,
   PermissionAction,

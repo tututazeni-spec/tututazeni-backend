@@ -98,9 +98,14 @@ describe('CareerController', () => {
     expect(mockSvc.getCompetencyGapsForUser).toHaveBeenCalledWith(5);
   });
 
-  it('simulateUser → simulateNextRole(userId, targetPositionId)', async () => {
-    await controller.simulateUser(3, 7);
-    expect(mockSvc.simulateNextRole).toHaveBeenCalledWith(3, 7);
+  it('simulateUser → ADMIN/RH vêem os dados do colaborador (sem redacção)', async () => {
+    await controller.simulateUser(mockUser as any, 3, 7);
+    expect(mockSvc.simulateNextRole).toHaveBeenCalledWith(3, 7, { redactActual: false });
+  });
+
+  it('simulateUser → GESTOR não vê habilitações/idiomas/certificações do colaborador (redacção)', async () => {
+    await controller.simulateUser({ id: 9, role: { name: 'GESTOR' } } as any, 3, 7);
+    expect(mockSvc.simulateNextRole).toHaveBeenCalledWith(3, 7, { redactActual: true });
   });
 
   it('findPaths sem deptId → findAllCareerPaths(undefined)', async () => {

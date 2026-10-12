@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bull';
 import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
+import { UserQualificationsService } from './user-qualifications.service';
+import { UserQualificationsController } from './user-qualifications.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { MailModule } from '../mail/mail.module';
 import { EmailProcessor } from '../queue/processors/email.processor';
@@ -21,8 +23,8 @@ import { SettingsModule } from '../settings/settings.module';
     RolesPermissionsModule,
     SettingsModule,
   ],
-  providers: [UsersService, EmailProcessor],
-  controllers: [UsersController],
+  providers: [UsersService, UserQualificationsService, EmailProcessor],
+  controllers: [UsersController, UserQualificationsController],
   exports: [UsersService, EmployeesModule, RolesPermissionsModule],
 })
 export class UsersModule {}

@@ -390,7 +390,7 @@ export class PayrollWorkflowService {
         skip,
         take,
         include: {
-          user: { select: { id: true, fullName: true, employeeNumber: true } },
+          user: { select: { id: true, fullName: true, employeeNumber: true, avatarUrl: true } },
           items: true,
         },
         orderBy: { user: { fullName: 'asc' } },
@@ -403,12 +403,18 @@ export class PayrollWorkflowService {
   async listExceptions(runId: number) {
     const rows = await this.prisma.read.payslip.findMany({
       where: { runId, hasExceptions: true },
-      select: { id: true, userId: true, exceptions: true, user: { select: { fullName: true } } },
+      select: {
+        id: true,
+        userId: true,
+        exceptions: true,
+        user: { select: { fullName: true, avatarUrl: true } },
+      },
     });
     const out: Array<{
       payslipId: number;
       userId: number;
       fullName: string;
+      avatarUrl?: string | null;
       code: string;
       severity: string;
       message: string;
@@ -422,6 +428,7 @@ export class PayrollWorkflowService {
           payslipId: r.id,
           userId: r.userId,
           fullName: r.user?.fullName ?? '—',
+          avatarUrl: r.user?.avatarUrl,
           code: e.code,
           severity: e.severity,
           message: e.message,
