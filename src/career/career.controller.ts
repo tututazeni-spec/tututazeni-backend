@@ -36,6 +36,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
+import { isPrivileged } from '../common/authz/ownership';
 
 @ApiTags('Career')
 @ApiBearerAuth()
@@ -114,10 +115,16 @@ export class CareerController {
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Simular carreira de um colaborador' })
   simulateUser(
+    @CurrentUser() user: CurrentUserData,
     @Param('userId', ParseIntPipe) userId: number,
     @Param('targetPositionId', ParseIntPipe) targetPositionId: number,
   ) {
-    return this.svc.simulateNextRole(userId, targetPositionId);
+    // GESTOR continua a ver o estado de cada requisito mas não o valor que o
+    // colaborador tem (habilitação, nível de idioma, certificação): sem escopo de
+    // equipa neste endpoint, isso expunha dados de qualquer colaborador.
+    return this.svc.simulateNextRole(userId, targetPositionId, {
+      redactActual: !isPrivileged(user, [Role.ADMIN, Role.RH]),
+    });
   }
 
   // ── Famílias Profissionais ────────────────────────────────────────────────
@@ -169,6 +176,13 @@ export class CareerController {
   @ApiOperation({ summary: 'Actualizar trilha' })
   updatePath(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCareerPathDto) {
     return this.svc.updateCareerPath(id, dto);
+  }
+
+  @Delete('paths/:id')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Apagar trilha de carreira' })
+  removePath(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.removeCareerPath(id);
   }
 
   @Post('paths/:id/steps')
@@ -243,6 +257,13 @@ export class CareerController {
   @ApiOperation({ summary: 'Criar vaga interna' })
   createVacancy(@CurrentUser() user: CurrentUserData, @Body() dto: CreateInternalVacancyDto) {
     return this.svc.createVacancy(user.id, dto);
+  }
+
+  @Delete('vacancies/:id')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Apagar vaga interna (e respectivas candidaturas)' })
+  removeVacancy(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.removeVacancy(id, user);
   }
 
   @Patch('vacancies/:id/publish')

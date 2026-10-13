@@ -10,6 +10,16 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Prisma, ReviewStatus, CareerPlanStatus, GoalType } from '@prisma/client';
 import { CareerPlansService } from './career-plans.service';
 import {
+  computeReadiness,
+  evaluateRequirements,
+  type CandidateProfile,
+  type RequirementCheck,
+  type RequirementInput,
+} from './position-requirements.evaluator';
+import { assertCanAccess } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import { CurrentUserData } from '../common/types/current-user';
+import {
   CreateCareerPathDto,
   UpdateCareerPathDto,
   AddCareerPathStepDto,
@@ -55,7 +65,11 @@ export class CareerService {
         },
         userCareerPlans: {
           where: { status: { in: ['ACTIVE', 'DRAFT'] } },
-          include: { goals: { orderBy: { createdAt: 'desc' }, take: 5 } },
+          include: {
+            goals: { orderBy: { createdAt: 'desc' } },
+            currentRole: { select: { id: true, name: true } },
+            targetRole: { select: { id: true, name: true } },
+          },
           orderBy: { createdAt: 'desc' },
           take: 1,
         },
@@ -195,16 +209,20 @@ export class CareerService {
 
   // ─── SIMULADOR DE CARREIRA (Próximo cargo) ────────────────────────────────
 
-  async simulateNextRole(userId: number, targetPositionId: number) {
+  async simulateNextRole(
+    userId: number,
+    targetPositionId: number,
+    opts: { redactActual?: boolean } = {},
+  ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { positionId: true, hireDate: true },
+      select: { positionId: true, hireDate: true, priorExperienceYears: true },
     });
     if (!user) throw new NotFoundException(`Utilizador #${userId} não encontrado`);
 
     const targetPosition = await this.prisma.read.position.findUnique({
       where: { id: targetPositionId },
-      include: { competencies: { include: { competency: true } } },
+      include: { competencies: { include: { competency: true } }, requirementItems: true },
     });
     if (!targetPosition) throw new NotFoundException('Cargo alvo não encontrado');
 
@@ -240,7 +258,60 @@ export class CareerService {
     // Calcular % completitude
     const metCount = competencyGaps.filter(g => g.met).length;
     const totalReqs = competencyGaps.length;
-    const readinessScore = totalReqs > 0 ? Math.round((metCount / totalReqs) * 100) : 100;
+
+    // Requisitos estruturados do cargo (habilitações, experiência, idiomas,
+    // certificações). Só consulta o perfil quando há requisitos a avaliar.
+    const requirementItems: RequirementInput[] = (targetPosition.requirementItems ?? []).map(r => ({
+      id: r.id,
+      category: r.category,
+      title: r.title,
+      level: r.level,
+      minYears: r.minYears,
+      mandatory: r.mandatory,
+    }));
+    let requirementChecks: RequirementCheck[] = [];
+    if (requirementItems.length > 0) {
+      const [qualifications, languages, externalCertifications, platformCertificates] =
+        await Promise.all([
+          this.prisma.read.userQualification.findMany({ where: { userId } }),
+          this.prisma.read.userLanguage.findMany({ where: { userId } }),
+          this.prisma.read.userExternalCertification.findMany({ where: { userId } }),
+          // Os escritores reais de Certificate (course-completion, events) não
+          // preenchem `title` — o nome vem do curso ou do evento associado.
+          this.prisma.read.certificate.findMany({
+            where: { userId, revoked: false, deletedAt: null },
+            select: {
+              title: true,
+              expiresAt: true,
+              revoked: true,
+              course: { select: { title: true } },
+              event: { select: { title: true } },
+            },
+          }),
+        ]);
+      const profile: CandidateProfile = {
+        qualifications,
+        languages,
+        externalCertifications,
+        platformCertificates: platformCertificates.map(c => ({
+          title: c.title ?? c.course?.title ?? c.event?.title ?? null,
+          expiresAt: c.expiresAt,
+          revoked: c.revoked,
+        })),
+        priorExperienceYears: user.priorExperienceYears ?? null,
+        hireDate: user.hireDate,
+        now: new Date(),
+      };
+      requirementChecks = evaluateRequirements(requirementItems, profile);
+      if (opts.redactActual) {
+        requirementChecks = requirementChecks.map(c => ({ ...c, actual: null }));
+      }
+    }
+    const { readinessScore, optionalMet, optionalTotal, noData } = computeReadiness(
+      metCount,
+      totalReqs,
+      requirementChecks,
+    );
 
     // Cursos recomendados para fechar gaps
     const gapCompetencyIds = competencyGaps.filter(g => !g.met).map(g => g.competency.id);
@@ -269,6 +340,7 @@ export class CareerService {
       },
       readinessScore,
       competencyGaps,
+      requirementChecks,
       monthsInCurrentRole,
       performanceAvg: Math.round((performanceAvg._avg.score ?? 0) * 10) / 10,
       recommendedCourses: recommendedCourses.map(rc => rc.course),
@@ -276,6 +348,9 @@ export class CareerService {
         totalRequirements: totalReqs,
         requirementsMet: metCount,
         requirementsGap: totalReqs - metCount,
+        optionalMet,
+        optionalTotal,
+        noData,
         ready: readinessScore >= 80,
         estimatedTimeMonths: readinessScore >= 80 ? 0 : Math.ceil((100 - readinessScore) / 10) * 3,
       },
@@ -381,6 +456,14 @@ export class CareerService {
   async updateCareerPath(id: number, dto: UpdateCareerPathDto) {
     await this.findOneCareerPath(id);
     return this.prisma.careerPath.update({ where: { id }, data: dto });
+  }
+
+  // Soft delete: UserCareerPlan referencia a trilha, por isso desactiva-se em vez
+  // de apagar a linha — findAllCareerPaths já filtra por active: true.
+  async removeCareerPath(id: number) {
+    await this.findOneCareerPath(id);
+    await this.prisma.careerPath.update({ where: { id }, data: { active: false } });
+    return { id, deleted: true };
   }
 
   // CareerPathStep.roleId é uma FK obrigatória para CareerRole — um modelo/relação
@@ -662,35 +745,61 @@ export class CareerService {
   }
 
   async createVacancy(createdById: number, dto: CreateInternalVacancyDto) {
-    return this.prisma.internalVacancy.create({
-      data: {
-        title: dto.title,
-        code: dto.code,
-        description: dto.description,
-        type: dto.type,
-        positionId: dto.positionId,
-        departmentId: dto.departmentId,
-        unitId: dto.unitId,
-        location: dto.location,
-        careerLevel: dto.careerLevel,
-        responsibleManagerId: dto.responsibleManagerId,
-        closingDate: dto.closingDate ? new Date(dto.closingDate) : null,
-        durationDays: dto.durationDays,
-        requiredCompetencyIds: dto.requiredCompetencyIds ?? [],
-        requiredCourseIds: dto.requiredCourseIds ?? [],
-        requiredCertifications: dto.requiredCertifications ?? [],
-        requiredTraining: dto.requiredTraining,
-        slots: dto.slots ?? 1,
-        status: 'DRAFT',
-        createdById,
-      },
-      include: {
-        position: { select: { id: true, name: true } },
-        department: { select: { id: true, name: true } },
-        unit: { select: { id: true, name: true, city: true } },
-        responsibleManager: { select: { id: true, fullName: true, avatarUrl: true } },
-      },
-    });
+    try {
+      return await this.prisma.internalVacancy.create({
+        data: {
+          title: dto.title,
+          code: dto.code,
+          description: dto.description,
+          type: dto.type,
+          positionId: dto.positionId,
+          departmentId: dto.departmentId,
+          unitId: dto.unitId,
+          location: dto.location,
+          careerLevel: dto.careerLevel,
+          responsibleManagerId: dto.responsibleManagerId,
+          closingDate: dto.closingDate ? new Date(dto.closingDate) : null,
+          durationDays: dto.durationDays,
+          requiredCompetencyIds: dto.requiredCompetencyIds ?? [],
+          requiredCourseIds: dto.requiredCourseIds ?? [],
+          requiredCertifications: dto.requiredCertifications ?? [],
+          requiredTraining: dto.requiredTraining,
+          slots: dto.slots ?? 1,
+          status: 'DRAFT',
+          createdById,
+        },
+        include: {
+          position: { select: { id: true, name: true } },
+          department: { select: { id: true, name: true } },
+          unit: { select: { id: true, name: true, city: true } },
+          responsibleManager: { select: { id: true, fullName: true, avatarUrl: true } },
+        },
+      });
+    } catch (e) {
+      // Sem isto, um código repetido ou uma referência inexistente chegavam ao
+      // utilizador como "Internal server error" (500) sem nenhuma pista.
+      if (e instanceof Prisma.PrismaClientKnownRequestError) {
+        if (e.code === 'P2002') {
+          throw new ConflictException('Já existe uma oportunidade com este código');
+        }
+        if (e.code === 'P2003') {
+          throw new BadRequestException(
+            'Cargo, departamento, unidade ou responsável inválido — seleccione um valor existente',
+          );
+        }
+      }
+      throw e;
+    }
+  }
+
+  // Hard delete: InternalVacancy não tem estado "apagada" e as candidaturas
+  // caem em cascata (onDelete: Cascade). GESTOR só apaga as vagas que criou.
+  async removeVacancy(id: number, user: CurrentUserData) {
+    const v = await this.prisma.read.internalVacancy.findUnique({ where: { id } });
+    if (!v) throw new NotFoundException('Vaga não encontrada');
+    assertCanAccess(v, v.createdById, user, [Role.ADMIN, Role.RH]);
+    await this.prisma.internalVacancy.delete({ where: { id } });
+    return { id, deleted: true };
   }
 
   async publishVacancy(id: number) {
@@ -1270,7 +1379,9 @@ export class CareerService {
       if (key === null) continue;
       map.set(key, (map.get(key) ?? 0) + 1);
     }
-    return Array.from(map.entries()).map(([key, count]) => ({ key, count }));
+    return Array.from(map.entries())
+      .map(([key, count]) => ({ key, count }))
+      .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
   }
 
   async getCareerOverview(filters: CareerAnalyticsFilterDto = {}) {
@@ -1354,7 +1465,8 @@ export class CareerService {
         orderBy: { effectiveDate: 'desc' },
       }),
       this.prisma.read.userCareerPlan.findMany({
-        where: { userId },
+        // ARCHIVED = plano apagado (soft delete, ver CareerPlansService.remove).
+        where: { userId, status: { not: CareerPlanStatus.ARCHIVED } },
         include: {
           currentRole: { select: { id: true, name: true } },
           targetRole: { select: { id: true, name: true } },

@@ -253,12 +253,29 @@ export class MetricsAggregationService {
       }),
       this.prisma.read.user.findMany({
         where: { ...where, active: true },
-        select: { hireDate: true, createdAt: true },
+        select: { hireDate: true, createdAt: true, departmentId: true },
       }),
     ]);
 
+    const deptTenure = new Map<number, { sum: number; n: number }>();
+    for (const u of tenureUsers) {
+      if (u.departmentId == null) continue;
+      const acc = deptTenure.get(u.departmentId) ?? { sum: 0, n: 0 };
+      acc.sum += tenureMonths(u.hireDate ?? u.createdAt);
+      acc.n++;
+      deptTenure.set(u.departmentId, acc);
+    }
+
     const byDepartment: HeadcountBreakdownEntry[] = deptRows
-      .map(d => ({ id: d.id, name: d.name, count: d._count.users }))
+      .map(d => {
+        const t = deptTenure.get(d.id);
+        return {
+          id: d.id,
+          name: d.name,
+          count: d._count.users,
+          avgTenureYears: t ? round(t.sum / t.n / 12, 1) : 0,
+        };
+      })
       .sort((a, b) => b.count - a.count);
 
     const byPosition: HeadcountBreakdownEntry[] = posRows.map(p => {

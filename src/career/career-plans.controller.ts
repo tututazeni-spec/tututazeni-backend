@@ -5,6 +5,7 @@ import {
   Post,
   Put,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -247,6 +248,13 @@ export class CareerPlansController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.update(id, dto, user.id);
+  }
+
+  @Delete(':id')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Apagar plano de carreira (arquiva)' })
+  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.remove(id, user);
   }
 
   @Patch(':id/activate')

@@ -282,6 +282,51 @@ export class DashboardRhService {
     return points.map(p => ({ month: p.month, count: p.headcount, new: p.new }));
   }
 
+  /**
+   * Evolução mensal da cobertura PDI (% de colaboradores com plano de
+   * desenvolvimento em vigor no fim de cada mês). Aproximação histórica: o
+   * plano conta se já existia (`createdAt`), não é rascunho/pendente/cancelado
+   * e ainda não estava concluído (`completedAt`) nesse fim de mês — o modelo
+   * não guarda o histórico de estados.
+   */
+  async getPdiCoverageTrend(months = 6) {
+    const now = new Date();
+    const points: { month: string; coverage: number; withPlan: number; total: number }[] = [];
+    for (let i = months - 1; i >= 0; i--) {
+      const mEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59, 999);
+      const asOf = mEnd > now ? now : mEnd;
+      const [total, plans] = await Promise.all([
+        this.prisma.read.user.count({
+          where: {
+            hireDate: { lte: asOf },
+            OR: [{ exitDate: null }, { exitDate: { gt: asOf } }],
+          },
+        }),
+        this.prisma.read.developmentPlan.findMany({
+          where: {
+            isTemplate: false,
+            createdAt: { lte: asOf },
+            status: { notIn: ['DRAFT', 'PENDING_APPROVAL', 'CANCELLED'] },
+            OR: [{ completedAt: null }, { completedAt: { gt: asOf } }],
+            user: {
+              hireDate: { lte: asOf },
+              OR: [{ exitDate: null }, { exitDate: { gt: asOf } }],
+            },
+          },
+          distinct: ['userId'],
+          select: { userId: true },
+        }),
+      ]);
+      points.push({
+        month: `${mEnd.getFullYear()}-${String(mEnd.getMonth() + 1).padStart(2, '0')}`,
+        coverage: total > 0 ? Math.min(100, Math.round((plans.length / total) * 1000) / 10) : 0,
+        withPlan: plans.length,
+        total,
+      });
+    }
+    return points;
+  }
+
   // ══════════════════════════════════════════════════════
   // TURNOVER & RETENTION
   // ══════════════════════════════════════════════════════

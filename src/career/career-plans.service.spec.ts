@@ -145,6 +145,35 @@ describe('CareerPlansService', () => {
       await expect(service.findOne(99)).rejects.toThrow(NotFoundException);
     });
   });
+
+  describe('remove', () => {
+    const rh = { id: 1, role: { name: 'RH' } } as any;
+
+    it('deve arquivar o plano (soft delete)', async () => {
+      mockPrisma.userCareerPlan.findUnique.mockResolvedValue(basePlan);
+      mockPrisma.userCareerPlan.update.mockResolvedValue({ ...basePlan, status: 'ARCHIVED' });
+      const result = await service.remove(1, rh);
+      expect(mockPrisma.userCareerPlan.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { status: 'ARCHIVED' },
+      });
+      expect(result).toEqual({ id: 1, deleted: true });
+    });
+
+    it('deve lançar NotFoundException se o plano não existe', async () => {
+      mockPrisma.userCareerPlan.findUnique.mockResolvedValue(null);
+      await expect(service.remove(99, rh)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('findAll — planos arquivados', () => {
+    it('exclui ARCHIVED por omissão', async () => {
+      await service.findAll({});
+      expect(mockPrisma.userCareerPlan.findMany.mock.calls[0][0].where.status).toEqual({
+        not: 'ARCHIVED',
+      });
+    });
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

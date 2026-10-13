@@ -139,6 +139,30 @@ describe('SuccessionService', () => {
     });
   });
 
+  describe('removeCriticalPosition', () => {
+    it('apaga o cargo crítico e regista DELETE na auditoria', async () => {
+      (mockPrisma.criticalPosition as any).delete = jest.fn().mockResolvedValue({});
+      mockPrisma.criticalPosition.findUnique.mockResolvedValue({
+        id: 3,
+        position: { name: 'Director TI' },
+        _count: { successionPlans: 2 },
+      });
+      const result = await service.removeCriticalPosition(3, 1);
+      expect((mockPrisma.criticalPosition as any).delete).toHaveBeenCalledWith({
+        where: { id: 3 },
+      });
+      expect(result).toEqual({ id: 3, deleted: true });
+      expect(mockAuditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'DELETE', entity: 'CriticalPosition', entityId: 3 }),
+      );
+    });
+
+    it('lança NotFoundException se não existe', async () => {
+      mockPrisma.criticalPosition.findUnique.mockResolvedValue(null);
+      await expect(service.removeCriticalPosition(99, 1)).rejects.toThrow(NotFoundException);
+    });
+  });
+
   describe('getCriticalPositions', () => {
     it('deve retornar posições críticas', async () => {
       mockPrisma.criticalPosition.findMany.mockResolvedValue([baseCritical]);

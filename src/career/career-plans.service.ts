@@ -221,10 +221,14 @@ export class CareerPlansService {
       return {
         userId,
         targetRoleId,
+        targetRoleName: targetRole.name,
         score: 100,
         readinessLevel: ReadinessLevel.READY,
+        readinessEmoji: readinessEmoji(ReadinessLevel.READY),
         skillGaps: [],
         missingSkills: [],
+        totalRequirements: 0,
+        metRequirements: 0,
         message: 'Sem requisitos de skills configurados',
         recommendedCourses: [],
       };
@@ -291,7 +295,8 @@ export class CareerPlansService {
     const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.UserCareerPlanWhereInput = {};
     if (userId) where.userId = userId;
-    if (status) where.status = status;
+    // ARCHIVED = plano apagado (soft delete) — só aparece se pedido explicitamente.
+    where.status = status ? status : { not: CareerPlanStatus.ARCHIVED };
     // FIX: removed employee from UserSelect — User has no employee relation
     if (department)
       where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
@@ -446,6 +451,16 @@ export class CareerPlansService {
     const data: Prisma.UserCareerPlanUpdateInput = { ...dto };
     if (dto.targetDate) data.targetDate = new Date(dto.targetDate);
     return this.prisma.userCareerPlan.update({ where: { id }, data });
+  }
+
+  // Soft delete: metas, promoções e PDIs referenciam o plano, por isso arquiva-se.
+  async remove(id: number, user: CurrentUserData) {
+    await this.findOne(id, user);
+    await this.prisma.userCareerPlan.update({
+      where: { id },
+      data: { status: CareerPlanStatus.ARCHIVED },
+    });
+    return { id, deleted: true };
   }
 
   async activate(id: number, _activatedById: number) {

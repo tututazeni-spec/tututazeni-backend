@@ -42,6 +42,13 @@ export class DashboardRhController {
     return this.svc.getHeadcountTrend(months ? +months : 6);
   }
 
+  @Get('pdi-coverage-trend')
+  @Roles(...ADMIN)
+  @ApiOperation({ summary: 'Evolução mensal da cobertura PDI' })
+  pdiCoverageTrend(@Query('months') months?: string) {
+    return this.svc.getPdiCoverageTrend(months ? +months : 6);
+  }
+
   // ─── Turnover ────────────────────────────────────────────────
 
   @Get('turnover')

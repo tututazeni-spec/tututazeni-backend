@@ -671,6 +671,7 @@ model User {
   exitDate DateTime?
   nif      String? // Número de Identificação Fiscal — usado no processamento de recibos de vencimento
   nib      String? // Número de Identificação Bancária — conta para pagamento de salário
+  priorExperienceYears Float? // anos de experiência anterior à empresa; null = nunca preenchido
 
   // ─── Dados Profissionais (docs/modulo_users.md Ponto 2) ────────
   // Empresa/área/função/categoria/localização/centro de custo/horário: sem
@@ -715,6 +716,9 @@ model User {
   unit                      Unit?                     @relation(fields: [unitId], references: [id])
   manager                   User?                     @relation("Hierarchy", fields: [managerId], references: [id])
   subordinates              User[]                    @relation("Hierarchy")
+  qualifications            UserQualification[]
+  languages                 UserLanguage[]
+  externalCertifications    UserExternalCertification[]
   departmentHead            Department[]              @relation("DeptHead")
   departmentDeputyHead      Department[]              @relation("DeptDeputyHead")
   departmentDirectManager   Department[]              @relation("DeptDirectManager")
@@ -1471,6 +1475,7 @@ model Position {
   users               User[]               @relation("PositionUsers")
   successionPlans     SuccessionPlan[]
   competencies        PositionCompetency[]
+  requirementItems    PositionRequirement[]
   onboardingTemplates OnboardingTemplate[]
   orgChangesFrom      OrgChangeLog[]       @relation("OrgChangePosFrom")
   careerPathSteps     CareerPathStep[]
@@ -3310,6 +3315,82 @@ model CompetencyEndorsement {
 enum MappingPriority {
   MANDATORY
   OPTIONAL
+}
+
+enum RequirementCategory {
+  ACADEMIC
+  EXPERIENCE
+  LANGUAGE
+  CERTIFICATION
+}
+
+enum AcademicDegree {
+  TECNICO
+  BACHARELATO
+  LICENCIATURA
+  POS_GRADUACAO
+  MESTRADO
+  DOUTORAMENTO
+}
+
+enum CefrLevel {
+  A1
+  A2
+  B1
+  B2
+  C1
+  C2
+}
+
+model PositionRequirement {
+  id         Int                 @id @default(autoincrement())
+  positionId Int
+  category   RequirementCategory
+  title      String
+  level      String? // AcademicDegree (ACADEMIC) ou CefrLevel (LANGUAGE); validado no serviço
+  minYears   Float? // só EXPERIENCE
+  mandatory  Boolean             @default(true)
+  notes      String?             @db.Text
+  createdAt  DateTime            @default(now())
+  position   Position            @relation(fields: [positionId], references: [id], onDelete: Cascade)
+
+  @@index([positionId, category])
+}
+
+model UserQualification {
+  id          Int            @id @default(autoincrement())
+  userId      Int
+  degree      AcademicDegree
+  course      String
+  institution String?
+  year        Int?
+  createdAt   DateTime       @default(now())
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model UserLanguage {
+  id       Int       @id @default(autoincrement())
+  userId   Int
+  language String
+  level    CefrLevel
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, language])
+}
+
+model UserExternalCertification {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  name      String
+  issuer    String?
+  issuedAt  DateTime?
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model PositionCompetency {

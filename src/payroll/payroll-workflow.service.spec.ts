@@ -382,7 +382,7 @@ describe('PayrollWorkflowService reads', () => {
           id: true,
           userId: true,
           exceptions: true,
-          user: { select: { fullName: true } },
+          user: { select: { fullName: true, avatarUrl: true } },
         },
       });
       expect(rows).toHaveLength(3);
@@ -458,7 +458,7 @@ describe('PayrollWorkflowService reads', () => {
           skip: 0,
           take: 50,
           include: {
-            user: { select: { id: true, fullName: true, employeeNumber: true } },
+            user: { select: { id: true, fullName: true, employeeNumber: true, avatarUrl: true } },
             items: true,
           },
           orderBy: { user: { fullName: 'asc' } },

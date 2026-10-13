@@ -390,6 +390,193 @@ describe('CareerService (additional)', () => {
     });
   });
 
+  // ─── simulateNextRole — requisitos estruturados ───────────────
+
+  describe('simulateNextRole — requisitos estruturados', () => {
+    const position = (items: unknown[]) => ({
+      id: 5,
+      name: 'Dev Senior',
+      level: 'SENIOR',
+      competencies: [],
+      requirementItems: items,
+    });
+
+    beforeEach(() => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        positionId: 1,
+        hireDate: new Date('2020-01-01T00:00:00Z'),
+        priorExperienceYears: 1,
+      });
+      mockPrisma.position.findUnique.mockResolvedValue(position([]));
+      mockPrisma.userCompetency.findMany.mockResolvedValue([]);
+      mockPrisma.enrollment.findMany.mockResolvedValue([]);
+      mockPrisma.performanceReview.aggregate.mockResolvedValue({ _avg: { score: null } });
+      mockPrisma.courseCompetency.findMany.mockResolvedValue([]);
+      mockPrisma.userQualification = { findMany: jest.fn().mockResolvedValue([]) };
+      mockPrisma.userLanguage = { findMany: jest.fn().mockResolvedValue([]) };
+      mockPrisma.userExternalCertification = { findMany: jest.fn().mockResolvedValue([]) };
+      mockPrisma.certificate = { findMany: jest.fn().mockResolvedValue([]) };
+    });
+
+    it('cargo sem requisitos: não consulta o perfil e mantém o comportamento actual', async () => {
+      const r = await service.simulateNextRole(1, 5);
+      expect(r.readinessScore).toBe(100);
+      expect(r.requirementChecks).toEqual([]);
+      expect(mockPrisma.userQualification.findMany).not.toHaveBeenCalled();
+    });
+
+    it('devolve checks e inclui requisitos obrigatórios no score', async () => {
+      mockPrisma.position.findUnique.mockResolvedValue(
+        position([
+          {
+            id: 1,
+            category: 'LANGUAGE',
+            title: 'Inglês',
+            level: 'B2',
+            minYears: null,
+            mandatory: true,
+          },
+          {
+            id: 2,
+            category: 'EXPERIENCE',
+            title: 'Exp',
+            level: null,
+            minYears: 2,
+            mandatory: true,
+          },
+        ]),
+      );
+      mockPrisma.userLanguage.findMany.mockResolvedValue([{ language: 'Inglês', level: 'C1' }]);
+      const r = await service.simulateNextRole(1, 5);
+      expect(r.requirementChecks.map((c: any) => [c.category, c.status])).toEqual([
+        ['LANGUAGE', 'MET'],
+        ['EXPERIENCE', 'MET'],
+      ]);
+      expect(r.readinessScore).toBe(100);
+      expect(r.summary.noData).toBe(0);
+    });
+
+    it('requisito não cumprido baixa a nota', async () => {
+      mockPrisma.position.findUnique.mockResolvedValue(
+        position([
+          {
+            id: 1,
+            category: 'LANGUAGE',
+            title: 'Inglês',
+            level: 'C1',
+            minYears: null,
+            mandatory: true,
+          },
+          {
+            id: 2,
+            category: 'EXPERIENCE',
+            title: 'Exp',
+            level: null,
+            minYears: 2,
+            mandatory: true,
+          },
+        ]),
+      );
+      mockPrisma.userLanguage.findMany.mockResolvedValue([{ language: 'Inglês', level: 'A2' }]);
+      const r = await service.simulateNextRole(1, 5);
+      expect(r.requirementChecks[0].status).toBe('NOT_MET');
+      expect(r.readinessScore).toBe(50); // 1 de 2 obrigatórios
+      expect(r.summary.ready).toBe(false);
+    });
+
+    it('certificado da plataforma sem title conta pelo título do curso (course.title)', async () => {
+      mockPrisma.position.findUnique.mockResolvedValue(
+        position([
+          {
+            id: 4,
+            category: 'CERTIFICATION',
+            title: 'AWS Cloud',
+            level: null,
+            minYears: null,
+            mandatory: true,
+          },
+        ]),
+      );
+      mockPrisma.certificate.findMany.mockResolvedValue([
+        {
+          title: null,
+          expiresAt: null,
+          revoked: false,
+          course: { title: 'AWS Cloud' },
+          event: null,
+        },
+      ]);
+      const r = await service.simulateNextRole(1, 5);
+      expect(r.requirementChecks[0].status).toBe('MET');
+      // só certificados não apagados (soft delete) e não revogados
+      expect(mockPrisma.certificate.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ userId: 1, revoked: false, deletedAt: null }),
+        }),
+      );
+    });
+
+    it('redactActual: esconde o valor que o colaborador tem mas mantém o estado', async () => {
+      mockPrisma.position.findUnique.mockResolvedValue(
+        position([
+          {
+            id: 1,
+            category: 'LANGUAGE',
+            title: 'Inglês',
+            level: 'B2',
+            minYears: null,
+            mandatory: true,
+          },
+        ]),
+      );
+      mockPrisma.userLanguage.findMany.mockResolvedValue([{ language: 'Inglês', level: 'C1' }]);
+      const full = await service.simulateNextRole(1, 5);
+      expect(full.requirementChecks[0].actual).toBe('Inglês C1');
+      const redacted = await service.simulateNextRole(1, 5, { redactActual: true });
+      expect(redacted.requirementChecks[0].status).toBe('MET');
+      expect(redacted.requirementChecks[0].actual).toBeNull();
+    });
+
+    it('certificado sem nenhum título utilizável não conta como "dados" (continua NO_DATA)', async () => {
+      mockPrisma.position.findUnique.mockResolvedValue(
+        position([
+          {
+            id: 4,
+            category: 'CERTIFICATION',
+            title: 'AWS Cloud',
+            level: null,
+            minYears: null,
+            mandatory: true,
+          },
+        ]),
+      );
+      mockPrisma.certificate.findMany.mockResolvedValue([
+        { title: null, expiresAt: null, revoked: false, course: null, event: null },
+      ]);
+      const r = await service.simulateNextRole(1, 5);
+      expect(r.requirementChecks[0].status).toBe('NO_DATA');
+    });
+
+    it('requisito sem dados do colaborador fica NO_DATA e não baixa a nota', async () => {
+      mockPrisma.position.findUnique.mockResolvedValue(
+        position([
+          {
+            id: 3,
+            category: 'ACADEMIC',
+            title: 'Licenciatura',
+            level: 'LICENCIATURA',
+            minYears: null,
+            mandatory: true,
+          },
+        ]),
+      );
+      const r = await service.simulateNextRole(1, 5);
+      expect(r.requirementChecks[0].status).toBe('NO_DATA');
+      expect(r.readinessScore).toBe(100);
+      expect(r.summary.noData).toBe(1);
+    });
+  });
+
   // ─── createCareerPath ─────────────────────────────────────────
 
   describe('createCareerPath', () => {
@@ -416,6 +603,60 @@ describe('CareerService (additional)', () => {
     it('deve lançar NotFoundException se trilha não existe', async () => {
       mockPrisma.careerPath.findUnique.mockResolvedValue(null);
       await expect(service.updateCareerPath(99, {} as any)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─── removeCareerPath ─────────────────────────────────────────
+
+  describe('removeCareerPath', () => {
+    it('deve desactivar a trilha (soft delete)', async () => {
+      mockPrisma.careerPath.findUnique.mockResolvedValue(baseCareerPath);
+      mockPrisma.careerPath.update.mockResolvedValue({ ...baseCareerPath, active: false });
+      const result = await service.removeCareerPath(1);
+      expect(mockPrisma.careerPath.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { active: false },
+      });
+      expect(result).toEqual({ id: 1, deleted: true });
+    });
+
+    it('deve lançar NotFoundException se trilha não existe', async () => {
+      mockPrisma.careerPath.findUnique.mockResolvedValue(null);
+      await expect(service.removeCareerPath(99)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─── removeVacancy ────────────────────────────────────────────
+
+  describe('removeVacancy', () => {
+    const vacancy = { id: 5, createdById: 7 };
+    const rh = { id: 1, role: { name: 'RH' } } as any;
+    const owner = { id: 7, role: { name: 'GESTOR' } } as any;
+    const otherManager = { id: 8, role: { name: 'GESTOR' } } as any;
+    (mockPrisma.internalVacancy as any).delete = jest.fn();
+
+    it('RH apaga qualquer vaga', async () => {
+      mockPrisma.internalVacancy.findUnique.mockResolvedValue(vacancy);
+      const result = await service.removeVacancy(5, rh);
+      expect((mockPrisma.internalVacancy as any).delete).toHaveBeenCalledWith({ where: { id: 5 } });
+      expect(result).toEqual({ id: 5, deleted: true });
+    });
+
+    it('GESTOR apaga a vaga que criou', async () => {
+      mockPrisma.internalVacancy.findUnique.mockResolvedValue(vacancy);
+      await expect(service.removeVacancy(5, owner)).resolves.toEqual({ id: 5, deleted: true });
+    });
+
+    it('GESTOR não apaga vaga de outro (sem delete)', async () => {
+      (mockPrisma.internalVacancy as any).delete.mockClear();
+      mockPrisma.internalVacancy.findUnique.mockResolvedValue(vacancy);
+      await expect(service.removeVacancy(5, otherManager)).rejects.toThrow();
+      expect((mockPrisma.internalVacancy as any).delete).not.toHaveBeenCalled();
+    });
+
+    it('lança NotFoundException se a vaga não existe', async () => {
+      mockPrisma.internalVacancy.findUnique.mockResolvedValue(null);
+      await expect(service.removeVacancy(99, rh)).rejects.toThrow(NotFoundException);
     });
   });
 

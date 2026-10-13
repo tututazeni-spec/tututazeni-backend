@@ -181,10 +181,27 @@ describe('MetricsAggregationService', () => {
       });
 
       expect(result.byDepartment).toEqual([
-        { id: 2, name: 'RH', count: 9 },
-        { id: 1, name: 'Eng', count: 3 },
+        { id: 2, name: 'RH', count: 9, avgTenureYears: 0 },
+        { id: 1, name: 'Eng', count: 3, avgTenureYears: 0 },
       ]);
       expect(result.byPosition).toEqual([{ id: 5, name: 'Dev', level: 'SENIOR', count: 4 }]);
+    });
+
+    it('byDepartment devolve avgTenureYears a partir de hireDate ?? createdAt dos activos', async () => {
+      mockPrisma.user.count = makeCount(0);
+      mockPrisma.department.findMany = jest
+        .fn()
+        .mockResolvedValue([{ id: 1, name: 'Eng', _count: { users: 2 } }]);
+      const yearsAgo = (y: number) => new Date(Date.now() - y * 365.25 * 86400000);
+      mockPrisma.user.findMany = jest.fn().mockResolvedValue([
+        { hireDate: yearsAgo(2), createdAt: yearsAgo(1), departmentId: 1 },
+        { hireDate: null, createdAt: yearsAgo(4), departmentId: 1 },
+        { hireDate: yearsAgo(9), createdAt: yearsAgo(9), departmentId: null },
+      ]);
+
+      const result = await service.headcount({});
+
+      expect(result.byDepartment[0].avgTenureYears).toBeCloseTo(3, 0);
     });
 
     it('byTenure faz bucketing sobre activos (base hireDate ?? createdAt)', async () => {

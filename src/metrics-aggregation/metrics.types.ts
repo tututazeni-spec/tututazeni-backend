@@ -41,6 +41,7 @@ export interface HeadcountBreakdownEntry {
   name: string;
   level?: string; // só em byPosition — Prisma enum PositionLevel (string), ex. 'SENIOR'
   count: number; // scoped a active:true
+  avgTenureYears?: number; // só em byDepartment — média (anos) sobre activos
 }
 
 export interface HeadcountResult {

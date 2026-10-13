@@ -244,6 +244,27 @@ export class SuccessionService {
     return { ...cp, successionPlans };
   }
 
+  // Hard delete: CriticalPosition não tem estado "inactivo" e os SuccessionPlan
+  // caem em cascata (onDelete: Cascade). O histórico fica no AuditLog.
+  async removeCriticalPosition(id: number, userId: number) {
+    const cp = await this.prisma.read.criticalPosition.findUnique({
+      where: { id },
+      include: {
+        position: { select: { name: true } },
+        _count: { select: { successionPlans: true } },
+      },
+    });
+    if (!cp) throw new NotFoundException('Cargo crítico não encontrado');
+
+    await this.prisma.criticalPosition.delete({ where: { id } });
+
+    await this.logSuccessionHistory(userId, 'DELETE', 'CriticalPosition', id, {
+      position: cp.position.name,
+      successionPlansRemoved: cp._count.successionPlans,
+    });
+    return { id, deleted: true };
+  }
+
   async updateCriticalPosition(id: number, dto: UpdateCriticalPositionDto, userId: number) {
     const cp = await this.prisma.read.criticalPosition.findUnique({
       where: { id },
@@ -1206,7 +1227,7 @@ export class SuccessionService {
     if (cp.exitRisk === 'CRITICAL') return '🔴 Risco de saída crítico';
     if (cp.exitRisk === 'HIGH') return '🟠 Risco de saída alto';
     const days = this.daysUntil(cp.expectedExitDate);
-    if (days !== null && days <= 90) return `⏳ Saída prevista em ${days} dias`;
+    if (days !== null && days <= 90) return `Saída prevista em ${days} dias`;
     return null;
   }
 }

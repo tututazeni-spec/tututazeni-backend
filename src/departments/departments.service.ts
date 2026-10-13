@@ -1843,7 +1843,9 @@ export class PositionsService {
         reportsTo: { select: { id: true, name: true } },
         subordinates: { select: { id: true, name: true } },
         users: { select: { id: true, fullName: true, email: true, active: true } },
-        competencies: { include: { competency: { select: { id: true, name: true } } } },
+        competencies: {
+          include: { competency: { select: { id: true, name: true, category: true } } },
+        },
         internalVacancies: {
           select: { id: true, title: true, status: true, slots: true, closingDate: true },
           orderBy: { createdAt: 'desc' },

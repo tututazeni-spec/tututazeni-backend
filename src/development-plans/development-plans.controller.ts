@@ -113,10 +113,10 @@ export class DevelopmentPlansController {
   }
 
   @Delete(':id')
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Eliminar plano (apenas DRAFT)' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.remove(id);
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Eliminar plano (não activo)' })
+  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.remove(id, user);
   }
 
   // ── Acções ────────────────────────────────────────────────────────────────

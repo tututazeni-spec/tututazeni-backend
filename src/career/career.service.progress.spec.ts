@@ -5,7 +5,8 @@
 // requestPromotion, updateCareerInterests, getTalentHeatmap
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { CareerService } from './career.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CareerPlansService } from './career-plans.service';
@@ -284,6 +285,38 @@ describe('CareerService (progress)', () => {
           data: expect.objectContaining({ status: 'DRAFT', createdById: 1 }),
         }),
       );
+    });
+
+    it('código repetido (P2002) → 409 com mensagem clara, não 500', async () => {
+      mockPrisma.internalVacancy.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: 'test',
+          meta: { target: ['code'] },
+        }),
+      );
+      await expect(
+        service.createVacancy(1, { title: 'Vaga', type: 'LATERAL' as any, code: 'DBG-2' } as any),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('referência inexistente (P2003) → 400 com mensagem clara, não 500', async () => {
+      mockPrisma.internalVacancy.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Foreign key constraint failed', {
+          code: 'P2003',
+          clientVersion: 'test',
+        }),
+      );
+      await expect(
+        service.createVacancy(1, { title: 'Vaga', type: 'LATERAL' as any, unitId: 999 } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('outros erros continuam a propagar-se', async () => {
+      mockPrisma.internalVacancy.create.mockRejectedValue(new Error('boom'));
+      await expect(
+        service.createVacancy(1, { title: 'Vaga', type: 'LATERAL' as any } as any),
+      ).rejects.toThrow('boom');
     });
 
     it('deve criar vaga com closingDate convertida', async () => {

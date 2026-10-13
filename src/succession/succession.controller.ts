@@ -86,6 +86,18 @@ export class SuccessionController {
     return this.svc.updateCriticalPosition(id, dto, user.id);
   }
 
+  @Delete('critical-positions/:id')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary: 'Remover classificação de cargo crítico (e os seus planos de sucessão)',
+  })
+  removeCriticalPosition(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.removeCriticalPosition(id, user.id);
+  }
+
   @Get('critical-positions/:id/history')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Histórico de sucessão do cargo (auditoria de mudanças)' })
