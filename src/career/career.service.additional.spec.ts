@@ -519,7 +519,14 @@ describe('CareerService (additional)', () => {
     it('redactActual: esconde o valor que o colaborador tem mas mantém o estado', async () => {
       mockPrisma.position.findUnique.mockResolvedValue(
         position([
-          { id: 1, category: 'LANGUAGE', title: 'Inglês', level: 'B2', minYears: null, mandatory: true },
+          {
+            id: 1,
+            category: 'LANGUAGE',
+            title: 'Inglês',
+            level: 'B2',
+            minYears: null,
+            mandatory: true,
+          },
         ]),
       );
       mockPrisma.userLanguage.findMany.mockResolvedValue([{ language: 'Inglês', level: 'C1' }]);
