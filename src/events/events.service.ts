@@ -326,7 +326,15 @@ export class EventsService {
       where: { eventId_userId: { eventId, userId } },
     });
     if (existing && !['CANCELLED', 'REJECTED'].includes(existing.status)) {
-      throw new ConflictException('Já inscrito neste evento');
+      const user = await this.prisma.read.user.findUnique({
+        where: { id: userId },
+        select: { fullName: true },
+      });
+      throw new ConflictException(
+        user?.fullName
+          ? `O utilizador ${user.fullName} já se encontra inscrito neste evento`
+          : 'Já se encontra inscrito neste evento',
+      );
     }
 
     // Verificar capacidade — PRESENT também ocupa vaga (colaborador já fez check-in);
@@ -877,11 +885,12 @@ export class EventsService {
         skip,
         take,
         include: {
-          event: { select: { id: true, title: true } },
+          event: { select: { id: true, title: true, startAt: true } },
           user: {
             select: {
               id: true,
               fullName: true,
+              avatarUrl: true,
               department: { select: { id: true, name: true } },
               unit: { select: { id: true, name: true } },
             },
@@ -1111,11 +1120,12 @@ export class EventsService {
         skip,
         take,
         include: {
-          event: { select: { id: true, title: true } },
+          event: { select: { id: true, title: true, startAt: true } },
           user: {
             select: {
               id: true,
               fullName: true,
+              avatarUrl: true,
               department: { select: { id: true, name: true } },
               unit: { select: { id: true, name: true } },
             },
@@ -1871,6 +1881,7 @@ export class EventsService {
     const data = {
       responsibleId: dto.responsibleId,
       equipment: dto.equipment ?? [],
+      customEquipment: dto.customEquipment ?? [],
       resourcesNeeded: dto.resourcesNeeded,
       suppliers: dto.suppliers,
       catering: dto.catering,
@@ -1986,7 +1997,7 @@ export class EventsService {
         skip,
         take,
         include: {
-          event: { select: { id: true, title: true } },
+          event: { select: { id: true, title: true, startAt: true } },
           createdBy: { select: { id: true, fullName: true } },
         },
         orderBy: { createdAt: 'desc' },
