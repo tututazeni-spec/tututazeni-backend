@@ -1238,7 +1238,12 @@ export class TalentDevelopmentService {
           dueDate: { lt: new Date() },
         },
       }),
-      this.prisma.read.mentoring.count({ where: { status: 'ACTIVE' } }),
+      this.prisma.read.mentoring.count({
+        where: {
+          status: 'ACTIVE',
+          OR: [{ mentor: userWhere }, { mentee: userWhere }],
+        },
+      }),
       this.prisma.read.legacyEmployeeSkill.count({ where: { user: userWhere } }),
       this.prisma.read.developmentPlan.findMany({
         where: { status: 'COMPLETED', isTemplate: false, user: userWhere },

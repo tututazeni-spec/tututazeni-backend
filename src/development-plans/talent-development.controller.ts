@@ -329,7 +329,7 @@ export class TalentDevelopmentController {
   }
 
   @Get('analytics/talent-health')
-  @Roles(...ADMIN_ROLES)
+  @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Talent Health Score organizacional (A-D)' })
   talentHealth(@Query('departmentId') departmentId?: string) {
     return this.svc.getTalentHealthScore(departmentId ? +departmentId : undefined);
