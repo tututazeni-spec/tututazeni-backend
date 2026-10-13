@@ -155,6 +155,16 @@ export class DevelopmentPlansService {
   async create(dto: CreateDevelopmentPlanDto) {
     const { competencyGaps, ...data } = dto;
 
+    // Sem managerId explícito, herda o gestor directo do colaborador — é por
+    // este campo que o plano aparece no dashboard de equipa do gestor.
+    if (data.managerId == null) {
+      const owner = await this.prisma.user.findUnique({
+        where: { id: data.userId },
+        select: { managerId: true },
+      });
+      data.managerId = owner?.managerId ?? undefined;
+    }
+
     // Transacção: o plano e os gaps de competência iniciais (secção 5 do doc)
     // nascem juntos — sem isto um gap podia ficar "meio-criado" se a segunda
     // escrita falhasse (ex.: competencyId inexistente).
