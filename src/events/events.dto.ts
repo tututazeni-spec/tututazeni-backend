@@ -11,6 +11,7 @@ import {
   Min,
   Max,
   MaxLength,
+  ArrayMaxSize,
   ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
@@ -622,6 +623,17 @@ export class UpsertEventLogisticsDto {
   @IsArray()
   @IsEnum(EventEquipmentType, { each: true })
   equipment?: EventEquipmentType[];
+
+  @ApiPropertyOptional({
+    description: 'Equipamentos livres, fora da lista predefinida',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(80, { each: true })
+  @ArrayMaxSize(30)
+  customEquipment?: string[];
 
   @ApiPropertyOptional()
   @IsOptional()

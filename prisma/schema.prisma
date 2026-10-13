@@ -9671,6 +9671,7 @@ model EventLogistics {
   eventId         Int                  @unique
   responsibleId   Int?
   equipment       EventEquipmentType[] @default([])
+  customEquipment String[]             @default([])
   resourcesNeeded String?              @db.Text
   suppliers       String?              @db.Text
   catering        String?
