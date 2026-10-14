@@ -64,6 +64,8 @@ const ACTIVE_TASK_STATUSES = ['PENDING', 'IN_PROGRESS', 'BLOCKED', 'ESCALATED'] 
 const COMPLETABLE_STATUSES = ['PENDING', 'IN_PROGRESS', 'ESCALATED'];
 
 const toDate = (v?: string | null) => (v ? new Date(v) : undefined);
+/** Em updates, texto vazio/null limpa a data (null); undefined mantém o valor actual. */
+const toDateOrClear = (v?: string | null) => (v === undefined ? undefined : v ? new Date(v) : null);
 
 @Injectable()
 export class ProcessStandardService {
@@ -207,7 +209,7 @@ export class ProcessStandardService {
         skip,
         take: limit,
         include: {
-          owner: { select: { id: true, fullName: true } },
+          owner: { select: { id: true, fullName: true, avatarUrl: true } },
           department: { select: { id: true, name: true } },
           _count: { select: { steps: true, instances: true } },
         },
@@ -232,7 +234,7 @@ export class ProcessStandardService {
             reviewer: { select: { id: true, fullName: true } },
           },
         },
-        owner: { select: { id: true, fullName: true } },
+        owner: { select: { id: true, fullName: true, avatarUrl: true } },
         department: { select: { id: true, name: true } },
         versions: { orderBy: { createdAt: 'desc' }, take: 10 },
         _count: { select: { instances: true } },
@@ -266,7 +268,7 @@ export class ProcessStandardService {
       },
       include: {
         steps: { orderBy: { order: 'asc' } },
-        owner: { select: { id: true, fullName: true } },
+        owner: { select: { id: true, fullName: true, avatarUrl: true } },
       },
     });
 
@@ -311,8 +313,8 @@ export class ProcessStandardService {
       where: { id },
       data: {
         ...data,
-        nextReviewDate: toDate(data.nextReviewDate),
-        effectiveFrom: toDate(data.effectiveFrom),
+        nextReviewDate: toDateOrClear(data.nextReviewDate),
+        effectiveFrom: toDateOrClear(data.effectiveFrom),
         tags: data.tags ?? undefined,
       },
     });
