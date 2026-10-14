@@ -594,10 +594,11 @@ export class AutomationService {
     const owners = ownerIds.length
       ? await this.prisma.read.user.findMany({
           where: { id: { in: ownerIds } },
-          select: { id: true, fullName: true },
+          select: { id: true, fullName: true, avatarUrl: true },
         })
       : [];
     const ownerName = new Map(owners.map(u => [String(u.id), u.fullName]));
+    const ownerAvatar = new Map(owners.map(u => [String(u.id), u.avatarUrl]));
 
     return rules.map(r => {
       const c = counts.get(r.id) ?? { total: 0, success: 0, failed: 0 };
@@ -611,6 +612,7 @@ export class AutomationService {
         departmentIds: parseJsonArray(r.departmentIds),
         status: deriveRuleStatus(r),
         ownerName: ownerName.get(ownerKey) ?? null,
+        ownerAvatarUrl: ownerAvatar.get(ownerKey) ?? null,
         stats: {
           total: c.total,
           success: c.success,

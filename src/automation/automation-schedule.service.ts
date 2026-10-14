@@ -143,16 +143,18 @@ export class AutomationScheduleService {
     const owners = ownerIds.length
       ? await this.prisma.read.user.findMany({
           where: { id: { in: ownerIds } },
-          select: { id: true, fullName: true },
+          select: { id: true, fullName: true, avatarUrl: true },
         })
       : [];
     const ownerName = new Map(owners.map(u => [String(u.id), u.fullName]));
+    const ownerAvatar = new Map(owners.map(u => [String(u.id), u.avatarUrl]));
 
     return buildPaginatedResponse(
       rows.map(r => ({
         ...r,
         daysOfWeek: parseDays(r.daysOfWeek),
         ownerName: ownerName.get(r.ownerId ?? r.createdBy ?? '') ?? null,
+        ownerAvatarUrl: ownerAvatar.get(r.ownerId ?? r.createdBy ?? '') ?? null,
       })),
       total,
       page,
