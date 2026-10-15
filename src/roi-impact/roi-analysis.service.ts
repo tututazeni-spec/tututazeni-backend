@@ -144,6 +144,15 @@ export class RoiAnalysisService {
     });
   }
 
+  // RoiAnalysis não tem FKs a apontar para si (Scenario.basedOnAnalysisId é
+  // FK solta e o detalhe do cenário já tolera a análise ter desaparecido),
+  // por isso o apagar directo não deixa registos órfãos com erro.
+  async remove(id: number) {
+    await this.findOrThrow(id);
+    await this.prisma.roiAnalysis.delete({ where: { id } });
+    return { id, deleted: true };
+  }
+
   private confidenceFor(analysis: {
     hasControlGroup: boolean;
     isolationFactor: number | null;

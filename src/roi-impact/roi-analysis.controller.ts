@@ -4,6 +4,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   ParseIntPipe,
   Query,
@@ -74,5 +75,11 @@ export class RoiAnalysisController {
   @ApiOperation({ summary: 'Etapa 5 — Aprovação: valida ou revê o resultado' })
   approve(@Param('id', ParseIntPipe) id: number, @Body() dto: ApproveRoiAnalysisDto) {
     return this.svc.approve(id, dto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Apaga uma análise de ROI' })
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.remove(id);
   }
 }
