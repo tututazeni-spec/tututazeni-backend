@@ -4,6 +4,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   ParseIntPipe,
   Query,
@@ -59,5 +60,11 @@ export class KpiDefinitionController {
   @ApiOperation({ summary: 'Editar KPI' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateKpiDefinitionDto) {
     return this.svc.update(id, dto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Apagar KPI da biblioteca' })
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.remove(id);
   }
 }

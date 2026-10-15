@@ -82,6 +82,12 @@ export class KpiDefinitionService {
     });
   }
 
+  async remove(id: number) {
+    await this.findOne(id);
+    await this.prisma.kpiDefinition.delete({ where: { id } });
+    return { id, deleted: true };
+  }
+
   // ══════════════════════════════════════════════════════
   // RESUMO POR CATEGORIA — para a aba (docs/roi-impact.md §6)
   // ══════════════════════════════════════════════════════

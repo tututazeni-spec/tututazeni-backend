@@ -865,7 +865,7 @@ async function main() {
       unit: '%',
       formula: '(Formações obrigatórias concluídas ÷ Formações obrigatórias atribuídas) × 100',
       frequency: 'MENSAL' as const,
-      dataSource: 'Trainings/Courses',
+      dataSource: 'Formações e cursos',
       description: 'Conformidade com formações de carácter obrigatório.',
     },
     {
@@ -875,7 +875,7 @@ async function main() {
       unit: 'AOA/hora',
       formula: 'Custo total da formação ÷ Total de horas de formação',
       frequency: 'MENSAL' as const,
-      dataSource: 'Custos & Investimento',
+      dataSource: 'Custos e investimento',
       description: 'Custo médio de cada hora de formação ministrada.',
     },
     {
@@ -894,7 +894,7 @@ async function main() {
       unit: '%',
       formula: '(Dias de ausência ÷ Dias úteis totais) × 100',
       frequency: 'MENSAL' as const,
-      dataSource: 'Attendance',
+      dataSource: 'Assiduidade',
       description: 'Percentagem de dias úteis perdidos por ausência.',
     },
     {
