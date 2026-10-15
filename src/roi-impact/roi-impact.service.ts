@@ -872,7 +872,9 @@ export class RoiImpactService {
       (retention.savedValue ?? 0) +
       (performance.monetised?.productivityBenefit ?? 0);
     const totalCost = roi.financial.totalCost ?? 0;
-    const overallRoi = roiFormula(totalBenefit, totalCost);
+    // Sem benefício medido (ex.: inscrições mas nenhuma conclusão) não há ROI
+    // a reportar: 0 em vez de -100%.
+    const overallRoi = totalBenefit > 0 ? roiFormula(totalBenefit, totalCost) : 0;
     const costPerLearner =
       roi.volume.uniqueLearners > 0 ? +(totalCost / roi.volume.uniqueLearners).toFixed(2) : null;
     const costPerHour =
@@ -904,7 +906,7 @@ export class RoiImpactService {
       },
       domains: {
         learning: {
-          roi: roi.financial.roi,
+          roi: roi.volume.completed > 0 ? roi.financial.roi : 0,
           completions: roi.volume.completed,
           cost: roi.financial.totalCost,
         },
