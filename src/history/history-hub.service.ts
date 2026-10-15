@@ -151,6 +151,7 @@ interface RawEntry {
 export interface PersonRef {
   id: number;
   fullName: string;
+  avatarUrl?: string | null;
 }
 
 export interface HistoryEntryDto extends Omit<RawEntry, 'actorId' | 'affectedId'> {
@@ -268,9 +269,11 @@ export class HistoryHubService {
     if (!unique.length) return new Map();
     const users = await this.prisma.read.user.findMany({
       where: { id: { in: unique } },
-      select: { id: true, fullName: true },
+      select: { id: true, fullName: true, avatarUrl: true },
     });
-    return new Map(users.map(u => [u.id, { id: u.id, fullName: u.fullName }]));
+    return new Map(
+      users.map(u => [u.id, { id: u.id, fullName: u.fullName, avatarUrl: u.avatarUrl }]),
+    );
   }
 
   // ══════════════════════════════════════════════════════
