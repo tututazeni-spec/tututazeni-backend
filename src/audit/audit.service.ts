@@ -584,8 +584,6 @@ export class AuditService {
         by: ['entity'],
         where: inPeriod,
         _count: true,
-        orderBy: { _count: { entity: 'desc' } },
-        take: 8,
       }),
       this.prisma.read.auditLog.groupBy({ by: ['severity'], where: inPeriod, _count: true }),
       this.prisma.read.auditLog.groupBy({
@@ -654,7 +652,7 @@ export class AuditService {
       },
       access: { success: successAccess, failed: failedAccess },
       daily,
-      byModule: byModule.map(m => ({ module: m.entity, count: m._count })),
+      byModule: this.groupByModule(byModule),
       bySeverity: Object.fromEntries(bySeverity.map(s => [s.severity, s._count])),
       topUsers: topUsers.map(u => ({
         userId: u.userId,
@@ -1431,5 +1429,25 @@ export class AuditService {
       byEntity: byEntity.map(e => ({ entity: e.entity, count: e._count })),
       byAction: byAction.map(a => ({ action: a.action, count: a._count })),
     };
+  }
+
+  /**
+   * Eventos por módulo (matriz §13): agrega as entidades pelo módulo de origem e devolve
+   * TODOS os módulos da matriz — também os sem eventos — mais «Outros», do maior para o menor
+   * (empates pela ordem de declaração).
+   */
+  private groupByModule(
+    rows: Array<{ entity: string; _count: number }>,
+  ): Array<{ module: string; count: number }> {
+    const counts = new Map<string, number>(
+      [...AUDIT_MODULES, AUDIT_FALLBACK_MODULE].map(m => [m, 0]),
+    );
+    for (const r of rows) {
+      const mod = resolveAuditModule(r.entity);
+      counts.set(mod, (counts.get(mod) ?? 0) + r._count);
+    }
+    return [...counts.entries()]
+      .map(([module, count]) => ({ module, count }))
+      .sort((a, b) => b.count - a.count);
   }
 }
