@@ -111,6 +111,14 @@ export class ImpactRecordService {
     });
   }
 
+  // Nenhum modelo aponta para ImpactRecord, por isso o apagar directo não
+  // deixa registos órfãos.
+  async remove(id: number) {
+    await this.findOrThrow(id);
+    await this.prisma.impactRecord.delete({ where: { id } });
+    return { id, deleted: true };
+  }
+
   private async findOrThrow(id: number) {
     const record = await this.prisma.read.impactRecord.findUnique({ where: { id } });
     if (!record) throw new NotFoundException(`Registo de impacto ${id} não encontrado`);
