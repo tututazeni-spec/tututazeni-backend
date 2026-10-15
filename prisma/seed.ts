@@ -783,6 +783,31 @@ async function main() {
     console.log('✅ Modelo de avaliação padrão criado: Kirkpatrick + Phillips');
   }
 
+  // Modelo Phillips ROI autónomo — oferecido na lista "Modelo de avaliação"
+  // da Nova Análise de ROI. Mesmo padrão findFirst+create (sem @@unique).
+  const phillipsRoiModel = await prisma.roiEvaluationModel.findFirst({
+    where: { name: 'Phillips ROI' },
+  });
+  if (!phillipsRoiModel) {
+    await prisma.roiEvaluationModel.create({
+      data: {
+        name: 'Phillips ROI',
+        description:
+          'Metodologia Phillips: converte os resultados em valor monetário, isola o ' +
+          'efeito da iniciativa e compara benefícios líquidos com custos totais (ROI %, BCR, payback).',
+        levels: [
+          { level: 1, name: 'Reação', mandatory: true, weight: 10 },
+          { level: 2, name: 'Aprendizagem', mandatory: true, weight: 15 },
+          { level: 3, name: 'Aplicação', mandatory: true, weight: 20 },
+          { level: 4, name: 'Impacto no negócio', mandatory: true, weight: 25 },
+          { level: 5, name: 'ROI', mandatory: true, weight: 30 },
+        ],
+        createdById: admin.id,
+      },
+    });
+    console.log('✅ Modelo de avaliação criado: Phillips ROI');
+  }
+
   // docs/roi-impact.md §6 — biblioteca central de KPIs, exemplos do spec.
   // `code` é @unique, por isso upsert directo (reexecutar o seed não deve
   // duplicar nem apagar edições do RH nos campos não semeados aqui).
