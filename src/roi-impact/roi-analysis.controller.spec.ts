@@ -75,8 +75,8 @@ describe('RoiAnalysisController', () => {
   });
 
   it('approve → svc.approve(id, dto)', async () => {
-    const dto = { status: RoiAnalysisStatus.VALIDADO, approvedById: 1 };
-    await controller.approve(7, dto);
-    expect(mockSvc.approve).toHaveBeenCalledWith(7, dto);
+    const dto = { status: RoiAnalysisStatus.VALIDADO };
+    await controller.approve(7, dto, { id: 1 } as any);
+    expect(mockSvc.approve).toHaveBeenCalledWith(7, dto, 1);
   });
 });

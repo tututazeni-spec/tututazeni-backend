@@ -131,13 +131,14 @@ export class RoiAnalysisService {
     });
   }
 
-  async approve(id: number, dto: ApproveRoiAnalysisDto) {
+  // O aprovador é sempre o utilizador autenticado, nunca um id vindo do cliente.
+  async approve(id: number, dto: ApproveRoiAnalysisDto, approvedById: number) {
     await this.findOrThrow(id);
     return this.prisma.roiAnalysis.update({
       where: { id },
       data: {
         status: dto.status,
-        approvedById: dto.approvedById,
+        approvedById,
         approvedAt: new Date(),
         observations: dto.observations,
       },

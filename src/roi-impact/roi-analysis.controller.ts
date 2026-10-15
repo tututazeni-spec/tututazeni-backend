@@ -73,8 +73,12 @@ export class RoiAnalysisController {
 
   @Post(':id/approve')
   @ApiOperation({ summary: 'Etapa 5 — Aprovação: valida ou revê o resultado' })
-  approve(@Param('id', ParseIntPipe) id: number, @Body() dto: ApproveRoiAnalysisDto) {
-    return this.svc.approve(id, dto);
+  approve(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ApproveRoiAnalysisDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.approve(id, dto, user.id);
   }
 
   @Delete(':id')

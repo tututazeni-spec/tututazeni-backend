@@ -170,7 +170,6 @@ export class ApproveRoiAnalysisDto {
   @ApiProperty({ enum: [RoiAnalysisStatus.VALIDADO, RoiAnalysisStatus.REVISTO] })
   @IsEnum(RoiAnalysisStatus)
   status!: RoiAnalysisStatus;
-  @ApiProperty() @IsInt() @Type(() => Number) approvedById!: number;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) observations?: string;
 }
 
