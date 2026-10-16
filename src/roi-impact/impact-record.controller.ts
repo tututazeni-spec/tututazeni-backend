@@ -4,6 +4,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   ParseIntPipe,
   Query,
@@ -66,5 +67,11 @@ export class ImpactRecordController {
   @ApiOperation({ summary: 'Validar registo de impacto' })
   validate(@Param('id', ParseIntPipe) id: number, @Body() dto: ValidateImpactRecordDto) {
     return this.svc.validate(id, dto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Apaga um registo de impacto' })
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.remove(id);
   }
 }

@@ -131,17 +131,27 @@ export class RoiAnalysisService {
     });
   }
 
-  async approve(id: number, dto: ApproveRoiAnalysisDto) {
+  // O aprovador é sempre o utilizador autenticado, nunca um id vindo do cliente.
+  async approve(id: number, dto: ApproveRoiAnalysisDto, approvedById: number) {
     await this.findOrThrow(id);
     return this.prisma.roiAnalysis.update({
       where: { id },
       data: {
         status: dto.status,
-        approvedById: dto.approvedById,
+        approvedById,
         approvedAt: new Date(),
         observations: dto.observations,
       },
     });
+  }
+
+  // RoiAnalysis não tem FKs a apontar para si (Scenario.basedOnAnalysisId é
+  // FK solta e o detalhe do cenário já tolera a análise ter desaparecido),
+  // por isso o apagar directo não deixa registos órfãos com erro.
+  async remove(id: number) {
+    await this.findOrThrow(id);
+    await this.prisma.roiAnalysis.delete({ where: { id } });
+    return { id, deleted: true };
   }
 
   private confidenceFor(analysis: {

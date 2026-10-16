@@ -158,11 +158,14 @@ describe('RoiAnalysisService', () => {
         Promise.resolve({ id: 1, ...data }),
       );
 
-      const result = await service.approve(1, {
-        status: RoiAnalysisStatus.VALIDADO,
-        approvedById: 7,
-        observations: 'Confirmado com Finanças',
-      });
+      const result = await service.approve(
+        1,
+        {
+          status: RoiAnalysisStatus.VALIDADO,
+          observations: 'Confirmado com Finanças',
+        },
+        7,
+      );
 
       expect(result.status).toBe(RoiAnalysisStatus.VALIDADO);
       expect(result.approvedById).toBe(7);
