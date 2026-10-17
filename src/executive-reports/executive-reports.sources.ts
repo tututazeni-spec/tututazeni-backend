@@ -53,7 +53,7 @@ export const SOURCE_MATRIX: SourceDefinition[] = [
     consumes: 'Unidades, hierarquia, estrutura, distribuição e consolidação organizacional',
     status: 'REPLACED',
     usedBy: ['Filtro de unidade'],
-    note: 'O módulo organization foi removido do backend; as unidades vêm de users/departments.',
+    note: 'O módulo Organização foi removido; as unidades vêm dos módulos Utilizadores e Departamentos.',
   },
   {
     module: 'attendance',

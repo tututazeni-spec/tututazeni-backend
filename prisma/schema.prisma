@@ -8496,7 +8496,7 @@ model TenantConfig {
   tenantCode               String                    @unique // ex: "EMPRESA_XYZ"
   tenantName               String
   plan                     TenantPlan                @default(STARTER)
-  maxUsers                 Int                       @default(100)
+  maxUsers                 Int                       @default(6000)
   maxStorageGb             Int                       @default(50)
   isActive                 Boolean                   @default(true)
   trialEndsAt              DateTime?
