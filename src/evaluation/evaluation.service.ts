@@ -508,7 +508,49 @@ export class EvaluationService {
     });
   }
 
+  // Escalas padrão criadas na primeira leitura quando a tabela está vazia —
+  // sem isto os selects "Escala de avaliação" (Nova Avaliação, Modelos,
+  // Critérios) aparecem vazios numa instalação nova.
+  private async ensureDefaultScales() {
+    if ((await this.prisma.evaluationScale.count()) > 0) return;
+    const defaults = [
+      {
+        name: 'Escala 1–5 (Likert)',
+        description: 'Escala de desempenho de cinco níveis',
+        minValue: 1,
+        maxValue: 5,
+        isDefault: true,
+        labels: ['Insuficiente', 'Abaixo do esperado', 'Cumpre', 'Acima do esperado', 'Excecional'],
+      },
+      {
+        name: 'Escala 1–4',
+        description: 'Escala de quatro níveis, sem ponto neutro',
+        minValue: 1,
+        maxValue: 4,
+        isDefault: false,
+        labels: ['Insuficiente', 'Em desenvolvimento', 'Competente', 'Excelente'],
+      },
+      {
+        name: 'Escala 1–10',
+        description: 'Escala numérica de dez pontos',
+        minValue: 1,
+        maxValue: 10,
+        isDefault: false,
+        labels: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'],
+      },
+    ];
+    for (const { labels, ...scale } of defaults) {
+      await this.prisma.evaluationScale.create({
+        data: {
+          ...scale,
+          levels: { create: labels.map((label, i) => ({ value: scale.minValue + i, label })) },
+        },
+      });
+    }
+  }
+
   async getScales() {
+    await this.ensureDefaultScales();
     return this.prisma.evaluationScale.findMany({
       include: { levels: { orderBy: { value: 'asc' } } },
       orderBy: { createdAt: 'desc' },
