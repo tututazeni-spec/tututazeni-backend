@@ -121,10 +121,20 @@ export class CreateLeavePolicyDto {
 
 const HH_MM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-/** Comprovativo por referência (HTTPS) — mesma convenção do onboarding. */
+/** Comprovativo máx. 4 MB inline (base64 ≈ 4/3 do ficheiro + prefixo). */
+export const MAX_LEAVE_DOC_DATA_URL_LEN = Math.ceil((4 * 1024 * 1024) / 3) * 4 + 64;
+
+/** Comprovativo por referência (HTTPS) ou ficheiro inline (PDF/imagem, até 4 MB). */
 export class LeaveDocumentInputDto {
   @ApiProperty() @IsString() @MaxLength(200) name!: string;
-  @ApiProperty() @IsString() @IsAllowedFileUrl() @MaxLength(2000) fileUrl!: string;
+  @ApiProperty()
+  @IsString()
+  @IsAllowedFileUrl(undefined, {
+    allowPdfDataUrl: MAX_LEAVE_DOC_DATA_URL_LEN,
+    allowImageDataUrl: MAX_LEAVE_DOC_DATA_URL_LEN,
+  })
+  @MaxLength(MAX_LEAVE_DOC_DATA_URL_LEN)
+  fileUrl!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) mimeType?: string;
 }
 

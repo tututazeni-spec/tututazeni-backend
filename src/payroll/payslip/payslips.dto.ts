@@ -33,7 +33,7 @@ export class CreatePayslipDto {
   paymentDate: string;
 
   // ── Remunerações ─────────────────────────────────────────────────────────
-  @ApiProperty({ description: 'Salário base (Kz)' })
+  @ApiProperty({ description: 'Salário base (AOA)' })
   @IsNumber()
   baseSalary: number;
 

@@ -80,7 +80,7 @@ export class CreateDepartmentDto {
   @IsString()
   costCenter?: string;
 
-  @ApiPropertyOptional({ description: 'Orçamento de formação (Kz)' })
+  @ApiPropertyOptional({ description: 'Orçamento de formação (AOA)' })
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -91,7 +91,7 @@ export class CreateDepartmentDto {
   @IsInt()
   unitId?: number;
 
-  @ApiPropertyOptional({ description: 'Orçamento anual (Kz)' })
+  @ApiPropertyOptional({ description: 'Orçamento anual (AOA)' })
   @IsOptional()
   @IsNumber()
   @Min(0)

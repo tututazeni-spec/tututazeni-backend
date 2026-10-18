@@ -19,6 +19,7 @@ import {
   ContentCategory,
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
+import { IsUrlOrInlineFile } from '../common/validators/is-url-or-inline-file.decorator';
 
 // ─── Enums ────────────────────────────────────────────────────────
 // NOTA: ContentStatus/ContentLevel aqui são `ContentAssetStatus`/
@@ -37,7 +38,11 @@ export class CreateContentDto {
   @IsOptional()
   @IsEnum(ContentCategory)
   category?: ContentCategory;
-  @ApiProperty() @IsString() url!: string;
+  @ApiProperty({
+    description: 'Ligação (URL) ou ficheiro inline em data URL base64 (máx. 5 MB)',
+  })
+  @IsUrlOrInlineFile()
+  url!: string; // file-url-exempt: dual-propósito (ligação externa OU ficheiro inline data URL ≤ 5 MB, validado por @IsUrlOrInlineFile)
   @ApiPropertyOptional() @IsOptional() @IsString() thumbnailUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() author?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() language?: string;

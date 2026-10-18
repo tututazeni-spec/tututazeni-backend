@@ -40,7 +40,7 @@ export class ReportKpiDto {
   @IsNumber()
   value!: number;
 
-  @ApiPropertyOptional({ description: 'Unidade: %, h, Kz, etc.' })
+  @ApiPropertyOptional({ description: 'Unidade: %, h, AOA, etc.' })
   @IsOptional()
   @IsString()
   unit?: string;

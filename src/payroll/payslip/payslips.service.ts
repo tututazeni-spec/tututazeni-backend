@@ -42,7 +42,7 @@ export function assertPayslipEditable(payslip: {
 }
 
 // ─── Tabela IRT Angola 2026 (Lei nº 26/2020 + actualização 2026) ─────────────
-// Isenção até 150.000 Kz/mês (Portaria 2026)
+// Isenção até 150.000 AOA/mês (Portaria 2026)
 export interface IrtBracket {
   min: number;
   max: number | null;
@@ -120,7 +120,7 @@ export class PayslipsService {
       b => grossSalary >= b.min && (b.max === null || grossSalary <= b.max),
     );
     const tax = Math.max(0, grossSalary * bracket.rate - bracket.deduction);
-    const formula = `${grossSalary.toLocaleString('pt-AO')} × ${(bracket.rate * 100).toFixed(0)}% − ${bracket.deduction.toLocaleString('pt-AO')} = ${tax.toLocaleString('pt-AO')} Kz`;
+    const formula = `${grossSalary.toLocaleString('pt-AO')} × ${(bracket.rate * 100).toFixed(0)}% − ${bracket.deduction.toLocaleString('pt-AO')} = ${tax.toLocaleString('pt-AO')} AOA`;
     return { tax, bracket, formula };
   }
 

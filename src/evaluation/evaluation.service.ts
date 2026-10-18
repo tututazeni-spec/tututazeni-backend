@@ -191,8 +191,29 @@ export class EvaluationService {
       this.prisma.evaluationCampaign.count({ where }),
     ]);
 
+    // Participação por ciclo numa só query — o separador Ciclos mostra-a em cada cartão.
+    const grouped = data.length
+      ? await this.prisma.evaluationRequest.groupBy({
+          by: ['cycleId', 'status'],
+          where: { cycleId: { in: data.map(c => c.id) } },
+          _count: { _all: true },
+        })
+      : [];
+    const participationOf = (cycleId: number) => {
+      const rows = grouped.filter(g => g.cycleId === cycleId);
+      const cycleTotal = rows.reduce((n, g) => n + g._count._all, 0);
+      const cycleDone = rows
+        .filter(g => g.status === 'COMPLETED')
+        .reduce((n, g) => n + g._count._all, 0);
+      return {
+        total: cycleTotal,
+        completed: cycleDone,
+        rate: cycleTotal > 0 ? +((cycleDone / cycleTotal) * 100).toFixed(1) : 0,
+      };
+    };
+
     return buildPaginatedResponse(
-      data.map(c => this.toPublicCampaign(c)),
+      data.map(c => ({ ...this.toPublicCampaign(c), participation: participationOf(c.id) })),
       total,
       page,
       limit,
