@@ -14,6 +14,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
+import { IsBase64ImageDataUrl } from '../common/validators/is-base64-image-data-url.decorator';
 import {
   PlanStatus,
   ActionType,
@@ -151,6 +152,16 @@ export class CreateDevelopmentPlanDto {
   @IsOptional()
   @IsEnum(PdiOrigin)
   origin?: PdiOrigin;
+
+  @ApiPropertyOptional({
+    description: 'Imagem do cartão do PDI (data URL base64 png/jpeg/webp)',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(700_000)
+  @IsBase64ImageDataUrl()
+  imageUrl?: string | null;
 
   @ApiPropertyOptional({ description: 'Justificação para a criação do PDI' })
   @IsOptional()

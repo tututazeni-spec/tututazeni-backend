@@ -10,9 +10,11 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ContentLibraryService } from './content-library.service';
+import { StripInlineFilesInterceptor } from './strip-inline-files.interceptor';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
@@ -32,6 +34,7 @@ const ADMIN_ROLES = [Role.ADMIN, Role.RH] as const;
 @ApiTags('Content Library')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
+@UseInterceptors(StripInlineFilesInterceptor)
 @Controller('content-library')
 export class ContentLibraryController {
   constructor(private readonly svc: ContentLibraryService) {}

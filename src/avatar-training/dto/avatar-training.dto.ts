@@ -13,11 +13,13 @@ import {
   Min,
   Max,
   MaxLength,
+  Matches,
   ValidateNested,
   ArrayMaxSize,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { IsUrlOrInlineFile } from '../../common/validators/is-url-or-inline-file.decorator';
 import {
   AvatarTrainingAvatarType,
   AvatarTrainingAvatarStatus,
@@ -73,10 +75,14 @@ export class CreateTrainingAvatarDto {
   @IsEnum(AvatarTrainingAvatarType)
   avatarType?: AvatarTrainingAvatarType;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Ligação (URL) ou imagem inline em data URL base64 (png/jpeg/webp/gif, máx. 5 MB)',
+  })
   @IsOptional()
-  @IsString()
-  @MaxLength(2048)
+  @IsUrlOrInlineFile()
+  @Matches(/^(?!data:)|^data:image\/(png|jpe?g|webp|gif);base64,/, {
+    message: 'imageUrl: o ficheiro inline tem de ser uma imagem (png, jpeg, webp ou gif)',
+  })
   imageUrl?: string;
 
   @ApiPropertyOptional({ description: 'Voz e parâmetros permitidos (guardado como JSON)' })

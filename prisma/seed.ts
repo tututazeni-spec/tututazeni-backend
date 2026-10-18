@@ -209,7 +209,7 @@ async function seedOrgStructure(prisma: PrismaClient) {
   }
   console.log('✅ Departamentos criados:', departments.map(d => d.code).join(', '));
 
-  // Um cargo por PositionLevel. Salários em Kz (Angola) — bandas indicativas.
+  // Um cargo por PositionLevel. Salários em AOA (Angola) — bandas indicativas.
   const positions = [
     {
       code: 'P-INT',

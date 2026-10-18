@@ -327,7 +327,7 @@ function annualCsv(data: AnnualExport): string {
 
 function annualReportInput(data: AnnualExport) {
   const kz = (n: number) =>
-    `${n.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kz`;
+    `${n.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} AOA`;
   const t = data.totals;
   const title = data.month
     ? `Resumo de Recibos ${data.year}-${data.month.padStart(2, '0')}`

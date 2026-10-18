@@ -2024,6 +2024,7 @@ model DevelopmentPlan {
   updatedAt          DateTime     @updatedAt
 
   // ── Origem e diagnóstico (secções 2-3 do doc) ──────────────────────────
+  imageUrl            String?    @db.Text // Imagem do cartão (data URL)
   origin              PdiOrigin?
   originJustification String?    @db.Text
   strengths           String?    @db.Text // Principais pontos fortes
@@ -5192,6 +5193,8 @@ model Training {
   language               String           @default("pt")
   workloadHours          Float?
   thumbnailUrl           String?
+  // Cor própria da formação nas cartas: índice em PALETTE (frontend); null = derivada do id.
+  colorIndex             Int?
   prerequisites          String?
   instructorId           Int?
   // docs/trainings-detalhado.md pt.7 — formador SEM conta de colaborador
@@ -5293,6 +5296,7 @@ model TrainingPlan {
   code                 String?            @unique
   year                 Int
   period               TrainingPlanPeriod @default(ANNUAL)
+  imageUrl             String?            @db.Text
   description          String?            @db.Text
   objectives           String?
   identifiedNeeds      String?

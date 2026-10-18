@@ -69,7 +69,7 @@ describe('buildPdfInput', () => {
       expect.objectContaining({ label: 'Subsídio de Transporte' }),
     );
     expect(input.deductions).toEqual([{ label: 'INSS Colaborador', amount: 3000 }]);
-    expect(input.currencySymbol).toBe('Kz');
+    expect(input.currencySymbol).toBe('AOA');
     expect(input.employeeName).toBe('Ana');
   });
 

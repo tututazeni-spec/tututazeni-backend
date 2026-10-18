@@ -35,7 +35,7 @@ describe('PayslipsService — cálculo IRT Angola 2026 (calcIRT)', () => {
     service = module.get<PayslipsService>(PayslipsService);
   });
 
-  it('isento até 150.000 Kz (escalão 0%)', () => {
+  it('isento até 150.000 AOA (escalão 0%)', () => {
     expect(service.calcIRT(150_000).tax).toBe(0);
     expect(service.calcIRT(0).tax).toBe(0);
   });

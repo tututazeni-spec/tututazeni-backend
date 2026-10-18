@@ -30,6 +30,7 @@ import {
   TrainingResourceStatus,
 } from '@prisma/client';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
+import { IsBase64ImageDataUrl } from '../common/validators/is-base64-image-data-url.decorator';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 // NOTA: ParticipantStatus aqui é o `TrainingParticipantStatus` do Prisma —
@@ -121,6 +122,13 @@ export class CreateTrainingDto {
   @IsString()
   thumbnailUrl?: string;
 
+  @ApiPropertyOptional({ description: 'Índice da cor da formação (0-7)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(7)
+  colorIndex?: number;
+
   @ApiPropertyOptional({ description: 'Pré-requisitos em texto' })
   @IsOptional()
   @IsString()
@@ -161,7 +169,7 @@ export class CreateTrainingDto {
   @IsBoolean()
   issueCertificate?: boolean;
 
-  @ApiPropertyOptional({ description: 'Custo do treinamento (Kz)' })
+  @ApiPropertyOptional({ description: 'Custo do treinamento (AOA)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
@@ -268,43 +276,43 @@ export class CreateTrainingDto {
 
   // ─── Custos ──────────────────────────────────────────────────────────────
 
-  @ApiPropertyOptional({ description: 'Custo do formador (Kz)' })
+  @ApiPropertyOptional({ description: 'Custo do formador (AOA)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
   instructorCost?: number;
 
-  @ApiPropertyOptional({ description: 'Custo de material (Kz)' })
+  @ApiPropertyOptional({ description: 'Custo de material (AOA)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
   materialCost?: number;
 
-  @ApiPropertyOptional({ description: 'Custo de transporte (Kz)' })
+  @ApiPropertyOptional({ description: 'Custo de transporte (AOA)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
   transportCost?: number;
 
-  @ApiPropertyOptional({ description: 'Custo de alimentação (Kz)' })
+  @ApiPropertyOptional({ description: 'Custo de alimentação (AOA)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
   foodCost?: number;
 
-  @ApiPropertyOptional({ description: 'Custo de alojamento (Kz)' })
+  @ApiPropertyOptional({ description: 'Custo de alojamento (AOA)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
   lodgingCost?: number;
 
-  @ApiPropertyOptional({ description: 'Outros custos (Kz)' })
+  @ApiPropertyOptional({ description: 'Outros custos (AOA)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
   otherCosts?: number;
 
-  @ApiPropertyOptional({ description: 'Orçamento previsto (Kz)' })
+  @ApiPropertyOptional({ description: 'Orçamento previsto (AOA)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
@@ -499,15 +507,25 @@ export class NotifyTrainingDto {
 
 // ─── Documentos administrativos ────────────────────────────────────────────────
 
+// 4 MB de ficheiro em base64 (×4/3) + prefixo `data:<mime>;base64,` — cabe no
+// parser JSON (8 MB). O frontend recusa acima de 4 MB antes de enviar.
+const TRAINING_DOCUMENT_MAX_DATA_URL_LENGTH = Math.ceil((4 * 1024 * 1024 * 4) / 3) + 64;
+
 export class CreateTrainingDocumentDto {
   @ApiProperty()
   @IsString()
   @MaxLength(200)
   name!: string;
 
-  @ApiProperty({ description: 'URL do ficheiro (HTTPS, domínio autorizado)' })
+  @ApiProperty({
+    description:
+      'URL do ficheiro (HTTPS, domínio autorizado) ou ficheiro inline (PDF/PNG/JPG/WebP em data URL base64, máx. 4 MB)',
+  })
   @IsString()
-  @IsAllowedFileUrl()
+  @IsAllowedFileUrl(undefined, {
+    allowPdfDataUrl: TRAINING_DOCUMENT_MAX_DATA_URL_LENGTH,
+    allowImageDataUrl: TRAINING_DOCUMENT_MAX_DATA_URL_LENGTH,
+  })
   fileUrl!: string;
 
   @ApiPropertyOptional()
@@ -694,6 +712,16 @@ export class CreateTrainingPlanDto {
   @IsEnum(TrainingPlanPeriod)
   period?: TrainingPlanPeriod;
 
+  @ApiPropertyOptional({
+    description: 'Imagem do plano (data URL base64 png/jpeg/webp)',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(700_000)
+  @IsBase64ImageDataUrl()
+  imageUrl?: string | null;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -760,7 +788,7 @@ export class CreateTrainingPlanDto {
   @IsEnum(TrainingType)
   modality?: TrainingType;
 
-  @ApiPropertyOptional({ description: 'Orçamento previsto (Kz)' })
+  @ApiPropertyOptional({ description: 'Orçamento previsto (AOA)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
@@ -956,15 +984,21 @@ export class CreateTrainingInstructorDto {
   @IsString()
   availability?: string;
 
-  @ApiPropertyOptional({ description: 'Custo/hora (Kz)' })
+  @ApiPropertyOptional({ description: 'Custo/hora (AOA)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
   hourlyCost?: number;
 
-  @ApiPropertyOptional({ description: 'URL de documentação (HTTPS, domínio autorizado)' })
+  @ApiPropertyOptional({
+    description:
+      'Documentação: URL (HTTPS, domínio autorizado) ou ficheiro inline (PDF/PNG/JPG/WebP em data URL base64, máx. 4 MB)',
+  })
   @IsOptional()
-  @IsAllowedFileUrl()
+  @IsAllowedFileUrl(undefined, {
+    allowPdfDataUrl: TRAINING_DOCUMENT_MAX_DATA_URL_LENGTH,
+    allowImageDataUrl: TRAINING_DOCUMENT_MAX_DATA_URL_LENGTH,
+  })
   documentUrl?: string;
 
   @ApiPropertyOptional({ enum: TrainingInstructorStatus, default: TrainingInstructorStatus.ACTIVE })
@@ -1064,7 +1098,7 @@ export class CreateTrainingResourceDto {
   @IsString({ each: true })
   equipment?: string[];
 
-  @ApiPropertyOptional({ description: 'Custo (Kz)' })
+  @ApiPropertyOptional({ description: 'Custo (AOA)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
