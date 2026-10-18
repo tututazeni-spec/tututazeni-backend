@@ -2024,6 +2024,7 @@ model DevelopmentPlan {
   updatedAt          DateTime     @updatedAt
 
   // ── Origem e diagnóstico (secções 2-3 do doc) ──────────────────────────
+  imageUrl            String?    @db.Text // Imagem do cartão (data URL)
   origin              PdiOrigin?
   originJustification String?    @db.Text
   strengths           String?    @db.Text // Principais pontos fortes

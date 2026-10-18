@@ -184,6 +184,7 @@ export class DevelopmentPlansService {
           notes: data.notes,
           status: 'DRAFT',
           origin: data.origin,
+          imageUrl: data.imageUrl,
           originJustification: data.originJustification,
           strengths: data.strengths,
           developmentNeeds: data.developmentNeeds,
