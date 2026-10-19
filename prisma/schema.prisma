@@ -13200,7 +13200,7 @@ model CertificateTemplate {
   isDefault      Boolean                 @default(false)
   isActive       Boolean                 @default(true)
   validityDays   Int?
-  createdById    Int
+  createdById    Int?
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
   deletedAt      DateTime?
@@ -13215,7 +13215,8 @@ model CertificateTemplate {
 
   versions CertificateTemplateVersion[]
 
-  createdBy    User                @relation("TemplateCreator", fields: [createdById], references: [id])
+  // null nos modelos de sistema (criados automaticamente, sem autor humano).
+  createdBy    User?               @relation("TemplateCreator", fields: [createdById], references: [id])
   certificates IssuedCertificate[]
 
   leadershipPrograms LeadershipProgram[]
