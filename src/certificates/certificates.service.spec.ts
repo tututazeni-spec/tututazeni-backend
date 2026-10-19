@@ -201,4 +201,24 @@ describe('CertificatesService', () => {
       expect(r).toMatchObject({ origin: 'EXTERNAL' });
     });
   });
+
+  describe('partilha na lista do colaborador', () => {
+    it('cada linha traz a ligação de verificação; só o válido traz o LinkedIn', async () => {
+      prisma.certificate.findMany.mockResolvedValue([
+        row({ id: 1, validationCode: 'AAAA1111BBBB2222' }),
+        row({ id: 2, validationCode: 'CCCC3333DDDD4444', revoked: true, status: 'REVOKED' }),
+        row({
+          id: 3,
+          validationCode: 'EEEE5555FFFF6666',
+          expiresAt: new Date(Date.now() - 86_400_000),
+        }),
+      ]);
+      const [ok, revoked, expired] = await svc.listMine(1);
+      expect(ok.verifyUrl).toMatch(/\/verify\/AAAA1111BBBB2222$/);
+      expect(ok.linkedInUrl).toContain('startTask=CERTIFICATION_NAME');
+      expect(revoked.verifyUrl).toMatch(/\/verify\/CCCC3333DDDD4444$/);
+      expect(revoked.linkedInUrl).toBeUndefined();
+      expect(expired.linkedInUrl).toBeUndefined();
+    });
+  });
 });

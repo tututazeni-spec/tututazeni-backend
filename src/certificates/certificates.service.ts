@@ -5,6 +5,7 @@ import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { normalizeVerificationCode } from './certificate-code';
 import { buildVerifyUrl, CertificateSnapshot, renderCertificatePdf } from './certificate-renderer';
+import { buildLinkedInUrl } from './certificate-share';
 
 interface StatusInput {
   status: CertificateStatus;
@@ -53,11 +54,27 @@ export class CertificatesService {
     });
     const now = new Date();
     // O documento importado (fileUrl, até 5 MB) e o snapshot nunca vão na lista.
-    return rows.map(({ fileUrl: _fileUrl, snapshot: _snapshot, ...r }) => ({
-      ...r,
-      status: effectiveStatus(r, now),
-      displayTitle: r.title ?? r.course?.title ?? r.event?.title ?? 'Certificado',
-    }));
+    return rows.map(({ fileUrl: _fileUrl, snapshot: _snapshot, ...r }) => {
+      const status = effectiveStatus(r, now);
+      const displayTitle = r.title ?? r.course?.title ?? r.event?.title ?? 'Certificado';
+      return {
+        ...r,
+        status,
+        displayTitle,
+        verifyUrl: buildVerifyUrl(r.validationCode),
+        // O LinkedIn só se oferece para certificados válidos (fluxo oficial "Add to profile").
+        linkedInUrl:
+          status === 'ACTIVE'
+            ? buildLinkedInUrl({
+                title: displayTitle,
+                issuerName: r.issuerName,
+                issuedAt: r.issuedAt,
+                expiresAt: r.expiresAt,
+                validationCode: r.validationCode,
+              })
+            : undefined,
+      };
+    });
   }
 
   /** Verificação pública: lê sempre o registo actual e expõe só o mínimo necessário. */

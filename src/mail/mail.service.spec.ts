@@ -16,6 +16,10 @@ describe('MailService', () => {
       service.onModuleInit();
     });
 
+    it('isConfigured devolve false', async () => {
+      await expect(service.isConfigured()).resolves.toBe(false);
+    });
+
     it('sendPasswordReset resolve sem lançar e regista warn', async () => {
       const spy = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
       await expect(service.sendPasswordReset('user@innova.com', 'tok123')).resolves.toBeUndefined();
@@ -111,6 +115,14 @@ describe('MailService', () => {
     it('sendNotification lança se o transporter rejeitar', async () => {
       sendMailMock.mockRejectedValue(new Error('boom'));
       await expect(service.sendNotification('x@y.com', 'S', 'M')).rejects.toThrow('boom');
+    });
+  });
+
+  describe('isConfigured', () => {
+    it('devolve true quando há SMTP_HOST', async () => {
+      process.env.SMTP_HOST = 'smtp.exemplo.com';
+      service.onModuleInit();
+      await expect(service.isConfigured()).resolves.toBe(true);
     });
   });
 });
