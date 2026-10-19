@@ -7,11 +7,12 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
-import { Prisma, CertificateType } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MailService } from '../mail/mail.service';
 import { SmsService } from '../sms/sms.service';
+import { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
 import {
   CreateEventDto,
   UpdateEventDto,
@@ -56,6 +57,7 @@ export class EventsService {
     private notifications: NotificationsService,
     private mail: MailService,
     private sms: SmsService,
+    private certificates: CertificateIssuanceService,
   ) {}
 
   // ─── LISTAGEM ─────────────────────────────────────────────────────────────
@@ -1214,45 +1216,14 @@ export class EventsService {
     });
     if (participant?.status !== 'PRESENT') return;
 
-    // Verificar se já existe
-    const existing = await this.prisma.certificate.findFirst({
-      where: { userId, eventId },
+    // Emissão centralizada: idempotente, com auditoria e notificação. Sem regra
+    // configurada aplica-se a regra implícita "presença confirmada".
+    await this.certificates.issue({
+      userId,
+      activityKind: 'EVENT',
+      activityId: eventId,
+      trigger: 'AUTO',
     });
-    if (existing) return;
-
-    const code = `EVT-${Date.now()}-${eventId}-${userId}`;
-    await this.prisma.certificate.create({
-      data: {
-        // CertificateType não tem valor EVENT (achado estrutural, ver
-        // schema.prisma) — usa-se COURSE como o mais próximo disponível.
-        // Enum real, não 'as any': mesmo comportamento em runtime.
-        type: CertificateType.COURSE,
-        userId,
-        eventId,
-        validationCode: code,
-        fileUrl: `/certificates/${code}.pdf`,
-      },
-    });
-
-    await this.prisma.notificationLog
-      .create({
-        data: {
-          userId,
-          type: 'CERTIFICATE_ISSUED',
-          message: `🎓 Certificado emitido! Consulta o teu perfil para fazer o download.`,
-          priority: 'MEDIUM',
-          category: 'LMS',
-        },
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          userId,
-          action: 'EVENT_CERTIFICATE_ISSUED_NOTIFY',
-          entityId: eventId,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao notificar utilizador sobre emissão de certificado de evento',
-        });
-      });
   }
 
   // ─── DASHBOARD DO ORGANIZADOR ─────────────────────────────────────────────

@@ -12,7 +12,7 @@ const snapshot = (over: Partial<CertificateSnapshot> = {}): CertificateSnapshot 
   ...over,
 });
 
-const url = 'http://localhost:3000/verificar/ABCD1234EFGH5678';
+const url = 'http://localhost:3000/verify/ABCD1234EFGH5678';
 
 describe('renderCertificatePdf', () => {
   it('gera um PDF válido', async () => {
@@ -44,11 +44,11 @@ describe('buildVerifyUrl', () => {
 
   it('usa APP_URL sem barra final', () => {
     process.env.APP_URL = 'https://academia.example.com/';
-    expect(buildVerifyUrl('ABC')).toBe('https://academia.example.com/verificar/ABC');
+    expect(buildVerifyUrl('ABC')).toBe('https://academia.example.com/verify/ABC');
   });
 
   it('em desenvolvimento cai para localhost:3000', () => {
     delete process.env.APP_URL;
-    expect(buildVerifyUrl('ABC')).toBe('http://localhost:3000/verificar/ABC');
+    expect(buildVerifyUrl('ABC')).toBe('http://localhost:3000/verify/ABC');
   });
 });

@@ -69,3 +69,18 @@ export function evaluateEligibility(
   if (active === 0) return { eligible: false, missing: ['NO_CRITERIA'] };
   return { eligible: missing.length === 0, missing };
 }
+
+const MISSING_LABELS: Record<MissingReason, string> = {
+  COMPLETION_INCOMPLETE: 'Conteúdo obrigatório por concluir',
+  MIN_SCORE_NOT_MET: 'Nota mínima não atingida',
+  ATTENDANCE_BELOW_MIN: 'Presença mínima não atingida',
+  PRACTICAL_NOT_PASSED: 'Avaliação prática por aprovar',
+  INSTRUCTOR_APPROVAL_MISSING: 'Aprovação do instrutor em falta',
+  MANAGER_APPROVAL_MISSING: 'Aprovação do gestor em falta',
+  NO_CRITERIA: 'A regra de emissão não tem critérios configurados',
+};
+
+/** Frases para o utilizador (o filtro global de erros só preserva o campo `message`). */
+export function describeMissing(missing: MissingReason[]): string[] {
+  return missing.map(m => MISSING_LABELS[m]);
+}

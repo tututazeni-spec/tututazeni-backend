@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { EventsService } from './events.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MailService } from '../mail/mail.service';
 import { SmsService } from '../sms/sms.service';
@@ -85,6 +86,7 @@ describe('EventsService (additional)', () => {
       providers: [
         EventsService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: CertificateIssuanceService, useValue: { issue: jest.fn() } },
         { provide: NotificationsService, useValue: mockNotifications },
         { provide: MailService, useValue: mockMail },
         { provide: SmsService, useValue: mockSms },
