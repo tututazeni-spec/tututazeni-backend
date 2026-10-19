@@ -804,6 +804,8 @@ const CertificateStatus = {
   REVOKED: 'REVOKED',
 };
 
+const CertificateAssetKind = { LOGO: 'LOGO', BACKGROUND: 'BACKGROUND', SIGNATURE: 'SIGNATURE' };
+
 const CertificateOrigin = { INTERNAL: 'INTERNAL', EXTERNAL: 'EXTERNAL' };
 
 const CertificateIssueMode = { AUTOMATIC: 'AUTOMATIC', MANUAL: 'MANUAL', APPROVAL: 'APPROVAL' };
@@ -3083,6 +3085,7 @@ module.exports = {
   EvalType,
   CertificateType,
   CertificateStatus,
+  CertificateAssetKind,
   CertificateOrigin,
   CertificateIssueMode,
   CertificateActivityKind,

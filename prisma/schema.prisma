@@ -2690,6 +2690,39 @@ enum CertificateOrigin {
   EXTERNAL
 }
 
+enum CertificateAssetKind {
+  LOGO
+  BACKGROUND
+  SIGNATURE
+}
+
+model CertificateTemplateVersion {
+  id          String   @id @default(cuid())
+  templateId  String
+  version     Int
+  config      String   @db.Text
+  createdById Int?
+  createdAt   DateTime @default(now())
+
+  template CertificateTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, version])
+  @@index([templateId])
+}
+
+/// Imagens dos templates (logótipo, fundo, assinatura): imutáveis e de acesso controlado.
+model CertificateAsset {
+  id          String                   @id @default(cuid())
+  kind        CertificateAssetKind
+  mime        String
+  size        Int
+  width       Int
+  height      Int
+  data        Bytes
+  createdById Int?
+  createdAt   DateTime                 @default(now())
+}
+
 enum CertificateIssueMode {
   AUTOMATIC
   MANUAL
@@ -13171,6 +13204,16 @@ model CertificateTemplate {
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
   deletedAt      DateTime?
+
+  // Fatia 2 (certificados): os 9 modelos de sistema são configuração JSON versionada.
+  // Cada guardar cria uma CertificateTemplateVersion imutável; o certificado emitido
+  // embute a versão usada no seu snapshot, por isso nunca muda retroactivamente.
+  isSystem       Boolean @default(false)
+  layoutKey      String?
+  config         String? @db.Text
+  currentVersion Int     @default(0)
+
+  versions CertificateTemplateVersion[]
 
   createdBy    User                @relation("TemplateCreator", fields: [createdById], references: [id])
   certificates IssuedCertificate[]
