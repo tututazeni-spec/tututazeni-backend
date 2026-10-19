@@ -88,16 +88,22 @@ describe('Certificates admin API (Postgres real)', () => {
   });
 
   describe('autorização', () => {
-    it.each([
-      '/certificates/admin/overview',
-      '/certificates/admin/list',
-      '/certificates/admin/history',
-      '/certificates/rules',
-      '/certificates/templates',
-    ])('colaborador e gestor → 403 em %s', async path => {
-      await request(http()).get(path).set(as(employeeToken)).expect(403);
-      await request(http()).get(path).set(as(managerToken)).expect(403);
-    });
+    it.each(['/certificates/admin/history', '/certificates/rules', '/certificates/templates'])(
+      'colaborador e gestor → 403 em %s',
+      async path => {
+        await request(http()).get(path).set(as(employeeToken)).expect(403);
+        await request(http()).get(path).set(as(managerToken)).expect(403);
+      },
+    );
+
+    // O gestor lê visão geral e lista, mas só da sua equipa (ver certificates-scope).
+    it.each(['/certificates/admin/overview', '/certificates/admin/list'])(
+      'colaborador → 403 e gestor → 200 em %s',
+      async path => {
+        await request(http()).get(path).set(as(employeeToken)).expect(403);
+        await request(http()).get(path).set(as(managerToken)).expect(200);
+      },
+    );
 
     it('sem token → 401', async () => {
       await request(http()).get('/certificates/admin/overview').expect(401);

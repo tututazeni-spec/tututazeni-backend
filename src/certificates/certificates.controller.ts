@@ -23,17 +23,32 @@ import { CertificateRulesService } from './certificate-rules.service';
 import { CertificateLifecycleService } from './certificate-lifecycle.service';
 import { CertificateExternalService } from './certificate-external.service';
 import { CertificateBatchService } from './certificate-batch.service';
+import { CertificateScopeService } from './certificate-scope.service';
+import { CertificatesTeamService } from './certificates-team.service';
+import { CertificatesExportService } from './certificates-export.service';
+import { CertificatesMeService } from './certificates-me.service';
 import {
   BatchIssueDto,
   ImportExternalCertificateDto,
   ReasonDto,
 } from './certificates-lifecycle.dto';
 import {
+  ExportCertificatesQueryDto,
   HistoryQueryDto,
   ListCertificatesQueryDto,
   UpsertCertificateRuleDto,
 } from './certificates-admin.dto';
 import { describeMissing } from './certificate-rules';
+
+// Quem pode abrir o centro de certificados; o âmbito (tudo/equipa) é resolvido no serviço.
+const MANAGEMENT_ROLES = [
+  Role.ADMIN,
+  Role.RH,
+  Role.AUDITOR,
+  Role.GESTOR,
+  Role.LIDER,
+  Role.DIRECTOR,
+];
 
 @ApiTags('Certificates')
 @ApiBearerAuth()
@@ -47,6 +62,10 @@ export class CertificatesController {
     private readonly lifecycle: CertificateLifecycleService,
     private readonly external: CertificateExternalService,
     private readonly batch: CertificateBatchService,
+    private readonly scope: CertificateScopeService,
+    private readonly team: CertificatesTeamService,
+    private readonly exports: CertificatesExportService,
+    private readonly me: CertificatesMeService,
   ) {}
 
   @Get('my')
@@ -56,20 +75,61 @@ export class CertificatesController {
     return this.certificates.listMine(user.id);
   }
 
-  // As rotas fixas (admin/*, rules, templates) vêm antes de ':id/pdf'.
-  // Leitura: ADMIN/RH/AUDITOR. GESTOR e INSTRUCTOR só entram com o âmbito de equipa.
+  // As rotas fixas (admin/*, rules, templates, team/*, my/*) vêm antes de ':id/...'.
+  // Leitura: ADMIN/RH/AUDITOR vêem tudo; GESTOR/LIDER/DIRECTOR só a equipa directa
+  // (âmbito resolvido no backend; qualquer outro papel recebe 403 do serviço).
   @Get('admin/overview')
-  @Roles(Role.ADMIN, Role.RH, Role.AUDITOR)
-  @ApiOperation({ summary: 'Indicadores do centro de certificados' })
-  overview() {
-    return this.admin.overview();
+  @Roles(...MANAGEMENT_ROLES)
+  @ApiOperation({ summary: 'Indicadores do centro de certificados (no âmbito do utilizador)' })
+  async overview(@CurrentUser() user: CurrentUserData) {
+    return this.admin.overview(new Date(), await this.scope.resolveScope(user));
   }
 
   @Get('admin/list')
-  @Roles(Role.ADMIN, Role.RH, Role.AUDITOR)
-  @ApiOperation({ summary: 'Lista de certificados com filtros e paginação' })
-  list(@Query() q: ListCertificatesQueryDto) {
-    return this.admin.list(q);
+  @Roles(...MANAGEMENT_ROLES)
+  @ApiOperation({
+    summary: 'Lista de certificados com filtros e paginação (no âmbito do utilizador)',
+  })
+  async list(@Query() q: ListCertificatesQueryDto, @CurrentUser() user: CurrentUserData) {
+    return this.admin.list(q, new Date(), await this.scope.resolveScope(user));
+  }
+
+  @Get('admin/export')
+  @Roles(...MANAGEMENT_ROLES)
+  @ApiOperation({
+    summary: 'Exportar certificados em CSV, Excel ou PDF (filtros e âmbito do utilizador)',
+  })
+  async export(
+    @Query() q: ExportCertificatesQueryDto,
+    @CurrentUser() user: CurrentUserData,
+    @Res() res: Response,
+  ) {
+    const file = await this.exports.exportCertificates(q, user);
+    res.set({
+      'Content-Type': file.contentType,
+      'Content-Disposition': `attachment; filename="${file.filename}"`,
+      'Content-Length': file.buffer.length,
+    });
+    res.end(file.buffer);
+  }
+
+  @Get('team/summary')
+  @Roles(...MANAGEMENT_ROLES)
+  @ApiOperation({
+    summary: 'Resumo de certificações da equipa (ou de um departamento para RH/ADMIN/AUDITOR)',
+  })
+  teamSummary(
+    @CurrentUser() user: CurrentUserData,
+    @Query('departmentId', new ParseIntPipe({ optional: true })) departmentId?: number,
+  ) {
+    return this.team.teamSummary(user, departmentId);
+  }
+
+  @Get('my/summary')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Resumo pessoal: pendentes, a expirar e obrigatórias em falta' })
+  mySummary(@CurrentUser() user: CurrentUserData) {
+    return this.me.mySummary(user.id);
   }
 
   @Get('admin/history')
@@ -202,12 +262,23 @@ export class CertificatesController {
     };
   }
 
-  // GESTOR fica de fora até existir âmbito de equipa (aprovar só a sua equipa).
+  // ADMIN/RH aprovam qualquer um; GESTOR/LIDER/DIRECTOR só os da sua equipa (404 fora dela).
   @Post(':id/approve')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR, Role.LIDER, Role.DIRECTOR)
   @ApiOperation({ summary: 'Aprovar um certificado pendente de aprovação' })
   async approve(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    await this.team.assertCanApprove(user, id);
     const cert = await this.issuance.approve(id, user.id);
     return { id: cert.id, status: cert.status };
+  }
+
+  @Post(':id/email-me')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({
+    summary:
+      'Enviar o próprio certificado para o e-mail do titular (se o SMTP estiver configurado)',
+  })
+  emailMe(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.me.emailMe(id, user);
   }
 }
