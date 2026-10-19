@@ -796,6 +796,23 @@ const CertificateType = {
   DEVELOPMENT: 'DEVELOPMENT',
 };
 
+const CertificateStatus = {
+  PENDING: 'PENDING',
+  PENDING_APPROVAL: 'PENDING_APPROVAL',
+  ACTIVE: 'ACTIVE',
+  EXPIRED: 'EXPIRED',
+  REVOKED: 'REVOKED',
+};
+
+const CertificateIssueMode = { AUTOMATIC: 'AUTOMATIC', MANUAL: 'MANUAL', APPROVAL: 'APPROVAL' };
+
+const CertificateActivityKind = {
+  COURSE: 'COURSE',
+  TRAINING: 'TRAINING',
+  LEARNING_PATH: 'LEARNING_PATH',
+  EVENT: 'EVENT',
+};
+
 const EventStatus = {
   DRAFT: 'DRAFT',
   PUBLISHED: 'PUBLISHED',
@@ -3063,6 +3080,9 @@ module.exports = {
   OrgChangeType,
   EvalType,
   CertificateType,
+  CertificateStatus,
+  CertificateIssueMode,
+  CertificateActivityKind,
   EventStatus,
   ReportFormat,
   AiRole,
