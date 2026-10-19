@@ -3,7 +3,11 @@ import { CertificateStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeVerificationCode } from './certificate-code';
 import { effectiveStatus } from './certificates.service';
-import { EffectiveStatusFilter, ListCertificatesQueryDto } from './certificates-admin.dto';
+import {
+  EffectiveStatusFilter,
+  HistoryQueryDto,
+  ListCertificatesQueryDto,
+} from './certificates-admin.dto';
 
 export const EXPIRING_SOON_DAYS = 30;
 const DAY_MS = 86_400_000;
@@ -30,6 +34,16 @@ export interface AdminOverview {
   expiringSoon: number;
   revoked: number;
   mandatoryCoveragePct: number | null;
+}
+
+export interface HistoryRow {
+  id: number;
+  action: string;
+  userName: string | null;
+  certificateId: number | null;
+  timestamp: Date;
+  reason: string | null;
+  metadata: unknown;
 }
 
 export interface Paginated<T> {
@@ -210,5 +224,51 @@ export class CertificatesAdminService {
       limit,
       totalPages: Math.ceil(total / limit),
     };
+  }
+
+  /** Histórico de emissões, aprovações e alterações de regras (campo `entity`, nunca `entityType`). */
+  async history(q: HistoryQueryDto): Promise<Paginated<HistoryRow>> {
+    const page = q.page ?? 1;
+    const limit = q.limit ?? DEFAULT_LIMIT;
+    const where: Prisma.AuditLogWhereInput = q.certificateId
+      ? { entity: 'Certificate', entityId: q.certificateId }
+      : { entity: { in: ['Certificate', 'CertificateRule'] } };
+    if (q.action) where.action = q.action;
+
+    const [total, rows] = await Promise.all([
+      this.prisma.auditLog.count({ where }),
+      this.prisma.auditLog.findMany({
+        where,
+        orderBy: { timestamp: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: { user: { select: { fullName: true } } },
+      }),
+    ]);
+
+    return {
+      data: rows.map(r => ({
+        id: r.id,
+        action: r.action,
+        userName: r.user?.fullName ?? null,
+        certificateId: r.entity === 'Certificate' ? r.entityId : null,
+        timestamp: r.timestamp,
+        reason: r.reason,
+        metadata: parseJson(r.metadata),
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+}
+
+function parseJson(raw: string | null): unknown {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
   }
 }

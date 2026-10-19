@@ -128,3 +128,47 @@ describe('CertificatesAdminService', () => {
     });
   });
 });
+
+describe('CertificatesAdminService.history', () => {
+  const prisma = { auditLog: { count: jest.fn(), findMany: jest.fn() } };
+  const svc = new CertificatesAdminService(prisma as never);
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    prisma.auditLog.count.mockResolvedValue(1);
+  });
+
+  it('filtra pela entidade Certificate e pelo id do certificado', async () => {
+    prisma.auditLog.findMany.mockResolvedValue([]);
+    await svc.history({ certificateId: 7 });
+    expect(prisma.auditLog.findMany.mock.calls[0][0].where).toMatchObject({
+      entity: 'Certificate',
+      entityId: 7,
+    });
+  });
+
+  it('sem certificateId inclui também alterações a regras', async () => {
+    prisma.auditLog.findMany.mockResolvedValue([]);
+    await svc.history({});
+    expect(prisma.auditLog.findMany.mock.calls[0][0].where).toMatchObject({
+      entity: { in: ['Certificate', 'CertificateRule'] },
+    });
+  });
+
+  it('metadata inválido devolve null em vez de rebentar', async () => {
+    prisma.auditLog.findMany.mockResolvedValue([
+      {
+        id: 1,
+        action: 'CERTIFICATE_ISSUED',
+        entity: 'Certificate',
+        entityId: 7,
+        timestamp: new Date(),
+        reason: null,
+        metadata: '{não é json',
+        user: { fullName: 'RH Teste' },
+      },
+    ]);
+    const r = await svc.history({});
+    expect(r.data[0]).toMatchObject({ certificateId: 7, userName: 'RH Teste', metadata: null });
+  });
+});
