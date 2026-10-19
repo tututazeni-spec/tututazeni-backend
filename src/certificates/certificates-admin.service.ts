@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { CertificateStatus, Prisma } from '@prisma/client';
+import { CertificateOrigin, CertificateStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeVerificationCode } from './certificate-code';
 import { effectiveStatus } from './certificates.service';
@@ -19,6 +19,7 @@ export interface AdminCertificateRow {
   departmentName: string | null;
   title: string;
   activityKind: string | null;
+  origin: CertificateOrigin;
   status: CertificateStatus;
   code: string;
   issuedAt: Date;
@@ -213,6 +214,7 @@ export class CertificatesAdminService {
         departmentName: r.user?.department?.name ?? null,
         title: r.title ?? r.course?.title ?? r.event?.title ?? 'Certificado',
         activityKind: r.activityKind,
+        origin: r.origin,
         status: effectiveStatus(r, now),
         code: r.validationCode,
         issuedAt: r.issuedAt,
