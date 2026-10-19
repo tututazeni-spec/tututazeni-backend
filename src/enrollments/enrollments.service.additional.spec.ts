@@ -86,7 +86,7 @@ const baseEnrollment = {
     workloadHours: 20,
     status: 'PUBLISHED',
   },
-  certificate: null,
+  certificates: [],
 };
 
 describe('EnrollmentsService (additional)', () => {

@@ -84,10 +84,35 @@ export class CertificateRecyclingService {
       });
       if (claim.count === 0) return false;
 
-      await tx.enrollmentRun.updateMany({
-        where: { enrollmentId, cycle: enrollment.cycle, closedAt: null },
-        data: { closedAt: now, finalProgress: enrollment.progress },
+      // Matrículas criadas depois da migração podem não ter ainda a realização corrente.
+      const closing = await tx.enrollmentRun.upsert({
+        where: { enrollmentId_cycle: { enrollmentId, cycle: enrollment.cycle } },
+        create: {
+          enrollmentId,
+          cycle: enrollment.cycle,
+          startedAt: enrollment.cycleStartedAt ?? enrollment.startedAt ?? enrollment.enrolledAt,
+          completedAt: enrollment.completedAt,
+          closedAt: now,
+          finalProgress: enrollment.progress,
+        },
+        update: { closedAt: now, finalProgress: enrollment.progress },
       });
+      await tx.enrollmentRunLesson.deleteMany({ where: { runId: closing.id } });
+      const lessonWhere = {
+        userId: enrollment.userId,
+        lesson: { module: { courseId: enrollment.courseId } },
+      };
+      const done = await tx.lessonProgress.findMany({
+        where: lessonWhere,
+        select: { lessonId: true, completed: true, completedAt: true, watchedSeconds: true },
+      });
+      // Preserva o detalhe por aula antes de o limpar (LessonProgress é único por aula/utilizador).
+      if (done.length) {
+        await tx.enrollmentRunLesson.createMany({
+          data: done.map(l => ({ ...l, runId: closing.id })),
+          skipDuplicates: true,
+        });
+      }
       await tx.enrollmentRun.create({
         data: {
           enrollmentId,
@@ -98,11 +123,7 @@ export class CertificateRecyclingService {
           startedAt: now,
         },
       });
-      // LessonProgress é único por (aula, utilizador): a nova realização recomeça do zero.
-      // O desfecho da anterior fica no EnrollmentRun e no certificado emitido.
-      await tx.lessonProgress.deleteMany({
-        where: { userId: enrollment.userId, lesson: { module: { courseId: enrollment.courseId } } },
-      });
+      await tx.lessonProgress.deleteMany({ where: lessonWhere });
       return true;
     });
 
@@ -182,7 +203,16 @@ export class CertificateRecyclingService {
   /** Realizações da matrícula com o certificado de cada uma; `current` marca o vigente. */
   async listRuns(enrollmentId: number) {
     const [runs, certs] = await Promise.all([
-      this.prisma.enrollmentRun.findMany({ where: { enrollmentId }, orderBy: { cycle: 'asc' } }),
+      this.prisma.enrollmentRun.findMany({
+        where: { enrollmentId },
+        orderBy: { cycle: 'asc' },
+        include: {
+          lessons: {
+            orderBy: { lessonId: 'asc' },
+            select: { lessonId: true, completed: true, completedAt: true, watchedSeconds: true },
+          },
+        },
+      }),
       this.prisma.certificate.findMany({
         where: { enrollmentId, deletedAt: null },
         orderBy: { issuedAt: 'asc' },
@@ -204,6 +234,7 @@ export class CertificateRecyclingService {
     const currentId = valid.length ? valid[valid.length - 1].id : null;
     return runs.map(run => ({
       ...run,
+      lessonsCompleted: run.lessons.filter(l => l.completed).length,
       certificates: certs
         .filter(c => c.enrollmentCycle === run.cycle)
         .map(c => ({ ...c, current: c.id === currentId })),

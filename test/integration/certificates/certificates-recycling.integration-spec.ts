@@ -25,6 +25,7 @@ describe('Reciclagem de certificados (Postgres real)', () => {
   let manualCourse: number;
   let autoCourse: number;
   let offCourse: number;
+  let lessonId: number;
   const enrollments: Record<string, number> = {};
   const stamp = Date.now();
   const http = () => app.getHttpServer();
@@ -98,12 +99,35 @@ describe('Reciclagem de certificados (Postgres real)', () => {
       await prisma.enrollmentRun.create({ data: { enrollmentId: e.id, cycle: 1 } });
       enrollments[key] = e.id;
     }
+    // Uma aula concluída na 1.ª realização do curso MANUAL: tem de sobreviver à reciclagem.
+    const mod = await prisma.courseModule.create({
+      data: { courseId: manualCourse, title: 'M1', seq: 0, learningObjectives: [] },
+    });
+    const lesson = await prisma.lesson.create({
+      data: { moduleId: mod.id, title: 'L1', seq: 0, learningObjectives: [] } as never,
+    });
+    lessonId = lesson.id;
+    await prisma.lessonProgress.create({
+      data: {
+        lessonId,
+        userId: employeeId,
+        enrollmentId: enrollments.manual,
+        completed: true,
+        completedAt: new Date(),
+        watchedSeconds: 42,
+      },
+    });
   });
 
   afterAll(async () => {
     const ids = [manualCourse, autoCourse, offCourse];
     // filhos antes de pais: certificate → run → enrollment → course
     await prisma.certificate
+      .deleteMany({ where: { courseId: { in: ids } } })
+      .catch(() => undefined);
+    await prisma.lessonProgress.deleteMany({ where: { lessonId } }).catch(() => undefined);
+    await prisma.lesson.deleteMany({ where: { id: lessonId } }).catch(() => undefined);
+    await prisma.courseModule
       .deleteMany({ where: { courseId: { in: ids } } })
       .catch(() => undefined);
     await prisma.enrollmentRun
@@ -141,6 +165,20 @@ describe('Reciclagem de certificados (Postgres real)', () => {
       expect(res.body).toMatchObject({ outcome: 'STARTED', cycle: 2 });
       const e = await prisma.enrollment.findUniqueOrThrow({ where: { id: enrollments.manual } });
       expect(e).toMatchObject({ cycle: 2, status: 'NOT_STARTED', progress: 0, completedAt: null });
+    });
+
+    it('o progresso da aula é limpo na matrícula mas fica guardado na realização 1', async () => {
+      expect(await prisma.lessonProgress.count({ where: { lessonId, userId: employeeId } })).toBe(
+        0,
+      );
+      const run1 = await prisma.enrollmentRun.findUniqueOrThrow({
+        where: { enrollmentId_cycle: { enrollmentId: enrollments.manual, cycle: 1 } },
+        include: { lessons: true },
+      });
+      expect(run1.closedAt).not.toBeNull();
+      expect(run1.lessons).toEqual([
+        expect.objectContaining({ lessonId, completed: true, watchedSeconds: 42 }),
+      ]);
     });
 
     it('repetir a reciclagem não duplica realizações (409, a realização está em curso)', async () => {

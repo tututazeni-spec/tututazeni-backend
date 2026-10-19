@@ -15743,6 +15743,24 @@ model EnrollmentRun {
   finalProgress     Int?
   enrollment        Enrollment          @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
 
+  lessons EnrollmentRunLesson[]
+
   @@unique([enrollmentId, cycle])
   @@index([enrollmentId])
+}
+
+// Progresso por aula de uma realização, copiado antes de a reciclagem limpar o
+// LessonProgress (único por aula/utilizador). Sem FK para a aula: o histórico
+// sobrevive a aulas apagadas.
+model EnrollmentRunLesson {
+  id             Int           @id @default(autoincrement())
+  runId          Int
+  lessonId       Int
+  completed      Boolean
+  completedAt    DateTime?
+  watchedSeconds Int?
+  run            EnrollmentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, lessonId])
+  @@index([runId])
 }

@@ -48,10 +48,19 @@ const ENROLLMENT_INCLUDE_BASIC = {
   // `score` — aproximação de "Nota" (docs/modulo_courses.md secção 3): só
   // populado quando o certificado já foi emitido (issueCertificateFor grava
   // a nota final aí); sem isso não há nota de curso a nível de Enrollment.
-  certificate: {
+  // Reciclagem: uma matrícula pode ter um certificado por realização; o mais recente é o que se mostra.
+  certificates: {
     select: { id: true, validationCode: true, issuedAt: true, expiresAt: true, score: true },
+    orderBy: { issuedAt: 'desc' },
+    take: 1,
   },
 } as const;
+
+/** Mantém o contrato da API (`certificate`) a partir da lista `certificates` do include. */
+function withCurrentCertificate<T extends { certificates?: unknown[] }>(e: T) {
+  const { certificates, ...rest } = e;
+  return { ...rest, certificate: certificates?.[0] ?? null };
+}
 
 @Injectable()
 export class EnrollmentsService {
@@ -232,7 +241,7 @@ export class EnrollmentsService {
       const progressPercent =
         totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
       return {
-        ...e,
+        ...withCurrentCertificate(e),
         totalLessons,
         completedLessons,
         progressPercent,
@@ -338,7 +347,7 @@ export class EnrollmentsService {
 
     const prog = await this.computeProgress(id, e.courseId, e.userId, opts);
     return {
-      ...e,
+      ...withCurrentCertificate(e),
       ...prog,
       isOverdue: this.isOverdue(e.deadline, e.status),
     };
@@ -420,7 +429,7 @@ export class EnrollmentsService {
         }),
     ]);
 
-    return enrollment;
+    return withCurrentCertificate(enrollment);
   }
 
   // ─── BULK ENROLL ──────────────────────────────────────────────────────────
@@ -588,7 +597,7 @@ export class EnrollmentsService {
       throw new BadRequestException('Só é possível reinscrever matrículas canceladas ou expiradas');
     }
 
-    return this.prisma.enrollment.update({
+    const updated = await this.prisma.enrollment.update({
       where: { id },
       data: {
         status: 'NOT_STARTED',
@@ -599,6 +608,7 @@ export class EnrollmentsService {
       },
       include: ENROLLMENT_INCLUDE_BASIC,
     });
+    return withCurrentCertificate(updated);
   }
 
   // ─── ENVIAR LEMBRETE (Admin/RH/Gestor) ────────────────────────────────────

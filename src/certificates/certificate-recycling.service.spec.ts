@@ -6,8 +6,9 @@ const DAY = 86_400_000;
 describe('CertificateRecyclingService', () => {
   const tx = {
     enrollment: { updateMany: jest.fn() },
-    enrollmentRun: { updateMany: jest.fn(), create: jest.fn() },
-    lessonProgress: { deleteMany: jest.fn() },
+    enrollmentRun: { upsert: jest.fn(), create: jest.fn() },
+    enrollmentRunLesson: { deleteMany: jest.fn(), createMany: jest.fn() },
+    lessonProgress: { findMany: jest.fn(), deleteMany: jest.fn() },
   };
   const prisma = {
     enrollment: { findUnique: jest.fn() },
@@ -36,7 +37,13 @@ describe('CertificateRecyclingService', () => {
     jest.resetAllMocks();
     prisma.$transaction.mockImplementation((fn: (t: typeof tx) => unknown) => fn(tx));
     tx.enrollment.updateMany.mockResolvedValue({ count: 1 });
-    tx.enrollmentRun.updateMany.mockResolvedValue({ count: 1 });
+    tx.enrollmentRun.upsert.mockResolvedValue({ id: 500 });
+    tx.enrollmentRunLesson.deleteMany.mockResolvedValue({ count: 0 });
+    tx.enrollmentRunLesson.createMany.mockResolvedValue({ count: 2 });
+    tx.lessonProgress.findMany.mockResolvedValue([
+      { lessonId: 1, completed: true, completedAt: new Date(), watchedSeconds: 60 },
+      { lessonId: 2, completed: false, completedAt: null, watchedSeconds: null },
+    ]);
     tx.enrollmentRun.create.mockResolvedValue({});
     tx.lessonProgress.deleteMany.mockResolvedValue({ count: 3 });
     prisma.certificate.findFirst.mockResolvedValue({ id: 99, expiresAt: null });
@@ -86,6 +93,14 @@ describe('CertificateRecyclingService', () => {
         fromCertificateId: 99,
       });
       expect(tx.lessonProgress.deleteMany).toHaveBeenCalled();
+      expect(tx.enrollmentRunLesson.createMany.mock.calls[0][0].data).toEqual([
+        expect.objectContaining({ runId: 500, lessonId: 1, completed: true }),
+        expect.objectContaining({ runId: 500, lessonId: 2, completed: false }),
+      ]);
+      // guarda o detalhe antes de limpar o progresso
+      expect(tx.enrollmentRunLesson.createMany.mock.invocationCallOrder[0]).toBeLessThan(
+        tx.lessonProgress.deleteMany.mock.invocationCallOrder[0],
+      );
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'ENROLLMENT_RECYCLED' }),
       );
@@ -156,18 +171,28 @@ describe('CertificateRecyclingService', () => {
     it('só o certificado válido mais recente é o vigente; os anteriores ficam no histórico', async () => {
       const future = new Date(Date.now() + 30 * DAY);
       const past = new Date(Date.now() - DAY);
-      prisma.enrollmentRun.findMany.mockResolvedValue([{ cycle: 1 }, { cycle: 2 }]);
+      prisma.enrollmentRun.findMany.mockResolvedValue([
+        {
+          cycle: 1,
+          lessons: [
+            { lessonId: 1, completed: true },
+            { lessonId: 2, completed: false },
+          ],
+        },
+        { cycle: 2, lessons: [] },
+      ]);
       prisma.certificate.findMany.mockResolvedValue([
         { id: 1, enrollmentCycle: 1, status: 'ACTIVE', revoked: false, expiresAt: past },
         { id: 2, enrollmentCycle: 2, status: 'ACTIVE', revoked: false, expiresAt: future },
       ]);
       const runs = await svc.listRuns(10);
+      expect(runs[0].lessonsCompleted).toBe(1);
       expect(runs[0].certificates).toEqual([expect.objectContaining({ id: 1, current: false })]);
       expect(runs[1].certificates).toEqual([expect.objectContaining({ id: 2, current: true })]);
     });
 
     it('certificado expirado nunca é vigente, mesmo sendo o único', async () => {
-      prisma.enrollmentRun.findMany.mockResolvedValue([{ cycle: 1 }]);
+      prisma.enrollmentRun.findMany.mockResolvedValue([{ cycle: 1, lessons: [] }]);
       prisma.certificate.findMany.mockResolvedValue([
         {
           id: 1,
