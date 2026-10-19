@@ -27,6 +27,9 @@ import { CertificateScopeService } from './certificate-scope.service';
 import { CertificatesTeamService } from './certificates-team.service';
 import { CertificatesExportService } from './certificates-export.service';
 import { CertificatesMeService } from './certificates-me.service';
+import { CertificateAssetsService } from './templates/certificate-assets.service';
+import { CertificateTemplatesService } from './templates/certificate-templates.service';
+import { UploadAssetDto } from './templates/certificate-templates.dto';
 import {
   BatchIssueDto,
   ImportExternalCertificateDto,
@@ -66,6 +69,8 @@ export class CertificatesController {
     private readonly team: CertificatesTeamService,
     private readonly exports: CertificatesExportService,
     private readonly me: CertificatesMeService,
+    private readonly templateService: CertificateTemplatesService,
+    private readonly assetService: CertificateAssetsService,
   ) {}
 
   @Get('my')
@@ -153,11 +158,68 @@ export class CertificatesController {
     return this.rules.upsertRule(dto, user.id);
   }
 
+  // ─── Modelos de certificado: nove modelos de sistema, configuráveis e versionados ───
+
   @Get('templates')
   @Roles(Role.ADMIN, Role.RH, Role.AUDITOR)
-  @ApiOperation({ summary: 'Modelos de certificado (consulta)' })
+  @ApiOperation({ summary: 'Biblioteca dos nove modelos de certificado' })
   templates() {
-    return this.admin.templates();
+    return this.templateService.list();
+  }
+
+  @Post('templates/preview')
+  @Roles(Role.ADMIN, Role.RH, Role.AUDITOR)
+  @ApiOperation({ summary: 'Pré-visualizar uma configuração em PDF (nada é gravado)' })
+  async previewTemplate(@Body() body: Record<string, unknown>, @Res() res: Response) {
+    const pdf = await this.templateService.preview(body);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': 'inline; filename="previsualizacao.pdf"',
+      'Content-Length': pdf.length,
+      'Cache-Control': 'private, no-store',
+    });
+    res.end(pdf);
+  }
+
+  @Get('templates/:id')
+  @Roles(Role.ADMIN, Role.RH, Role.AUDITOR)
+  @ApiOperation({ summary: 'Configuração actual e versões de um modelo' })
+  template(@Param('id') id: string) {
+    return this.templateService.get(id);
+  }
+
+  @Put('templates/:id')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary: 'Guardar uma nova versão do modelo (os certificados já emitidos não mudam)',
+  })
+  saveTemplate(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.templateService.saveVersion(id, body, user.id);
+  }
+
+  @Post('assets')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Carregar uma imagem (logótipo, fundo ou assinatura) para os modelos' })
+  uploadAsset(@Body() dto: UploadAssetDto, @CurrentUser() user: CurrentUserData) {
+    return this.assetService.upload(dto, user.id);
+  }
+
+  @Get('assets/:id')
+  @Roles(Role.ADMIN, Role.RH, Role.AUDITOR)
+  @ApiOperation({ summary: 'Ler uma imagem dos modelos (acesso controlado)' })
+  async asset(@Param('id') id: string, @Res() res: Response) {
+    const { mime, data } = await this.assetService.read(id);
+    res.set({
+      'Content-Type': mime,
+      'Content-Length': data.length,
+      'Cache-Control': 'private, max-age=3600',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    res.end(data);
   }
 
   // Ciclo de vida: só ADMIN/RH (AUDITOR lê mas nunca altera certificados).
