@@ -2685,6 +2685,11 @@ enum CertificateStatus {
   REVOKED
 }
 
+enum CertificateOrigin {
+  INTERNAL
+  EXTERNAL
+}
+
 enum CertificateIssueMode {
   AUTOMATIC
   MANUAL
@@ -2757,11 +2762,22 @@ model Certificate {
   hours        Float?
   snapshot     String?                  @db.Text
 
+  // Fatia 4 (ciclo de vida): origem (interna/importada), reemissão ligada ao
+  // original (nunca se apaga nem substitui o histórico) e alerta de validade.
+  origin              CertificateOrigin @default(INTERNAL)
+  replacesId          Int?
+  replaces            Certificate?      @relation("CertificateReissue", fields: [replacesId], references: [id], onDelete: SetNull)
+  replacedBy          Certificate[]     @relation("CertificateReissue")
+  observations        String?           @db.Text
+  lastExpiryAlertDays Int?
+
   @@index([userId])
   @@index([courseId])
   @@index([enrollmentId])
   @@index([legacyType])
   @@index([status])
+  @@index([replacesId])
+  @@index([expiresAt])
   @@index([activityKind, activityId])
 }
 
