@@ -1,4 +1,11 @@
-import { buildVerifyUrl, CertificateSnapshot, renderCertificatePdf } from './certificate-renderer';
+import {
+  buildVerifyUrl,
+  CertificateSnapshot,
+  renderCertificatePdf,
+  snapshotToTemplateInput,
+} from './certificate-renderer';
+import { BUILTIN_TEMPLATES } from './templates/builtin-templates';
+import { buildLayoutPlan } from './templates/layout-plan';
 
 const snapshot = (over: Partial<CertificateSnapshot> = {}): CertificateSnapshot => ({
   code: 'ABCD1234EFGH5678',
@@ -34,6 +41,74 @@ describe('renderCertificatePdf', () => {
     );
     expect(bare.length).toBeLessThan(full.length);
   });
+});
+
+describe('snapshotToTemplateInput', () => {
+  it('snapshot antigo (sem template) usa o corporativo clássico', () => {
+    expect(snapshotToTemplateInput(snapshot()).config.layoutKey).toBe('corporativo-classico');
+  });
+
+  it('usa o template embutido no snapshot, não o actual', () => {
+    const v1 = structuredClone(BUILTIN_TEMPLATES[2].config);
+    v1.texts.title = 'TÍTULO DA VERSÃO 1';
+    const snap = snapshot({ template: { id: BUILTIN_TEMPLATES[2].id, version: 1, config: v1 } });
+    const stored = JSON.parse(JSON.stringify(snap)) as CertificateSnapshot;
+    // Uma "v2" do template alterada depois não toca no que já foi gravado no snapshot.
+    v1.texts.title = 'TÍTULO DA VERSÃO 2';
+    const { config } = snapshotToTemplateInput(stored);
+    expect(config.layoutKey).toBe('executivo-premium');
+    expect(config.texts.title).toBe('TÍTULO DA VERSÃO 1');
+  });
+
+  it('mapeia os valores: horas, nota e datas só quando existem', () => {
+    const { values } = snapshotToTemplateInput(snapshot());
+    expect(values).toMatchObject({
+      nome_completo: 'Ana Silva',
+      nome_curso: 'Segurança no Trabalho',
+      nome_formacao: 'Segurança no Trabalho',
+      nome_empresa: 'INNOVA',
+      carga_horaria: '8 h',
+      nota_final: '82%',
+      codigo_certificado: 'ABCD1234EFGH5678',
+    });
+    expect(values.data_emissao).toMatch(/2026/);
+    expect(values.data_validade).toMatch(/2027/);
+
+    const bare = snapshotToTemplateInput(
+      snapshot({ score: undefined, hours: null, expiresAt: null }),
+    ).values;
+    expect(bare.carga_horaria).toBeUndefined();
+    expect(bare.nota_final).toBeUndefined();
+    expect(bare.data_validade).toBeUndefined();
+  });
+
+  it('o plano sem nota/validade/horas não tem essas linhas e nunca tem chavetas', () => {
+    const { config, values } = snapshotToTemplateInput(
+      snapshot({ score: undefined, hours: null, expiresAt: null }),
+    );
+    const ops = buildLayoutPlan(config, {
+      values,
+      hasLogo: false,
+      hasBackground: false,
+      hasSignature: false,
+      verifyUrl: url,
+    });
+    const text = ops
+      .filter(o => o.kind === 'text')
+      .map(o => (o as { text: string }).text)
+      .join('\n');
+    expect(text).not.toMatch(/Nota|Válido até|Carga horária|\{\{/);
+  });
+
+  it('cada um dos nove templates gera PDF a partir do snapshot', async () => {
+    for (const t of BUILTIN_TEMPLATES) {
+      const pdf = await renderCertificatePdf(
+        snapshot({ template: { id: t.id, version: 1, config: t.config } }),
+        url,
+      );
+      expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+    }
+  }, 30_000);
 });
 
 describe('buildVerifyUrl', () => {

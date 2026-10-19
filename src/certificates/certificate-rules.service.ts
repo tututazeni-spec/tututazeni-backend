@@ -13,6 +13,7 @@ export interface CertificateRuleView {
   mode: CertificateIssueMode;
   criteria: RuleCriteria;
   validityDays: number | null;
+  templateId: string | null;
   active: boolean;
   updatedAt: Date;
 }
@@ -72,6 +73,7 @@ export class CertificateRulesService {
       mode: r.mode,
       criteria: parseCriteria(r.criteria),
       validityDays: r.validityDays,
+      templateId: r.templateId,
       active: r.active,
       updatedAt: r.updatedAt,
     }));
@@ -98,6 +100,15 @@ export class CertificateRulesService {
           });
     if (!exists) throw new NotFoundException('Atividade não encontrada');
 
+    if (dto.templateId) {
+      // Só os 9 modelos de sistema são seleccionáveis (os antigos de Definições ficam de fora).
+      const template = await this.prisma.certificateTemplate.findFirst({
+        where: { id: dto.templateId, isSystem: true, deletedAt: null },
+        select: { id: true },
+      });
+      if (!template) throw new NotFoundException('Modelo de certificado não encontrado');
+    }
+
     const key = { activityKind: dto.activityKind, activityId: dto.activityId };
     const previous = await this.prisma.certificateRule.findUnique({
       where: { activityKind_activityId: key },
@@ -106,6 +117,7 @@ export class CertificateRulesService {
       mode: dto.mode,
       criteria: JSON.stringify(criteria),
       validityDays: dto.validityDays ?? null,
+      templateId: dto.templateId ?? null,
       active: dto.active ?? true,
     };
     const saved = await this.prisma.certificateRule.upsert({
@@ -140,6 +152,7 @@ export class CertificateRulesService {
       mode: saved.mode,
       criteria,
       validityDays: saved.validityDays,
+      templateId: saved.templateId,
       active: saved.active,
       updatedAt: saved.updatedAt,
     };

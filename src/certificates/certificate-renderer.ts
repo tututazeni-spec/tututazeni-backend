@@ -1,5 +1,15 @@
-import PDFDocument from 'pdfkit';
-import QRCode from 'qrcode';
+import { PlanAssets } from './templates/plan-renderer';
+import { BUILTIN_TEMPLATES } from './templates/builtin-templates';
+import { renderConfigPdf } from './templates/template-render';
+import { TemplateConfig } from './templates/template-config';
+import { VariableValues } from './templates/template-variables';
+
+/** Template (id, versão e configuração) embutido no certificado no momento da emissão. */
+export interface SnapshotTemplate {
+  id: string;
+  version: number;
+  config: TemplateConfig;
+}
 
 /** Dados impressos no certificado — guardados em Certificate.snapshot (JSON). */
 export interface CertificateSnapshot {
@@ -11,107 +21,49 @@ export interface CertificateSnapshot {
   issuedAt: string;
   expiresAt?: string | null;
   issuerName: string;
+  /** Ausente nos certificados anteriores à fatia de templates → corporativo clássico. */
+  template?: SnapshotTemplate;
 }
-
-const NAVY = '#0F1F3D';
-const MAX_NAME = 120;
-const MAX_TITLE = 160;
 
 export function buildVerifyUrl(code: string): string {
   const base = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
   return `${base}/verify/${code}`;
 }
 
-// Fontes standard do pdfkit só cobrem Latin-1: remove emoji/símbolos fora desse
-// intervalo (renderizariam como lixo) e limita o comprimento.
-function printable(text: string, max: number): string {
-  const clean = text
-    .replace(/[^\u0020-\u007E\u00A0-\u00FF\u2013\u2014\u2018\u2019\u201C\u201D]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
-}
-
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('pt-PT');
 
-/** Layout único "corporativo clássico"; a fatia de templates substitui esta função. */
+/**
+ * Configuração e valores das variáveis a partir do snapshot. O template vem SEMPRE do
+ * snapshot (nunca do template actual), por isso editar um modelo não altera os
+ * certificados já emitidos.
+ */
+export function snapshotToTemplateInput(snapshot: CertificateSnapshot): {
+  config: TemplateConfig;
+  values: VariableValues;
+} {
+  const config = snapshot.template?.config ?? BUILTIN_TEMPLATES[0].config;
+  const values: VariableValues = {
+    nome_completo: snapshot.recipientName,
+    nome_curso: snapshot.title,
+    nome_formacao: snapshot.title,
+    nome_empresa: snapshot.issuerName,
+    codigo_certificado: snapshot.code,
+    data_emissao: fmtDate(snapshot.issuedAt),
+  };
+  if (snapshot.hours) values.carga_horaria = `${snapshot.hours} h`;
+  if (snapshot.score !== undefined && snapshot.score !== null) {
+    values.nota_final = `${snapshot.score}%`;
+  }
+  if (snapshot.expiresAt) values.data_validade = fmtDate(snapshot.expiresAt);
+  return { config, values };
+}
+
+/** `assets`: imagens já carregadas das referências do template do snapshot. */
 export async function renderCertificatePdf(
   snapshot: CertificateSnapshot,
   verifyUrl: string,
+  assets: PlanAssets = {},
 ): Promise<Buffer> {
-  const qr = await QRCode.toBuffer(verifyUrl, { margin: 1, width: 240 });
-  const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 50 });
-  const chunks: Buffer[] = [];
-  const done = new Promise<Buffer>((resolve, reject) => {
-    doc.on('data', (c: Buffer) => chunks.push(c));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
-  });
-
-  const w = doc.page.width;
-  const h = doc.page.height;
-
-  doc
-    .rect(25, 25, w - 50, h - 50)
-    .lineWidth(3)
-    .stroke(NAVY);
-  doc
-    .rect(33, 33, w - 66, h - 66)
-    .lineWidth(0.75)
-    .stroke(NAVY);
-
-  doc
-    .fillColor(NAVY)
-    .font('Helvetica-Bold')
-    .fontSize(16)
-    .text(printable(snapshot.issuerName, 60), 0, 70, { align: 'center', width: w });
-  doc
-    .font('Helvetica-Bold')
-    .fontSize(32)
-    .text('CERTIFICADO', 0, 105, { align: 'center', width: w });
-  doc
-    .font('Helvetica')
-    .fontSize(13)
-    .fillColor('#444444')
-    .text('Certificamos que', 0, 160, { align: 'center', width: w });
-
-  const name = printable(snapshot.recipientName, MAX_NAME);
-  doc
-    .fillColor(NAVY)
-    .font('Helvetica-Bold')
-    .fontSize(name.length > 60 ? 18 : 28)
-    .text(name, 60, 185, { align: 'center', width: w - 120 });
-
-  doc
-    .font('Helvetica')
-    .fontSize(13)
-    .fillColor('#444444')
-    .text('concluiu com aproveitamento', 0, 245, { align: 'center', width: w });
-  doc
-    .fillColor(NAVY)
-    .font('Helvetica-Bold')
-    .fontSize(20)
-    .text(printable(snapshot.title, MAX_TITLE), 80, 270, { align: 'center', width: w - 160 });
-
-  const details: string[] = [];
-  if (snapshot.hours) details.push(`Carga horária: ${snapshot.hours} h`);
-  if (snapshot.score !== undefined) details.push(`Nota: ${snapshot.score}%`);
-  details.push(`Emitido em ${fmtDate(snapshot.issuedAt)}`);
-  if (snapshot.expiresAt) details.push(`Válido até ${fmtDate(snapshot.expiresAt)}`);
-  doc
-    .font('Helvetica')
-    .fontSize(12)
-    .fillColor('#444444')
-    .text(details.join('   ·   '), 60, 335, { align: 'center', width: w - 120 });
-
-  doc.image(qr, 60, h - 150, { width: 90 });
-  doc
-    .font('Helvetica')
-    .fontSize(9)
-    .fillColor('#444444')
-    .text(`Código: ${snapshot.code}`, 160, h - 125, { width: 380 })
-    .text(`Verifique em: ${verifyUrl}`, 160, h - 110, { width: 380 });
-
-  doc.end();
-  return done;
+  const { config, values } = snapshotToTemplateInput(snapshot);
+  return renderConfigPdf(config, { values, verifyUrl }, assets);
 }

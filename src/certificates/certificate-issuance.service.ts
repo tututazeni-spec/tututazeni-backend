@@ -10,8 +10,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { CertificateFactsService } from './certificate-facts.service';
+import { BUILTIN_TEMPLATES } from './templates/builtin-templates';
+import { CertificateTemplatesService } from './templates/certificate-templates.service';
 import { generateVerificationCode } from './certificate-code';
 import { evaluateEligibility, MissingReason, RuleCriteria } from './certificate-rules';
+import { TemplateConfig } from './templates/template-config';
 
 export interface IssueInput {
   userId: number;
@@ -31,6 +34,7 @@ interface EffectiveRule {
   mode: CertificateIssueMode;
   criteria: RuleCriteria;
   validityDays: number | null;
+  templateId: string | null;
 }
 
 const DEFAULT_CYCLE = '1';
@@ -43,6 +47,7 @@ export class CertificateIssuanceService {
     private readonly prisma: PrismaService,
     private readonly facts: CertificateFactsService,
     private readonly audit: AuditService,
+    private readonly templates: CertificateTemplatesService,
   ) {}
 
   async issue(input: IssueInput): Promise<IssueResult> {
@@ -84,7 +89,9 @@ export class CertificateIssuanceService {
         ? await this.enrollmentId(input.userId, input.activityId)
         : undefined;
 
+    const template = await this.resolveTemplate(rule.templateId);
     const snapshot = {
+      template,
       code,
       recipientName,
       title: collected.title,
@@ -110,6 +117,7 @@ export class CertificateIssuanceService {
           status: pending ? 'PENDING_APPROVAL' : 'ACTIVE',
           validationCode: code,
           code,
+          templateId: template.id,
           recipientName,
           title: collected.title,
           score: collected.bestScore,
@@ -187,6 +195,7 @@ export class CertificateIssuanceService {
         mode: stored.mode,
         criteria: this.parseCriteria(stored.criteria),
         validityDays: stored.validityDays,
+        templateId: stored.templateId,
       };
     }
     if (kind === 'COURSE') {
@@ -198,12 +207,39 @@ export class CertificateIssuanceService {
         mode: 'AUTOMATIC',
         criteria: { requireFullCompletion: true },
         validityDays: course?.certificateValidityDays ?? null,
+        templateId: null,
       };
     }
     if (kind === 'EVENT') {
-      return { mode: 'AUTOMATIC', criteria: { minAttendancePct: 100 }, validityDays: null };
+      return {
+        mode: 'AUTOMATIC',
+        criteria: { minAttendancePct: 100 },
+        validityDays: null,
+        templateId: null,
+      };
     }
     return null;
+  }
+
+  /**
+   * Template da regra (ou o clássico) com a sua versão actual. Nunca falha a emissão:
+   * um modelo desaparecido cai para o clássico e, em último caso, para o de origem.
+   */
+  private async resolveTemplate(
+    templateId: string | null,
+  ): Promise<{ id: string; version: number; config: TemplateConfig }> {
+    try {
+      return await this.templates.resolveForIssuance(templateId ?? undefined);
+    } catch {
+      this.logger.warn(
+        `Modelo de certificado indisponível (${templateId ?? 'omissão'}); a usar o clássico`,
+      );
+    }
+    try {
+      return await this.templates.resolveForIssuance(undefined);
+    } catch {
+      return { id: BUILTIN_TEMPLATES[0].id, version: 1, config: BUILTIN_TEMPLATES[0].config };
+    }
   }
 
   private parseCriteria(raw: string): RuleCriteria {
