@@ -18,22 +18,22 @@ export function layout9(ctx: Ctx): void {
     ctx.ops.push({ kind: 'circle', cx, cy, r: 4, fill: p });
   }
   // Fita atrás do nome do curso.
-  ctx.ops.push({ kind: 'rect', x: w / 2 - 290, y: 268, w: 580, h: 48, fill: p });
+  ctx.ops.push({ kind: 'rect', x: w / 2 - 290, y: 263, w: 580, h: 34, fill: p });
   ctx.ops.push({
     kind: 'polygon',
     points: [
-      [w / 2 - 290, 268],
-      [w / 2 - 312, 292],
-      [w / 2 - 290, 316],
+      [w / 2 - 290, 263],
+      [w / 2 - 312, 280],
+      [w / 2 - 290, 297],
     ],
     fill: a,
   });
   ctx.ops.push({
     kind: 'polygon',
     points: [
-      [w / 2 + 290, 268],
-      [w / 2 + 312, 292],
-      [w / 2 + 290, 316],
+      [w / 2 + 290, 263],
+      [w / 2 + 312, 280],
+      [w / 2 + 290, 297],
     ],
     fill: a,
   });
@@ -46,7 +46,7 @@ export function layout9(ctx: Ctx): void {
       title: 96,
       recognition: 166,
       name: 194,
-      course: 258,
+      course: 246,
       details: 350,
       footer: h - 62,
     },

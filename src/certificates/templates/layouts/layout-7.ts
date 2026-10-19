@@ -44,7 +44,7 @@ export function layout7(ctx: Ctx): void {
     },
     colors: { title: 'primary', body: 'text', name: 'text', course: 'primary', details: 'text' },
     qr: { x: 72, y: h - 168, size: 80 },
-    code: { x: 162, y: h - 128, w: 280, align: 'left', font: 'Times-Roman' },
+    code: { x: 162, y: h - 128, w: 200, align: 'left', font: 'Times-Roman' },
     signature: { x: 590, y: h - 105, w: 190 },
   };
   addLogo(ctx, { x: 78, y: 50, w: 90, h: 44 });
