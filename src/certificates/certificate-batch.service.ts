@@ -34,7 +34,7 @@ export class CertificateBatchService {
     if (hasIds === !!dto.allEligible) {
       throw new BadRequestException('Indique os titulares ou escolha "todos os elegíveis" (um só)');
     }
-    const userIds = hasIds ? (dto.userIds as number[]) : await this.resolveEligible(dto);
+    const userIds = hasIds ? dto.userIds : await this.resolveEligible(dto);
     if (userIds.length > MAX_BATCH_SIZE) {
       throw new BadRequestException(`O lote não pode ter mais de ${MAX_BATCH_SIZE} titulares`);
     }
