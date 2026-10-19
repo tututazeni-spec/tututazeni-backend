@@ -60,6 +60,22 @@ describe('CertificatesAdminService', () => {
     });
   });
 
+  describe('exportRows', () => {
+    it('sem paginação: pede no máximo N linhas, na ordem pedida, dentro do âmbito', async () => {
+      await svc.exportRows({ sort: 'holderName', order: 'asc' }, { kind: 'TEAM', userIds: [1] }, now, 5001);
+      const arg = prisma.certificate.findMany.mock.calls[0][0];
+      expect(arg.take).toBe(5001);
+      expect(arg.skip).toBeUndefined();
+      expect(arg.orderBy).toEqual({ user: { fullName: 'asc' } });
+      expect(arg.where.AND).toContainEqual({ userId: { in: [1] } });
+    });
+
+    it('código inválido devolve vazio sem consultar', async () => {
+      expect(await svc.exportRows({ code: "1' OR" }, { kind: 'ALL' }, now, 10)).toEqual([]);
+      expect(prisma.certificate.findMany).not.toHaveBeenCalled();
+    });
+  });
+
   describe('âmbito de equipa', () => {
     it('list TEAM filtra pelos ids da equipa', async () => {
       await svc.list({}, now, { kind: 'TEAM', userIds: [1, 2] });

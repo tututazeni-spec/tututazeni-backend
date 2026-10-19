@@ -186,3 +186,14 @@ export class UpsertCertificateRuleDto {
   @IsBoolean()
   active?: boolean;
 }
+
+export const EXPORT_FORMATS = ['csv', 'xlsx', 'pdf'] as const;
+export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
+/** Mesmos filtros da lista; a paginação é ignorada (exporta tudo até ao máximo). */
+export class ExportCertificatesQueryDto extends ListCertificatesQueryDto {
+  @ApiPropertyOptional({ enum: EXPORT_FORMATS, default: 'csv' })
+  @IsOptional()
+  @IsIn(EXPORT_FORMATS)
+  format?: ExportFormat;
+}

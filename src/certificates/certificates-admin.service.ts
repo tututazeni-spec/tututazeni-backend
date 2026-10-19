@@ -151,15 +151,46 @@ export class CertificatesAdminService {
     };
   }
 
-  async list(
-    q: ListCertificatesQueryDto,
-    now = new Date(),
-    scope: CertificateScope = { kind: 'ALL' },
-  ): Promise<Paginated<AdminCertificateRow>> {
-    const page = q.page ?? 1;
-    const limit = q.limit ?? DEFAULT_LIMIT;
-    const empty = { data: [], total: 0, page, limit, totalPages: 0 };
+  private toRow(
+    r: {
+      id: number;
+      recipientName: string | null;
+      title: string | null;
+      activityKind: AdminCertificateRow['activityKind'];
+      origin: CertificateOrigin;
+      status: CertificateStatus;
+      revoked: boolean;
+      validationCode: string;
+      issuedAt: Date;
+      expiresAt: Date | null;
+      hours: number | null;
+      user: { fullName: string; department: { name: string } | null } | null;
+      course: { title: string } | null;
+      event: { title: string } | null;
+    },
+    now: Date,
+  ): AdminCertificateRow {
+    return {
+      id: r.id,
+      holderName: r.recipientName ?? r.user?.fullName ?? '',
+      departmentName: r.user?.department?.name ?? null,
+      title: r.title ?? r.course?.title ?? r.event?.title ?? 'Certificado',
+      activityKind: r.activityKind,
+      origin: r.origin,
+      status: effectiveStatus(r, now),
+      code: r.validationCode,
+      issuedAt: r.issuedAt,
+      expiresAt: r.expiresAt,
+      hours: r.hours,
+    };
+  }
 
+  /** `null` quando o filtro por código é inválido (resultado vazio garantido, sem consultar a BD). */
+  private buildWhere(
+    q: ListCertificatesQueryDto,
+    now: Date,
+    scope: CertificateScope,
+  ): Prisma.CertificateWhereInput | null {
     const and: Prisma.CertificateWhereInput[] = [{ deletedAt: null }];
     // O âmbito só restringe: filtros do pedido nunca o alargam.
     if (scope.kind === 'TEAM') and.push({ userId: { in: scope.userIds } });
@@ -185,7 +216,7 @@ export class CertificatesAdminService {
     }
     if (q.code !== undefined) {
       const code = normalizeVerificationCode(q.code);
-      if (!code) return empty;
+      if (!code) return null;
       and.push({ validationCode: code });
     }
     const search = q.search?.trim();
@@ -201,7 +232,20 @@ export class CertificatesAdminService {
         ],
       });
     }
-    const where: Prisma.CertificateWhereInput = { AND: and };
+    return { AND: and };
+  }
+
+  async list(
+    q: ListCertificatesQueryDto,
+    now = new Date(),
+    scope: CertificateScope = { kind: 'ALL' },
+  ): Promise<Paginated<AdminCertificateRow>> {
+    const page = q.page ?? 1;
+    const limit = q.limit ?? DEFAULT_LIMIT;
+    const empty = { data: [], total: 0, page, limit, totalPages: 0 };
+
+    const where = this.buildWhere(q, now, scope);
+    if (!where) return empty;
     const order = q.order ?? 'desc';
     const sort = q.sort ?? 'issuedAt';
     const orderBy: Prisma.CertificateOrderByWithRelationInput =
@@ -223,24 +267,38 @@ export class CertificatesAdminService {
     ]);
 
     return {
-      data: rows.map(r => ({
-        id: r.id,
-        holderName: r.recipientName ?? r.user?.fullName ?? '',
-        departmentName: r.user?.department?.name ?? null,
-        title: r.title ?? r.course?.title ?? r.event?.title ?? 'Certificado',
-        activityKind: r.activityKind,
-        origin: r.origin,
-        status: effectiveStatus(r, now),
-        code: r.validationCode,
-        issuedAt: r.issuedAt,
-        expiresAt: r.expiresAt,
-        hours: r.hours,
-      })),
+      data: rows.map(r => this.toRow(r, now)),
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
     };
+  }
+
+  /** Todas as linhas dos filtros (sem paginação), no âmbito do actor, até `max` linhas. */
+  async exportRows(
+    q: ListCertificatesQueryDto,
+    scope: CertificateScope,
+    now: Date,
+    max: number,
+  ): Promise<AdminCertificateRow[]> {
+    const where = this.buildWhere(q, now, scope);
+    if (!where) return [];
+    const order = q.order ?? 'desc';
+    const sort = q.sort ?? 'issuedAt';
+    const orderBy: Prisma.CertificateOrderByWithRelationInput =
+      sort === 'holderName' ? { user: { fullName: order } } : { [sort]: order };
+    const rows = await this.prisma.certificate.findMany({
+      where,
+      orderBy,
+      take: max,
+      include: {
+        user: { select: { fullName: true, department: { select: { name: true } } } },
+        course: { select: { title: true } },
+        event: { select: { title: true } },
+      },
+    });
+    return rows.map(r => this.toRow(r, now));
   }
 
   /** Modelos existentes, só para consulta (sem html/css). A edição pertence à fase dos templates. */
