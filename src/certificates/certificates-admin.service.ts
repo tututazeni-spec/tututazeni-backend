@@ -226,6 +226,25 @@ export class CertificatesAdminService {
     };
   }
 
+  /** Modelos existentes, só para consulta (sem html/css). A edição pertence à fase dos templates. */
+  templates() {
+    return this.prisma.certificateTemplate.findMany({
+      where: { deletedAt: null },
+      orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        type: true,
+        isDefault: true,
+        isActive: true,
+        validityDays: true,
+        signatoryName: true,
+        signatoryTitle: true,
+      },
+    });
+  }
+
   /** Histórico de emissões, aprovações e alterações de regras (campo `entity`, nunca `entityType`). */
   async history(q: HistoryQueryDto): Promise<Paginated<HistoryRow>> {
     const page = q.page ?? 1;
