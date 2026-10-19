@@ -57,6 +57,8 @@ describe('CertificatesService', () => {
     hours: 8,
     issuerName: 'INNOVA',
     activityKind: 'COURSE',
+    origin: 'INTERNAL',
+    fileUrl: null,
     snapshot: null,
     score: 80,
     course: { title: 'Curso X' },
@@ -81,6 +83,7 @@ describe('CertificatesService', () => {
           'hours',
           'issuedAt',
           'issuerName',
+          'origin',
           'status',
           'title',
           'type',
@@ -156,6 +159,46 @@ describe('CertificatesService', () => {
       prisma.certificate.findUnique.mockResolvedValue(row());
       const buf = await svc.getPdfFor(5, { id: 9, role: { name: 'RH' } });
       expect(buf.length).toBeGreaterThan(1000);
+    });
+  });
+
+  describe('certificados externos', () => {
+    const PDF_BYTES = Buffer.from('%PDF-1.4 externo');
+    const external = (over = {}) =>
+      row({
+        origin: 'EXTERNAL',
+        issuerName: 'Cruz Vermelha',
+        fileUrl: `data:application/pdf;base64,${PDF_BYTES.toString('base64')}`,
+        ...over,
+      });
+
+    it('verificação pública identifica a origem externa e a entidade emissora', async () => {
+      prisma.certificate.findFirst.mockResolvedValue(external());
+      expect(await svc.verifyPublic('ABCD1234EFGH5678')).toMatchObject({
+        origin: 'EXTERNAL',
+        issuerName: 'Cruz Vermelha',
+      });
+    });
+
+    it('o download devolve exactamente o PDF carregado, sem gerar outro', async () => {
+      prisma.certificate.findUnique.mockResolvedValue(external());
+      const buf = await svc.getPdfFor(5, { id: 1, role: { name: 'COLABORADOR' } });
+      expect(buf.equals(PDF_BYTES)).toBe(true);
+    });
+
+    it('externo sem PDF carregado → 409', async () => {
+      prisma.certificate.findUnique.mockResolvedValue(external({ fileUrl: 'https://x.com/a.pdf' }));
+      await expect(
+        svc.getPdfFor(5, { id: 1, role: { name: 'COLABORADOR' } }),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('a lista do colaborador nunca devolve o documento nem o snapshot', async () => {
+      prisma.certificate.findMany.mockResolvedValue([external({ snapshot: '{}' })]);
+      const [r] = await svc.listMine(1);
+      expect(r).not.toHaveProperty('fileUrl');
+      expect(r).not.toHaveProperty('snapshot');
+      expect(r).toMatchObject({ origin: 'EXTERNAL' });
     });
   });
 });

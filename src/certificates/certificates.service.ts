@@ -1,5 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { CertificateStatus } from '@prisma/client';
+import { CertificateOrigin, CertificateStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
@@ -30,6 +30,8 @@ export interface PublicVerifyResult {
   issuedAt: Date;
   expiresAt: Date | null;
   type: string;
+  /** EXTERNAL = importado para a plataforma, não emitido pela academia. */
+  origin: CertificateOrigin;
 }
 
 // Códigos legados (CERT-<curso>-<user>-<timestamp>) têm hífens; os novos não.
@@ -50,7 +52,8 @@ export class CertificatesService {
       orderBy: { issuedAt: 'desc' },
     });
     const now = new Date();
-    return rows.map(r => ({
+    // O documento importado (fileUrl, até 5 MB) e o snapshot nunca vão na lista.
+    return rows.map(({ fileUrl: _fileUrl, snapshot: _snapshot, ...r }) => ({
       ...r,
       status: effectiveStatus(r, now),
       displayTitle: r.title ?? r.course?.title ?? r.event?.title ?? 'Certificado',
@@ -95,6 +98,7 @@ export class CertificatesService {
       issuedAt: cert.issuedAt,
       expiresAt: cert.expiresAt,
       type: cert.activityKind ?? 'COURSE',
+      origin: cert.origin,
     };
   }
 
@@ -117,6 +121,17 @@ export class CertificatesService {
       throw new ConflictException('Certificado indisponível para download');
     }
 
+    if (cert.origin === 'EXTERNAL') {
+      // O documento de um certificado externo é o ficheiro carregado, nunca um PDF gerado.
+      const external = this.externalPdf(cert.fileUrl);
+      if (!external) throw new ConflictException('Documento do certificado externo indisponível');
+      await this.prisma.certificate.update({
+        where: { id },
+        data: { downloadCount: { increment: 1 } },
+      });
+      return external;
+    }
+
     const snapshot = this.snapshotOf(cert);
     const buffer = await renderCertificatePdf(snapshot, buildVerifyUrl(cert.validationCode));
     await this.prisma.certificate.update({
@@ -124,6 +139,12 @@ export class CertificatesService {
       data: { downloadCount: { increment: 1 } },
     });
     return buffer;
+  }
+
+  private externalPdf(fileUrl: string | null): Buffer | null {
+    const prefix = 'data:application/pdf;base64,';
+    if (!fileUrl?.startsWith(prefix)) return null;
+    return Buffer.from(fileUrl.slice(prefix.length), 'base64');
   }
 
   /** Certificados anteriores à migração não têm snapshot: reconstrói a partir dos campos actuais. */
