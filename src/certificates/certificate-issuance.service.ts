@@ -58,8 +58,17 @@ export class CertificateIssuanceService {
     const rule = await this.resolveRule(input.activityKind, input.activityId);
     if (!rule) return { outcome: 'NO_RULE' };
 
-    const dedupKey = `${input.userId}:${input.activityKind}:${input.activityId}:${DEFAULT_CYCLE}`;
-    const existing = await this.findExisting(input, dedupKey);
+    // Reciclagem: cada realização da matrícula tem o seu certificado (chave `E<n>` a
+    // partir da 2.ª); o contador de reemissão (cycleKey) é independente.
+    const enrollment =
+      input.activityKind === 'COURSE'
+        ? await this.enrollmentRef(input.userId, input.activityId)
+        : undefined;
+    const enrollmentCycle = enrollment?.cycle ?? 1;
+    const base = `${input.userId}:${input.activityKind}:${input.activityId}`;
+    const dedupKey =
+      enrollmentCycle > 1 ? `${base}:E${enrollmentCycle}` : `${base}:${DEFAULT_CYCLE}`;
+    const existing = await this.findExisting(input, dedupKey, enrollmentCycle);
     if (existing) return { outcome: 'EXISTS', certificate: existing };
 
     // Revalida sempre no servidor — nunca confia no evento que despoletou a emissão.
@@ -84,10 +93,7 @@ export class CertificateIssuanceService {
     });
     const recipientName = user?.fullName ?? '';
     const code = generateVerificationCode();
-    const enrollmentId =
-      input.activityKind === 'COURSE'
-        ? await this.enrollmentId(input.userId, input.activityId)
-        : undefined;
+    const enrollmentId = enrollment?.id;
 
     const template = await this.resolveTemplate(rule.templateId);
     const snapshot = {
@@ -113,6 +119,7 @@ export class CertificateIssuanceService {
           activityKind: input.activityKind,
           activityId: input.activityId,
           cycleKey: DEFAULT_CYCLE,
+          enrollmentCycle,
           dedupKey,
           status: pending ? 'PENDING_APPROVAL' : 'ACTIVE',
           validationCode: code,
@@ -253,9 +260,14 @@ export class CertificateIssuanceService {
   }
 
   /** Inclui certificados anteriores à migração (sem dedupKey) para não os duplicar. */
-  private findExisting(input: IssueInput, dedupKey: string): Promise<Certificate | null> {
+  private findExisting(
+    input: IssueInput,
+    dedupKey: string,
+    enrollmentCycle: number,
+  ): Promise<Certificate | null> {
     const legacy: Prisma.CertificateWhereInput[] = [];
-    if (input.activityKind === 'COURSE') {
+    // Os certificados anteriores à migração pertencem à 1.ª realização.
+    if (input.activityKind === 'COURSE' && enrollmentCycle === 1) {
       legacy.push({ userId: input.userId, courseId: input.activityId });
     }
     if (input.activityKind === 'EVENT') {
@@ -266,12 +278,14 @@ export class CertificateIssuanceService {
     });
   }
 
-  private async enrollmentId(userId: number, courseId: number): Promise<number | undefined> {
-    const e = await this.prisma.enrollment.findUnique({
+  private enrollmentRef(
+    userId: number,
+    courseId: number,
+  ): Promise<{ id: number; cycle: number } | null> {
+    return this.prisma.enrollment.findUnique({
       where: { courseId_userId: { courseId, userId } },
-      select: { id: true },
+      select: { id: true, cycle: true },
     });
-    return e?.id;
   }
 
   private legacyType(kind: CertificateActivityKind): CertificateType {

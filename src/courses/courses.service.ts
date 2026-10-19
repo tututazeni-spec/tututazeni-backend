@@ -893,11 +893,20 @@ export class CoursesService {
   }
 
   async getCourseProgress(courseId: number, userId: number) {
-    const enrollment = await this.prisma.read.enrollment.findFirst({
+    const found = await this.prisma.read.enrollment.findFirst({
       where: { userId, courseId },
-      include: { certificate: { select: { id: true, code: true, issuedAt: true, fileUrl: true } } },
+      include: {
+        // Reciclagem: o certificado mais recente da matrícula é o que se mostra.
+        certificates: {
+          select: { id: true, code: true, issuedAt: true, fileUrl: true },
+          orderBy: { issuedAt: 'desc' },
+          take: 1,
+        },
+      },
     });
-    if (!enrollment) return null;
+    if (!found) return null;
+    const { certificates, ...rest } = found;
+    const enrollment = { ...rest, certificate: certificates[0] ?? null };
 
     const courseProgress = await this.courseCompletion.getCourseProgressNumbers(courseId, userId);
     const moduleProgress = await this.prisma.read.courseModule.findMany({

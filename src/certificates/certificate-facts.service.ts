@@ -30,10 +30,15 @@ export class CertificateFactsService {
 
     const enrollment = await this.prisma.enrollment.findUnique({
       where: { courseId_userId: { courseId, userId } },
-      select: { status: true, progress: true },
+      select: { status: true, progress: true, cycleStartedAt: true },
     });
     const best = await this.prisma.quizAttempt.aggregate({
-      where: { userId, quiz: { lesson: { module: { courseId } } } },
+      where: {
+        userId,
+        quiz: { lesson: { module: { courseId } } },
+        // Reciclagem: só as tentativas da realização corrente contam para a nota.
+        ...(enrollment?.cycleStartedAt ? { submittedAt: { gte: enrollment.cycleStartedAt } } : {}),
+      },
       _max: { score: true },
     });
 

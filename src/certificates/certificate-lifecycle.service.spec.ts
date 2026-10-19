@@ -177,10 +177,15 @@ describe('CertificateLifecycleService', () => {
       );
     });
 
-    it('o novo certificado não copia o enrollmentId (único) do original', async () => {
-      prisma.certificate.findUnique.mockResolvedValue(cert({ enrollmentId: 77 }));
+    it('o novo certificado fica na mesma matrícula e realização do original', async () => {
+      prisma.certificate.findUnique.mockResolvedValue(
+        cert({ enrollmentId: 77, enrollmentCycle: 2 }),
+      );
       await svc.reissue(5, 'correcção', 9);
-      expect(prisma.certificate.create.mock.calls[0][0].data).not.toHaveProperty('enrollmentId');
+      expect(prisma.certificate.create.mock.calls[0][0].data).toMatchObject({
+        enrollmentId: 77,
+        enrollmentCycle: 2,
+      });
     });
 
     it('conserva a duração da validade (365 dias)', async () => {

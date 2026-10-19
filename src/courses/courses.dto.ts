@@ -3,6 +3,7 @@ import {
   IsOptional,
   IsBoolean,
   IsInt,
+  IsIn,
   IsArray,
   IsEnum,
   IsDateString,
@@ -225,6 +226,17 @@ export class CreateCourseDto {
   @IsInt()
   @Min(0)
   certificateValidityDays?: number;
+
+  @ApiPropertyOptional({ enum: ['OFF', 'MANUAL', 'AUTOMATIC'], description: 'Reciclagem' })
+  @IsOptional()
+  @IsIn(['OFF', 'MANUAL', 'AUTOMATIC'])
+  recyclingMode?: 'OFF' | 'MANUAL' | 'AUTOMATIC';
+
+  @ApiPropertyOptional({ description: 'Dias antes da validade para abrir a reciclagem' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  recyclingLeadDays?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

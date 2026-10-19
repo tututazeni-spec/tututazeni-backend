@@ -706,7 +706,12 @@ export class EnrollmentsService {
             _count: { select: { modules: true } },
           },
         },
-        certificate: { select: { id: true, validationCode: true, issuedAt: true } },
+        // Reciclagem: a matrícula pode ter um certificado por realização; mostra o mais recente.
+        certificates: {
+          select: { id: true, validationCode: true, issuedAt: true },
+          orderBy: { issuedAt: 'desc' },
+          take: 1,
+        },
       },
       orderBy: [{ mandatory: 'desc' }, { deadline: 'asc' }, { enrolledAt: 'desc' }],
     });
@@ -751,7 +756,15 @@ export class EnrollmentsService {
       const progressPercent =
         totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
       const isOverdue = this.isOverdue(e.deadline, e.status);
-      return { ...e, totalLessons, completedLessons, progressPercent, isOverdue };
+      const { certificates, ...rest } = e;
+      return {
+        ...rest,
+        certificate: certificates[0] ?? null,
+        totalLessons,
+        completedLessons,
+        progressPercent,
+        isOverdue,
+      };
     });
 
     const groups = {

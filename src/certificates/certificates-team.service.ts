@@ -96,7 +96,10 @@ export class CertificatesTeamService {
             userId: true,
             status: true,
             mandatory: true,
-            certificate: { select: { status: true, revoked: true, expiresAt: true } },
+            certificates: {
+              where: { deletedAt: null },
+              select: { status: true, revoked: true, expiresAt: true },
+            },
           },
         }),
       ]);
@@ -122,8 +125,7 @@ export class CertificatesTeamService {
           mandatoryTotal++;
           if (
             e.status === 'COMPLETED' &&
-            e.certificate &&
-            effectiveStatus(e.certificate, now) === 'ACTIVE'
+            e.certificates.some(c => effectiveStatus(c, now) === 'ACTIVE')
           ) {
             mandatoryCovered++;
           }

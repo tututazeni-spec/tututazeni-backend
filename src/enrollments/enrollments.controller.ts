@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { EnrollmentsService } from './enrollments.service';
+import { CertificateRecyclingService } from '../certificates/certificate-recycling.service';
 import {
   EnrollmentsCreateEnrollmentDto,
   UpdateEnrollmentStatusDto,
@@ -33,7 +34,10 @@ import { Role } from '../auth/enums/role.enum';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('enrollments')
 export class EnrollmentsController {
-  constructor(private readonly svc: EnrollmentsService) {}
+  constructor(
+    private readonly svc: EnrollmentsService,
+    private readonly recycling: CertificateRecyclingService,
+  ) {}
 
   // ── Colaborador ───────────────────────────────────────────────────────────
 
@@ -201,6 +205,21 @@ export class EnrollmentsController {
   @HttpCode(HttpStatus.OK)
   certificate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.generateCertificate(id, user);
+  }
+
+  @Post(':id/recycle')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Iniciar a reciclagem (nova realização) de uma matrícula concluída' })
+  @HttpCode(HttpStatus.OK)
+  recycle(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.recycling.recycle(id, { reason: 'MANUAL', actorId: user.id });
+  }
+
+  @Get(':id/runs')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR, Role.DIRECTOR)
+  @ApiOperation({ summary: 'Realizações da matrícula e certificado de cada uma' })
+  runs(@Param('id', ParseIntPipe) id: number) {
+    return this.recycling.listRuns(id);
   }
 
   @Post(':id/reset-progress')
