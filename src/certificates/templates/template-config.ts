@@ -125,7 +125,7 @@ export function validateTemplateConfig(
     }
   }
   const hexOk = (k: (typeof COLOR_KEYS)[number]) =>
-    typeof colors[k] === 'string' && HEX.test(colors[k] as string);
+    typeof colors[k] === 'string' && HEX.test(colors[k]);
   if (
     hexOk('text') &&
     hexOk('background') &&
