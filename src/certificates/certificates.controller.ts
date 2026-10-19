@@ -20,6 +20,14 @@ import { CertificateIssuanceService } from './certificate-issuance.service';
 import { IssueCertificateDto } from './certificates.dto';
 import { CertificatesAdminService } from './certificates-admin.service';
 import { CertificateRulesService } from './certificate-rules.service';
+import { CertificateLifecycleService } from './certificate-lifecycle.service';
+import { CertificateExternalService } from './certificate-external.service';
+import { CertificateBatchService } from './certificate-batch.service';
+import {
+  BatchIssueDto,
+  ImportExternalCertificateDto,
+  ReasonDto,
+} from './certificates-lifecycle.dto';
 import {
   HistoryQueryDto,
   ListCertificatesQueryDto,
@@ -36,6 +44,9 @@ export class CertificatesController {
     private readonly issuance: CertificateIssuanceService,
     private readonly admin: CertificatesAdminService,
     private readonly rules: CertificateRulesService,
+    private readonly lifecycle: CertificateLifecycleService,
+    private readonly external: CertificateExternalService,
+    private readonly batch: CertificateBatchService,
   ) {}
 
   @Get('my')
@@ -87,6 +98,70 @@ export class CertificatesController {
   @ApiOperation({ summary: 'Modelos de certificado (consulta)' })
   templates() {
     return this.admin.templates();
+  }
+
+  // Ciclo de vida: só ADMIN/RH (AUDITOR lê mas nunca altera certificados).
+  @Post('external')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Importar um certificado obtido fora da plataforma' })
+  async importExternal(
+    @Body() dto: ImportExternalCertificateDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    const { outcome, certificate } = await this.external.importExternal(dto, user.id);
+    return {
+      outcome,
+      certificate: {
+        id: certificate.id,
+        status: certificate.status,
+        validationCode: certificate.validationCode,
+      },
+    };
+  }
+
+  @Post('issue-batch')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Emitir em lote (cada titular é validado à parte)' })
+  issueBatch(@Body() dto: BatchIssueDto, @CurrentUser() user: CurrentUserData) {
+    return this.batch.issueBatch(dto, user.id);
+  }
+
+  @Post(':id/revoke')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Revogar um certificado (motivo obrigatório; o registo é preservado)' })
+  async revoke(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ReasonDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    const cert = await this.lifecycle.revoke(id, dto.reason, user.id);
+    return { id: cert.id, status: cert.status, revokedAt: cert.revokedAt };
+  }
+
+  @Post(':id/reissue')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Reemitir um certificado, ligado ao original' })
+  async reissue(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ReasonDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    const { original, replacement } = await this.lifecycle.reissue(id, dto.reason, user.id);
+    return {
+      original: { id: original.id, status: original.status },
+      replacement: {
+        id: replacement.id,
+        status: replacement.status,
+        validationCode: replacement.validationCode,
+      },
+    };
+  }
+
+  @Post(':id/resend')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Reenviar o certificado ao titular (notificação e e-mail)' })
+  resend(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.lifecycle.resend(id, user.id);
   }
 
   @Get(':id/pdf')
