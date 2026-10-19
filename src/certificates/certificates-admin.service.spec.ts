@@ -60,6 +60,39 @@ describe('CertificatesAdminService', () => {
     });
   });
 
+  describe('âmbito de equipa', () => {
+    it('list TEAM filtra pelos ids da equipa', async () => {
+      await svc.list({}, now, { kind: 'TEAM', userIds: [1, 2] });
+      expect(prisma.certificate.findMany.mock.calls[0][0].where.AND).toContainEqual({
+        userId: { in: [1, 2] },
+      });
+    });
+
+    it('list TEAM com equipa vazia filtra por lista vazia (nunca por tudo)', async () => {
+      await svc.list({}, now, { kind: 'TEAM', userIds: [] });
+      expect(prisma.certificate.findMany.mock.calls[0][0].where.AND).toContainEqual({
+        userId: { in: [] },
+      });
+    });
+
+    it('list ALL não acrescenta filtro de titular', async () => {
+      await svc.list({}, now, { kind: 'ALL' });
+      expect(JSON.stringify(prisma.certificate.findMany.mock.calls[0][0].where)).not.toContain(
+        '"userId":{"in"',
+      );
+    });
+
+    it('overview TEAM restringe todas as contagens à equipa', async () => {
+      await svc.overview(now, { kind: 'TEAM', userIds: [3] });
+      for (const [arg] of prisma.certificate.count.mock.calls) {
+        expect(JSON.stringify(arg.where)).toContain('"userId":{"in":[3]}');
+      }
+      expect(JSON.stringify(prisma.enrollment.count.mock.calls[0][0].where)).toContain(
+        '"userId":{"in":[3]}',
+      );
+    });
+  });
+
   describe('list', () => {
     const row = (over = {}) => ({
       id: 1,

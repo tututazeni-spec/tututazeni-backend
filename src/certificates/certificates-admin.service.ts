@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { CertificateOrigin, CertificateStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeVerificationCode } from './certificate-code';
+import type { CertificateScope } from './certificate-scope.service';
 import { effectiveStatus } from './certificates.service';
 import {
   EffectiveStatusFilter,
@@ -102,29 +103,40 @@ function statusWhere(status: EffectiveStatusFilter, now: Date): Prisma.Certifica
 export class CertificatesAdminService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async overview(now = new Date()): Promise<AdminOverview> {
+  async overview(
+    now = new Date(),
+    scope: CertificateScope = { kind: 'ALL' },
+  ): Promise<AdminOverview> {
     const soon = new Date(now.getTime() + EXPIRING_SOON_DAYS * DAY_MS);
     const c = this.prisma.certificate;
+    // Âmbito de equipa: todas as contagens (e a cobertura) ficam limitadas aos titulares da equipa.
+    const holder = scope.kind === 'TEAM' ? { userId: { in: scope.userIds } } : {};
     const [total, active, pendingApproval, expired, expiringSoon, revoked] = await Promise.all([
-      c.count({ where: { deletedAt: null } }),
-      c.count({ where: activeWhere(now) }),
-      c.count({ where: pendingWhere }),
-      c.count({ where: expiredWhere(now) }),
+      c.count({ where: { deletedAt: null, ...holder } }),
+      c.count({ where: { ...activeWhere(now), ...holder } }),
+      c.count({ where: { ...pendingWhere, ...holder } }),
+      c.count({ where: { ...expiredWhere(now), ...holder } }),
       c.count({
         where: {
           deletedAt: null,
           revoked: false,
           status: 'ACTIVE',
           expiresAt: { gt: now, lte: soon },
+          ...holder,
         },
       }),
-      c.count({ where: revokedWhere }),
+      c.count({ where: { ...revokedWhere, ...holder } }),
     ]);
 
     const [mandatory, covered] = await Promise.all([
-      this.prisma.enrollment.count({ where: { mandatory: true } }),
+      this.prisma.enrollment.count({ where: { mandatory: true, ...holder } }),
       this.prisma.enrollment.count({
-        where: { mandatory: true, status: 'COMPLETED', certificate: { is: activeWhere(now) } },
+        where: {
+          mandatory: true,
+          status: 'COMPLETED',
+          certificate: { is: activeWhere(now) },
+          ...holder,
+        },
       }),
     ]);
 
@@ -142,12 +154,15 @@ export class CertificatesAdminService {
   async list(
     q: ListCertificatesQueryDto,
     now = new Date(),
+    scope: CertificateScope = { kind: 'ALL' },
   ): Promise<Paginated<AdminCertificateRow>> {
     const page = q.page ?? 1;
     const limit = q.limit ?? DEFAULT_LIMIT;
     const empty = { data: [], total: 0, page, limit, totalPages: 0 };
 
     const and: Prisma.CertificateWhereInput[] = [{ deletedAt: null }];
+    // O âmbito só restringe: filtros do pedido nunca o alargam.
+    if (scope.kind === 'TEAM') and.push({ userId: { in: scope.userIds } });
     if (q.status) and.push(statusWhere(q.status, now));
     if (q.activityKind) and.push({ activityKind: q.activityKind });
     if (q.courseId) and.push({ courseId: q.courseId });
