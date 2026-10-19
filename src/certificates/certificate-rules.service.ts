@@ -34,9 +34,9 @@ function activeCriteria(c: RuleCriteria): RuleCriteria {
   const out: Record<string, boolean | number> = {};
   for (const [k, v] of Object.entries(c)) {
     if (v === undefined || v === null || v === false) continue;
-    out[k] = v as boolean | number;
+    out[k] = v;
   }
-  return out as RuleCriteria;
+  return out;
 }
 
 @Injectable()
