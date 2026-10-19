@@ -162,6 +162,21 @@ describe('CertificateLifecycleService', () => {
       );
     });
 
+    it('a reemissão mantém o template (id, versão e configuração) do original', async () => {
+      const template = {
+        id: 'tpl-3-executivo-premium',
+        version: 2,
+        config: { layoutKey: 'executivo-premium' },
+      };
+      prisma.certificate.findUnique.mockResolvedValue(
+        cert({ snapshot: JSON.stringify({ title: 'Segurança', hours: 8, template }) }),
+      );
+      await svc.reissue(5, 'correcção', 9);
+      expect(JSON.parse(prisma.certificate.create.mock.calls[0][0].data.snapshot).template).toEqual(
+        template,
+      );
+    });
+
     it('o novo certificado não copia o enrollmentId (único) do original', async () => {
       prisma.certificate.findUnique.mockResolvedValue(cert({ enrollmentId: 77 }));
       await svc.reissue(5, 'correcção', 9);

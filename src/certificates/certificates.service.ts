@@ -3,6 +3,8 @@ import { CertificateOrigin, CertificateStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
+import { Optional } from '@nestjs/common';
+import { CertificateAssetsService } from './templates/certificate-assets.service';
 import { normalizeVerificationCode } from './certificate-code';
 import { buildVerifyUrl, CertificateSnapshot, renderCertificatePdf } from './certificate-renderer';
 import { buildLinkedInUrl } from './certificate-share';
@@ -41,7 +43,10 @@ const PDF_PRIVILEGED = [Role.ADMIN, Role.RH, Role.AUDITOR];
 
 @Injectable()
 export class CertificatesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly assets?: CertificateAssetsService,
+  ) {}
 
   async listMine(userId: number) {
     const rows = await this.prisma.certificate.findMany({
@@ -150,7 +155,13 @@ export class CertificatesService {
     }
 
     const snapshot = this.snapshotOf(cert);
-    const buffer = await renderCertificatePdf(snapshot, buildVerifyUrl(cert.validationCode));
+    // Imagens do template EMBUTIDO no snapshot (a versão com que foi emitido), não do actual.
+    const images = (await this.assets?.loadForRender(snapshot.template?.config.assets ?? {})) ?? {};
+    const buffer = await renderCertificatePdf(
+      snapshot,
+      buildVerifyUrl(cert.validationCode),
+      images,
+    );
     await this.prisma.certificate.update({
       where: { id },
       data: { downloadCount: { increment: 1 } },

@@ -8,6 +8,7 @@ import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditService } from '../../../src/common/services/audit.service';
 import { CertificateFactsService } from '../../../src/certificates/certificate-facts.service';
 import { CertificateIssuanceService } from '../../../src/certificates/certificate-issuance.service';
+import { CertificateTemplatesService } from '../../../src/certificates/templates/certificate-templates.service';
 
 const TEST_DB_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/innova_test';
 
@@ -30,6 +31,7 @@ describe('Certificates issuance (Postgres real)', () => {
       prismaService,
       new CertificateFactsService(prismaService),
       app.get(AuditService),
+      app.get(CertificateTemplatesService),
     );
 
     const employee = await prisma.user.findUnique({

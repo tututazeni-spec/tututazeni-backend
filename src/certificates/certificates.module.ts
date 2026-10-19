@@ -13,6 +13,8 @@ import { CertificateScopeService } from './certificate-scope.service';
 import { CertificatesTeamService } from './certificates-team.service';
 import { CertificatesExportService } from './certificates-export.service';
 import { CertificatesMeService } from './certificates-me.service';
+import { CertificateAssetsService } from './templates/certificate-assets.service';
+import { CertificateTemplatesService } from './templates/certificate-templates.service';
 import { CertificatesController } from './certificates.controller';
 import { PublicCertificatesController } from './public-certificates.controller';
 
@@ -35,6 +37,8 @@ import { PublicCertificatesController } from './public-certificates.controller';
     CertificatesTeamService,
     CertificatesExportService,
     CertificatesMeService,
+    CertificateAssetsService,
+    CertificateTemplatesService,
   ],
   exports: [CertificateIssuanceService, CertificatesService],
 })

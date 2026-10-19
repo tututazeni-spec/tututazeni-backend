@@ -9,6 +9,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -185,6 +186,12 @@ export class UpsertCertificateRuleDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  /** Um dos 9 modelos de sistema (ex.: tpl-3-executivo-premium); omitido = corporativo clássico. */
+  @IsOptional()
+  @IsString()
+  @Matches(/^tpl-[a-z0-9-]{3,60}$/, { message: 'templateId inválido' })
+  templateId?: string;
 }
 
 export const EXPORT_FORMATS = ['csv', 'xlsx', 'pdf'] as const;

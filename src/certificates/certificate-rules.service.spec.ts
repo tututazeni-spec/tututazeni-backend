@@ -36,6 +36,13 @@ describe('UpsertCertificateRuleDto', () => {
     ).toBeGreaterThan(0);
   });
 
+  it('aceita templateId de um modelo de sistema e rejeita formatos estranhos', async () => {
+    expect(await validate(dtoOf({ templateId: 'tpl-3-executivo-premium' }))).toHaveLength(0);
+    for (const bad of ['TPL-3', 'tpl 3', "tpl-1'; DROP TABLE x", '', 'x'.repeat(80), 'tpl-']) {
+      expect((await validate(dtoOf({ templateId: bad }))).length).toBeGreaterThan(0);
+    }
+  });
+
   it('rejeita validityDays fora de 1–3650', async () => {
     expect((await validate(dtoOf({ validityDays: 0 }))).length).toBeGreaterThan(0);
     expect((await validate(dtoOf({ validityDays: 4000 }))).length).toBeGreaterThan(0);
@@ -47,6 +54,7 @@ describe('CertificateRulesService', () => {
     certificateRule: { findMany: jest.fn(), findUnique: jest.fn(), upsert: jest.fn() },
     course: { findUnique: jest.fn(), findMany: jest.fn() },
     event: { findUnique: jest.fn(), findMany: jest.fn() },
+    certificateTemplate: { findFirst: jest.fn() },
   };
   const audit = { log: jest.fn() };
   const svc = new CertificateRulesService(prisma as never, audit as never);
@@ -55,6 +63,7 @@ describe('CertificateRulesService', () => {
     jest.resetAllMocks();
     prisma.certificateRule.findUnique.mockResolvedValue(null);
     prisma.course.findUnique.mockResolvedValue({ id: 10 });
+    prisma.certificateTemplate.findFirst.mockResolvedValue({ id: 'tpl-3-executivo-premium' });
     prisma.certificateRule.upsert.mockImplementation(async ({ create }) => ({
       id: 1,
       updatedAt: new Date(),
@@ -105,6 +114,32 @@ describe('CertificateRulesService', () => {
     );
   });
 
+  it('com templateId confirma que é um modelo de sistema e grava-o na regra', async () => {
+    await svc.upsertRule(dtoOf({ templateId: 'tpl-3-executivo-premium' }), 7);
+    expect(prisma.certificateTemplate.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'tpl-3-executivo-premium', isSystem: true, deletedAt: null },
+      }),
+    );
+    const call = prisma.certificateRule.upsert.mock.calls[0][0];
+    expect(call.create.templateId).toBe('tpl-3-executivo-premium');
+    expect(call.update.templateId).toBe('tpl-3-executivo-premium');
+  });
+
+  it('modelo inexistente ou legado → 404 e nada gravado', async () => {
+    prisma.certificateTemplate.findFirst.mockResolvedValue(null);
+    await expect(svc.upsertRule(dtoOf({ templateId: 'tpl-legado-1' }), 7)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(prisma.certificateRule.upsert).not.toHaveBeenCalled();
+  });
+
+  it('sem templateId a regra volta ao modelo por omissão (null) e não consulta modelos', async () => {
+    await svc.upsertRule(dtoOf(), 7);
+    expect(prisma.certificateTemplate.findFirst).not.toHaveBeenCalled();
+    expect(prisma.certificateRule.upsert.mock.calls[0][0].update.templateId).toBeNull();
+  });
+
   it('listRules devolve critérios já interpretados e o título da atividade', async () => {
     prisma.certificateRule.findMany.mockResolvedValue([
       {
@@ -114,6 +149,7 @@ describe('CertificateRulesService', () => {
         mode: 'AUTOMATIC',
         criteria: '{"requireFullCompletion":true}',
         validityDays: null,
+        templateId: 'tpl-2-moderno-minimalista',
         active: true,
         updatedAt: new Date(),
       },
@@ -123,6 +159,7 @@ describe('CertificateRulesService', () => {
     const [r] = await svc.listRules();
     expect(r).toMatchObject({
       activityTitle: 'Segurança',
+      templateId: 'tpl-2-moderno-minimalista',
       criteria: { requireFullCompletion: true },
     });
   });

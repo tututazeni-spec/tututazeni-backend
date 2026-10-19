@@ -1,5 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { CertificatesService, effectiveStatus } from './certificates.service';
+import { BUILTIN_TEMPLATES } from './templates/builtin-templates';
 
 const DAY = 86_400_000;
 
@@ -42,7 +43,8 @@ describe('CertificatesService', () => {
       update: jest.fn(),
     },
   };
-  const svc = new CertificatesService(prisma as never);
+  const assets = { loadForRender: jest.fn() };
+  const svc = new CertificatesService(prisma as never, assets as never);
 
   const row = (over = {}) => ({
     id: 5,
@@ -69,6 +71,7 @@ describe('CertificatesService', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    assets.loadForRender.mockResolvedValue({});
     prisma.certificate.update.mockResolvedValue({});
   });
 
@@ -219,6 +222,48 @@ describe('CertificatesService', () => {
       expect(revoked.verifyUrl).toMatch(/\/verify\/CCCC3333DDDD4444$/);
       expect(revoked.linkedInUrl).toBeUndefined();
       expect(expired.linkedInUrl).toBeUndefined();
+    });
+  });
+
+  describe('PDF com o template do snapshot', () => {
+    const owner = { id: 1, role: { name: 'COLABORADOR' } };
+
+    it('carrega as imagens referidas pelo snapshot (nunca pelo template actual)', async () => {
+      const config = {
+        ...BUILTIN_TEMPLATES[0].config,
+        assets: { logoId: 'logo-id-0001', signatureId: 'sign-id-0001' },
+      };
+      prisma.certificate.findUnique.mockResolvedValue(
+        row({
+          snapshot: JSON.stringify({
+            code: 'ABCD1234EFGH5678',
+            recipientName: 'Ana',
+            title: 'Segurança',
+            issuedAt: '2026-10-01T00:00:00.000Z',
+            issuerName: 'INNOVA',
+            template: { id: BUILTIN_TEMPLATES[0].id, version: 1, config },
+          }),
+        }),
+      );
+      const buf = await svc.getPdfFor(5, owner);
+      expect(buf.subarray(0, 5).toString()).toBe('%PDF-');
+      expect(assets.loadForRender).toHaveBeenCalledWith({
+        logoId: 'logo-id-0001',
+        signatureId: 'sign-id-0001',
+      });
+    });
+
+    it('certificado antigo sem template: sem imagens e PDF clássico', async () => {
+      prisma.certificate.findUnique.mockResolvedValue(row());
+      const buf = await svc.getPdfFor(5, owner);
+      expect(buf.subarray(0, 5).toString()).toBe('%PDF-');
+      expect(assets.loadForRender).toHaveBeenCalledWith({});
+    });
+
+    it('sem serviço de imagens injectado continua a gerar o PDF', async () => {
+      const bare = new CertificatesService(prisma as never);
+      prisma.certificate.findUnique.mockResolvedValue(row());
+      expect((await bare.getPdfFor(5, owner)).subarray(0, 5).toString()).toBe('%PDF-');
     });
   });
 });
