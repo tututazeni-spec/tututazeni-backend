@@ -1,0 +1,214 @@
+import { Injectable } from '@nestjs/common';
+import { CertificateStatus, Prisma } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { normalizeVerificationCode } from './certificate-code';
+import { effectiveStatus } from './certificates.service';
+import { EffectiveStatusFilter, ListCertificatesQueryDto } from './certificates-admin.dto';
+
+export const EXPIRING_SOON_DAYS = 30;
+const DAY_MS = 86_400_000;
+const DEFAULT_LIMIT = 20;
+
+export interface AdminCertificateRow {
+  id: number;
+  holderName: string;
+  departmentName: string | null;
+  title: string;
+  activityKind: string | null;
+  status: CertificateStatus;
+  code: string;
+  issuedAt: Date;
+  expiresAt: Date | null;
+  hours: number | null;
+}
+
+export interface AdminOverview {
+  total: number;
+  active: number;
+  pendingApproval: number;
+  expired: number;
+  expiringSoon: number;
+  revoked: number;
+  mandatoryCoveragePct: number | null;
+}
+
+export interface Paginated<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+/** Filtros por estado EFECTIVO (revogação > expiração > gravado), nunca só `status`. */
+function activeWhere(now: Date): Prisma.CertificateWhereInput {
+  return {
+    deletedAt: null,
+    revoked: false,
+    status: 'ACTIVE',
+    OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+  };
+}
+
+function expiredWhere(now: Date): Prisma.CertificateWhereInput {
+  return {
+    deletedAt: null,
+    revoked: false,
+    status: { in: ['ACTIVE', 'EXPIRED'] },
+    expiresAt: { lte: now },
+  };
+}
+
+const revokedWhere: Prisma.CertificateWhereInput = {
+  deletedAt: null,
+  OR: [{ revoked: true }, { status: 'REVOKED' }],
+};
+
+const pendingWhere: Prisma.CertificateWhereInput = {
+  deletedAt: null,
+  revoked: false,
+  status: 'PENDING_APPROVAL',
+};
+
+function statusWhere(status: EffectiveStatusFilter, now: Date): Prisma.CertificateWhereInput {
+  switch (status) {
+    case 'ACTIVE':
+      return activeWhere(now);
+    case 'EXPIRED':
+      return expiredWhere(now);
+    case 'REVOKED':
+      return revokedWhere;
+    case 'PENDING_APPROVAL':
+      return pendingWhere;
+  }
+}
+
+@Injectable()
+export class CertificatesAdminService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async overview(now = new Date()): Promise<AdminOverview> {
+    const soon = new Date(now.getTime() + EXPIRING_SOON_DAYS * DAY_MS);
+    const c = this.prisma.certificate;
+    const [total, active, pendingApproval, expired, expiringSoon, revoked] = await Promise.all([
+      c.count({ where: { deletedAt: null } }),
+      c.count({ where: activeWhere(now) }),
+      c.count({ where: pendingWhere }),
+      c.count({ where: expiredWhere(now) }),
+      c.count({
+        where: {
+          deletedAt: null,
+          revoked: false,
+          status: 'ACTIVE',
+          expiresAt: { gt: now, lte: soon },
+        },
+      }),
+      c.count({ where: revokedWhere }),
+    ]);
+
+    const [mandatory, covered] = await Promise.all([
+      this.prisma.enrollment.count({ where: { mandatory: true } }),
+      this.prisma.enrollment.count({
+        where: { mandatory: true, status: 'COMPLETED', certificate: { is: activeWhere(now) } },
+      }),
+    ]);
+
+    return {
+      total,
+      active,
+      pendingApproval,
+      expired,
+      expiringSoon,
+      revoked,
+      mandatoryCoveragePct: mandatory === 0 ? null : Math.round((covered / mandatory) * 100),
+    };
+  }
+
+  async list(
+    q: ListCertificatesQueryDto,
+    now = new Date(),
+  ): Promise<Paginated<AdminCertificateRow>> {
+    const page = q.page ?? 1;
+    const limit = q.limit ?? DEFAULT_LIMIT;
+    const empty = { data: [], total: 0, page, limit, totalPages: 0 };
+
+    const and: Prisma.CertificateWhereInput[] = [{ deletedAt: null }];
+    if (q.status) and.push(statusWhere(q.status, now));
+    if (q.activityKind) and.push({ activityKind: q.activityKind });
+    if (q.courseId) and.push({ courseId: q.courseId });
+    if (q.departmentId) and.push({ user: { departmentId: q.departmentId } });
+    if (q.issuedFrom || q.issuedTo) {
+      and.push({
+        issuedAt: {
+          ...(q.issuedFrom ? { gte: new Date(q.issuedFrom) } : {}),
+          ...(q.issuedTo ? { lte: new Date(q.issuedTo) } : {}),
+        },
+      });
+    }
+    if (q.expiresFrom || q.expiresTo) {
+      and.push({
+        expiresAt: {
+          ...(q.expiresFrom ? { gte: new Date(q.expiresFrom) } : {}),
+          ...(q.expiresTo ? { lte: new Date(q.expiresTo) } : {}),
+        },
+      });
+    }
+    if (q.code !== undefined) {
+      const code = normalizeVerificationCode(q.code);
+      if (!code) return empty;
+      and.push({ validationCode: code });
+    }
+    const search = q.search?.trim();
+    if (search) {
+      const contains = { contains: search, mode: 'insensitive' as const };
+      and.push({
+        OR: [
+          { recipientName: contains },
+          { title: contains },
+          { user: { fullName: contains } },
+          { course: { title: contains } },
+          { event: { title: contains } },
+        ],
+      });
+    }
+    const where: Prisma.CertificateWhereInput = { AND: and };
+    const order = q.order ?? 'desc';
+    const sort = q.sort ?? 'issuedAt';
+    const orderBy: Prisma.CertificateOrderByWithRelationInput =
+      sort === 'holderName' ? { user: { fullName: order } } : { [sort]: order };
+
+    const [total, rows] = await Promise.all([
+      this.prisma.certificate.count({ where }),
+      this.prisma.certificate.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          user: { select: { fullName: true, department: { select: { name: true } } } },
+          course: { select: { title: true } },
+          event: { select: { title: true } },
+        },
+      }),
+    ]);
+
+    return {
+      data: rows.map(r => ({
+        id: r.id,
+        holderName: r.recipientName ?? r.user?.fullName ?? '',
+        departmentName: r.user?.department?.name ?? null,
+        title: r.title ?? r.course?.title ?? r.event?.title ?? 'Certificado',
+        activityKind: r.activityKind,
+        status: effectiveStatus(r, now),
+        code: r.validationCode,
+        issuedAt: r.issuedAt,
+        expiresAt: r.expiresAt,
+        hours: r.hours,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+}
