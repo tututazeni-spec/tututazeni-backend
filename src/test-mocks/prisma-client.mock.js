@@ -804,6 +804,8 @@ const CertificateStatus = {
   REVOKED: 'REVOKED',
 };
 
+const CertificateOrigin = { INTERNAL: 'INTERNAL', EXTERNAL: 'EXTERNAL' };
+
 const CertificateIssueMode = { AUTOMATIC: 'AUTOMATIC', MANUAL: 'MANUAL', APPROVAL: 'APPROVAL' };
 
 const CertificateActivityKind = {
@@ -3081,6 +3083,7 @@ module.exports = {
   EvalType,
   CertificateType,
   CertificateStatus,
+  CertificateOrigin,
   CertificateIssueMode,
   CertificateActivityKind,
   EventStatus,
