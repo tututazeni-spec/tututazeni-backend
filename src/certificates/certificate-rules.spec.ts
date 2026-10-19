@@ -1,4 +1,4 @@
-import { evaluateEligibility, ActivityFacts } from './certificate-rules';
+import { describeMissing, evaluateEligibility, ActivityFacts } from './certificate-rules';
 
 const facts = (over: Partial<ActivityFacts> = {}): ActivityFacts => ({
   completionPct: 100,
@@ -63,5 +63,14 @@ describe('evaluateEligibility', () => {
   it('devolve todos os motivos em falta', () => {
     const r = evaluateEligibility(criteria, facts({ completionPct: 50, bestScore: 10 }));
     expect(r.missing).toEqual(['COMPLETION_INCOMPLETE', 'MIN_SCORE_NOT_MET']);
+  });
+});
+
+describe('describeMissing', () => {
+  it('traduz cada motivo para uma frase em português', () => {
+    expect(describeMissing(['MIN_SCORE_NOT_MET', 'COMPLETION_INCOMPLETE'])).toEqual([
+      'Nota mínima não atingida',
+      'Conteúdo obrigatório por concluir',
+    ]);
   });
 });

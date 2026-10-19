@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { CoursesService } from './courses.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CertificatesService } from '../certificates/certificates.service';
 import { CourseCompletionService } from '../course-completion/course-completion.service';
 
 const baseCourse = {
@@ -93,6 +94,7 @@ const mockPrisma: any = {
     create: jest.fn().mockResolvedValue({ id: 'cert-1', validationCode: 'CERT-1-1-123' }),
     findFirst: jest.fn(),
     findMany: jest.fn().mockResolvedValue([]),
+    update: jest.fn().mockResolvedValue({}),
     count: jest.fn().mockResolvedValue(0),
   },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
@@ -161,6 +163,10 @@ describe('CoursesService (progress & quiz & analytics)', () => {
       providers: [
         CoursesService,
         { provide: PrismaService, useValue: mockPrisma },
+        {
+          provide: CertificatesService,
+          useFactory: () => new CertificatesService(mockPrisma as never),
+        },
         { provide: CourseCompletionService, useValue: mockCourseCompletion },
       ],
     }).compile();

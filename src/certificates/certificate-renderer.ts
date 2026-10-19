@@ -19,14 +19,14 @@ const MAX_TITLE = 160;
 
 export function buildVerifyUrl(code: string): string {
   const base = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
-  return `${base}/verificar/${code}`;
+  return `${base}/verify/${code}`;
 }
 
 // Fontes standard do pdfkit só cobrem Latin-1: remove emoji/símbolos fora desse
 // intervalo (renderizariam como lixo) e limita o comprimento.
 function printable(text: string, max: number): string {
   const clean = text
-    .replace(/[^ -~ -ÿ–—‘’“”]/g, '')
+    .replace(/[^\u0020-\u007E\u00A0-\u00FF\u2013\u2014\u2018\u2019\u201C\u201D]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;

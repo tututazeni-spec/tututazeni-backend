@@ -208,8 +208,8 @@ export class CertificateIssuanceService {
 
   private parseCriteria(raw: string): RuleCriteria {
     try {
-      const parsed: unknown = JSON.parse(raw);
-      return parsed && typeof parsed === 'object' ? (parsed as RuleCriteria) : {};
+      const parsed: RuleCriteria | null = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : {};
     } catch {
       this.logger.warn('CertificateRule.criteria inválido — tratado como sem critérios');
       return {};

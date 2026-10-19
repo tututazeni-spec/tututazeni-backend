@@ -8,6 +8,7 @@
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CertificatesService } from '../certificates/certificates.service';
 import { CourseCompletionService } from '../course-completion/course-completion.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
@@ -97,6 +98,7 @@ export class CoursesService {
   constructor(
     private prisma: PrismaService,
     private readonly courseCompletion: CourseCompletionService,
+    private readonly certificates: CertificatesService,
   ) {}
 
   // ─── Catálogo ─────────────────────────────────────────────────────────────
@@ -927,27 +929,13 @@ export class CoursesService {
 
   // ─── Certificados ─────────────────────────────────────────────────────────
 
+  // Delegado no módulo de certificados (fonte única de verdade).
   async getMyCertificates(userId: number) {
-    return this.prisma.read.certificate.findMany({
-      where: { userId },
-      include: {
-        course: { select: { id: true, title: true, thumbnailUrl: true, category: true } },
-      },
-      orderBy: { issuedAt: 'desc' },
-    });
+    return this.certificates.listMine(userId);
   }
 
   async verifyCertificate(validationCode: string) {
-    const cert = await this.prisma.read.certificate.findFirst({
-      where: { validationCode },
-      include: {
-        course: { select: { id: true, title: true } },
-        user: { select: { id: true, fullName: true } },
-      },
-    });
-    if (!cert) throw new NotFoundException('Certificado não encontrado ou inválido');
-    const expired = cert.expiresAt ? new Date() > new Date(cert.expiresAt) : false;
-    return { ...cert, valid: !expired };
+    return this.certificates.verifyPublic(validationCode);
   }
 
   // ─── Quiz ─────────────────────────────────────────────────────────────────

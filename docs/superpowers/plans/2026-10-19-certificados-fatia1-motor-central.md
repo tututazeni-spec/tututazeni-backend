@@ -43,7 +43,7 @@
 - Create `src/certificates/certificates.service.ts` — `listMine`, `getPdfFor`, `verifyPublic`.
 - Create `src/certificates/certificates.controller.ts` + `public-certificates.controller.ts` + `certificates.dto.ts` + `certificates.module.ts`.
 - Modify `prisma/schema.prisma`, add migration; `src/app.module.ts`; `src/course-completion/course-completion.service.ts:376-410`; `src/events/events.service.ts:1214-1235`; `src/pdf/pdf.controller.ts:45-62`; `src/courses/courses.controller.ts:106-117` (delegar).
-- Frontend: create `frontend/app/verificar/[code]/page.tsx`, `frontend/components/certificates/VerifyResultCard.tsx`; modify `frontend/middleware.ts` (PUBLIC_PATHS), `frontend/components/courses/CertificatesView.tsx`, `frontend/components/courses/types.ts`, `frontend/lib/queryKeys.ts`.
+- Frontend: create `frontend/app/verify/[code]/page.tsx`, `frontend/components/certificates/VerifyResultCard.tsx`; modify `frontend/middleware.ts` (PUBLIC_PATHS), `frontend/components/courses/CertificatesView.tsx`, `frontend/components/courses/types.ts`, `frontend/lib/queryKeys.ts`.
 
 ---
 
@@ -128,9 +128,9 @@ Comportamento: sem regra activa → `NO_RULE` (não emite); factos recolhidos de
 
 **Files:** Create `src/certificates/certificate-renderer.ts`; Modify `src/pdf/pdf.service.ts` (só se for preciso reutilizar `createDoc`/`bufferFromDoc` — exportar helpers em vez de duplicar); Test `src/certificates/certificate-renderer.spec.ts`.
 
-**Interfaces:** Produces `renderCertificatePdf(snapshot: CertificateSnapshot, verifyUrl: string): Promise<Buffer>` — QR via `qrcode.toBuffer(verifyUrl)`; omite linhas de nota/validade/horas quando ausentes; nunca deixa `{{...}}` por substituir. `buildVerifyUrl(code: string): string` usa `process.env.PUBLIC_APP_URL` (nova variável; default `http://localhost:3000` só em desenvolvimento, erro claro em produção se faltar) → `${PUBLIC_APP_URL}/verificar/${code}`.
+**Interfaces:** Produces `renderCertificatePdf(snapshot: CertificateSnapshot, verifyUrl: string): Promise<Buffer>` — QR via `qrcode.toBuffer(verifyUrl)`; omite linhas de nota/validade/horas quando ausentes; nunca deixa `{{...}}` por substituir. `buildVerifyUrl(code: string): string` usa `process.env.PUBLIC_APP_URL` (nova variável; default `http://localhost:3000` só em desenvolvimento, erro claro em produção se faltar) → `${PUBLIC_APP_URL}/verify/${code}`.
 
-- [ ] **Step 1: Tests:** buffer começa com `%PDF`; snapshot com nome `'José Ñandú 🎓 ' + 'A'.repeat(200)` não lança; PDF de snapshot sem `score` não contém o texto "Nota"; `buildVerifyUrl('ABC')` termina em `/verificar/ABC`.
+- [ ] **Step 1: Tests:** buffer começa com `%PDF`; snapshot com nome `'José Ñandú 🎓 ' + 'A'.repeat(200)` não lança; PDF de snapshot sem `score` não contém o texto "Nota"; `buildVerifyUrl('ABC')` termina em `/verify/ABC`.
 - [ ] **Step 2: Run** → FAIL.
 - [ ] **Step 3: Implement** (layout corporativo clássico, A4 horizontal).
 - [ ] **Step 4: Run** → PASS.
@@ -158,7 +158,7 @@ Comportamento: sem regra activa → `NO_RULE` (não emite); factos recolhidos de
 
 ### Task 8: Frontend — verificação pública e download real
 
-**Files:** Create `frontend/app/verificar/[code]/page.tsx`, `frontend/components/certificates/VerifyResultCard.tsx`, test `frontend/components/certificates/VerifyResultCard.test.tsx`; Modify `frontend/middleware.ts` (`PUBLIC_PATHS` + prefixo `/verificar/`), `frontend/components/courses/CertificatesView.tsx`, `frontend/components/courses/types.ts`, `frontend/lib/queryKeys.ts`.
+**Files:** Create `frontend/app/verify/[code]/page.tsx`, `frontend/components/certificates/VerifyResultCard.tsx`, test `frontend/components/certificates/VerifyResultCard.test.tsx`; Modify `frontend/middleware.ts` (`PUBLIC_PATHS` + prefixo `/verify/`), `frontend/components/courses/CertificatesView.tsx`, `frontend/components/courses/types.ts`, `frontend/lib/queryKeys.ts`.
 
 **Interfaces:** Consumes `GET /certificates/verify/:code`, `GET /certificates/my`, `GET /certificates/:id/pdf`. `VerifyResultCard({ result }: { result: PublicVerifyResult | { notFound: true } })` — mostra nome completo, curso, emissor, horas, emissão, validade, tipo e selo de estado (ACTIVE verde; EXPIRED/REVOKED vermelho; nunca "válido" se não ACTIVE); "não encontrado" com `AlertCard` (regra 16). O botão "Download PDF" descarrega via `apiClient` como blob e reutiliza o helper de download já corrigido (`revokeObjectURL` diferido; procurar em `frontend/lib`) em vez de criar outro.
 
@@ -166,7 +166,7 @@ Comportamento: sem regra activa → `NO_RULE` (não emite); factos recolhidos de
 - [ ] **Step 2: Run** → FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** `npx vitest run components/certificates components/courses/CertificatesView` → PASS.
-- [ ] **Step 5: Verificação real:** backend em :4000 (processo único, ver memória dual-process); emitir um certificado via `POST /certificates/issue`; abrir `/verificar/<código>` sem sessão (não pode redirecionar para /login); descarregar o PDF em "Cursos → Certificados"; abrir o PDF e confirmar dados e QR a apontar para a mesma URL.
+- [ ] **Step 5: Verificação real:** backend em :4000 (processo único, ver memória dual-process); emitir um certificado via `POST /certificates/issue`; abrir `/verify/<código>` sem sessão (não pode redirecionar para /login); descarregar o PDF em "Cursos → Certificados"; abrir o PDF e confirmar dados e QR a apontar para a mesma URL.
 - [ ] **Step 6: Commit** (repo do frontend, separado) `feat(certificates): página pública de verificação e download real`.
 
 ### Task 9: Verificação final da fatia

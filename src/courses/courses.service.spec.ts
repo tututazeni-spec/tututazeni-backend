@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { CoursesService } from './courses.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CertificatesService } from '../certificates/certificates.service';
 import { CourseCompletionService } from '../course-completion/course-completion.service';
 import { CourseStatus } from './courses.dto';
 
@@ -81,6 +82,10 @@ describe('CoursesService', () => {
       providers: [
         CoursesService,
         { provide: PrismaService, useValue: mockPrisma },
+        {
+          provide: CertificatesService,
+          useFactory: () => new CertificatesService(mockPrisma as never),
+        },
         { provide: CourseCompletionService, useValue: mockCourseCompletion },
       ],
     }).compile();

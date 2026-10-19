@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { CoursesService } from './courses.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CertificatesService } from '../certificates/certificates.service';
 import { CourseCompletionService } from '../course-completion/course-completion.service';
 
 const mockPrisma = {
@@ -110,6 +111,10 @@ describe('CoursesService (additional)', () => {
       providers: [
         CoursesService,
         { provide: PrismaService, useValue: mockPrisma },
+        {
+          provide: CertificatesService,
+          useFactory: () => new CertificatesService(mockPrisma as never),
+        },
         { provide: CourseCompletionService, useValue: mockCourseCompletion },
       ],
     }).compile();
