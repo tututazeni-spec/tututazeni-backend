@@ -54,6 +54,12 @@ export class MailService implements OnModuleInit {
     return { transporter: this.transporter };
   }
 
+  /** Há um transporte SMTP utilizável (variáveis de ambiente ou definições da organização)? */
+  async isConfigured(): Promise<boolean> {
+    const { transporter } = await this.resolveTransport();
+    return transporter !== null;
+  }
+
   onModuleInit(): void {
     const host = process.env.SMTP_HOST;
     if (!host) {
