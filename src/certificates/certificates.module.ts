@@ -9,6 +9,10 @@ import { CertificateLifecycleService } from './certificate-lifecycle.service';
 import { CertificateExternalService } from './certificate-external.service';
 import { CertificateBatchService } from './certificate-batch.service';
 import { CertificateExpiryService } from './certificate-expiry.service';
+import { CertificateScopeService } from './certificate-scope.service';
+import { CertificatesTeamService } from './certificates-team.service';
+import { CertificatesExportService } from './certificates-export.service';
+import { CertificatesMeService } from './certificates-me.service';
 import { CertificatesController } from './certificates.controller';
 import { PublicCertificatesController } from './public-certificates.controller';
 
@@ -27,6 +31,10 @@ import { PublicCertificatesController } from './public-certificates.controller';
     CertificateExternalService,
     CertificateBatchService,
     CertificateExpiryService,
+    CertificateScopeService,
+    CertificatesTeamService,
+    CertificatesExportService,
+    CertificatesMeService,
   ],
   exports: [CertificateIssuanceService, CertificatesService],
 })

@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { MailService } from '../mail/mail.service';
@@ -119,11 +124,18 @@ export class CertificatesMeService {
     if (!owner?.email) throw new ConflictException('O utilizador não tem e-mail registado');
 
     const title = cert.title ?? 'formação';
-    await this.mail.sendNotification(
-      owner.email,
-      `O seu certificado: ${title}`,
-      `O seu certificado "${title}" está disponível. Verificação pública: ${buildVerifyUrl(cert.validationCode)}`,
-    );
+    try {
+      await this.mail.sendNotification(
+        owner.email,
+        `O seu certificado: ${title}`,
+        `O seu certificado "${title}" está disponível. Verificação pública: ${buildVerifyUrl(cert.validationCode)}`,
+      );
+    } catch {
+      // SMTP configurado mas a falhar: erro claro em vez de um 500 genérico, e sem auditar um envio que não houve.
+      throw new BadGatewayException(
+        'Não foi possível enviar o e-mail agora. Tente novamente mais tarde.',
+      );
+    }
     await this.audit.log({
       action: 'CERTIFICATE_EMAILED_TO_SELF',
       entity: 'Certificate',

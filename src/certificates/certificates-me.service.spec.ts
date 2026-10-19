@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadGatewayException, ConflictException, NotFoundException } from '@nestjs/common';
 import { buildLinkedInUrl, CertificatesMeService } from './certificates-me.service';
 
 const DAY = 86_400_000;
@@ -172,11 +172,11 @@ describe('CertificatesMeService', () => {
       );
     });
 
-    it('falha de SMTP no envio → erro (não diz que enviou)', async () => {
+    it('falha de SMTP no envio → 502 claro (não diz que enviou nem devolve 500)', async () => {
       prisma.certificate.findUnique.mockResolvedValue(own());
       prisma.user.findUnique.mockResolvedValue({ email: 'ana@innova.com' });
       mail.sendNotification.mockRejectedValue(new Error('smtp'));
-      await expect(svc.emailMe(5, { id: 42 })).rejects.toThrow();
+      await expect(svc.emailMe(5, { id: 42 })).rejects.toBeInstanceOf(BadGatewayException);
       expect(audit.log).not.toHaveBeenCalled();
     });
   });
