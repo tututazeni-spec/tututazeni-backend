@@ -1,6 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CertificateActivityKind } from '@prisma/client';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
   IsBoolean,
+  IsEnum,
   IsDateString,
   IsInt,
   IsNumber,
@@ -74,4 +80,34 @@ export class ImportExternalCertificateDto {
   @IsOptional()
   @IsBoolean()
   validated?: boolean;
+}
+
+export const MAX_BATCH_SIZE = 500;
+
+export class BatchIssueDto {
+  @ApiProperty({ enum: CertificateActivityKind })
+  @IsEnum(CertificateActivityKind)
+  activityKind!: CertificateActivityKind;
+
+  @ApiProperty()
+  @IsInt()
+  @Min(1)
+  activityId!: number;
+
+  @ApiPropertyOptional({ description: 'Titulares a certificar (1–500, sem repetidos)' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(MAX_BATCH_SIZE)
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  userIds?: number[];
+
+  @ApiPropertyOptional({
+    description: 'Todos os que concluíram (cursos) ou estiveram presentes (eventos)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  allEligible?: boolean;
 }
