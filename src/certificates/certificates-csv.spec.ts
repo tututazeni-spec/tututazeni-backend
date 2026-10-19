@@ -33,15 +33,12 @@ function parseCsv(text: string): string[][] {
 }
 
 describe('safeCsvCell', () => {
-  it.each([
-    ['=HYPERLINK("http://x","clica")'],
-    ['+1+1'],
-    ['-2'],
-    ['@SUM(A1)'],
-    ['\t=cmd'],
-  ])('neutraliza a fórmula %p com apóstrofo à frente', raw => {
-    expect(safeCsvCell(raw).replace(/^"|"$/g, '')).toMatch(/^'/);
-  });
+  it.each([['=HYPERLINK("http://x","clica")'], ['+1+1'], ['-2'], ['@SUM(A1)'], ['\t=cmd']])(
+    'neutraliza a fórmula %p com apóstrofo à frente',
+    raw => {
+      expect(safeCsvCell(raw).replace(/^"|"$/g, '')).toMatch(/^'/);
+    },
+  );
 
   it('null e undefined ficam vazios', () => {
     expect(safeCsvCell(null)).toBe('');

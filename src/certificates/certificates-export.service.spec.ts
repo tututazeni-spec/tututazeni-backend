@@ -34,7 +34,9 @@ describe('CertificatesExportService', () => {
     const text = r.buffer.toString('utf8');
     expect(text.charCodeAt(0)).toBe(0xfeff);
     const lines = text.slice(1).trim().split('\n');
-    expect(lines[0]).toBe('Titular,Departamento,Formação,Tipo,Origem,Estado,Emissão,Validade,Código');
+    expect(lines[0]).toBe(
+      'Titular,Departamento,Formação,Tipo,Origem,Estado,Emissão,Validade,Código',
+    );
     expect(lines).toHaveLength(3);
     expect(lines[1]).toContain('Válido');
     expect(r).toMatchObject({ contentType: 'text/csv; charset=utf-8', rows: 2 });
@@ -50,9 +52,7 @@ describe('CertificatesExportService', () => {
   it('XLSX devolve um ficheiro zip válido com o tipo certo', async () => {
     const r = await svc.exportCertificates({ format: 'xlsx' }, actor);
     expect(r.buffer.subarray(0, 2).toString()).toBe('PK');
-    expect(r.contentType).toBe(
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    );
+    expect(r.contentType).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     expect(r.filename.endsWith('.xlsx')).toBe(true);
   });
 
@@ -76,8 +76,12 @@ describe('CertificatesExportService', () => {
   });
 
   it('mais do que o máximo → 400, sem ficheiro nem auditoria', async () => {
-    admin.exportRows.mockResolvedValue(Array.from({ length: MAX_EXPORT_ROWS + 1 }, (_, i) => row(i + 1)));
-    await expect(svc.exportCertificates({ format: 'csv' }, actor)).rejects.toBeInstanceOf(BadRequestException);
+    admin.exportRows.mockResolvedValue(
+      Array.from({ length: MAX_EXPORT_ROWS + 1 }, (_, i) => row(i + 1)),
+    );
+    await expect(svc.exportCertificates({ format: 'csv' }, actor)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
     expect(audit.log).not.toHaveBeenCalled();
   });
 

@@ -216,7 +216,9 @@ describe('CertificateIssuanceService', () => {
     });
 
     it('com templateId na regra usa esse modelo e a sua versão actual', async () => {
-      prisma.certificateRule.findUnique.mockResolvedValue(rule({ templateId: 'tpl-3-executivo-premium' }));
+      prisma.certificateRule.findUnique.mockResolvedValue(
+        rule({ templateId: 'tpl-3-executivo-premium' }),
+      );
       templates.resolveForIssuance.mockResolvedValue(tpl('tpl-3-executivo-premium', 4));
       await svc.issue(input);
       expect(templates.resolveForIssuance).toHaveBeenCalledWith('tpl-3-executivo-premium');
@@ -227,7 +229,9 @@ describe('CertificateIssuanceService', () => {
 
     it('modelo da regra desaparecido: emite na mesma com o clássico (nunca falha a emissão)', async () => {
       prisma.certificateRule.findUnique.mockResolvedValue(rule({ templateId: 'tpl-removido' }));
-      templates.resolveForIssuance.mockRejectedValueOnce(new Error('404')).mockResolvedValueOnce(tpl());
+      templates.resolveForIssuance
+        .mockRejectedValueOnce(new Error('404'))
+        .mockResolvedValueOnce(tpl());
       const r = await svc.issue(input);
       expect(r.outcome).toBe('ISSUED');
       expect(JSON.parse(prisma.certificate.create.mock.calls[0][0].data.snapshot).template.id).toBe(
@@ -240,7 +244,9 @@ describe('CertificateIssuanceService', () => {
       templates.resolveForIssuance.mockRejectedValue(new Error('BD indisponível'));
       const r = await svc.issue(input);
       expect(r.outcome).toBe('ISSUED');
-      expect(JSON.parse(prisma.certificate.create.mock.calls[0][0].data.snapshot).template).toMatchObject({
+      expect(
+        JSON.parse(prisma.certificate.create.mock.calls[0][0].data.snapshot).template,
+      ).toMatchObject({
         id: 'tpl-1-corporativo-classico',
         version: 1,
       });
