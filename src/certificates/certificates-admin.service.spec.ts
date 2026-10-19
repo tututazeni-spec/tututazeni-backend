@@ -62,7 +62,12 @@ describe('CertificatesAdminService', () => {
 
   describe('exportRows', () => {
     it('sem paginação: pede no máximo N linhas, na ordem pedida, dentro do âmbito', async () => {
-      await svc.exportRows({ sort: 'holderName', order: 'asc' }, { kind: 'TEAM', userIds: [1] }, now, 5001);
+      await svc.exportRows(
+        { sort: 'holderName', order: 'asc' },
+        { kind: 'TEAM', userIds: [1] },
+        now,
+        5001,
+      );
       const arg = prisma.certificate.findMany.mock.calls[0][0];
       expect(arg.take).toBe(5001);
       expect(arg.skip).toBeUndefined();
