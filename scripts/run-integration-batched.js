@@ -23,7 +23,10 @@ const BATCHES = [
   ['acl', 'ai-tutor'],
   ['analytics', 'api-integration'],
   ['assessments', 'attendance', 'audit', 'auth'],
-  ['automation', 'avatar-training', 'career', 'career-plans', 'certificates'],
+  ['automation', 'avatar-training', 'career', 'career-plans'],
+  // `certificates` isolado: o módulo cresceu para 9 specs (cada uma arranca a sua
+  // app Nest completa) e, juntas com o batch anterior, esgotavam a heap em CI.
+  ['certificates'],
   ['certification', 'competencies', 'competency-map', 'content-library'],
   // Batch 3 original (9 módulos) também passou a esgotar a heap de 4 GB — o
   // bootstrap Nest de cada spec ficou mais pesado à medida que app.module.ts
