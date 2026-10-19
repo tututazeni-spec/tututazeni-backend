@@ -33,7 +33,7 @@ export function layout5(ctx: Ctx): void {
   const st: Style = {
     region: { x: 64, w: 600 },
     align: 'left',
-    y: { title: 66, recognition: 150, name: 178, course: 246, details: 368, footer: h - 52 },
+    y: { title: 78, recognition: 150, name: 178, course: 246, details: 368, footer: h - 52 },
     size: { issuer: 11, title: 34, recognition: 12, name: 30, course: 20, details: 10, footer: 8 },
     fonts: {
       title: 'Helvetica-Bold',

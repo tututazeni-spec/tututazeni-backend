@@ -222,3 +222,64 @@ describe('os nove layouts são visualmente distintos', () => {
     expect(title({ ...t, elements: { title: { align: 'left' } } }).align).toBe('left');
   });
 });
+
+// ─── Colisões visuais (apanhadas ao abrir os nove PDFs) ───────────────────────
+
+type TextOp = Extract<Op, { kind: 'text' }>;
+type Box = [number, number, number, number];
+
+/** Extensão estimada do texto realmente desenhado (não da caixa inteira). */
+function textExtent(t: TextOp): Box {
+  const est = Math.min(t.w, t.text.length * t.size * 0.55);
+  const x1 =
+    t.align === 'center' ? t.x + (t.w - est) / 2 : t.align === 'right' ? t.x + t.w - est : t.x;
+  return [x1, t.y, x1 + est, t.y + t.size * 1.2];
+}
+const intersects = (a: Box, b: Box) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
+const circleBox = (o: Extract<Op, { kind: 'circle' }>): Box => [
+  o.cx - o.r,
+  o.cy - o.r,
+  o.cx + o.r,
+  o.cy + o.r,
+];
+
+describe.each(templates)('sem colisões — %s', (_name, config) => {
+  const cfg = withSignatory(config);
+  const plan = buildLayoutPlan(cfg, FULL);
+
+  it('o logótipo não se sobrepõe nem encosta (6 pt) a nenhum texto', () => {
+    const logo = plan.find(
+      (o): o is Extract<Op, { kind: 'image' }> => o.kind === 'image' && o.asset === 'logo',
+    );
+    expect(logo).toBeDefined();
+    const gap = 6;
+    const box: Box = [
+      logo!.x - gap,
+      logo!.y - gap,
+      logo!.x + logo!.w + gap,
+      logo!.y + logo!.h + gap,
+    ];
+    for (const t of texts(plan)) expect(intersects(box, textExtent(t))).toBe(false);
+  });
+
+  it('nenhum texto atravessa um selo circular', () => {
+    for (const c of plan.filter(
+      (o): o is Extract<Op, { kind: 'circle' }> => o.kind === 'circle' && o.r >= 30,
+    )) {
+      for (const t of texts(plan)) expect(intersects(circleBox(c), textExtent(t))).toBe(false);
+    }
+  });
+
+  it('a fita (rectângulo largo preenchido sobre o conteúdo) só cobre a linha do curso', () => {
+    const ribbon = plan.find(
+      (o): o is Extract<Op, { kind: 'rect' }> =>
+        o.kind === 'rect' && !!o.fill && o.w > 400 && o.w < PAGE.w - 100 && o.h < 80 && o.y > 100,
+    );
+    if (!ribbon) return; // só o layout 9 tem fita
+    const box: Box = [ribbon.x, ribbon.y, ribbon.x + ribbon.w, ribbon.y + ribbon.h];
+    const covered = texts(plan).filter(t => intersects(box, textExtent(t)));
+    expect(covered.map(t => t.text)).toEqual([
+      cfg.texts.courseLine.split('\n').pop()!.replace('{{nome_curso}}', FULL.values.nome_curso!),
+    ]);
+  });
+});

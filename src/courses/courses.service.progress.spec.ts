@@ -260,6 +260,8 @@ describe('CoursesService (progress & quiz & analytics)', () => {
           userId: 1,
           courseId: 1,
           validationCode: 'V123',
+          issuedAt: new Date('2026-03-01T00:00:00Z'),
+          expiresAt: null,
           course: { title: 'Curso A' },
         },
       ]);
