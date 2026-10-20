@@ -24,9 +24,13 @@ const BATCHES = [
   ['analytics', 'api-integration'],
   ['assessments', 'attendance', 'audit', 'auth'],
   ['automation', 'avatar-training', 'career', 'career-plans'],
-  // `certificates` isolado: o módulo cresceu para 9 specs (cada uma arranca a sua
-  // app Nest completa) e, juntas com o batch anterior, esgotavam a heap em CI.
-  ['certificates'],
+  // `certificates` isolado e partido por ficheiro: são 10 specs, cada uma com a
+  // sua app Nest completa, e o registo de módulos do Jest retém ~1 GB por spec —
+  // no mesmo processo esgotava os 8 GB ao 7.º (run 39332615778, #395). Entradas
+  // com '/' são usadas como regex de caminho em vez de nome de pasta.
+  ['certificates/certificates-(admin|api|issuance|lifecycle)\.integration'],
+  ['certificates/certificates-(recycling|scope|templates)\.integration'],
+  ['certificates/certificates-(schema|lifecycle-schema|templates-schema)\.integration'],
   ['certification', 'competencies', 'competency-map', 'content-library'],
   // Batch 3 original (9 módulos) também passou a esgotar a heap de 4 GB — o
   // bootstrap Nest de cada spec ficou mais pesado à medida que app.module.ts
@@ -59,7 +63,9 @@ const BATCHES = [
 let failed = false;
 
 for (const [i, modules] of BATCHES.entries()) {
-  const pattern = `test/integration/(${modules.join('|')})/`;
+  const pattern = `test/integration/(${modules
+    .map(m => (m.includes('/') ? m : `${m}/`))
+    .join('|')})`;
   console.log(`\n=== Batch ${i + 1}/${BATCHES.length}: ${modules.join(', ')} ===\n`);
 
   const result = spawnSync(
