@@ -796,6 +796,27 @@ const CertificateType = {
   DEVELOPMENT: 'DEVELOPMENT',
 };
 
+const CertificateStatus = {
+  PENDING: 'PENDING',
+  PENDING_APPROVAL: 'PENDING_APPROVAL',
+  ACTIVE: 'ACTIVE',
+  EXPIRED: 'EXPIRED',
+  REVOKED: 'REVOKED',
+};
+
+const CertificateAssetKind = { LOGO: 'LOGO', BACKGROUND: 'BACKGROUND', SIGNATURE: 'SIGNATURE' };
+
+const CertificateOrigin = { INTERNAL: 'INTERNAL', EXTERNAL: 'EXTERNAL' };
+
+const CertificateIssueMode = { AUTOMATIC: 'AUTOMATIC', MANUAL: 'MANUAL', APPROVAL: 'APPROVAL' };
+
+const CertificateActivityKind = {
+  COURSE: 'COURSE',
+  TRAINING: 'TRAINING',
+  LEARNING_PATH: 'LEARNING_PATH',
+  EVENT: 'EVENT',
+};
+
 const EventStatus = {
   DRAFT: 'DRAFT',
   PUBLISHED: 'PUBLISHED',
@@ -2247,6 +2268,7 @@ const TrainingStatus = {
 };
 
 const TrainingPriority = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', URGENT: 'URGENT' };
+const TrainingCompletionMode = { MANUAL: 'MANUAL', ATTENDANCE: 'ATTENDANCE', HYBRID: 'HYBRID' };
 
 const TrainingPlanPeriod = {
   ANNUAL: 'ANNUAL',
@@ -3063,6 +3085,11 @@ module.exports = {
   OrgChangeType,
   EvalType,
   CertificateType,
+  CertificateStatus,
+  CertificateAssetKind,
+  CertificateOrigin,
+  CertificateIssueMode,
+  CertificateActivityKind,
   EventStatus,
   ReportFormat,
   AiRole,
@@ -3247,6 +3274,7 @@ module.exports = {
   TrainingLevel,
   TrainingStatus,
   TrainingPriority,
+  TrainingCompletionMode,
   TrainingPlanPeriod,
   TrainingPlanStatus,
   TrainingParticipantStatus,

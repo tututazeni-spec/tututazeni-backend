@@ -57,6 +57,9 @@ describe('Onboarding Integration', () => {
       where: { email: 'int.manager@innova-test.com' },
     });
     managerId = manager!.id;
+    // Outras suites (matrículas, cursos) deixam XP de conclusão de curso no mesmo colaborador;
+    // as asserções de XP daqui partem sempre de zero.
+    await prisma.userPoints.deleteMany({ where: { userId: employeeId } });
   });
 
   afterAll(async () => {

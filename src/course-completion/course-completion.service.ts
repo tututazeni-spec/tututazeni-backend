@@ -4,10 +4,13 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
-import { CertificateType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GamificationService } from '../gamification/gamification.service';
+import { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
+import { LearningPathCertificationService } from '../certificates/learning-path-certification.service';
+import { describeMissing } from '../certificates/certificate-rules';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
@@ -26,6 +29,8 @@ export class CourseCompletionService {
   constructor(
     private prisma: PrismaService,
     private readonly gamification: GamificationService,
+    private readonly certificates: CertificateIssuanceService,
+    private readonly learningPaths: LearningPathCertificationService,
   ) {}
 
   /**
@@ -309,6 +314,7 @@ export class CourseCompletionService {
     if (!enrollment) return { finalized: true };
 
     await this.issueCertificateInternal(enrollment);
+    await this.learningPaths.onCourseCompleted(enrollment.userId, enrollment.courseId);
     await this.gamification.awardPoints(enrollment.userId, 100, 'course-completion');
 
     await createNotificationSafe(this.prisma, this.logger, {
@@ -361,10 +367,13 @@ export class CourseCompletionService {
       throw new BadRequestException('Curso ainda não concluído');
     }
 
-    const before = await this.prisma.certificate.findFirst({ where: { enrollmentId } });
-    const cert = await this.issueCertificateInternal(enrollment);
+    const result = await this.issueCertificateInternal(enrollment);
+    if (result.outcome === 'NOT_ELIGIBLE' || result.outcome === 'NO_RULE') {
+      throw new UnprocessableEntityException(describeMissing(result.missing ?? []));
+    }
+    const cert = result.certificate ?? null;
 
-    if (!before && cert) {
+    if (result.outcome === 'ISSUED' && cert) {
       await createNotificationSafe(this.prisma, this.logger, {
         userId: enrollment.userId,
         type: 'COURSE_COMPLETED',
@@ -376,37 +385,14 @@ export class CourseCompletionService {
     return cert;
   }
 
-  private async issueCertificateInternal(enrollment: {
-    id: number;
-    userId: number;
-    courseId: number;
-    course: { certificateValidityDays: number | null } | null;
-  }) {
-    const existing = await this.prisma.certificate.findFirst({
-      where: { enrollmentId: enrollment.id },
+  private async issueCertificateInternal(enrollment: { userId: number; courseId: number }) {
+    // Emissão centralizada (regras, idempotência, snapshot, auditoria). Sem regra
+    // configurada para o curso aplica-se a regra implícita "100% concluído".
+    return this.certificates.issue({
+      userId: enrollment.userId,
+      activityKind: 'COURSE',
+      activityId: enrollment.courseId,
+      trigger: 'AUTO',
     });
-    if (existing) return existing;
-
-    const validityDays = enrollment.course?.certificateValidityDays ?? null;
-    const expiresAt = validityDays ? new Date(Date.now() + validityDays * 86400 * 1000) : null;
-
-    try {
-      return await this.prisma.certificate.create({
-        data: {
-          enrollmentId: enrollment.id,
-          userId: enrollment.userId,
-          courseId: enrollment.courseId,
-          type: CertificateType.COURSE,
-          validationCode: `CERT-${enrollment.courseId}-${enrollment.userId}-${Date.now()}`,
-          issuedAt: new Date(),
-          expiresAt,
-        },
-      });
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        return this.prisma.certificate.findFirst({ where: { enrollmentId: enrollment.id } });
-      }
-      throw e;
-    }
   }
 }

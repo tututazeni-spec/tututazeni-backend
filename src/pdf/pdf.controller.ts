@@ -41,26 +41,7 @@ export class PdfController {
     res.end(buffer);
   }
 
-  // A10-20: mesma ressalva — ownership obrigatório antes de ligar a dados reais.
-  @Get('certificate/:id')
-  @ApiOperation({ summary: 'Exportar certificado em PDF' })
-  async downloadCertificate(@Param('id') id: string, @Res() res: Response) {
-    // TODO: buscar dados reais do certificado — adicionar ownership antes de
-    // ligar a dados reais (A10-20).
-    const buffer = await this.pdfService.generateCertificate({
-      employeeName: 'Nome do Colaborador',
-      courseName: 'Nome do Curso',
-      completedAt: new Date().toLocaleDateString('pt-PT'),
-      durationHours: 8,
-    });
-
-    res.set({
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="certificado-${id}.pdf"`,
-      'Content-Length': buffer.length,
-    });
-    res.end(buffer);
-  }
+  // O PDF de certificado vive em GET /certificates/:id/pdf (dados reais + ownership).
 
   // A10-20: recibo de vencimento é dado financeiro sensível — restringido a
   // ADMIN/RH até existir ownership real (assertCanAccess) contra o payslip.

@@ -8,6 +8,7 @@
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CertificatesService } from '../certificates/certificates.service';
 import { CourseCompletionService } from '../course-completion/course-completion.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
@@ -97,6 +98,7 @@ export class CoursesService {
   constructor(
     private prisma: PrismaService,
     private readonly courseCompletion: CourseCompletionService,
+    private readonly certificates: CertificatesService,
   ) {}
 
   // ─── Catálogo ─────────────────────────────────────────────────────────────
@@ -418,7 +420,7 @@ export class CoursesService {
     for (const mod of original.modules) {
       if (mod.requiredModuleId && moduleIdMap.has(mod.requiredModuleId)) {
         await this.prisma.courseModule.update({
-          where: { id: moduleIdMap.get(mod.id)! },
+          where: { id: moduleIdMap.get(mod.id) },
           data: { requiredModuleId: moduleIdMap.get(mod.requiredModuleId) },
         });
       }
@@ -891,11 +893,20 @@ export class CoursesService {
   }
 
   async getCourseProgress(courseId: number, userId: number) {
-    const enrollment = await this.prisma.read.enrollment.findFirst({
+    const found = await this.prisma.read.enrollment.findFirst({
       where: { userId, courseId },
-      include: { certificate: { select: { id: true, code: true, issuedAt: true, fileUrl: true } } },
+      include: {
+        // Reciclagem: o certificado mais recente da matrícula é o que se mostra.
+        certificates: {
+          select: { id: true, code: true, issuedAt: true, fileUrl: true },
+          orderBy: { issuedAt: 'desc' },
+          take: 1,
+        },
+      },
     });
-    if (!enrollment) return null;
+    if (!found) return null;
+    const { certificates, ...rest } = found;
+    const enrollment = { ...rest, certificate: certificates[0] ?? null };
 
     const courseProgress = await this.courseCompletion.getCourseProgressNumbers(courseId, userId);
     const moduleProgress = await this.prisma.read.courseModule.findMany({
@@ -927,27 +938,13 @@ export class CoursesService {
 
   // ─── Certificados ─────────────────────────────────────────────────────────
 
+  // Delegado no módulo de certificados (fonte única de verdade).
   async getMyCertificates(userId: number) {
-    return this.prisma.read.certificate.findMany({
-      where: { userId },
-      include: {
-        course: { select: { id: true, title: true, thumbnailUrl: true, category: true } },
-      },
-      orderBy: { issuedAt: 'desc' },
-    });
+    return this.certificates.listMine(userId);
   }
 
   async verifyCertificate(validationCode: string) {
-    const cert = await this.prisma.read.certificate.findFirst({
-      where: { validationCode },
-      include: {
-        course: { select: { id: true, title: true } },
-        user: { select: { id: true, fullName: true } },
-      },
-    });
-    if (!cert) throw new NotFoundException('Certificado não encontrado ou inválido');
-    const expired = cert.expiresAt ? new Date() > new Date(cert.expiresAt) : false;
-    return { ...cert, valid: !expired };
+    return this.certificates.verifyPublic(validationCode);
   }
 
   // ─── Quiz ─────────────────────────────────────────────────────────────────

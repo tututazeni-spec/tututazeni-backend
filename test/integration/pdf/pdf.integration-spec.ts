@@ -40,7 +40,6 @@ describe('Pdf Integration', () => {
   describe('Autenticação (JwtAuthGuard global)', () => {
     it('sem token → 401 em todas as rotas', async () => {
       await request(app.getHttpServer()).get('/pdf/declaration/1').expect(401);
-      await request(app.getHttpServer()).get('/pdf/certificate/1').expect(401);
       await request(app.getHttpServer()).get('/pdf/payslip/1').expect(401);
       await request(app.getHttpServer()).get('/pdf/report/1').expect(401);
     });
@@ -62,24 +61,6 @@ describe('Pdf Integration', () => {
       expect(res.headers['content-type']).toBe('application/pdf');
       expect(res.headers['content-disposition']).toContain('declaracao-1.pdf');
       expect(Buffer.isBuffer(res.body)).toBe(true);
-      expect(res.body.subarray(0, 5).toString()).toBe('%PDF-');
-    });
-  });
-
-  describe('GET /pdf/certificate/:id — qualquer autenticado', () => {
-    it('colaborador recebe um PDF válido', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/pdf/certificate/2')
-        .set('Authorization', `Bearer ${employeeToken}`)
-        .buffer(true)
-        .parse((res, cb) => {
-          const chunks: Buffer[] = [];
-          res.on('data', c => chunks.push(c));
-          res.on('end', () => cb(null, Buffer.concat(chunks)));
-        })
-        .expect(200);
-
-      expect(res.headers['content-type']).toBe('application/pdf');
       expect(res.body.subarray(0, 5).toString()).toBe('%PDF-');
     });
   });

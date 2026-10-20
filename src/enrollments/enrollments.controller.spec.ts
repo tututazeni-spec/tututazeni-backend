@@ -1,8 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EnrollmentsController } from './enrollments.controller';
 import { EnrollmentsService } from './enrollments.service';
+import { CertificateRecyclingService } from '../certificates/certificate-recycling.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+
+const mockRecycling = { recycle: jest.fn(), listRuns: jest.fn() };
 
 const mockSvc = {
   getUserEnrollments: jest.fn().mockResolvedValue([]),
@@ -30,7 +33,10 @@ describe('EnrollmentsController', () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [EnrollmentsController],
-      providers: [{ provide: EnrollmentsService, useValue: mockSvc }],
+      providers: [
+        { provide: EnrollmentsService, useValue: mockSvc },
+        { provide: CertificateRecyclingService, useValue: mockRecycling },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
@@ -147,5 +153,18 @@ describe('EnrollmentsController', () => {
   it('syncOverdue → syncOverdueStatus', async () => {
     await controller.syncOverdue();
     expect(mockSvc.syncOverdueStatus).toHaveBeenCalled();
+  });
+
+  it('recycle → reciclagem MANUAL com o utilizador como responsável', async () => {
+    await controller.recycle(7, mockUser as any);
+    expect(mockRecycling.recycle).toHaveBeenCalledWith(7, {
+      reason: 'MANUAL',
+      actorId: (mockUser as any).id,
+    });
+  });
+
+  it('runs → listRuns', async () => {
+    await controller.runs(7);
+    expect(mockRecycling.listRuns).toHaveBeenCalledWith(7);
   });
 });

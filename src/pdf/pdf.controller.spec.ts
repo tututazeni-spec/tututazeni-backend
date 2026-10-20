@@ -35,12 +35,6 @@ describe('PdfController', () => {
     expect(mockRes.end).toHaveBeenCalled();
   });
 
-  it('downloadCertificate → generateCertificate + res', async () => {
-    await controller.downloadCertificate('2', mockRes as any);
-    expect(mockSvc.generateCertificate).toHaveBeenCalled();
-    expect(mockRes.end).toHaveBeenCalled();
-  });
-
   it('downloadPayslip → generatePayslip + res', async () => {
     await controller.downloadPayslip('3', mockRes as any);
     expect(mockSvc.generatePayslip).toHaveBeenCalled();
