@@ -8,6 +8,9 @@ import { EmailSettingsService } from '../settings/email-settings.service';
 const escapeHtml = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+const errMsg = (e: unknown) =>
+  e instanceof Error ? e.message : typeof e === 'string' ? e : JSON.stringify(e);
+
 @Injectable()
 export class MailService implements OnModuleInit {
   private readonly logger = new Logger(MailService.name);
@@ -194,7 +197,7 @@ export class MailService implements OnModuleInit {
       this.logger.error({
         to: sanitizeForLog(options.to),
         subject: sanitizeForLog(options.subject),
-        err: { message: err instanceof Error ? err.message : String(err) },
+        err: { message: errMsg(err) },
         msg: 'Falha ao enviar email via SMTP',
       });
       throw err;

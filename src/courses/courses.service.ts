@@ -420,7 +420,7 @@ export class CoursesService {
     for (const mod of original.modules) {
       if (mod.requiredModuleId && moduleIdMap.has(mod.requiredModuleId)) {
         await this.prisma.courseModule.update({
-          where: { id: moduleIdMap.get(mod.id)! },
+          where: { id: moduleIdMap.get(mod.id) },
           data: { requiredModuleId: moduleIdMap.get(mod.requiredModuleId) },
         });
       }
