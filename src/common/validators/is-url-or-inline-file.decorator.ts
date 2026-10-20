@@ -46,12 +46,13 @@ export function inlineFileProblem(value: string, maxBytes: number): string | nul
   if (!(ALLOWED_MIME_TYPES as readonly string[]).includes(m[1])) {
     return `tipo de ficheiro não permitido (${m[1]})`;
   }
+  const tooBig = `o ficheiro excede ${Math.round(maxBytes / (1024 * 1024))} MB`;
+  // Rejeita pelo tamanho antes de percorrer o payload (o padding tira no máximo 2 bytes).
+  if (Math.floor(((value.length - m[0].length) * 3) / 4) - 2 > maxBytes) return tooBig;
   const payload = base64PayloadLength(value, m[0].length);
   if (!payload) return invalid;
   const bytes = Math.floor((payload.length * 3) / 4) - payload.padding;
-  if (bytes > maxBytes) {
-    return `o ficheiro excede ${Math.round(maxBytes / (1024 * 1024))} MB`;
-  }
+  if (bytes > maxBytes) return tooBig;
   return null;
 }
 
