@@ -27,6 +27,7 @@ const mockPrisma = {
     update: jest.fn().mockResolvedValue({}),
   },
   trainingSession: { findUnique: jest.fn() },
+  training: { findUnique: jest.fn().mockResolvedValue(null) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
   userPoints: { upsert: jest.fn().mockResolvedValue({}) },
   certificate: { create: jest.fn().mockResolvedValue({}) },
@@ -324,7 +325,7 @@ describe('TrainingsService — bulkAttendance', () => {
   });
 
   it('marca presentes e ausentes correctamente', async () => {
-    mockPrisma.trainingSession.findUnique.mockResolvedValue({ id: 1 });
+    mockPrisma.trainingSession.findUnique.mockResolvedValue({ id: 1, trainingId: 10 });
     mockPrisma.trainingParticipant.findMany.mockResolvedValue([
       { id: 1, userId: 10 },
       { id: 2, userId: 20 },
