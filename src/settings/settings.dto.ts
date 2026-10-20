@@ -19,7 +19,13 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { CertificateTemplateType, DsrStatus, DsrType, PermissionSubject } from '@prisma/client';
+import {
+  CertificateTemplateType,
+  DsrStatus,
+  DsrType,
+  EmailPolicyMode,
+  PermissionSubject,
+} from '@prisma/client';
 import { EmptyStringToUndefined } from '../common/transformers/empty-string-to-undefined';
 import { POLICY_REQUIRED_FIELD_OPTIONS } from './user-policy';
 import { TWO_FACTOR_MODES } from './security-policy';
@@ -35,6 +41,8 @@ const DATE_FORMATS = ['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'] as const;
 const TIME_FORMATS = ['24h', '12h'] as const;
 const NUMBER_FORMATS = ['pt', 'en'] as const;
 const LANGUAGES = ['pt', 'en', 'es', 'fr'] as const;
+// Único padrão suportado hoje; o campo existe para variantes futuras.
+const EMAIL_PATTERNS = ['{primeiroNome}.{apelido}'] as const;
 
 export class UpdateOrganizationSettingsDto {
   @ApiPropertyOptional({ description: 'Nome do tenant (aparece no cabeçalho do Dashboard)' })
@@ -139,6 +147,27 @@ export class UpdateOrganizationSettingsDto {
   @IsOptional()
   @IsIn(NUMBER_FORMATS)
   numberFormat?: string;
+
+  @ApiPropertyOptional({
+    example: 'carrinho-sa.com',
+    description: 'Domínio de email da organização; string vazia desactiva a regra',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^(@?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+)?$/i, {
+    message: 'Domínio de email inválido (ex.: empresa.com)',
+  })
+  emailDomain?: string;
+
+  @ApiPropertyOptional({ example: '{primeiroNome}.{apelido}' })
+  @IsOptional()
+  @IsIn(EMAIL_PATTERNS)
+  emailPattern?: string;
+
+  @ApiPropertyOptional({ enum: EmailPolicyMode })
+  @IsOptional()
+  @IsEnum(EmailPolicyMode)
+  emailPolicyMode?: EmailPolicyMode;
 }
 
 export class UpdateUserPolicyDto {

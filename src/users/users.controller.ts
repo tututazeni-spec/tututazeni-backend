@@ -124,6 +124,16 @@ export class UsersController {
     return this.svc.getModuleAuditLogs(filters);
   }
 
+  // Rota estática — antes de ':id'.
+  @Get('email-check')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Sugestão e validação de email conforme o formato do tenant' })
+  @ApiQuery({ name: 'fullName', required: true })
+  @ApiQuery({ name: 'email', required: false })
+  emailCheck(@Query('fullName') fullName = '', @Query('email') email?: string) {
+    return this.svc.checkEmail(fullName, email);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Perfil completo de um utilizador' })
   findOne(@Param('id', ParseIntPipe) id: number) {

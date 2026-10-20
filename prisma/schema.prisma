@@ -478,6 +478,11 @@ enum GapPriority {
   HIGH
 }
 
+enum EmailPolicyMode {
+  SUGGEST
+  ENFORCE
+}
+
 enum TenantPlan {
   STARTER
   GROWTH
@@ -8688,6 +8693,10 @@ model TenantConfig {
   whatsappSettingsJson     String?
   backupSettingsJson       String?
   systemSettingsJson       String?
+  // ─── Formato de email por tenant (docs/innova-formato-email-carrinho-sa.md) ───
+  emailDomain              String?
+  emailPattern             String                    @default("{primeiroNome}.{apelido}")
+  emailPolicyMode          EmailPolicyMode           @default(SUGGEST)
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
   integrations             IntegrationConfig[]

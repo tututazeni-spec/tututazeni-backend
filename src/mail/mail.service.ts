@@ -189,9 +189,18 @@ export class MailService implements OnModuleInit {
       return;
     }
     try {
-      await transporter.sendMail({
+      const info = await transporter.sendMail({
         from: from ?? process.env.SMTP_FROM ?? 'INNOVA <noreply@innova.ao>',
         ...options,
+      });
+      // Resultado de cada envio, para diagnóstico de entrega (ID atribuído pelo servidor SMTP).
+      this.logger.log({
+        to: sanitizeForLog(options.to),
+        subject: sanitizeForLog(options.subject),
+        messageId: sanitizeForLog(info?.messageId),
+        accepted: info?.accepted?.length ?? 0,
+        rejected: info?.rejected?.length ?? 0,
+        msg: 'Email enviado',
       });
     } catch (err: unknown) {
       this.logger.error({
