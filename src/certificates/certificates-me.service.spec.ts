@@ -48,7 +48,7 @@ describe('CertificatesMeService', () => {
     enrollment: { findMany: jest.fn() },
     user: { findUnique: jest.fn() },
   };
-  const mail = { isConfigured: jest.fn(), sendNotification: jest.fn() };
+  const mail = { isConfigured: jest.fn(), sendCertificateLink: jest.fn() };
   const audit = { log: jest.fn() };
   const svc = new CertificatesMeService(prisma as never, mail as never, audit as never);
   const now = new Date('2026-10-20T10:00:00Z');
@@ -56,7 +56,7 @@ describe('CertificatesMeService', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     mail.isConfigured.mockResolvedValue(true);
-    mail.sendNotification.mockResolvedValue(undefined);
+    mail.sendCertificateLink.mockResolvedValue(undefined);
     prisma.certificate.findMany.mockResolvedValue([]);
     prisma.enrollment.findMany.mockResolvedValue([]);
   });
@@ -135,7 +135,7 @@ describe('CertificatesMeService', () => {
     it('certificado de outro titular → 404 e nada é enviado', async () => {
       prisma.certificate.findUnique.mockResolvedValue(own({ userId: 99 }));
       await expect(svc.emailMe(5, { id: 42 })).rejects.toBeInstanceOf(NotFoundException);
-      expect(mail.sendNotification).not.toHaveBeenCalled();
+      expect(mail.sendCertificateLink).not.toHaveBeenCalled();
     });
 
     it('certificado inexistente → 404', async () => {
@@ -152,18 +152,19 @@ describe('CertificatesMeService', () => {
       prisma.certificate.findUnique.mockResolvedValue(own());
       mail.isConfigured.mockResolvedValue(false);
       await expect(svc.emailMe(5, { id: 42 })).rejects.toThrow(/e-mail não está configurado/i);
-      expect(mail.sendNotification).not.toHaveBeenCalled();
+      expect(mail.sendCertificateLink).not.toHaveBeenCalled();
     });
 
     it('envia sempre para o e-mail do próprio titular, lido da BD, com a ligação de verificação', async () => {
       prisma.certificate.findUnique.mockResolvedValue(own());
-      prisma.user.findUnique.mockResolvedValue({ email: 'ana@innova.com' });
+      prisma.user.findUnique.mockResolvedValue({ email: 'ana@innova.com', fullName: 'Ana' });
       expect(await svc.emailMe(5, { id: 42 })).toEqual({ emailed: true });
       expect(prisma.user.findUnique).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 42 } }),
       );
-      expect(mail.sendNotification).toHaveBeenCalledWith(
+      expect(mail.sendCertificateLink).toHaveBeenCalledWith(
         'ana@innova.com',
+        expect.any(String),
         expect.stringContaining('Segurança'),
         expect.stringContaining('/verify/ABCD1234EFGH5678'),
       );
@@ -174,8 +175,8 @@ describe('CertificatesMeService', () => {
 
     it('falha de SMTP no envio → 502 claro (não diz que enviou nem devolve 500)', async () => {
       prisma.certificate.findUnique.mockResolvedValue(own());
-      prisma.user.findUnique.mockResolvedValue({ email: 'ana@innova.com' });
-      mail.sendNotification.mockRejectedValue(new Error('smtp'));
+      prisma.user.findUnique.mockResolvedValue({ email: 'ana@innova.com', fullName: 'Ana' });
+      mail.sendCertificateLink.mockRejectedValue(new Error('smtp'));
       await expect(svc.emailMe(5, { id: 42 })).rejects.toBeInstanceOf(BadGatewayException);
       expect(audit.log).not.toHaveBeenCalled();
     });

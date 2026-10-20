@@ -42,8 +42,8 @@ describe('CertificatesTeamService', () => {
         cert(2, { status: 'PENDING_APPROVAL' }),
       ]);
       prisma.enrollment.findMany.mockResolvedValue([
-        { userId: 2, status: 'IN_PROGRESS', mandatory: true, certificate: null },
-        { userId: 1, status: 'IN_PROGRESS', mandatory: false, certificate: null },
+        { userId: 2, status: 'IN_PROGRESS', mandatory: true, certificates: [] },
+        { userId: 1, status: 'IN_PROGRESS', mandatory: false, certificates: [] },
       ]);
       const r = await svc.teamSummary(manager, undefined, now);
       const ana = r.members.find(m => m.userId === 1)!;
@@ -73,8 +73,8 @@ describe('CertificatesTeamService', () => {
 
     it('obrigatória cancelada ou expirada não conta como em falta', async () => {
       prisma.enrollment.findMany.mockResolvedValue([
-        { userId: 1, status: 'CANCELLED', mandatory: true, certificate: null },
-        { userId: 1, status: 'EXPIRED', mandatory: true, certificate: null },
+        { userId: 1, status: 'CANCELLED', mandatory: true, certificates: [] },
+        { userId: 1, status: 'EXPIRED', mandatory: true, certificates: [] },
       ]);
       expect((await svc.teamSummary(manager, undefined, now)).totals.mandatoryPending).toBe(0);
     });
@@ -85,9 +85,9 @@ describe('CertificatesTeamService', () => {
           userId: 1,
           status: 'COMPLETED',
           mandatory: true,
-          certificate: { status: 'ACTIVE', revoked: false, expiresAt: null },
+          certificates: [{ status: 'ACTIVE', revoked: false, expiresAt: null }],
         },
-        { userId: 2, status: 'IN_PROGRESS', mandatory: true, certificate: null },
+        { userId: 2, status: 'IN_PROGRESS', mandatory: true, certificates: [] },
       ]);
       expect((await svc.teamSummary(manager, undefined, now)).totals.mandatoryCoveragePct).toBe(50);
     });

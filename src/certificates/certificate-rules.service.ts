@@ -18,8 +18,7 @@ export interface CertificateRuleView {
   updatedAt: Date;
 }
 
-// O CertificateFactsService só sabe recolher factos de cursos e eventos.
-const SUPPORTED_KINDS: CertificateActivityKind[] = ['COURSE', 'EVENT'];
+const SUPPORTED_KINDS: CertificateActivityKind[] = ['COURSE', 'EVENT', 'TRAINING', 'LEARNING_PATH'];
 
 function parseCriteria(raw: string): RuleCriteria {
   try {
@@ -51,7 +50,9 @@ export class CertificateRulesService {
     const rules = await this.prisma.certificateRule.findMany({ orderBy: { updatedAt: 'desc' } });
     const courseIds = rules.filter(r => r.activityKind === 'COURSE').map(r => r.activityId);
     const eventIds = rules.filter(r => r.activityKind === 'EVENT').map(r => r.activityId);
-    const [courses, events] = await Promise.all([
+    const trainingIds = rules.filter(r => r.activityKind === 'TRAINING').map(r => r.activityId);
+    const pathIds = rules.filter(r => r.activityKind === 'LEARNING_PATH').map(r => r.activityId);
+    const [courses, events, trainings, paths] = await Promise.all([
       this.prisma.course.findMany({
         where: { id: { in: courseIds } },
         select: { id: true, title: true },
@@ -60,10 +61,20 @@ export class CertificateRulesService {
         where: { id: { in: eventIds } },
         select: { id: true, title: true },
       }),
+      this.prisma.training.findMany({
+        where: { id: { in: trainingIds } },
+        select: { id: true, title: true },
+      }),
+      this.prisma.learningPath.findMany({
+        where: { id: { in: pathIds } },
+        select: { id: true, title: true },
+      }),
     ]);
     const titles = new Map<string, string>([
       ...courses.map(c => [`COURSE:${c.id}`, c.title] as [string, string]),
       ...events.map(e => [`EVENT:${e.id}`, e.title] as [string, string]),
+      ...trainings.map(t => [`TRAINING:${t.id}`, t.title] as [string, string]),
+      ...paths.map(p => [`LEARNING_PATH:${p.id}`, p.title] as [string, string]),
     ]);
     return rules.map(r => ({
       id: r.id,
@@ -81,23 +92,22 @@ export class CertificateRulesService {
 
   async upsertRule(dto: UpsertCertificateRuleDto, actorId: number): Promise<CertificateRuleView> {
     if (!SUPPORTED_KINDS.includes(dto.activityKind)) {
-      throw new BadRequestException('Só cursos e eventos suportam regras de emissão por agora');
+      throw new BadRequestException('Este tipo de atividade não suporta regras de emissão');
     }
     const criteria = activeCriteria(dto.criteria);
     if (Object.keys(criteria).length === 0) {
       throw new BadRequestException('Defina pelo menos um critério de emissão');
     }
 
+    const lookup = { where: { id: dto.activityId }, select: { id: true } };
     const exists =
       dto.activityKind === 'COURSE'
-        ? await this.prisma.course.findUnique({
-            where: { id: dto.activityId },
-            select: { id: true },
-          })
-        : await this.prisma.event.findUnique({
-            where: { id: dto.activityId },
-            select: { id: true },
-          });
+        ? await this.prisma.course.findUnique(lookup)
+        : dto.activityKind === 'EVENT'
+          ? await this.prisma.event.findUnique(lookup)
+          : dto.activityKind === 'TRAINING'
+            ? await this.prisma.training.findUnique(lookup)
+            : await this.prisma.learningPath.findUnique(lookup);
     if (!exists) throw new NotFoundException('Atividade não encontrada');
 
     if (dto.templateId) {

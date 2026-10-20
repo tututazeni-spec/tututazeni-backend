@@ -72,7 +72,7 @@ const baseEnrollment: any = {
     workloadHours: 10,
     status: 'PUBLISHED',
   },
-  certificate: null,
+  certificates: [],
   progresses: [],
 };
 

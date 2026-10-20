@@ -19,7 +19,8 @@ describe('CertificateExpiryService', () => {
     certificate: { updateMany: jest.fn(), findMany: jest.fn() },
     notificationLog: { create: jest.fn() },
   };
-  const svc = new CertificateExpiryService(prisma as never);
+  const recycling = { runAutomatic: jest.fn() };
+  const svc = new CertificateExpiryService(prisma as never, recycling as never);
   const now = new Date('2026-10-20T07:00:00Z');
   const row = (id: number, managerId: number | null = 50) => ({
     id,
@@ -35,6 +36,7 @@ describe('CertificateExpiryService', () => {
     prisma.certificate.updateMany.mockResolvedValue({ count: 1 });
     prisma.certificate.findMany.mockResolvedValue([]);
     prisma.notificationLog.create.mockResolvedValue({});
+    recycling.runAutomatic.mockResolvedValue({ started: 0 });
   });
 
   it('marca como EXPIRED os válidos com validade ultrapassada e conta-os', async () => {
@@ -115,5 +117,12 @@ describe('CertificateExpiryService', () => {
     prisma.certificate.updateMany.mockResolvedValue({ count: 0 });
     await svc.runExpiryJob(now);
     expect(prisma.certificate.findMany.mock.calls.length).toBeLessThanOrEqual(2);
+  });
+
+  it('abre a reciclagem automática depois de expirar e alertar', async () => {
+    recycling.runAutomatic.mockResolvedValueOnce({ started: 3 });
+    const r = await svc.runExpiryJob(now);
+    expect(r.recycled).toBe(3);
+    expect(recycling.runAutomatic).toHaveBeenCalledWith(now);
   });
 });

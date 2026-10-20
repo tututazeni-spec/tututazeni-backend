@@ -8,6 +8,7 @@ import { Test } from '@nestjs/testing';
 import { CourseCompletionService } from './course-completion.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
+import { LearningPathCertificationService } from '../certificates/learning-path-certification.service';
 import { GamificationService } from '../gamification/gamification.service';
 
 // A decisão de conclusão passou a ler da primária (regressão evitada da antiga
@@ -57,6 +58,10 @@ describe('CourseCompletionService', () => {
         CourseCompletionService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: CertificateIssuanceService, useValue: mockCertificates },
+        {
+          provide: LearningPathCertificationService,
+          useValue: { onCourseCompleted: jest.fn().mockResolvedValue([]) },
+        },
         { provide: GamificationService, useValue: mockGamification },
       ],
     }).compile();

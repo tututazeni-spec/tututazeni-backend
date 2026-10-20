@@ -14,6 +14,8 @@ import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
 import { AuditService } from '../common/services/audit.service';
 import { CompetenciesService } from '../competencies/competencies.service';
+import { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
+import { LearningPathCertificationService } from '../certificates/learning-path-certification.service';
 import {
   CreateTrainingDto,
   UpdateTrainingDto,
@@ -23,6 +25,7 @@ import {
   RegisterParticipantDto,
   TrainingsUpdateParticipantStatusDto,
   BulkAttendanceDto,
+  BulkCompleteParticipantsDto,
   RateTrainingDto,
   RejectParticipantDto,
   NotifyTrainingDto,
@@ -51,6 +54,8 @@ export class TrainingService {
     private prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly competencies: CompetenciesService,
+    private readonly certificates: CertificateIssuanceService,
+    private readonly learningPaths: LearningPathCertificationService,
   ) {}
 
   // ─── HISTÓRICO (docs/trainings-detalhado.md pt.11 — aba "Histórico") ──────
@@ -304,6 +309,8 @@ export class TrainingService {
         mandatory: data.mandatory ?? false,
         passingScore: data.passingScore ?? 70,
         issueCertificate: data.issueCertificate ?? false,
+        completionMode: data.completionMode,
+        minAttendancePercent: data.minAttendancePercent,
         cost: data.cost,
         startDate: data.startDate ? new Date(data.startDate) : null,
         endDate: data.endDate ? new Date(data.endDate) : null,
@@ -783,14 +790,19 @@ export class TrainingService {
       );
     }
 
-    // Emitir certificado automaticamente se COMPLETED e passou
+    // Emissão centralizada: a regra (formação com `issueCertificate`), a nota mínima e a
+    // idempotência são revalidadas no servidor a partir da BD.
+    // Nos modos ATTENDANCE/HYBRID a presença registada também pode tornar o participante elegível.
+    if (
+      dto.status === 'ATTENDED' &&
+      training &&
+      training.completionMode !== 'MANUAL' &&
+      training.issueCertificate
+    ) {
+      await this.issueCertificate(p.userId, training.id, actorId);
+    }
     if (dto.status === 'COMPLETED') {
-      if (training?.issueCertificate) {
-        const score = dto.finalScore ?? 100;
-        if (score >= (training.passingScore ?? 70)) {
-          await this.issueCertificate(p.userId, p.sessionId, score);
-        }
-      }
+      if (training) await this.issueCertificate(p.userId, training.id, actorId);
 
       // docs/trainings-detalhado.md — Fluxo completo: Conclusão →
       // Certificação → Competências → PDI/Carreira (ver comentário em
@@ -826,6 +838,29 @@ export class TrainingService {
     }
 
     return updated;
+  }
+
+  /** Marca vários participantes como concluídos; cada um é tratado à parte (um erro não perde os outros). */
+  async bulkComplete(dto: BulkCompleteParticipantsDto, actorId: number) {
+    const results: { participantId: number; ok: boolean; error?: string }[] = [];
+    for (const participantId of dto.participantIds) {
+      try {
+        await this.updateParticipantStatus(
+          participantId,
+          { status: 'COMPLETED', finalScore: dto.finalScore },
+          actorId,
+        );
+        results.push({ participantId, ok: true });
+      } catch (e) {
+        results.push({
+          participantId,
+          ok: false,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+    const completed = results.filter(r => r.ok).length;
+    return { total: results.length, completed, failed: results.length - completed, results };
   }
 
   // ─── PRESENÇA EM MASSA ────────────────────────────────────────────────────
@@ -873,6 +908,19 @@ export class TrainingService {
           msg: 'Falha ao registar notificação de presença em massa',
         }),
       );
+
+    // Nos modos ATTENDANCE/HYBRID a presença pode completar os critérios da formação.
+    const training = await this.prisma.read.training.findUnique({
+      where: { id: session.trainingId },
+      select: { completionMode: true, issueCertificate: true },
+    });
+    if (training && training.completionMode !== 'MANUAL' && training.issueCertificate) {
+      for (const p of participants) {
+        if (presentSet.has(p.userId)) {
+          await this.issueCertificate(p.userId, session.trainingId, registrarId);
+        }
+      }
+    }
 
     this.logHistory('BULK_ATTENDANCE', session.trainingId, registrarId, {
       sessionId: dto.sessionId,
@@ -1191,45 +1239,27 @@ export class TrainingService {
 
   // ─── CERTIFICADO ──────────────────────────────────────────────────────────
 
-  private async issueCertificate(userId: number, sessionId: number, score: number) {
-    const code = `CERT-${Date.now()}-${userId}-${sessionId}`;
-    await this.prisma.certificate
-      .create({
-        data: {
-          userId,
-          type: 'TRAINING',
-          validationCode: code,
-          fileUrl: `/certificates/${code}.pdf`,
-        },
-      })
-      .catch(e =>
-        this.logger.error({
-          userId,
-          sessionId,
-          action: 'CERTIFICATE_ISSUE',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao emitir certificado de treinamento',
-        }),
-      );
-
-    await this.prisma.notificationLog
-      .create({
-        data: {
-          userId,
-          type: 'CERTIFICATE_ISSUED',
-          message: `🏆 Certificado emitido! Nota: ${score}%`,
-          metadata: JSON.stringify({}),
-        },
-      })
-      .catch(e =>
-        this.logger.warn({
-          userId,
-          sessionId,
-          action: 'CERTIFICATE_ISSUED',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao notificar emissão de certificado',
-        }),
-      );
+  /** Nunca falha a conclusão: um erro de emissão fica registado e a reconciliação recupera-o. */
+  private async issueCertificate(userId: number, trainingId: number, actorId?: number) {
+    try {
+      await this.certificates.issue({
+        userId,
+        activityKind: 'TRAINING',
+        activityId: trainingId,
+        actorId,
+        trigger: 'AUTO',
+      });
+      // A formação pode ser a última unidade obrigatória de uma trilha.
+      await this.learningPaths.onTrainingCompleted(userId, trainingId);
+    } catch (e) {
+      this.logger.error({
+        userId,
+        trainingId,
+        action: 'CERTIFICATE_ISSUE',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao emitir certificado de treinamento',
+      });
+    }
   }
 
   // ─── RATING ───────────────────────────────────────────────────────────────
@@ -1303,7 +1333,7 @@ export class TrainingService {
   // partia o fluxo já existente de um GESTOR gerir presenças de formações
   // criadas por RH (ver test/integration/trainings).
   async getSessionParticipants(sessionId: number) {
-    return this.prisma.read.trainingParticipant.findMany({
+    const rows = await this.prisma.read.trainingParticipant.findMany({
       where: { sessionId },
       include: {
         user: {
@@ -1319,6 +1349,29 @@ export class TrainingService {
       },
       orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
     });
+    if (rows.length === 0) return rows.map(p => ({ ...p, certificate: null }));
+
+    // Certificado da formação de cada participante (a lista só mostra o mais recente).
+    const session = await this.prisma.read.trainingSession.findUnique({
+      where: { id: sessionId },
+      select: { trainingId: true },
+    });
+    const certs = session
+      ? await this.prisma.read.certificate.findMany({
+          where: {
+            activityKind: 'TRAINING',
+            activityId: session.trainingId,
+            deletedAt: null,
+            userId: { in: rows.map(p => p.userId) },
+          },
+          select: { id: true, userId: true, status: true },
+          orderBy: { issuedAt: 'desc' },
+        })
+      : [];
+    return rows.map(p => ({
+      ...p,
+      certificate: certs.find(c => c.userId === p.userId) ?? null,
+    }));
   }
 
   // docs/trainings-detalhado.md pt.6 — "exportar participantes". Agrega

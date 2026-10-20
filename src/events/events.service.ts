@@ -48,6 +48,9 @@ import { CurrentUserData } from '../common/types/current-user';
 // departamento restrito nem no catálogo nem em /events/upcoming.
 const DEPT_FILTER_BYPASS_ROLES = new Set(['ADMIN', 'RH']);
 
+const errMsg = (e: unknown) =>
+  e instanceof Error ? e.message : typeof e === 'string' ? e : JSON.stringify(e);
+
 @Injectable()
 export class EventsService {
   private readonly logger = new Logger(EventsService.name);
@@ -285,7 +288,7 @@ export class EventsService {
             action: 'EVENT_CANCELLED_NOTIFY',
             entityId: id,
             participantCount: participants.length,
-            err: { message: e instanceof Error ? e.message : String(e) },
+            err: { message: errMsg(e) },
             msg: 'Falha ao notificar participantes sobre cancelamento do evento',
           });
         });
@@ -387,7 +390,7 @@ export class EventsService {
           userId,
           action: 'EVENT_JOIN_NOTIFY',
           entityId: eventId,
-          err: { message: e instanceof Error ? e.message : String(e) },
+          err: { message: errMsg(e) },
           msg: 'Falha ao notificar utilizador sobre inscrição no evento',
         });
       });
@@ -404,7 +407,7 @@ export class EventsService {
           userId,
           action: 'EVENT_JOIN_POINTS',
           entityId: eventId,
-          err: { message: e instanceof Error ? e.message : String(e) },
+          err: { message: errMsg(e) },
           msg: 'Falha ao atribuir pontos de gamificação por inscrição em evento',
         });
       });
@@ -468,7 +471,7 @@ export class EventsService {
           userId: nextOnWaitlist.userId,
           action: 'EVENT_WAITLIST_PROMOTED_NOTIFY',
           entityId: eventId,
-          err: { message: e instanceof Error ? e.message : String(e) },
+          err: { message: errMsg(e) },
           msg: 'Falha ao notificar utilizador promovido da lista de espera',
         });
       });
@@ -612,7 +615,7 @@ export class EventsService {
         });
         added.push(userId);
       } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : String(e);
+        const message = errMsg(e);
         errors.push({ userId, error: message });
         this.logger.warn(`addParticipants erro user ${userId} evento ${eventId}: ${message}`);
       }
@@ -659,7 +662,7 @@ export class EventsService {
           userId,
           action: 'EVENT_PARTICIPANT_APPROVE_NOTIFY',
           entityId: eventId,
-          err: { message: e instanceof Error ? e.message : String(e) },
+          err: { message: errMsg(e) },
           msg: 'Falha ao notificar aprovação de inscrição',
         });
       });
@@ -695,7 +698,7 @@ export class EventsService {
           userId,
           action: 'EVENT_PARTICIPANT_REJECT_NOTIFY',
           entityId: eventId,
-          err: { message: e instanceof Error ? e.message : String(e) },
+          err: { message: errMsg(e) },
           msg: 'Falha ao notificar rejeição de inscrição',
         });
       });
@@ -734,7 +737,7 @@ export class EventsService {
           userId,
           action: 'EVENT_PARTICIPANT_ADMIN_CANCEL_NOTIFY',
           entityId: eventId,
-          err: { message: e instanceof Error ? e.message : String(e) },
+          err: { message: errMsg(e) },
           msg: 'Falha ao notificar cancelamento administrativo de inscrição',
         });
       });
@@ -812,7 +815,7 @@ export class EventsService {
           userId,
           action: 'EVENT_CHECKIN_POINTS',
           entityId: dto.eventId,
-          err: { message: e instanceof Error ? e.message : String(e) },
+          err: { message: errMsg(e) },
           msg: 'Falha ao atribuir pontos de gamificação por check-in em evento',
         });
       });
@@ -1069,7 +1072,7 @@ export class EventsService {
           userId,
           action: 'EVENT_FEEDBACK_POINTS',
           entityId: eventId,
-          err: { message: e instanceof Error ? e.message : String(e) },
+          err: { message: errMsg(e) },
           msg: 'Falha ao atribuir pontos de gamificação por feedback de evento',
         });
       });
@@ -1080,7 +1083,7 @@ export class EventsService {
         userId,
         action: 'EVENT_AUTO_ISSUE_CERTIFICATE',
         entityId: eventId,
-        err: { message: e instanceof Error ? e.message : String(e) },
+        err: { message: errMsg(e) },
         msg: 'Falha ao emitir certificado automático após feedback de evento',
       });
     });
@@ -2033,7 +2036,7 @@ export class EventsService {
       this.logger.warn({
         userId,
         channel: ch,
-        err: { message: e instanceof Error ? e.message : String(e) },
+        err: { message: errMsg(e) },
         msg: `Falha ao entregar comunicação de evento por ${ch} — registo interno já será criado`,
       });
 

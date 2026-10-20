@@ -9,6 +9,8 @@ describe('CertificateIssuanceService', () => {
   const prisma = {
     certificateRule: { findUnique: jest.fn() },
     course: { findUnique: jest.fn() },
+    training: { findUnique: jest.fn() },
+    trainingSession: { findMany: jest.fn() },
     enrollment: { findUnique: jest.fn() },
     user: { findUnique: jest.fn() },
     certificate: {
@@ -22,11 +24,13 @@ describe('CertificateIssuanceService', () => {
   const facts = { collect: jest.fn() };
   const audit = { log: jest.fn() };
   const templates = { resolveForIssuance: jest.fn() };
+  const mail = { sendCertificateLink: jest.fn() };
   const svc = new CertificateIssuanceService(
     prisma as never,
     facts as never,
     audit as never,
     templates as never,
+    mail as never,
   );
   const tpl = (id = 'tpl-1-corporativo-classico', version = 1) => ({
     id,
@@ -62,6 +66,7 @@ describe('CertificateIssuanceService', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     prisma.certificate.findFirst.mockResolvedValue(null);
+    prisma.trainingSession.findMany.mockResolvedValue([]);
     prisma.enrollment.findUnique.mockResolvedValue({ id: 55 });
     prisma.user.findUnique.mockResolvedValue({ fullName: 'Ana Silva' });
     prisma.certificate.create.mockImplementation(async ({ data }) => ({ id: 1, ...data }));
@@ -69,11 +74,95 @@ describe('CertificateIssuanceService', () => {
     templates.resolveForIssuance.mockResolvedValue(tpl());
   });
 
-  it('TRAINING sem regra → NO_RULE e nada é criado', async () => {
+  it('TRAINING sem regra e com issueCertificate desligado → NO_RULE e nada é criado', async () => {
     prisma.certificateRule.findUnique.mockResolvedValue(null);
+    prisma.training.findUnique.mockResolvedValue({ issueCertificate: false });
     const r = await svc.issue({ ...input, activityKind: 'TRAINING' });
     expect(r.outcome).toBe('NO_RULE');
     expect(prisma.certificate.create).not.toHaveBeenCalled();
+  });
+
+  it('TRAINING sem regra mas com issueCertificate → regra implícita de conclusão', async () => {
+    prisma.certificateRule.findUnique.mockResolvedValue(null);
+    prisma.training.findUnique.mockResolvedValue({ issueCertificate: true });
+    facts.collect.mockResolvedValue(goodFacts({ bestScore: null }));
+    const r = await svc.issue({ ...input, activityKind: 'TRAINING', activityId: 3 });
+    expect(r.outcome).toBe('ISSUED');
+    expect(prisma.certificate.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: 'TRAINING',
+          activityKind: 'TRAINING',
+          activityId: 3,
+          dedupKey: '1:TRAINING:3:1',
+        }),
+      }),
+    );
+  });
+
+  it('TRAINING por concluir → NOT_ELIGIBLE (COMPLETION_INCOMPLETE)', async () => {
+    prisma.certificateRule.findUnique.mockResolvedValue(null);
+    prisma.training.findUnique.mockResolvedValue({ issueCertificate: true });
+    facts.collect.mockResolvedValue(goodFacts({ completionPct: 0 }));
+    const r = await svc.issue({ ...input, activityKind: 'TRAINING', activityId: 3 });
+    expect(r).toEqual({ outcome: 'NOT_ELIGIBLE', missing: ['COMPLETION_INCOMPLETE'] });
+  });
+
+  it('TRAINING já com certificado (mesma dedupKey) → EXISTS, sem duplicar', async () => {
+    prisma.certificateRule.findUnique.mockResolvedValue(null);
+    prisma.training.findUnique.mockResolvedValue({ issueCertificate: true });
+    prisma.certificate.findFirst.mockResolvedValue({ id: 9 });
+    const r = await svc.issue({ ...input, activityKind: 'TRAINING', activityId: 3 });
+    expect(r.outcome).toBe('EXISTS');
+    expect(prisma.certificate.create).not.toHaveBeenCalled();
+  });
+
+  it('TRAINING com certificado do atalho antigo (CERT-...-user-sessão) → EXISTS', async () => {
+    prisma.certificateRule.findUnique.mockResolvedValue(null);
+    prisma.training.findUnique.mockResolvedValue({ issueCertificate: true });
+    prisma.trainingSession.findMany.mockResolvedValue([{ id: 41 }, { id: 42 }]);
+    prisma.certificate.findFirst.mockResolvedValue({ id: 3, validationCode: 'CERT-1-1-42' });
+
+    const r = await svc.issue({ ...input, activityKind: 'TRAINING', activityId: 3 });
+
+    expect(r.outcome).toBe('EXISTS');
+    expect(prisma.certificate.findFirst).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        OR: expect.arrayContaining([
+          expect.objectContaining({
+            userId: 1,
+            activityKind: null,
+            OR: [
+              { validationCode: { endsWith: '-1-41' } },
+              { validationCode: { endsWith: '-1-42' } },
+            ],
+          }),
+        ]),
+      }),
+    });
+    expect(prisma.certificate.create).not.toHaveBeenCalled();
+  });
+
+  it('LEARNING_PATH sem regra → regra implícita de conclusão total', async () => {
+    prisma.certificateRule.findUnique.mockResolvedValue(null);
+    facts.collect.mockResolvedValue(goodFacts({ bestScore: null }));
+    const r = await svc.issue({ ...input, activityKind: 'LEARNING_PATH', activityId: 5 });
+    expect(r.outcome).toBe('ISSUED');
+    expect(prisma.certificate.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          activityKind: 'LEARNING_PATH',
+          dedupKey: '1:LEARNING_PATH:5:1',
+        }),
+      }),
+    );
+  });
+
+  it('LEARNING_PATH incompleta → NOT_ELIGIBLE', async () => {
+    prisma.certificateRule.findUnique.mockResolvedValue(null);
+    facts.collect.mockResolvedValue(goodFacts({ completionPct: 67 }));
+    const r = await svc.issue({ ...input, activityKind: 'LEARNING_PATH', activityId: 5 });
+    expect(r.outcome).toBe('NOT_ELIGIBLE');
   });
 
   it('regra desactivada → NO_RULE', async () => {
@@ -117,6 +206,31 @@ describe('CertificateIssuanceService', () => {
         strict: true,
       }),
     );
+  });
+
+  it('emissão envia o e-mail só com a ligação de verificação', async () => {
+    prisma.certificateRule.findUnique.mockResolvedValue(rule());
+    prisma.certificate.findUnique.mockResolvedValue({
+      validationCode: 'ABCD1234EFGH5678',
+      user: { email: 'ana@x.com', fullName: 'Ana Silva' },
+    });
+    await svc.issue(input);
+    expect(mail.sendCertificateLink).toHaveBeenCalledWith(
+      'ana@x.com',
+      'Ana Silva',
+      'Segurança',
+      expect.stringContaining('/verify/ABCD1234EFGH5678'),
+    );
+  });
+
+  it('falha de SMTP na emissão não falha a emissão', async () => {
+    prisma.certificateRule.findUnique.mockResolvedValue(rule());
+    prisma.certificate.findUnique.mockResolvedValue({
+      validationCode: 'ABCD1234EFGH5678',
+      user: { email: 'ana@x.com', fullName: 'Ana Silva' },
+    });
+    mail.sendCertificateLink.mockRejectedValue(new Error('smtp'));
+    expect((await svc.issue(input)).outcome).toBe('ISSUED');
   });
 
   it('snapshot não inclui score quando não há nota', async () => {

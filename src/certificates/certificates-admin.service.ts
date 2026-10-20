@@ -134,7 +134,7 @@ export class CertificatesAdminService {
         where: {
           mandatory: true,
           status: 'COMPLETED',
-          certificate: { is: activeWhere(now) },
+          certificates: { some: activeWhere(now) },
           ...holder,
         },
       }),

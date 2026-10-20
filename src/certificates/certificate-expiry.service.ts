@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
+import { CertificateRecyclingService } from './certificate-recycling.service';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 
 const DAY_MS = 86_400_000;
@@ -21,14 +22,17 @@ export function parseAlertDays(raw: string | undefined): number[] {
 /**
  * Expiração diária e alertas de validade. Corre em todas as instâncias da app:
  * a reclamação atómica (updateMany condicional) garante um só alerta por
- * certificado e limiar. A reciclagem não matricula: Enrollment tem
- * @@unique([courseId, userId]), por isso o alerta só encaminha o colaborador.
+ * certificado e limiar. Nos cursos com reciclagem AUTOMATIC o job abre também a nova
+ * realização da matrícula (CertificateRecyclingService); nos restantes o alerta só encaminha.
  */
 @Injectable()
 export class CertificateExpiryService {
   private readonly logger = new Logger(CertificateExpiryService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly recycling: CertificateRecyclingService,
+  ) {}
 
   @Cron('0 7 * * *')
   async scheduled(): Promise<void> {
@@ -43,7 +47,9 @@ export class CertificateExpiryService {
     }
   }
 
-  async runExpiryJob(now: Date = new Date()): Promise<{ markedExpired: number; alerted: number }> {
+  async runExpiryJob(
+    now: Date = new Date(),
+  ): Promise<{ markedExpired: number; alerted: number; recycled: number }> {
     const expired = await this.prisma.certificate.updateMany({
       where: { status: 'ACTIVE', revoked: false, deletedAt: null, expiresAt: { lt: now } },
       data: { status: 'EXPIRED' },
@@ -54,7 +60,9 @@ export class CertificateExpiryService {
     for (const days of parseAlertDays(process.env.CERT_EXPIRY_ALERT_DAYS)) {
       alerted += await this.alertWindow(now, days);
     }
-    return { markedExpired: expired.count, alerted };
+    // Depois do estado EXPIRED e dos alertas: uma falha na reciclagem não os perde.
+    const { started } = await this.recycling.runAutomatic(now);
+    return { markedExpired: expired.count, alerted, recycled: started };
   }
 
   private async alertWindow(now: Date, days: number): Promise<number> {
@@ -123,7 +131,7 @@ export class CertificateExpiryService {
     await createNotificationSafe(this.prisma, this.logger, {
       userId: c.userId,
       type: 'CERTIFICATE_EXPIRING',
-      message: `O seu certificado "${title}" expira a ${date}. Refaça a formação para o renovar.`,
+      message: `O seu certificado "${title}" expira a ${date}. Refaça a formação para o renovar (a reciclagem pode ser iniciada pelo RH ou abrir-se automaticamente).`,
       metadata: { certificateId: c.id, alertDays: days },
     });
     if (c.user?.managerId) {

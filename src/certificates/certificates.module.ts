@@ -7,8 +7,11 @@ import { CertificatesAdminService } from './certificates-admin.service';
 import { CertificateRulesService } from './certificate-rules.service';
 import { CertificateLifecycleService } from './certificate-lifecycle.service';
 import { CertificateExternalService } from './certificate-external.service';
+import { LearningPathCertificationService } from './learning-path-certification.service';
+import { LearningPathProgressService } from './learning-path-progress.service';
 import { CertificateBatchService } from './certificate-batch.service';
 import { CertificateExpiryService } from './certificate-expiry.service';
+import { CertificateRecyclingService } from './certificate-recycling.service';
 import { CertificateScopeService } from './certificate-scope.service';
 import { CertificatesTeamService } from './certificates-team.service';
 import { CertificatesExportService } from './certificates-export.service';
@@ -26,6 +29,8 @@ import { PublicCertificatesController } from './public-certificates.controller';
   providers: [
     CertificateFactsService,
     CertificateIssuanceService,
+    LearningPathCertificationService,
+    LearningPathProgressService,
     CertificatesService,
     CertificatesAdminService,
     CertificateRulesService,
@@ -33,6 +38,7 @@ import { PublicCertificatesController } from './public-certificates.controller';
     CertificateExternalService,
     CertificateBatchService,
     CertificateExpiryService,
+    CertificateRecyclingService,
     CertificateScopeService,
     CertificatesTeamService,
     CertificatesExportService,
@@ -40,6 +46,11 @@ import { PublicCertificatesController } from './public-certificates.controller';
     CertificateAssetsService,
     CertificateTemplatesService,
   ],
-  exports: [CertificateIssuanceService, CertificatesService],
+  exports: [
+    CertificateIssuanceService,
+    LearningPathCertificationService,
+    CertificatesService,
+    CertificateRecyclingService,
+  ],
 })
 export class CertificatesModule {}

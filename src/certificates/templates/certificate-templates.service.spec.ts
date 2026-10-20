@@ -31,7 +31,11 @@ describe('CertificateTemplatesService', () => {
       findMany: jest.fn(),
       findFirst: jest.fn(),
     },
-    certificateTemplateVersion: { createMany: jest.fn(), findMany: jest.fn() },
+    certificateTemplateVersion: {
+      createMany: jest.fn(),
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+    },
     certificateAsset: { findUnique: jest.fn(), findMany: jest.fn() },
     user: { findMany: jest.fn() },
     $transaction: jest.fn(),
@@ -105,8 +109,18 @@ describe('CertificateTemplatesService', () => {
       const r = await svc.get(BUILTIN_TEMPLATES[0].id);
       expect(r.config.layoutKey).toBe('corporativo-classico');
       expect(r.versions).toEqual([
-        { version: 2, createdAt: new Date('2026-10-21'), createdByName: 'Rita RH' },
-        { version: 1, createdAt: new Date('2026-10-20'), createdByName: null },
+        {
+          version: 2,
+          createdAt: new Date('2026-10-21'),
+          createdByName: 'Rita RH',
+          restoredFromVersion: undefined,
+        },
+        {
+          version: 1,
+          createdAt: new Date('2026-10-20'),
+          createdByName: null,
+          restoredFromVersion: undefined,
+        },
       ]);
     });
 
@@ -188,6 +202,75 @@ describe('CertificateTemplatesService', () => {
     it('template desconhecido → 404', async () => {
       prisma.certificateTemplate.findFirst.mockResolvedValue(null);
       await expect(svc.saveVersion('x', cfg(), 9)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('restoreVersion', () => {
+    const id = BUILTIN_TEMPLATES[0].id;
+    const old = () => {
+      const c = cfg();
+      c.texts.title = 'TÍTULO ANTIGO';
+      return { config: JSON.stringify(c) };
+    };
+
+    beforeEach(() => {
+      prisma.certificateTemplate.findFirst.mockResolvedValue(row(0, { currentVersion: 3 }));
+      tx.certificateTemplate.findUnique.mockResolvedValue({ currentVersion: 3 });
+      prisma.certificateTemplateVersion.findUnique.mockResolvedValue(old());
+    });
+
+    it('cria a versão n+1 como cópia da escolhida, com a origem, e audita', async () => {
+      await svc.restoreVersion(id, 1, 9);
+      const data = tx.certificateTemplateVersion.create.mock.calls[0][0].data;
+      expect(data).toMatchObject({
+        templateId: id,
+        version: 4,
+        createdById: 9,
+        restoredFromVersion: 1,
+      });
+      expect(JSON.parse(data.config).texts.title).toBe('TÍTULO ANTIGO');
+      expect(tx.certificateTemplate.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ currentVersion: 4 }) }),
+      );
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'CERTIFICATE_TEMPLATE_RESTORED',
+          userId: 9,
+          strict: true,
+          metadata: { templateId: id, restoredFromVersion: 1, newVersion: 4 },
+        }),
+      );
+    });
+
+    it('versão já actual → 400 e nada é criado', async () => {
+      await expect(svc.restoreVersion(id, 3, 9)).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+
+    it('versão inexistente → 404', async () => {
+      prisma.certificateTemplateVersion.findUnique.mockResolvedValue(null);
+      await expect(svc.restoreVersion(id, 9, 9)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('modelo desconhecido → 404', async () => {
+      prisma.certificateTemplate.findFirst.mockResolvedValue(null);
+      await expect(svc.restoreVersion('x', 1, 9)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('configuração antiga danificada → 400', async () => {
+      prisma.certificateTemplateVersion.findUnique.mockResolvedValue({ config: '{nope' });
+      await expect(svc.restoreVersion(id, 1, 9)).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('imagem entretanto desaparecida → 404 e nada é criado', async () => {
+      const c = cfg();
+      c.assets = { logoId: 'asset12345678' };
+      prisma.certificateTemplateVersion.findUnique.mockResolvedValue({ config: JSON.stringify(c) });
+      prisma.certificateAsset.findUnique.mockResolvedValue(null);
+      await expect(svc.restoreVersion(id, 1, 9)).rejects.toBeInstanceOf(NotFoundException);
+      expect(tx.certificateTemplateVersion.create).not.toHaveBeenCalled();
     });
   });
 

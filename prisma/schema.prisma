@@ -667,10 +667,10 @@ model User {
   hrStatus      HrStatus      @default(ACTIVE)
 
   // ─── RH / Carreira ────────────────────────────────────────────
-  hireDate DateTime?
-  exitDate DateTime?
-  nif      String? // Número de Identificação Fiscal — usado no processamento de recibos de vencimento
-  nib      String? // Número de Identificação Bancária — conta para pagamento de salário
+  hireDate             DateTime?
+  exitDate             DateTime?
+  nif                  String? // Número de Identificação Fiscal — usado no processamento de recibos de vencimento
+  nib                  String? // Número de Identificação Bancária — conta para pagamento de salário
   priorExperienceYears Float? // anos de experiência anterior à empresa; null = nunca preenchido
 
   // ─── Dados Profissionais (docs/modulo_users.md Ponto 2) ────────
@@ -710,46 +710,46 @@ model User {
   managerId    Int?
 
   // ─── Relações Organizacionais ─────────────────────────────────
-  role                      Role?                     @relation(fields: [roleId], references: [id], onDelete: SetNull)
-  department                Department?               @relation("DeptMembers", fields: [departmentId], references: [id], onDelete: SetNull)
-  position                  Position?                 @relation("PositionUsers", fields: [positionId], references: [id])
-  unit                      Unit?                     @relation(fields: [unitId], references: [id])
-  manager                   User?                     @relation("Hierarchy", fields: [managerId], references: [id])
-  subordinates              User[]                    @relation("Hierarchy")
+  role                      Role?                       @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  department                Department?                 @relation("DeptMembers", fields: [departmentId], references: [id], onDelete: SetNull)
+  position                  Position?                   @relation("PositionUsers", fields: [positionId], references: [id])
+  unit                      Unit?                       @relation(fields: [unitId], references: [id])
+  manager                   User?                       @relation("Hierarchy", fields: [managerId], references: [id])
+  subordinates              User[]                      @relation("Hierarchy")
   qualifications            UserQualification[]
   languages                 UserLanguage[]
   externalCertifications    UserExternalCertification[]
-  departmentHead            Department[]              @relation("DeptHead")
-  departmentDeputyHead      Department[]              @relation("DeptDeputyHead")
-  departmentDirectManager   Department[]              @relation("DeptDirectManager")
+  departmentHead            Department[]                @relation("DeptHead")
+  departmentDeputyHead      Department[]                @relation("DeptDeputyHead")
+  departmentDirectManager   Department[]                @relation("DeptDirectManager")
   departmentHeadHistory     DepartmentHeadHistory[]
-  departmentHeadChangesMade DepartmentHeadHistory[]   @relation("HeadHistoryChangedBy")
+  departmentHeadChangesMade DepartmentHeadHistory[]     @relation("HeadHistoryChangedBy")
   departmentTransferLogs    DepartmentTransferLog[]
-  orgChanges                OrgChangeLog[]            @relation("OrgChangeUser")
-  orgChangesPerformed       OrgChangeLog[]            @relation("OrgChangePerformer")
-  developmentPlansManaged   DevelopmentPlan[]         @relation("PDIManager")
+  orgChanges                OrgChangeLog[]              @relation("OrgChangeUser")
+  orgChangesPerformed       OrgChangeLog[]              @relation("OrgChangePerformer")
+  developmentPlansManaged   DevelopmentPlan[]           @relation("PDIManager")
   pdiEvidences              PdiEvidence[]
   pdiApprovals              PdiApproval[]
   reportApprovals           ReportApproval[]
   reportAccessLogs          ReportAccessLog[]
-  execReportTemplates       ExecutiveReportTemplate[] @relation("ExecReportTemplateCreator")
-  execReportSchedules       ExecutiveReportSchedule[] @relation("ExecReportScheduleCreator")
-  execAlertsOwned           ExecutiveAlert[]          @relation("ExecAlertOwner")
-  execAlertEvents           ExecutiveAlertEvent[]     @relation("ExecAlertEventUser")
-  execAlertRulesOwned       ExecutiveAlertRule[]      @relation("ExecAlertRuleOwner")
-  execKpiDefinitionsOwned   ExecutiveKPIDefinition[]  @relation("ExecKpiDefinitionOwner")
-  execReportAudits          ExecutiveReportAudit[]    @relation("ExecReportAuditUser")
-  savedReports              SavedReport[]             @relation("UserSavedReports")
-  reportSchedules           ReportSchedule[]          @relation("UserReportSchedules")
+  execReportTemplates       ExecutiveReportTemplate[]   @relation("ExecReportTemplateCreator")
+  execReportSchedules       ExecutiveReportSchedule[]   @relation("ExecReportScheduleCreator")
+  execAlertsOwned           ExecutiveAlert[]            @relation("ExecAlertOwner")
+  execAlertEvents           ExecutiveAlertEvent[]       @relation("ExecAlertEventUser")
+  execAlertRulesOwned       ExecutiveAlertRule[]        @relation("ExecAlertRuleOwner")
+  execKpiDefinitionsOwned   ExecutiveKPIDefinition[]    @relation("ExecKpiDefinitionOwner")
+  execReportAudits          ExecutiveReportAudit[]      @relation("ExecReportAuditUser")
+  savedReports              SavedReport[]               @relation("UserSavedReports")
+  reportSchedules           ReportSchedule[]            @relation("UserReportSchedules")
   notificationPreference    NotificationPreference?
   aiTutorMemory             AiTutorMemory?
   cohortParticipations      CohortParticipant[]
   eventParticipations       EventParticipant[]
   eventFeedbacks            EventFeedback[]
-  attendanceRecords         AttendanceRecord[]        @relation("UserAttendanceRecords")
-  absenceRecords            AbsenceRecord[]           @relation("UserAbsenceRecords")
-  createdVacancies          InternalVacancy[]         @relation("VacancyCreator")
-  managedVacancies          InternalVacancy[]         @relation("VacancyResponsibleManager")
+  attendanceRecords         AttendanceRecord[]          @relation("UserAttendanceRecords")
+  absenceRecords            AbsenceRecord[]             @relation("UserAbsenceRecords")
+  createdVacancies          InternalVacancy[]           @relation("VacancyCreator")
+  managedVacancies          InternalVacancy[]           @relation("VacancyResponsibleManager")
   vacancyApplications       InternalApplication[]
 
   // ─── Permissões Adicionais (docs/modulo_users.md Ponto 2) ──────
@@ -1087,9 +1087,9 @@ model User {
   // ─── Auth Tokens ──────────────────────────────────────────────
   passwordChangedAt   DateTime?
   // Definições §4 Segurança: bloqueio por tentativas falhadas e 2FA (TOTP)
-  failedLoginAttempts Int       @default(0)
+  failedLoginAttempts Int                  @default(0)
   lockedUntil         DateTime?
-  twoFactorEnabled    Boolean   @default(false)
+  twoFactorEnabled    Boolean              @default(false)
   twoFactorSecret     String?
   passwordResetTokens PasswordResetToken[]
   refreshTokens       RefreshToken[]
@@ -1450,7 +1450,7 @@ enum PositionLevel {
 }
 
 model Position {
-  id                  Int                  @id @default(autoincrement())
+  id                  Int                   @id @default(autoincrement())
   name                String
   code                String?
   description         String?
@@ -1458,29 +1458,29 @@ model Position {
   departmentId        Int?
   salaryMin           Float?
   salaryMax           Float?
-  headcountPlanned    Int?                 @default(1)
+  headcountPlanned    Int?                  @default(1)
   // ─── docs/modulo_departments.md Ponto 6 — Cargos & Funções ───────────────
   jobFunction         String? // "Função" — distinta do nome do cargo
   jobFamily           String? // Família profissional
-  active              Boolean              @default(true)
-  createdAt           DateTime             @default(now())
-  responsibilities    String?              @db.Text
-  requirements        String?              @db.Text
+  active              Boolean               @default(true)
+  createdAt           DateTime              @default(now())
+  responsibilities    String?               @db.Text
+  requirements        String?               @db.Text
   requiredTraining    String?
   requiredExperience  String?
   reportsToPositionId Int?
-  department          Department?          @relation(fields: [departmentId], references: [id])
-  reportsTo           Position?            @relation("PositionHierarchy", fields: [reportsToPositionId], references: [id])
-  subordinates        Position[]           @relation("PositionHierarchy")
-  users               User[]               @relation("PositionUsers")
+  department          Department?           @relation(fields: [departmentId], references: [id])
+  reportsTo           Position?             @relation("PositionHierarchy", fields: [reportsToPositionId], references: [id])
+  subordinates        Position[]            @relation("PositionHierarchy")
+  users               User[]                @relation("PositionUsers")
   successionPlans     SuccessionPlan[]
   competencies        PositionCompetency[]
   requirementItems    PositionRequirement[]
   onboardingTemplates OnboardingTemplate[]
-  orgChangesFrom      OrgChangeLog[]       @relation("OrgChangePosFrom")
+  orgChangesFrom      OrgChangeLog[]        @relation("OrgChangePosFrom")
   careerPathSteps     CareerPathStep[]
   internalVacancies   InternalVacancy[]
-  orgChangesTo        OrgChangeLog[]       @relation("OrgChangePosTto")
+  orgChangesTo        OrgChangeLog[]        @relation("OrgChangePosTto")
   criticalPositions   CriticalPosition[]
   roleTemplates       RoleTemplate[]
 
@@ -2343,6 +2343,8 @@ model Course {
   certificateEnabled      Boolean                 @default(false)
   certificateCriteria     String?                 @db.Text
   certificateValidityDays Int?
+  recyclingMode           RecyclingMode           @default(MANUAL)
+  recyclingLeadDays       Int                     @default(30)
   allowDownload           Boolean                 @default(false)
   primaryInstructorId     Int?
   requiredCourseId        Int?
@@ -2664,7 +2666,12 @@ model Enrollment {
   progress                  Int                        @default(0)
   course                    Course                     @relation(fields: [courseId], references: [id])
   user                      User                       @relation(fields: [userId], references: [id])
-  certificate               Certificate?
+  certificates              Certificate[]
+  // Reciclagem: a matrícula é a inscrição principal (única por curso/utilizador);
+  // cada realização é um EnrollmentRun. `cycle` é a realização em curso.
+  cycle                     Int                        @default(1)
+  cycleStartedAt            DateTime?
+  runs                      EnrollmentRun[]
   progresses                LessonProgress[]
   attempts                  EvaluationAttempt[]        @relation("EnrollmentAttempts")
   aiSessions                AiTutorSession[]
@@ -2697,12 +2704,14 @@ enum CertificateAssetKind {
 }
 
 model CertificateTemplateVersion {
-  id          String   @id @default(cuid())
-  templateId  String
-  version     Int
-  config      String   @db.Text
-  createdById Int?
-  createdAt   DateTime @default(now())
+  id                  String   @id @default(cuid())
+  templateId          String
+  version             Int
+  config              String   @db.Text
+  createdById         Int?
+  createdAt           DateTime @default(now())
+  /// Preenchido quando a versão nasceu de um restauro: número da versão copiada.
+  restoredFromVersion Int?
 
   template CertificateTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
@@ -2712,7 +2721,7 @@ model CertificateTemplateVersion {
 
 /// Imagens dos templates (logótipo, fundo, assinatura): imutáveis e de acesso controlado.
 model CertificateAsset {
-  id          String                   @id @default(cuid())
+  id          String               @id @default(cuid())
   kind        CertificateAssetKind
   mime        String
   size        Int
@@ -2720,7 +2729,7 @@ model CertificateAsset {
   height      Int
   data        Bytes
   createdById Int?
-  createdAt   DateTime                 @default(now())
+  createdAt   DateTime             @default(now())
 }
 
 enum CertificateIssueMode {
@@ -2740,7 +2749,7 @@ model Certificate {
   id                Int             @id @default(autoincrement())
   type              CertificateType
   userId            Int?
-  enrollmentId      Int?            @unique
+  enrollmentId      Int?
   courseId          Int?
   programId         Int?
   developmentPlanId Int?
@@ -2787,13 +2796,15 @@ model Certificate {
   // Fatia 1 (certificados): emissão por regras, idempotente. dedupKey =
   // userId:activityKind:activityId:cycleKey — única, evita duplicados em
   // emissões concorrentes. snapshot = JSON.stringify dos dados impressos.
-  status       CertificateStatus        @default(ACTIVE)
-  activityKind CertificateActivityKind?
-  activityId   Int?
-  cycleKey     String                   @default("1")
-  dedupKey     String?                  @unique
-  hours        Float?
-  snapshot     String?                  @db.Text
+  status          CertificateStatus        @default(ACTIVE)
+  activityKind    CertificateActivityKind?
+  activityId      Int?
+  cycleKey        String                   @default("1")
+  // Realização da matrícula (EnrollmentRun.cycle) a que o certificado pertence.
+  enrollmentCycle Int                      @default(1)
+  dedupKey        String?                  @unique
+  hours           Float?
+  snapshot        String?                  @db.Text
 
   // Fatia 4 (ciclo de vida): origem (interna/importada), reemissão ligada ao
   // original (nunca se apaga nem substitui o histórico) e alerta de validade.
@@ -2962,6 +2973,7 @@ model LearningPath {
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
   courses          LearningPathCourse[]
+  trainings        LearningPathTraining[]
   milestones       LearningPathMilestone[]
   assignments      LearningPathAssignment[]
   enrollments      LearningPathEnrollment[]
@@ -2986,6 +2998,21 @@ model LearningPathCourse {
 
   @@unique([learningPathId, courseId])
   @@index([learningPathId])
+}
+
+// Formações (presenciais/online) que fazem parte de uma trilha, ao lado dos cursos.
+model LearningPathTraining {
+  id             Int          @id @default(autoincrement())
+  learningPathId Int
+  trainingId     Int
+  seq            Int          @default(0)
+  required       Boolean      @default(true)
+  learningPath   LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
+  training       Training     @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+
+  @@unique([learningPathId, trainingId])
+  @@index([learningPathId])
+  @@index([trainingId])
 }
 
 model LearningPathMilestone {
@@ -5218,6 +5245,15 @@ enum TrainingStatus {
 // docs/trainings-detalhado.md pt.2 — "Prioridade" do Plano de Formação e da
 // Formação. Enum dedicado ao módulo (mesmo padrão de GapPriority/PlanPriority
 // noutros módulos) em vez de reutilizar um enum global.
+// Como a conclusão de uma Formação é decidida para efeitos de certificado:
+// MANUAL (formador/Admin marca COMPLETED), ATTENDANCE (presença mínima) ou
+// HYBRID (presença mínima + COMPLETED marcado).
+enum TrainingCompletionMode {
+  MANUAL
+  ATTENDANCE
+  HYBRID
+}
+
 enum TrainingPriority {
   LOW
   MEDIUM
@@ -5276,20 +5312,20 @@ enum SessionModality {
 }
 
 model Training {
-  id                     Int              @id @default(autoincrement())
+  id                     Int                    @id @default(autoincrement())
   title                  String
-  code                   String?          @unique
+  code                   String?                @unique
   shortDescription       String?
-  description            String?          @db.Text
+  description            String?                @db.Text
   objectives             String?
   targetAudience         String?
   type                   TrainingType
   level                  TrainingLevel
-  status                 TrainingStatus   @default(DRAFT)
+  status                 TrainingStatus         @default(DRAFT)
   category               String?
   thematicArea           String?
   tags                   String[]
-  language               String           @default("pt")
+  language               String                 @default("pt")
   workloadHours          Float?
   thumbnailUrl           String?
   // Cor própria da formação nas cartas: índice em PALETTE (frontend); null = derivada do id.
@@ -5309,10 +5345,10 @@ model Training {
   // não acoplar o schema de Course/LearningPath a este módulo.
   courseId               Int?
   learningPathId         Int?
-  priority               TrainingPriority @default(MEDIUM)
-  targetDeptIds          Int[]            @default([])
-  targetUnitIds          Int[]            @default([])
-  targetPositionIds      Int[]            @default([])
+  priority               TrainingPriority       @default(MEDIUM)
+  targetDeptIds          Int[]                  @default([])
+  targetUnitIds          Int[]                  @default([])
+  targetPositionIds      Int[]                  @default([])
   // Plano de Formação a que esta formação pertence (opcional — nem toda
   // formação nasce de um plano).
   trainingPlanId         Int?
@@ -5329,9 +5365,11 @@ model Training {
   // "Modalidade" — plataforma/link (ONLINE), info da sala (VIRTUAL_ROOM) ou
   // instruções de acesso (HYBRID), consoante o `type` escolhido acima.
   modalityDetails        String?
-  mandatory              Boolean          @default(false)
-  passingScore           Int              @default(70)
-  issueCertificate       Boolean          @default(false)
+  mandatory              Boolean                @default(false)
+  passingScore           Int                    @default(70)
+  issueCertificate       Boolean                @default(false)
+  completionMode         TrainingCompletionMode @default(MANUAL)
+  minAttendancePercent   Int                    @default(75)
   cost                   Float?
   completionDeadlineDays Int?
   startDate              DateTime?
@@ -5343,9 +5381,9 @@ model Training {
   plannedSessionsCount   Int?
   // Participantes — inscrição passa a PENDING_APPROVAL em vez de
   // REGISTERED/WAITLIST quando true (ver trainings.service.ts).
-  requiresApproval       Boolean          @default(false)
+  requiresApproval       Boolean                @default(false)
   // Operação
-  requiredResources      String[]         @default([])
+  requiredResources      String[]               @default([])
   // Custos — `cost` acima mantém-se como valor legado/override; o total
   // apresentado na UI é calculado (soma destes + `cost` se nenhum destes
   // estiver preenchido) em vez de guardado, para nunca ficar desactualizado.
@@ -5357,8 +5395,8 @@ model Training {
   otherCosts             Float?
   createdById            Int?
   publishedAt            DateTime?
-  createdAt              DateTime         @default(now())
-  updatedAt              DateTime         @updatedAt
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
 
   instructor         User?                      @relation("TrainingInstructor", fields: [instructorId], references: [id])
   externalInstructor TrainingInstructorProfile? @relation("TrainingExternalInstructor", fields: [externalInstructorId], references: [id])
@@ -5374,6 +5412,7 @@ model Training {
   assessmentLinks    TrainingAssessment[]
   resourceBookings   TrainingResourceBooking[]
   aiTutorSessions    AiTutorSession[]
+  learningPathLinks  LearningPathTraining[]
 
   @@index([status])
   @@index([type])
@@ -15632,7 +15671,6 @@ model ScalabilityMetricHourly {
   @@map("scalability_metrics_hourly")
 }
 
-
 // ─── Chaves de API e webhooks (docs/modulo_settings.md §6) ───
 // Usados por src/api-integration/api-integration.service.ts, que até aqui
 // degradava para "sem persistência" por estes modelos não existirem.
@@ -15705,4 +15743,54 @@ model BackupRun {
   @@index([startedAt])
   @@index([status])
   @@map("backup_runs")
+}
+
+enum RecyclingMode {
+  OFF
+  MANUAL
+  AUTOMATIC
+}
+
+enum EnrollmentRunReason {
+  INITIAL
+  EXPIRY_AUTO
+  MANUAL
+}
+
+// Realização de uma matrícula (1.ª participação ou reciclagem). O histórico de
+// realizações nunca se apaga; o certificado de cada realização liga-se por
+// (enrollmentId, enrollmentCycle).
+model EnrollmentRun {
+  id                Int                 @id @default(autoincrement())
+  enrollmentId      Int
+  cycle             Int
+  reason            EnrollmentRunReason @default(INITIAL)
+  triggeredById     Int?
+  fromCertificateId Int?
+  startedAt         DateTime            @default(now())
+  completedAt       DateTime?
+  closedAt          DateTime?
+  finalProgress     Int?
+  enrollment        Enrollment          @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  lessons EnrollmentRunLesson[]
+
+  @@unique([enrollmentId, cycle])
+  @@index([enrollmentId])
+}
+
+// Progresso por aula de uma realização, copiado antes de a reciclagem limpar o
+// LessonProgress (único por aula/utilizador). Sem FK para a aula: o histórico
+// sobrevive a aulas apagadas.
+model EnrollmentRunLesson {
+  id             Int           @id @default(autoincrement())
+  runId          Int
+  lessonId       Int
+  completed      Boolean
+  completedAt    DateTime?
+  watchedSeconds Int?
+  run            EnrollmentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, lessonId])
+  @@index([runId])
 }

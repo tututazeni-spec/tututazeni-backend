@@ -54,6 +54,8 @@ describe('CertificateRulesService', () => {
     certificateRule: { findMany: jest.fn(), findUnique: jest.fn(), upsert: jest.fn() },
     course: { findUnique: jest.fn(), findMany: jest.fn() },
     event: { findUnique: jest.fn(), findMany: jest.fn() },
+    training: { findUnique: jest.fn(), findMany: jest.fn() },
+    learningPath: { findUnique: jest.fn(), findMany: jest.fn() },
     certificateTemplate: { findFirst: jest.fn() },
   };
   const audit = { log: jest.fn() };
@@ -82,12 +84,6 @@ describe('CertificateRulesService', () => {
     await expect(
       svc.upsertRule(dtoOf({ criteria: { requireFullCompletion: false } }), 1),
     ).rejects.toBeInstanceOf(BadRequestException);
-  });
-
-  it('TRAINING ainda sem suporte de factos → BadRequest', async () => {
-    await expect(svc.upsertRule(dtoOf({ activityKind: 'TRAINING' }), 1)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
   });
 
   it('curso inexistente → NotFound', async () => {
@@ -156,6 +152,8 @@ describe('CertificateRulesService', () => {
     ]);
     prisma.course.findMany.mockResolvedValue([{ id: 10, title: 'Segurança' }]);
     prisma.event.findMany.mockResolvedValue([]);
+    prisma.training.findMany.mockResolvedValue([]);
+    prisma.learningPath.findMany.mockResolvedValue([]);
     const [r] = await svc.listRules();
     expect(r).toMatchObject({
       activityTitle: 'Segurança',

@@ -9,6 +9,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
+import { MailService } from '../mail/mail.service';
+import { buildVerifyUrl } from './certificate-renderer';
 import { CertificateFactsService } from './certificate-facts.service';
 import { BUILTIN_TEMPLATES } from './templates/builtin-templates';
 import { CertificateTemplatesService } from './templates/certificate-templates.service';
@@ -48,6 +50,7 @@ export class CertificateIssuanceService {
     private readonly facts: CertificateFactsService,
     private readonly audit: AuditService,
     private readonly templates: CertificateTemplatesService,
+    private readonly mail: MailService,
   ) {}
 
   async issue(input: IssueInput): Promise<IssueResult> {
@@ -58,8 +61,17 @@ export class CertificateIssuanceService {
     const rule = await this.resolveRule(input.activityKind, input.activityId);
     if (!rule) return { outcome: 'NO_RULE' };
 
-    const dedupKey = `${input.userId}:${input.activityKind}:${input.activityId}:${DEFAULT_CYCLE}`;
-    const existing = await this.findExisting(input, dedupKey);
+    // Reciclagem: cada realização da matrícula tem o seu certificado (chave `E<n>` a
+    // partir da 2.ª); o contador de reemissão (cycleKey) é independente.
+    const enrollment =
+      input.activityKind === 'COURSE'
+        ? await this.enrollmentRef(input.userId, input.activityId)
+        : undefined;
+    const enrollmentCycle = enrollment?.cycle ?? 1;
+    const base = `${input.userId}:${input.activityKind}:${input.activityId}`;
+    const dedupKey =
+      enrollmentCycle > 1 ? `${base}:E${enrollmentCycle}` : `${base}:${DEFAULT_CYCLE}`;
+    const existing = await this.findExisting(input, dedupKey, enrollmentCycle);
     if (existing) return { outcome: 'EXISTS', certificate: existing };
 
     // Revalida sempre no servidor — nunca confia no evento que despoletou a emissão.
@@ -84,10 +96,7 @@ export class CertificateIssuanceService {
     });
     const recipientName = user?.fullName ?? '';
     const code = generateVerificationCode();
-    const enrollmentId =
-      input.activityKind === 'COURSE'
-        ? await this.enrollmentId(input.userId, input.activityId)
-        : undefined;
+    const enrollmentId = enrollment?.id;
 
     const template = await this.resolveTemplate(rule.templateId);
     const snapshot = {
@@ -113,6 +122,7 @@ export class CertificateIssuanceService {
           activityKind: input.activityKind,
           activityId: input.activityId,
           cycleKey: DEFAULT_CYCLE,
+          enrollmentCycle,
           dedupKey,
           status: pending ? 'PENDING_APPROVAL' : 'ACTIVE',
           validationCode: code,
@@ -218,6 +228,28 @@ export class CertificateIssuanceService {
         templateId: null,
       };
     }
+    if (kind === 'TRAINING') {
+      // Mantém o interruptor existente da formação: sem `issueCertificate` não emite.
+      const training = await this.prisma.training.findUnique({
+        where: { id: activityId },
+        select: { issueCertificate: true },
+      });
+      if (!training?.issueCertificate) return null;
+      return {
+        mode: 'AUTOMATIC',
+        criteria: { requireFullCompletion: true },
+        validityDays: null,
+        templateId: null,
+      };
+    }
+    if (kind === 'LEARNING_PATH') {
+      return {
+        mode: 'AUTOMATIC',
+        criteria: { requireFullCompletion: true },
+        validityDays: null,
+        templateId: null,
+      };
+    }
     return null;
   }
 
@@ -253,25 +285,50 @@ export class CertificateIssuanceService {
   }
 
   /** Inclui certificados anteriores à migração (sem dedupKey) para não os duplicar. */
-  private findExisting(input: IssueInput, dedupKey: string): Promise<Certificate | null> {
+  private async findExisting(
+    input: IssueInput,
+    dedupKey: string,
+    enrollmentCycle: number,
+  ): Promise<Certificate | null> {
     const legacy: Prisma.CertificateWhereInput[] = [];
-    if (input.activityKind === 'COURSE') {
+    // Os certificados anteriores à migração pertencem à 1.ª realização.
+    if (input.activityKind === 'COURSE' && enrollmentCycle === 1) {
       legacy.push({ userId: input.userId, courseId: input.activityId });
     }
     if (input.activityKind === 'EVENT') {
       legacy.push({ userId: input.userId, eventId: input.activityId });
+    }
+    if (input.activityKind === 'TRAINING') {
+      // O atalho antigo gravava `CERT-<ts>-<userId>-<sessionId>` sem referência à
+      // formação: reconhece-se pelo id da sessão para não emitir um segundo certificado.
+      const sessions = await this.prisma.trainingSession.findMany({
+        where: { trainingId: input.activityId },
+        select: { id: true },
+      });
+      if (sessions.length > 0) {
+        legacy.push({
+          userId: input.userId,
+          type: CertificateType.TRAINING,
+          activityKind: null,
+          OR: sessions.map(s => ({
+            validationCode: { endsWith: `-${input.userId}-${s.id}` },
+          })),
+        });
+      }
     }
     return this.prisma.certificate.findFirst({
       where: { deletedAt: null, OR: [{ dedupKey }, ...legacy] },
     });
   }
 
-  private async enrollmentId(userId: number, courseId: number): Promise<number | undefined> {
-    const e = await this.prisma.enrollment.findUnique({
+  private enrollmentRef(
+    userId: number,
+    courseId: number,
+  ): Promise<{ id: number; cycle: number } | null> {
+    return this.prisma.enrollment.findUnique({
       where: { courseId_userId: { courseId, userId } },
-      select: { id: true },
+      select: { id: true, cycle: true },
     });
-    return e?.id;
   }
 
   private legacyType(kind: CertificateActivityKind): CertificateType {
@@ -285,5 +342,25 @@ export class CertificateIssuanceService {
       message: `Certificado emitido para "${title}".`,
       metadata: { certificateId },
     });
+    await this.emailIssued(userId, title, certificateId);
+  }
+
+  /** Melhor esforço: um SMTP em baixo nunca pode falhar a emissão. Só a ligação, sem PDF anexado. */
+  private async emailIssued(userId: number, title: string, certificateId: number) {
+    try {
+      const cert = await this.prisma.certificate.findUnique({
+        where: { id: certificateId },
+        select: { validationCode: true, user: { select: { email: true, fullName: true } } },
+      });
+      if (!cert?.user?.email) return;
+      await this.mail.sendCertificateLink(
+        cert.user.email,
+        cert.user.fullName,
+        title,
+        buildVerifyUrl(cert.validationCode),
+      );
+    } catch {
+      this.logger.warn({ userId, certificateId, msg: 'Falha ao enviar o e-mail do certificado' });
+    }
   }
 }

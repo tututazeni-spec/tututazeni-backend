@@ -6,6 +6,8 @@ import {
   IsEnum,
   IsBoolean,
   IsArray,
+  ArrayMinSize,
+  ArrayMaxSize,
   IsNumber,
   IsDateString,
   Min,
@@ -22,6 +24,7 @@ import {
   SessionModality,
   TrainingAssessmentRole,
   TrainingPriority,
+  TrainingCompletionMode,
   TrainingPlanPeriod,
   TrainingPlanStatus,
   TrainingInstructorType,
@@ -168,6 +171,22 @@ export class CreateTrainingDto {
   @IsOptional()
   @IsBoolean()
   issueCertificate?: boolean;
+
+  @ApiPropertyOptional({
+    enum: TrainingCompletionMode,
+    default: TrainingCompletionMode.MANUAL,
+    description: 'Como se decide a conclusão para efeitos de certificado',
+  })
+  @IsOptional()
+  @IsEnum(TrainingCompletionMode)
+  completionMode?: TrainingCompletionMode;
+
+  @ApiPropertyOptional({ description: 'Presença mínima (%) nos modos ATTENDANCE e HYBRID' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  minAttendancePercent?: number;
 
   @ApiPropertyOptional({ description: 'Custo do treinamento (AOA)' })
   @IsOptional()
@@ -471,6 +490,22 @@ export class TrainingsUpdateParticipantStatusDto {
   @IsNumber()
   @Min(0)
   attendedHours?: number;
+}
+
+export class BulkCompleteParticipantsDto {
+  @ApiProperty({ description: 'IDs dos participantes (TrainingParticipant) a concluir' })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(500)
+  @IsInt({ each: true })
+  participantIds!: number[];
+
+  @ApiPropertyOptional({ description: 'Nota final aplicada a todos (opcional)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  finalScore?: number;
 }
 
 // ─── Presença em massa ────────────────────────────────────────────────────────

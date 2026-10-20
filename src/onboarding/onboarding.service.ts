@@ -891,7 +891,7 @@ export class OnboardingService {
               status: true,
               progress: true,
               completedAt: true,
-              certificate: { select: { id: true } },
+              certificates: { select: { id: true }, take: 1 },
             },
           })
         : [];
@@ -917,7 +917,7 @@ export class OnboardingService {
               status: enrollment.status,
               progress: enrollment.progress,
               completedAt: enrollment.completedAt,
-              hasCertificate: !!enrollment.certificate,
+              hasCertificate: enrollment.certificates.length > 0,
             }
           : null,
       };

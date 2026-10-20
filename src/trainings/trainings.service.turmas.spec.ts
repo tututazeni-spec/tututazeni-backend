@@ -7,8 +7,12 @@ import { TrainingService as TrainingsService } from './trainings.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { CompetenciesService } from '../competencies/competencies.service';
+import { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
+import { LearningPathCertificationService } from '../certificates/learning-path-certification.service';
 
 const mockAuditService = { log: jest.fn().mockResolvedValue(undefined) };
+const mockCertificates = { issue: jest.fn().mockResolvedValue({ outcome: 'ISSUED' }) };
+const mockLearningPaths = { onTrainingCompleted: jest.fn().mockResolvedValue([]) };
 const mockCompetenciesService = { updateFromTraining: jest.fn().mockResolvedValue(undefined) };
 
 const mockPrisma = {
@@ -36,6 +40,8 @@ describe('TrainingsService — Turmas & Participantes (pts 5-6)', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AuditService, useValue: mockAuditService },
         { provide: CompetenciesService, useValue: mockCompetenciesService },
+        { provide: CertificateIssuanceService, useValue: mockCertificates },
+        { provide: LearningPathCertificationService, useValue: mockLearningPaths },
       ],
     }).compile();
     service = module.get<TrainingsService>(TrainingsService);

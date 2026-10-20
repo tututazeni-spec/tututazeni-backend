@@ -27,7 +27,12 @@ export interface TemplateSummary {
 
 export interface TemplateDetail extends TemplateSummary {
   config: TemplateConfig;
-  versions: { version: number; createdAt: Date; createdByName: string | null }[];
+  versions: {
+    version: number;
+    createdAt: Date;
+    createdByName: string | null;
+    restoredFromVersion: number | null;
+  }[];
 }
 
 interface TemplateRow {
@@ -151,7 +156,7 @@ export class CertificateTemplatesService {
     const versions = await this.prisma.certificateTemplateVersion.findMany({
       where: { templateId: id },
       orderBy: { version: 'desc' },
-      select: { version: true, createdAt: true, createdById: true },
+      select: { version: true, createdAt: true, createdById: true, restoredFromVersion: true },
     });
     const authorIds = [
       ...new Set(versions.map(v => v.createdById).filter((v): v is number => !!v)),
@@ -170,12 +175,64 @@ export class CertificateTemplatesService {
         version: v.version,
         createdAt: v.createdAt,
         createdByName: v.createdById ? (names.get(v.createdById) ?? null) : null,
+        restoredFromVersion: v.restoredFromVersion,
       })),
     };
   }
 
   async saveVersion(id: string, input: unknown, actorId: number): Promise<TemplateDetail> {
     const row = await this.findSystem(id);
+    const saved = await this.persistVersion(row, input, actorId, null);
+    await this.audit.log({
+      action: 'CERTIFICATE_TEMPLATE_SAVED',
+      entity: 'CertificateTemplate',
+      userId: actorId,
+      metadata: { templateId: id, version: saved },
+      strict: true,
+    });
+    return this.get(id);
+  }
+
+  /**
+   * Restaura uma versão antiga sem apagar nada: cria a versão n+1 como cópia da escolhida.
+   * Os certificados emitidos continuam ligados à versão com que nasceram.
+   */
+  async restoreVersion(id: string, version: number, actorId: number): Promise<TemplateDetail> {
+    const row = await this.findSystem(id);
+    if (version === row.currentVersion) {
+      throw new BadRequestException('Esta já é a versão actual do modelo.');
+    }
+    const source = await this.prisma.certificateTemplateVersion.findUnique({
+      where: { templateId_version: { templateId: id, version } },
+      select: { config: true },
+    });
+    if (!source) throw new NotFoundException('Versão do modelo não encontrada');
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(source.config);
+    } catch {
+      throw new BadRequestException('A configuração desta versão está danificada.');
+    }
+    const saved = await this.persistVersion(row, parsed, actorId, version);
+    await this.audit.log({
+      action: 'CERTIFICATE_TEMPLATE_RESTORED',
+      entity: 'CertificateTemplate',
+      userId: actorId,
+      metadata: { templateId: id, restoredFromVersion: version, newVersion: saved },
+      strict: true,
+    });
+    return this.get(id);
+  }
+
+  /** Valida e grava a configuração como nova versão (com repetição em conflito). */
+  private async persistVersion(
+    row: TemplateRow,
+    input: unknown,
+    actorId: number,
+    restoredFromVersion: number | null,
+  ): Promise<number> {
+    const id = row.id;
     const checked = validateTemplateConfig(input);
     if (checked.ok === false) throw new BadRequestException(checked.errors);
     const config = checked.config;
@@ -207,7 +264,13 @@ export class CertificateTemplatesService {
           });
           const next = (fresh?.currentVersion ?? 0) + 1;
           await tx.certificateTemplateVersion.create({
-            data: { templateId: id, version: next, config: json, createdById: actorId },
+            data: {
+              templateId: id,
+              version: next,
+              config: json,
+              createdById: actorId,
+              restoredFromVersion,
+            },
           });
           await tx.certificateTemplate.update({
             where: { id },
@@ -223,15 +286,7 @@ export class CertificateTemplatesService {
     if (saved === null) {
       throw new ConflictException('Não foi possível guardar o modelo agora. Tente novamente.');
     }
-
-    await this.audit.log({
-      action: 'CERTIFICATE_TEMPLATE_SAVED',
-      entity: 'CertificateTemplate',
-      userId: actorId,
-      metadata: { templateId: id, version: saved },
-      strict: true,
-    });
-    return this.get(id);
+    return saved;
   }
 
   /** Pré-visualização com dados de exemplo; a configuração não é gravada. */

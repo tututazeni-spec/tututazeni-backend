@@ -122,12 +122,14 @@ export class CertificateLifecycleService {
         if (claim.count === 0)
           throw new ConflictException('O certificado já foi revogado ou reemitido');
 
-        // enrollmentId é único e fica com o original; o novo liga-se pelo replacesId.
+        // Fica na mesma matrícula e realização do original; liga-se também pelo replacesId.
         return tx.certificate.create({
           data: {
             type: cert.type,
             userId: cert.userId,
             courseId: cert.courseId,
+            enrollmentId: cert.enrollmentId,
+            enrollmentCycle: cert.enrollmentCycle,
             eventId: cert.eventId,
             activityKind: cert.activityKind,
             activityId: cert.activityId,
@@ -198,11 +200,7 @@ export class CertificateLifecycleService {
     let emailed = false;
     if (cert.user?.email) {
       try {
-        await this.mail.sendNotification(
-          cert.user.email,
-          `O seu certificado: ${title}`,
-          `O seu certificado "${title}" está disponível. Verificação pública: ${url}`,
-        );
+        await this.mail.sendCertificateLink(cert.user.email, cert.user.fullName, title, url);
         emailed = true;
       } catch {
         this.logger.warn({ certificateId: id, msg: 'Falha ao enviar o certificado por e-mail' });

@@ -23,6 +23,8 @@ import { CertificateRulesService } from './certificate-rules.service';
 import { CertificateLifecycleService } from './certificate-lifecycle.service';
 import { CertificateExternalService } from './certificate-external.service';
 import { CertificateBatchService } from './certificate-batch.service';
+import { LearningPathCertificationService } from './learning-path-certification.service';
+import { LearningPathProgressService } from './learning-path-progress.service';
 import { CertificateScopeService } from './certificate-scope.service';
 import { CertificatesTeamService } from './certificates-team.service';
 import { CertificatesExportService } from './certificates-export.service';
@@ -71,6 +73,8 @@ export class CertificatesController {
     private readonly me: CertificatesMeService,
     private readonly templateService: CertificateTemplatesService,
     private readonly assetService: CertificateAssetsService,
+    private readonly learningPaths: LearningPathCertificationService,
+    private readonly pathProgress: LearningPathProgressService,
   ) {}
 
   @Get('my')
@@ -137,6 +141,13 @@ export class CertificatesController {
     return this.me.mySummary(user.id);
   }
 
+  @Get('my/learning-paths')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'As minhas trilhas: progresso por unidade e estado do certificado' })
+  myLearningPaths(@CurrentUser() user: CurrentUserData) {
+    return this.pathProgress.mine(user.id);
+  }
+
   @Get('admin/history')
   @Roles(Role.ADMIN, Role.RH, Role.AUDITOR)
   @ApiOperation({ summary: 'Histórico de emissões, aprovações e regras' })
@@ -201,6 +212,19 @@ export class CertificatesController {
     return this.templateService.saveVersion(id, body, user.id);
   }
 
+  @Post('templates/:id/versions/:version/restore')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary: 'Restaurar uma versão antiga: cria uma nova versão com o mesmo conteúdo',
+  })
+  restoreTemplateVersion(
+    @Param('id') id: string,
+    @Param('version', ParseIntPipe) version: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.templateService.restoreVersion(id, version, user.id);
+  }
+
   @Post('assets')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Carregar uma imagem (logótipo, fundo ou assinatura) para os modelos' })
@@ -246,6 +270,19 @@ export class CertificatesController {
   @ApiOperation({ summary: 'Emitir em lote (cada titular é validado à parte)' })
   issueBatch(@Body() dto: BatchIssueDto, @CurrentUser() user: CurrentUserData) {
     return this.batch.issueBatch(dto, user.id);
+  }
+
+  @Post('reconcile-learning-paths')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary:
+      'Reconciliar trilhas: relata (simulação, por defeito) ou emite (dryRun=false) os certificados de quem já cumpriu todas as unidades obrigatórias',
+  })
+  reconcileLearningPaths(
+    @Query('learningPathId', new ParseIntPipe({ optional: true })) learningPathId?: number,
+    @Query('dryRun') dryRun?: string,
+  ) {
+    return this.learningPaths.reconcile(learningPathId, dryRun !== 'false');
   }
 
   @Post(':id/revoke')

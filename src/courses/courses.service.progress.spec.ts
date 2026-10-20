@@ -36,6 +36,7 @@ const baseEnrollment = {
   startedAt: new Date(),
   completedAt: null,
   deadline: null,
+  certificates: [],
 };
 
 const mockPrisma: any = {
