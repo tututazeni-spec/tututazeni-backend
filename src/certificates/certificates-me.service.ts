@@ -119,16 +119,17 @@ export class CertificatesMeService {
 
     const owner = await this.prisma.user.findUnique({
       where: { id: user.id },
-      select: { email: true },
+      select: { email: true, fullName: true },
     });
     if (!owner?.email) throw new ConflictException('O utilizador não tem e-mail registado');
 
     const title = cert.title ?? 'formação';
     try {
-      await this.mail.sendNotification(
+      await this.mail.sendCertificateLink(
         owner.email,
-        `O seu certificado: ${title}`,
-        `O seu certificado "${title}" está disponível. Verificação pública: ${buildVerifyUrl(cert.validationCode)}`,
+        owner.fullName,
+        title,
+        buildVerifyUrl(cert.validationCode),
       );
     } catch {
       // SMTP configurado mas a falhar: erro claro em vez de um 500 genérico, e sem auditar um envio que não houve.

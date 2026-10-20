@@ -33,7 +33,7 @@ describe('CertificateLifecycleService', () => {
     $transaction: jest.fn(),
   };
   const audit = { log: jest.fn() };
-  const mail = { sendNotification: jest.fn() };
+  const mail = { sendCertificateLink: jest.fn() };
   const svc = new CertificateLifecycleService(prisma as never, audit as never, mail as never);
 
   const issuedAt = new Date('2026-01-01T00:00:00Z');
@@ -69,7 +69,7 @@ describe('CertificateLifecycleService', () => {
     prisma.certificate.create.mockImplementation(async ({ data }) => ({ id: 6, ...data }));
     prisma.notificationLog.create.mockResolvedValue({});
     prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prisma));
-    mail.sendNotification.mockResolvedValue(undefined);
+    mail.sendCertificateLink.mockResolvedValue(undefined);
   });
 
   describe('revoke', () => {
@@ -220,7 +220,7 @@ describe('CertificateLifecycleService', () => {
 
     it('SMTP a falhar não falha a operação', async () => {
       prisma.certificate.findUnique.mockResolvedValue(cert());
-      mail.sendNotification.mockRejectedValue(new Error('smtp'));
+      mail.sendCertificateLink.mockRejectedValue(new Error('smtp'));
       expect(await svc.resend(5, 9)).toEqual({ notified: true, emailed: false });
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'CERTIFICATE_RESENT' }),
@@ -230,8 +230,9 @@ describe('CertificateLifecycleService', () => {
     it('notifica e envia e-mail com a ligação de verificação', async () => {
       prisma.certificate.findUnique.mockResolvedValue(cert());
       expect(await svc.resend(5, 9)).toEqual({ notified: true, emailed: true });
-      expect(mail.sendNotification).toHaveBeenCalledWith(
+      expect(mail.sendCertificateLink).toHaveBeenCalledWith(
         'ana@x.com',
+        expect.any(String),
         expect.any(String),
         expect.stringContaining('/verify/OLDCODE123456789'),
       );

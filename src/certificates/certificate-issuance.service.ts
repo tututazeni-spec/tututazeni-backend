@@ -9,6 +9,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
+import { MailService } from '../mail/mail.service';
+import { buildVerifyUrl } from './certificate-renderer';
 import { CertificateFactsService } from './certificate-facts.service';
 import { BUILTIN_TEMPLATES } from './templates/builtin-templates';
 import { CertificateTemplatesService } from './templates/certificate-templates.service';
@@ -48,6 +50,7 @@ export class CertificateIssuanceService {
     private readonly facts: CertificateFactsService,
     private readonly audit: AuditService,
     private readonly templates: CertificateTemplatesService,
+    private readonly mail: MailService,
   ) {}
 
   async issue(input: IssueInput): Promise<IssueResult> {
@@ -339,5 +342,25 @@ export class CertificateIssuanceService {
       message: `Certificado emitido para "${title}".`,
       metadata: { certificateId },
     });
+    await this.emailIssued(userId, title, certificateId);
+  }
+
+  /** Melhor esforço: um SMTP em baixo nunca pode falhar a emissão. Só a ligação, sem PDF anexado. */
+  private async emailIssued(userId: number, title: string, certificateId: number) {
+    try {
+      const cert = await this.prisma.certificate.findUnique({
+        where: { id: certificateId },
+        select: { validationCode: true, user: { select: { email: true, fullName: true } } },
+      });
+      if (!cert?.user?.email) return;
+      await this.mail.sendCertificateLink(
+        cert.user.email,
+        cert.user.fullName,
+        title,
+        buildVerifyUrl(cert.validationCode),
+      );
+    } catch {
+      this.logger.warn({ userId, certificateId, msg: 'Falha ao enviar o e-mail do certificado' });
+    }
   }
 }

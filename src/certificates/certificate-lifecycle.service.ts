@@ -200,11 +200,7 @@ export class CertificateLifecycleService {
     let emailed = false;
     if (cert.user?.email) {
       try {
-        await this.mail.sendNotification(
-          cert.user.email,
-          `O seu certificado: ${title}`,
-          `O seu certificado "${title}" está disponível. Verificação pública: ${url}`,
-        );
+        await this.mail.sendCertificateLink(cert.user.email, cert.user.fullName, title, url);
         emailed = true;
       } catch {
         this.logger.warn({ certificateId: id, msg: 'Falha ao enviar o certificado por e-mail' });

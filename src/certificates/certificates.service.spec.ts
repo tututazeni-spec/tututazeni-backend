@@ -165,6 +165,25 @@ describe('CertificatesService', () => {
     });
   });
 
+  describe('getPublicPdf', () => {
+    it('código válido e certificado activo → PDF', async () => {
+      prisma.certificate.findFirst.mockResolvedValue(row());
+      const buf = await svc.getPublicPdf('abcd-1234-efgh-5678');
+      expect(buf.subarray(0, 5).toString()).toBe('%PDF-');
+    });
+
+    it('revogado → 404 genérico', async () => {
+      prisma.certificate.findFirst.mockResolvedValue(row({ revoked: true, status: 'REVOKED' }));
+      await expect(svc.getPublicPdf('ABCD1234EFGH5678')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('inexistente ou inválido → 404 genérico', async () => {
+      prisma.certificate.findFirst.mockResolvedValue(null);
+      await expect(svc.getPublicPdf('ABCD1234EFGH5678')).rejects.toBeInstanceOf(NotFoundException);
+      await expect(svc.getPublicPdf('!!')).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
   describe('certificados externos', () => {
     const PDF_BYTES = Buffer.from('%PDF-1.4 externo');
     const external = (over = {}) =>

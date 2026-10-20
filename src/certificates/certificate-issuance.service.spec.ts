@@ -24,11 +24,13 @@ describe('CertificateIssuanceService', () => {
   const facts = { collect: jest.fn() };
   const audit = { log: jest.fn() };
   const templates = { resolveForIssuance: jest.fn() };
+  const mail = { sendCertificateLink: jest.fn() };
   const svc = new CertificateIssuanceService(
     prisma as never,
     facts as never,
     audit as never,
     templates as never,
+    mail as never,
   );
   const tpl = (id = 'tpl-1-corporativo-classico', version = 1) => ({
     id,
@@ -204,6 +206,31 @@ describe('CertificateIssuanceService', () => {
         strict: true,
       }),
     );
+  });
+
+  it('emissão envia o e-mail só com a ligação de verificação', async () => {
+    prisma.certificateRule.findUnique.mockResolvedValue(rule());
+    prisma.certificate.findUnique.mockResolvedValue({
+      validationCode: 'ABCD1234EFGH5678',
+      user: { email: 'ana@x.com', fullName: 'Ana Silva' },
+    });
+    await svc.issue(input);
+    expect(mail.sendCertificateLink).toHaveBeenCalledWith(
+      'ana@x.com',
+      'Ana Silva',
+      'Segurança',
+      expect.stringContaining('/verify/ABCD1234EFGH5678'),
+    );
+  });
+
+  it('falha de SMTP na emissão não falha a emissão', async () => {
+    prisma.certificateRule.findUnique.mockResolvedValue(rule());
+    prisma.certificate.findUnique.mockResolvedValue({
+      validationCode: 'ABCD1234EFGH5678',
+      user: { email: 'ana@x.com', fullName: 'Ana Silva' },
+    });
+    mail.sendCertificateLink.mockRejectedValue(new Error('smtp'));
+    expect((await svc.issue(input)).outcome).toBe('ISSUED');
   });
 
   it('snapshot não inclui score quando não há nota', async () => {

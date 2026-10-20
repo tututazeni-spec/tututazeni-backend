@@ -5,6 +5,9 @@ import { sanitizeForLog } from '../common/logging/sanitize';
 import { IntegrationSettingsService } from '../settings/integration-settings.service';
 import { EmailSettingsService } from '../settings/email-settings.service';
 
+const escapeHtml = (s: string): string =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 @Injectable()
 export class MailService implements OnModuleInit {
   private readonly logger = new Logger(MailService.name);
@@ -132,6 +135,44 @@ export class MailService implements OnModuleInit {
    *  acima ficam com o template próprio por já terem consumidores fixos. */
   async sendNotification(to: string, subject: string, text: string): Promise<void> {
     await this.send({ to, subject, text });
+  }
+
+  /**
+   * E-mail de certificado: leva só a ligação de verificação (a página pública mostra
+   * os dados e permite descarregar o PDF). Nunca anexa o PDF.
+   */
+  async sendCertificateLink(
+    to: string,
+    fullName: string,
+    title: string,
+    verifyUrl: string,
+  ): Promise<void> {
+    const text = [
+      `Olá ${fullName},`,
+      '',
+      `O seu certificado "${title}" está disponível.`,
+      'Para o ver e descarregar, abra esta ligação:',
+      verifyUrl,
+      '',
+      '-- Sistema INNOVA',
+    ].join('\n');
+    const html = `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#0F1F3D">
+  <div style="background:#0F1F3D;padding:20px 24px;border-bottom:4px solid #D4A017">
+    <span style="color:#fff;font-size:20px;font-weight:bold">INNOVA</span>
+  </div>
+  <div style="padding:24px">
+    <p>Olá ${escapeHtml(fullName)},</p>
+    <p>O seu certificado <strong>${escapeHtml(title)}</strong> está disponível.</p>
+    <p style="margin:28px 0"><a href="${escapeHtml(verifyUrl)}" style="background:#0F1F3D;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;border-bottom:3px solid #D4A017">Ver e descarregar o meu certificado</a></p>
+    <p style="font-size:13px;color:#555">Se o botão não funcionar, copie esta ligação para o navegador:<br>${escapeHtml(verifyUrl)}</p>
+  </div>
+</div>`;
+    await this.send({
+      to,
+      subject: `O seu certificado: ${title}`,
+      text,
+      html,
+    });
   }
 
   private async send(options: Mail.Options): Promise<void> {

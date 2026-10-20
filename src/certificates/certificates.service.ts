@@ -142,7 +142,36 @@ export class CertificatesService {
     if (status !== 'ACTIVE' && status !== 'EXPIRED') {
       throw new ConflictException('Certificado indisponível para download');
     }
+    return this.renderPdf(cert);
+  }
 
+  /** Download público pelo código: só certificados válidos; qualquer outro caso é 404 genérico. */
+  async getPublicPdf(rawCode: string): Promise<Buffer> {
+    const normalized = normalizeVerificationCode(rawCode);
+    const trimmed = rawCode.trim();
+    const candidates = [normalized, LEGACY_CODE.test(trimmed) ? trimmed : null].filter(
+      (c): c is string => !!c,
+    );
+    const cert = candidates.length
+      ? await this.prisma.certificate.findFirst({
+          where: { validationCode: { in: candidates }, deletedAt: null },
+          include: {
+            course: { select: { title: true } },
+            event: { select: { title: true } },
+            user: { select: { fullName: true } },
+          },
+        })
+      : null;
+    if (!cert || effectiveStatus(cert) !== 'ACTIVE') {
+      throw new NotFoundException('Certificado não encontrado');
+    }
+    return this.renderPdf(cert);
+  }
+
+  private async renderPdf(
+    cert: NonNullable<Awaited<ReturnType<CertificatesService['loadForPdf']>>>,
+  ): Promise<Buffer> {
+    const id = cert.id;
     if (cert.origin === 'EXTERNAL') {
       // O documento de um certificado externo é o ficheiro carregado, nunca um PDF gerado.
       const external = this.externalPdf(cert.fileUrl);
@@ -167,6 +196,17 @@ export class CertificatesService {
       data: { downloadCount: { increment: 1 } },
     });
     return buffer;
+  }
+
+  private loadForPdf(id: number) {
+    return this.prisma.certificate.findUnique({
+      where: { id },
+      include: {
+        course: { select: { title: true } },
+        event: { select: { title: true } },
+        user: { select: { fullName: true } },
+      },
+    });
   }
 
   private externalPdf(fileUrl: string | null): Buffer | null {
