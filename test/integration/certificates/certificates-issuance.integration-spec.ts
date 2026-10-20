@@ -6,6 +6,7 @@ import { Pool } from 'pg';
 import { AppModule } from '../../../src/app.module';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { AuditService } from '../../../src/common/services/audit.service';
+import { MailService } from '../../../src/mail/mail.service';
 import { CertificateFactsService } from '../../../src/certificates/certificate-facts.service';
 import { CertificateIssuanceService } from '../../../src/certificates/certificate-issuance.service';
 import { CertificateTemplatesService } from '../../../src/certificates/templates/certificate-templates.service';
@@ -32,6 +33,7 @@ describe('Certificates issuance (Postgres real)', () => {
       new CertificateFactsService(prismaService),
       app.get(AuditService),
       app.get(CertificateTemplatesService),
+      app.get(MailService),
     );
 
     const employee = await prisma.user.findUnique({
