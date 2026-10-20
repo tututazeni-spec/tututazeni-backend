@@ -212,6 +212,19 @@ export class CertificatesController {
     return this.templateService.saveVersion(id, body, user.id);
   }
 
+  @Post('templates/:id/versions/:version/restore')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary: 'Restaurar uma versão antiga: cria uma nova versão com o mesmo conteúdo',
+  })
+  restoreTemplateVersion(
+    @Param('id') id: string,
+    @Param('version', ParseIntPipe) version: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.templateService.restoreVersion(id, version, user.id);
+  }
+
   @Post('assets')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Carregar uma imagem (logótipo, fundo ou assinatura) para os modelos' })

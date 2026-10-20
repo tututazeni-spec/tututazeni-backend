@@ -2704,12 +2704,14 @@ enum CertificateAssetKind {
 }
 
 model CertificateTemplateVersion {
-  id          String   @id @default(cuid())
-  templateId  String
-  version     Int
-  config      String   @db.Text
-  createdById Int?
-  createdAt   DateTime @default(now())
+  id                  String   @id @default(cuid())
+  templateId          String
+  version             Int
+  config              String   @db.Text
+  createdById         Int?
+  createdAt           DateTime @default(now())
+  /// Preenchido quando a versão nasceu de um restauro: número da versão copiada.
+  restoredFromVersion Int?
 
   template CertificateTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
