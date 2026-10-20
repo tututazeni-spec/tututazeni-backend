@@ -23,6 +23,8 @@ import { CertificateRulesService } from './certificate-rules.service';
 import { CertificateLifecycleService } from './certificate-lifecycle.service';
 import { CertificateExternalService } from './certificate-external.service';
 import { CertificateBatchService } from './certificate-batch.service';
+import { LearningPathCertificationService } from './learning-path-certification.service';
+import { LearningPathProgressService } from './learning-path-progress.service';
 import { CertificateScopeService } from './certificate-scope.service';
 import { CertificatesTeamService } from './certificates-team.service';
 import { CertificatesExportService } from './certificates-export.service';
@@ -71,6 +73,8 @@ export class CertificatesController {
     private readonly me: CertificatesMeService,
     private readonly templateService: CertificateTemplatesService,
     private readonly assetService: CertificateAssetsService,
+    private readonly learningPaths: LearningPathCertificationService,
+    private readonly pathProgress: LearningPathProgressService,
   ) {}
 
   @Get('my')
@@ -135,6 +139,13 @@ export class CertificatesController {
   @ApiOperation({ summary: 'Resumo pessoal: pendentes, a expirar e obrigatórias em falta' })
   mySummary(@CurrentUser() user: CurrentUserData) {
     return this.me.mySummary(user.id);
+  }
+
+  @Get('my/learning-paths')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'As minhas trilhas: progresso por unidade e estado do certificado' })
+  myLearningPaths(@CurrentUser() user: CurrentUserData) {
+    return this.pathProgress.mine(user.id);
   }
 
   @Get('admin/history')
@@ -246,6 +257,18 @@ export class CertificatesController {
   @ApiOperation({ summary: 'Emitir em lote (cada titular é validado à parte)' })
   issueBatch(@Body() dto: BatchIssueDto, @CurrentUser() user: CurrentUserData) {
     return this.batch.issueBatch(dto, user.id);
+  }
+
+  @Post('reconcile-learning-paths')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary:
+      'Reconciliar trilhas: conclui e certifica quem já cumpriu todos os cursos obrigatórios',
+  })
+  reconcileLearningPaths(
+    @Query('learningPathId', new ParseIntPipe({ optional: true })) learningPathId?: number,
+  ) {
+    return this.learningPaths.reconcile(learningPathId);
   }
 
   @Post(':id/revoke')

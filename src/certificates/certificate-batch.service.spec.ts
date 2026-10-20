@@ -33,6 +33,9 @@ describe('CertificateBatchService', () => {
   const prisma = {
     enrollment: { findMany: jest.fn() },
     eventParticipant: { findMany: jest.fn() },
+    trainingParticipant: { findMany: jest.fn() },
+    learningPathCourse: { findMany: jest.fn() },
+    learningPathTraining: { findMany: jest.fn() },
   };
   const issuance = { issue: jest.fn() };
   const audit = { log: jest.fn() };
@@ -42,6 +45,9 @@ describe('CertificateBatchService', () => {
     jest.resetAllMocks();
     prisma.enrollment.findMany.mockResolvedValue([]);
     prisma.eventParticipant.findMany.mockResolvedValue([]);
+    prisma.trainingParticipant.findMany.mockResolvedValue([]);
+    prisma.learningPathCourse.findMany.mockResolvedValue([]);
+    prisma.learningPathTraining.findMany.mockResolvedValue([]);
   });
 
   it('sem userIds nem allEligible → 400', async () => {
@@ -56,10 +62,36 @@ describe('CertificateBatchService', () => {
     );
   });
 
-  it('allEligible em TRAINING → 400', async () => {
-    await expect(
-      svc.issueBatch(dtoOf({ activityKind: 'TRAINING', userIds: undefined, allEligible: true }), 9),
-    ).rejects.toBeInstanceOf(BadRequestException);
+  it('allEligible em TRAINING usa os participantes marcados como concluídos', async () => {
+    prisma.trainingParticipant.findMany.mockResolvedValue([{ userId: 4 }, { userId: 5 }]);
+    issuance.issue.mockResolvedValue({ outcome: 'ISSUED' });
+    const r = await svc.issueBatch(
+      dtoOf({ activityKind: 'TRAINING', userIds: undefined, allEligible: true }),
+      9,
+    );
+    expect(prisma.trainingParticipant.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { session: { trainingId: 10 }, status: 'COMPLETED' },
+      }),
+    );
+    expect(r.issued).toBe(2);
+  });
+
+  it('allEligible em LEARNING_PATH parte dos cursos obrigatórios concluídos', async () => {
+    prisma.learningPathCourse.findMany.mockResolvedValue([{ courseId: 3 }]);
+    prisma.enrollment.findMany.mockResolvedValue([{ userId: 8 }]);
+    issuance.issue.mockResolvedValue({
+      outcome: 'NOT_ELIGIBLE',
+      missing: ['COMPLETION_INCOMPLETE'],
+    });
+    const r = await svc.issueBatch(
+      dtoOf({ activityKind: 'LEARNING_PATH', userIds: undefined, allEligible: true }),
+      9,
+    );
+    expect(prisma.enrollment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { courseId: { in: [3] }, status: 'COMPLETED' } }),
+    );
+    expect(r.failed).toBe(1);
   });
 
   it('allEligible com mais de 500 concluintes → 400 e nada é emitido', async () => {

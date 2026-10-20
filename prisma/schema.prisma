@@ -2971,6 +2971,7 @@ model LearningPath {
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
   courses          LearningPathCourse[]
+  trainings        LearningPathTraining[]
   milestones       LearningPathMilestone[]
   assignments      LearningPathAssignment[]
   enrollments      LearningPathEnrollment[]
@@ -2995,6 +2996,21 @@ model LearningPathCourse {
 
   @@unique([learningPathId, courseId])
   @@index([learningPathId])
+}
+
+// Formações (presenciais/online) que fazem parte de uma trilha, ao lado dos cursos.
+model LearningPathTraining {
+  id             Int          @id @default(autoincrement())
+  learningPathId Int
+  trainingId     Int
+  seq            Int          @default(0)
+  required       Boolean      @default(true)
+  learningPath   LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
+  training       Training     @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+
+  @@unique([learningPathId, trainingId])
+  @@index([learningPathId])
+  @@index([trainingId])
 }
 
 model LearningPathMilestone {
@@ -5227,6 +5243,15 @@ enum TrainingStatus {
 // docs/trainings-detalhado.md pt.2 — "Prioridade" do Plano de Formação e da
 // Formação. Enum dedicado ao módulo (mesmo padrão de GapPriority/PlanPriority
 // noutros módulos) em vez de reutilizar um enum global.
+// Como a conclusão de uma Formação é decidida para efeitos de certificado:
+// MANUAL (formador/Admin marca COMPLETED), ATTENDANCE (presença mínima) ou
+// HYBRID (presença mínima + COMPLETED marcado).
+enum TrainingCompletionMode {
+  MANUAL
+  ATTENDANCE
+  HYBRID
+}
+
 enum TrainingPriority {
   LOW
   MEDIUM
@@ -5285,20 +5310,20 @@ enum SessionModality {
 }
 
 model Training {
-  id                     Int              @id @default(autoincrement())
+  id                     Int                    @id @default(autoincrement())
   title                  String
-  code                   String?          @unique
+  code                   String?                @unique
   shortDescription       String?
-  description            String?          @db.Text
+  description            String?                @db.Text
   objectives             String?
   targetAudience         String?
   type                   TrainingType
   level                  TrainingLevel
-  status                 TrainingStatus   @default(DRAFT)
+  status                 TrainingStatus         @default(DRAFT)
   category               String?
   thematicArea           String?
   tags                   String[]
-  language               String           @default("pt")
+  language               String                 @default("pt")
   workloadHours          Float?
   thumbnailUrl           String?
   // Cor própria da formação nas cartas: índice em PALETTE (frontend); null = derivada do id.
@@ -5318,10 +5343,10 @@ model Training {
   // não acoplar o schema de Course/LearningPath a este módulo.
   courseId               Int?
   learningPathId         Int?
-  priority               TrainingPriority @default(MEDIUM)
-  targetDeptIds          Int[]            @default([])
-  targetUnitIds          Int[]            @default([])
-  targetPositionIds      Int[]            @default([])
+  priority               TrainingPriority       @default(MEDIUM)
+  targetDeptIds          Int[]                  @default([])
+  targetUnitIds          Int[]                  @default([])
+  targetPositionIds      Int[]                  @default([])
   // Plano de Formação a que esta formação pertence (opcional — nem toda
   // formação nasce de um plano).
   trainingPlanId         Int?
@@ -5338,9 +5363,11 @@ model Training {
   // "Modalidade" — plataforma/link (ONLINE), info da sala (VIRTUAL_ROOM) ou
   // instruções de acesso (HYBRID), consoante o `type` escolhido acima.
   modalityDetails        String?
-  mandatory              Boolean          @default(false)
-  passingScore           Int              @default(70)
-  issueCertificate       Boolean          @default(false)
+  mandatory              Boolean                @default(false)
+  passingScore           Int                    @default(70)
+  issueCertificate       Boolean                @default(false)
+  completionMode         TrainingCompletionMode @default(MANUAL)
+  minAttendancePercent   Int                    @default(75)
   cost                   Float?
   completionDeadlineDays Int?
   startDate              DateTime?
@@ -5352,9 +5379,9 @@ model Training {
   plannedSessionsCount   Int?
   // Participantes — inscrição passa a PENDING_APPROVAL em vez de
   // REGISTERED/WAITLIST quando true (ver trainings.service.ts).
-  requiresApproval       Boolean          @default(false)
+  requiresApproval       Boolean                @default(false)
   // Operação
-  requiredResources      String[]         @default([])
+  requiredResources      String[]               @default([])
   // Custos — `cost` acima mantém-se como valor legado/override; o total
   // apresentado na UI é calculado (soma destes + `cost` se nenhum destes
   // estiver preenchido) em vez de guardado, para nunca ficar desactualizado.
@@ -5366,8 +5393,8 @@ model Training {
   otherCosts             Float?
   createdById            Int?
   publishedAt            DateTime?
-  createdAt              DateTime         @default(now())
-  updatedAt              DateTime         @updatedAt
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
 
   instructor         User?                      @relation("TrainingInstructor", fields: [instructorId], references: [id])
   externalInstructor TrainingInstructorProfile? @relation("TrainingExternalInstructor", fields: [externalInstructorId], references: [id])
@@ -5383,6 +5410,7 @@ model Training {
   assessmentLinks    TrainingAssessment[]
   resourceBookings   TrainingResourceBooking[]
   aiTutorSessions    AiTutorSession[]
+  learningPathLinks  LearningPathTraining[]
 
   @@index([status])
   @@index([type])

@@ -84,12 +84,6 @@ describe('CertificateRulesService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('TRAINING ainda sem suporte de factos → BadRequest', async () => {
-    await expect(svc.upsertRule(dtoOf({ activityKind: 'TRAINING' }), 1)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
-  });
-
   it('curso inexistente → NotFound', async () => {
     prisma.course.findUnique.mockResolvedValue(null);
     await expect(svc.upsertRule(dtoOf(), 1)).rejects.toBeInstanceOf(NotFoundException);

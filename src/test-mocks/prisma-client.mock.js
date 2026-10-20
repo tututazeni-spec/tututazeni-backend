@@ -2268,6 +2268,7 @@ const TrainingStatus = {
 };
 
 const TrainingPriority = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', URGENT: 'URGENT' };
+const TrainingCompletionMode = { MANUAL: 'MANUAL', ATTENDANCE: 'ATTENDANCE', HYBRID: 'HYBRID' };
 
 const TrainingPlanPeriod = {
   ANNUAL: 'ANNUAL',
@@ -3273,6 +3274,7 @@ module.exports = {
   TrainingLevel,
   TrainingStatus,
   TrainingPriority,
+  TrainingCompletionMode,
   TrainingPlanPeriod,
   TrainingPlanStatus,
   TrainingParticipantStatus,

@@ -36,6 +36,7 @@ import {
   TrainingCalendarFilterDto,
   TransferParticipantDto,
   BulkRegisterParticipantsDto,
+  BulkCompleteParticipantsDto,
   TrainingReportFilterDto,
 } from './trainings.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -364,6 +365,14 @@ export class TrainingController {
     @Query('reason') reason?: string,
   ) {
     return this.svc.cancelParticipant(id, user.id, reason);
+  }
+
+  @Post('participants/bulk-complete')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @ApiOperation({ summary: 'Marcar vários participantes como concluídos (emite certificados)' })
+  @HttpCode(HttpStatus.OK)
+  bulkComplete(@Body() dto: BulkCompleteParticipantsDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.bulkComplete(dto, user.id);
   }
 
   @Patch('participants/:id/status')

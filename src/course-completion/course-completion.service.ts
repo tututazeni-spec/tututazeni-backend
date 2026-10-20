@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { GamificationService } from '../gamification/gamification.service';
 import { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
+import { LearningPathCertificationService } from '../certificates/learning-path-certification.service';
 import { describeMissing } from '../certificates/certificate-rules';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { assertCanAccess } from '../common/authz/ownership';
@@ -29,6 +30,7 @@ export class CourseCompletionService {
     private prisma: PrismaService,
     private readonly gamification: GamificationService,
     private readonly certificates: CertificateIssuanceService,
+    private readonly learningPaths: LearningPathCertificationService,
   ) {}
 
   /**
@@ -312,6 +314,7 @@ export class CourseCompletionService {
     if (!enrollment) return { finalized: true };
 
     await this.issueCertificateInternal(enrollment);
+    await this.learningPaths.onCourseCompleted(enrollment.userId, enrollment.courseId);
     await this.gamification.awardPoints(enrollment.userId, 100, 'course-completion');
 
     await createNotificationSafe(this.prisma, this.logger, {

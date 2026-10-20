@@ -225,6 +225,28 @@ export class CertificateIssuanceService {
         templateId: null,
       };
     }
+    if (kind === 'TRAINING') {
+      // Mantém o interruptor existente da formação: sem `issueCertificate` não emite.
+      const training = await this.prisma.training.findUnique({
+        where: { id: activityId },
+        select: { issueCertificate: true },
+      });
+      if (!training?.issueCertificate) return null;
+      return {
+        mode: 'AUTOMATIC',
+        criteria: { requireFullCompletion: true },
+        validityDays: null,
+        templateId: null,
+      };
+    }
+    if (kind === 'LEARNING_PATH') {
+      return {
+        mode: 'AUTOMATIC',
+        criteria: { requireFullCompletion: true },
+        validityDays: null,
+        templateId: null,
+      };
+    }
     return null;
   }
 
@@ -260,7 +282,7 @@ export class CertificateIssuanceService {
   }
 
   /** Inclui certificados anteriores à migração (sem dedupKey) para não os duplicar. */
-  private findExisting(
+  private async findExisting(
     input: IssueInput,
     dedupKey: string,
     enrollmentCycle: number,
@@ -272,6 +294,24 @@ export class CertificateIssuanceService {
     }
     if (input.activityKind === 'EVENT') {
       legacy.push({ userId: input.userId, eventId: input.activityId });
+    }
+    if (input.activityKind === 'TRAINING') {
+      // O atalho antigo gravava `CERT-<ts>-<userId>-<sessionId>` sem referência à
+      // formação: reconhece-se pelo id da sessão para não emitir um segundo certificado.
+      const sessions = await this.prisma.trainingSession.findMany({
+        where: { trainingId: input.activityId },
+        select: { id: true },
+      });
+      if (sessions.length > 0) {
+        legacy.push({
+          userId: input.userId,
+          type: CertificateType.TRAINING,
+          activityKind: null,
+          OR: sessions.map(s => ({
+            validationCode: { endsWith: `-${input.userId}-${s.id}` },
+          })),
+        });
+      }
     }
     return this.prisma.certificate.findFirst({
       where: { deletedAt: null, OR: [{ dedupKey }, ...legacy] },

@@ -110,6 +110,44 @@ export class CertificateBatchService {
       });
       return rows.map(r => r.userId);
     }
-    throw new BadRequestException('"Todos os elegíveis" só existe para cursos e eventos');
+    if (dto.activityKind === 'TRAINING') {
+      const rows = await this.prisma.trainingParticipant.findMany({
+        where: { session: { trainingId: dto.activityId }, status: 'COMPLETED' },
+        select: { userId: true },
+        distinct: ['userId'],
+        take: MAX_BATCH_SIZE + 1,
+      });
+      return rows.map(r => r.userId);
+    }
+    // Trilha: quem já concluiu alguma unidade obrigatória (curso ou formação); a
+    // elegibilidade final (todas) é revalidada em `issue()`.
+    const [courses, trainings] = await Promise.all([
+      this.prisma.learningPathCourse.findMany({
+        where: { learningPathId: dto.activityId, required: true },
+        select: { courseId: true },
+      }),
+      this.prisma.learningPathTraining.findMany({
+        where: { learningPathId: dto.activityId, required: true },
+        select: { trainingId: true },
+      }),
+    ]);
+    const [fromCourses, fromTrainings] = await Promise.all([
+      this.prisma.enrollment.findMany({
+        where: { courseId: { in: courses.map(r => r.courseId) }, status: 'COMPLETED' },
+        select: { userId: true },
+        distinct: ['userId'],
+        take: MAX_BATCH_SIZE + 1,
+      }),
+      this.prisma.trainingParticipant.findMany({
+        where: {
+          session: { trainingId: { in: trainings.map(t => t.trainingId) } },
+          status: 'COMPLETED',
+        },
+        select: { userId: true },
+        distinct: ['userId'],
+        take: MAX_BATCH_SIZE + 1,
+      }),
+    ]);
+    return [...new Set([...fromCourses, ...fromTrainings].map(r => r.userId))];
   }
 }

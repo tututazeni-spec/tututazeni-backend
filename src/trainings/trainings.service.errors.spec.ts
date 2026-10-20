@@ -9,8 +9,12 @@ import { TrainingService as TrainingsService } from './trainings.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { CompetenciesService } from '../competencies/competencies.service';
+import { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
+import { LearningPathCertificationService } from '../certificates/learning-path-certification.service';
 
 const mockAuditService = { log: jest.fn().mockResolvedValue(undefined) };
+const mockCertificates = { issue: jest.fn().mockResolvedValue({ outcome: 'ISSUED' }) };
+const mockLearningPaths = { onTrainingCompleted: jest.fn().mockResolvedValue([]) };
 const mockCompetenciesService = { updateFromTraining: jest.fn().mockResolvedValue(undefined) };
 
 const mockPrisma = {
@@ -40,6 +44,8 @@ describe('TrainingsService — registerParticipant (capacidade / lista de espera
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AuditService, useValue: mockAuditService },
         { provide: CompetenciesService, useValue: mockCompetenciesService },
+        { provide: CertificateIssuanceService, useValue: mockCertificates },
+        { provide: LearningPathCertificationService, useValue: mockLearningPaths },
       ],
     }).compile();
     service = module.get<TrainingsService>(TrainingsService);
@@ -145,6 +151,8 @@ describe('TrainingsService — cancelParticipant (ownership + promoção da list
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AuditService, useValue: mockAuditService },
         { provide: CompetenciesService, useValue: mockCompetenciesService },
+        { provide: CertificateIssuanceService, useValue: mockCertificates },
+        { provide: LearningPathCertificationService, useValue: mockLearningPaths },
       ],
     }).compile();
     service = module.get<TrainingsService>(TrainingsService);
@@ -205,6 +213,8 @@ describe('TrainingsService — updateParticipantStatus (emissão automática de 
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AuditService, useValue: mockAuditService },
         { provide: CompetenciesService, useValue: mockCompetenciesService },
+        { provide: CertificateIssuanceService, useValue: mockCertificates },
+        { provide: LearningPathCertificationService, useValue: mockLearningPaths },
       ],
     }).compile();
     service = module.get<TrainingsService>(TrainingsService);
@@ -217,7 +227,7 @@ describe('TrainingsService — updateParticipantStatus (emissão automática de 
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('conclusão com nota abaixo do mínimo não emite certificado', async () => {
+  it('conclusão pede sempre a emissão centralizada (a regra e a nota mínima são revalidadas lá)', async () => {
     mockPrisma.trainingParticipant.findUnique.mockResolvedValue({
       id: 1,
       userId: 7,
@@ -225,15 +235,17 @@ describe('TrainingsService — updateParticipantStatus (emissão automática de 
     });
     mockPrisma.trainingSession.findUnique.mockResolvedValue({
       id: 10,
-      training: { issueCertificate: true, passingScore: 70 },
+      training: { id: 10, issueCertificate: true, passingScore: 70 },
     });
 
     await service.updateParticipantStatus(1, { status: 'COMPLETED', finalScore: 50 } as any);
 
-    expect(mockPrisma.certificate.create).not.toHaveBeenCalled();
+    expect(mockCertificates.issue).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 7, activityKind: 'TRAINING', trigger: 'AUTO' }),
+    );
   });
 
-  it('conclusão com nota suficiente emite certificado automaticamente', async () => {
+  it('conclusão com nota suficiente emite o certificado da formação', async () => {
     mockPrisma.trainingParticipant.findUnique.mockResolvedValue({
       id: 1,
       userId: 7,
@@ -241,15 +253,18 @@ describe('TrainingsService — updateParticipantStatus (emissão automática de 
     });
     mockPrisma.trainingSession.findUnique.mockResolvedValue({
       id: 10,
-      training: { issueCertificate: true, passingScore: 70 },
+      training: { id: 10, issueCertificate: true, passingScore: 70 },
     });
 
     await service.updateParticipantStatus(1, { status: 'COMPLETED', finalScore: 85 } as any);
 
-    expect(mockPrisma.certificate.create).toHaveBeenCalled();
+    expect(mockCertificates.issue).toHaveBeenCalledWith(
+      expect.objectContaining({ activityKind: 'TRAINING', activityId: 10 }),
+    );
   });
 
-  it('treinamento sem issueCertificate nunca emite, mesmo com nota alta', async () => {
+  it('falha na emissão não impede a conclusão do participante', async () => {
+    mockCertificates.issue.mockRejectedValueOnce(new Error('boom'));
     mockPrisma.trainingParticipant.findUnique.mockResolvedValue({
       id: 1,
       userId: 7,
@@ -257,12 +272,28 @@ describe('TrainingsService — updateParticipantStatus (emissão automática de 
     });
     mockPrisma.trainingSession.findUnique.mockResolvedValue({
       id: 10,
-      training: { issueCertificate: false, passingScore: 70 },
+      training: { id: 10, issueCertificate: true, passingScore: 70 },
     });
 
-    await service.updateParticipantStatus(1, { status: 'COMPLETED', finalScore: 100 } as any);
+    await expect(
+      service.updateParticipantStatus(1, { status: 'COMPLETED', finalScore: 85 } as any),
+    ).resolves.toBeDefined();
+  });
 
-    expect(mockPrisma.certificate.create).not.toHaveBeenCalled();
+  it('estado diferente de COMPLETED não pede emissão', async () => {
+    mockPrisma.trainingParticipant.findUnique.mockResolvedValue({
+      id: 1,
+      userId: 7,
+      sessionId: 10,
+    });
+    mockPrisma.trainingSession.findUnique.mockResolvedValue({
+      id: 10,
+      training: { issueCertificate: true, completionMode: 'MANUAL', passingScore: 70 },
+    });
+
+    await service.updateParticipantStatus(1, { status: 'ATTENDED' } as any);
+
+    expect(mockCertificates.issue).not.toHaveBeenCalled();
   });
 });
 
@@ -278,6 +309,8 @@ describe('TrainingsService — bulkAttendance', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AuditService, useValue: mockAuditService },
         { provide: CompetenciesService, useValue: mockCompetenciesService },
+        { provide: CertificateIssuanceService, useValue: mockCertificates },
+        { provide: LearningPathCertificationService, useValue: mockLearningPaths },
       ],
     }).compile();
     service = module.get<TrainingsService>(TrainingsService);
@@ -307,5 +340,42 @@ describe('TrainingsService — bulkAttendance', () => {
     expect(mockPrisma.trainingParticipant.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 2 }, data: { status: 'ABSENT' } }),
     );
+  });
+});
+
+describe('TrainingsService — bulkComplete', () => {
+  let service: TrainingsService;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    Object.defineProperty(mockPrisma, 'read', { get: () => mockPrisma, configurable: true });
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        TrainingsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: AuditService, useValue: mockAuditService },
+        { provide: CompetenciesService, useValue: mockCompetenciesService },
+        { provide: CertificateIssuanceService, useValue: mockCertificates },
+        { provide: LearningPathCertificationService, useValue: mockLearningPaths },
+      ],
+    }).compile();
+    service = module.get<TrainingsService>(TrainingsService);
+  });
+
+  it('conclui cada participante à parte: um erro não perde os restantes', async () => {
+    mockPrisma.trainingParticipant.findUnique
+      .mockResolvedValueOnce({ id: 1, userId: 7, sessionId: 10 })
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 3, userId: 8, sessionId: 10 });
+    mockPrisma.trainingSession.findUnique.mockResolvedValue({
+      id: 10,
+      training: { id: 10, issueCertificate: true, passingScore: 70 },
+    });
+
+    const r = await service.bulkComplete({ participantIds: [1, 2, 3] }, 99);
+
+    expect(r).toMatchObject({ total: 3, completed: 2, failed: 1 });
+    expect(r.results[1]).toMatchObject({ participantId: 2, ok: false });
+    expect(mockCertificates.issue).toHaveBeenCalledTimes(2);
   });
 });
