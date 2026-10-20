@@ -276,12 +276,13 @@ export class CertificatesController {
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({
     summary:
-      'Reconciliar trilhas: conclui e certifica quem já cumpriu todos os cursos obrigatórios',
+      'Reconciliar trilhas: relata (simulação, por defeito) ou emite (dryRun=false) os certificados de quem já cumpriu todas as unidades obrigatórias',
   })
   reconcileLearningPaths(
     @Query('learningPathId', new ParseIntPipe({ optional: true })) learningPathId?: number,
+    @Query('dryRun') dryRun?: string,
   ) {
-    return this.learningPaths.reconcile(learningPathId);
+    return this.learningPaths.reconcile(learningPathId, dryRun !== 'false');
   }
 
   @Post(':id/revoke')

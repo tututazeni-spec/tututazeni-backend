@@ -4,6 +4,7 @@ describe('LearningPathCertificationService', () => {
   const prisma = {
     learningPathCourse: { findMany: jest.fn() },
     learningPathTraining: { findMany: jest.fn() },
+    certificate: { findFirst: jest.fn() },
     learningPathEnrollment: { updateMany: jest.fn(), findMany: jest.fn() },
   };
   const facts = { collect: jest.fn() };
@@ -79,15 +80,47 @@ describe('LearningPathCertificationService', () => {
     expect(issuance.issue).toHaveBeenCalledTimes(1);
   });
 
-  it('reconcile percorre as inscrições por concluir e conta as emissões', async () => {
-    prisma.learningPathEnrollment.findMany.mockResolvedValue([
+  describe('reconcile', () => {
+    const enrollments = [
       { userId: 1, learningPathId: 5 },
       { userId: 2, learningPathId: 5 },
-    ]);
-    facts.collect
-      .mockResolvedValueOnce({ completionPct: 100 })
-      .mockResolvedValueOnce({ completionPct: 50 });
+      { userId: 3, learningPathId: 5 },
+    ];
 
-    expect(await svc.reconcile(5)).toEqual({ checked: 2, issued: 1 });
+    it('simulação (por defeito) relata elegíveis e ignora quem já tem certificado, sem emitir', async () => {
+      prisma.learningPathEnrollment.findMany.mockResolvedValue(enrollments);
+      facts.collect
+        .mockResolvedValueOnce({ completionPct: 100 })
+        .mockResolvedValueOnce({ completionPct: 50 })
+        .mockResolvedValueOnce({ completionPct: 100 });
+      prisma.certificate.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 9 });
+
+      expect(await svc.reconcile(5)).toEqual({
+        dryRun: true,
+        checked: 3,
+        eligible: 1,
+        issued: 0,
+        items: [
+          { userId: 1, learningPathId: 5, outcome: 'ELIGIBLE' },
+          { userId: 3, learningPathId: 5, outcome: 'SKIPPED' },
+        ],
+      });
+      expect(issuance.issue).not.toHaveBeenCalled();
+      expect(prisma.learningPathEnrollment.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('dryRun=false emite e conta as emissões', async () => {
+      prisma.learningPathEnrollment.findMany.mockResolvedValue(enrollments.slice(0, 2));
+      facts.collect
+        .mockResolvedValueOnce({ completionPct: 100 })
+        .mockResolvedValueOnce({ completionPct: 50 });
+
+      expect(await svc.reconcile(5, false)).toMatchObject({
+        dryRun: false,
+        checked: 2,
+        issued: 1,
+        items: [{ userId: 1, learningPathId: 5, outcome: 'ISSUED' }],
+      });
+    });
   });
 });

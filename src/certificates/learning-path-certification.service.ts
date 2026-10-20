@@ -3,6 +3,21 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CertificateFactsService } from './certificate-facts.service';
 import { CertificateIssuanceService, IssueResult } from './certificate-issuance.service';
 
+export interface ReconcileItem {
+  userId: number;
+  learningPathId: number;
+  outcome: 'ELIGIBLE' | 'ISSUED' | 'SKIPPED' | 'ERROR';
+}
+
+export interface ReconcileReport {
+  dryRun: boolean;
+  checked: number;
+  /** Só em simulação: elegíveis sem certificado, que seriam emitidos. */
+  eligible: number;
+  issued: number;
+  items: ReconcileItem[];
+}
+
 /**
  * A conclusão de uma Trilha deriva das suas unidades obrigatórias (cursos e formações):
  * ao concluir uma, recalcula as trilhas que a contêm e emite o certificado da trilha
@@ -42,26 +57,61 @@ export class LearningPathCertificationService {
     );
   }
 
-  /** Percorre as inscrições em trilhas ainda não concluídas e emite o que estiver em falta. */
-  async reconcile(learningPathId?: number): Promise<{ checked: number; issued: number }> {
+  /**
+   * Percorre as inscrições em trilhas ainda não concluídas. Em simulação (por defeito) só
+   * relata quem já é elegível e ainda não tem certificado; com `dryRun=false` emite.
+   */
+  async reconcile(learningPathId?: number, dryRun = true): Promise<ReconcileReport> {
     const rows = await this.prisma.learningPathEnrollment.findMany({
       where: { status: { not: 'COMPLETED' }, ...(learningPathId ? { learningPathId } : {}) },
       select: { userId: true, learningPathId: true },
     });
+    const items: ReconcileItem[] = [];
     let issued = 0;
     for (const row of rows) {
+      const { userId, learningPathId: pathId } = row;
       try {
-        const r = await this.evaluate(row.userId, row.learningPathId);
-        if (r?.outcome === 'ISSUED' || r?.outcome === 'PENDING_APPROVAL') issued++;
+        if (dryRun) {
+          const facts = await this.facts.collect(userId, 'LEARNING_PATH', pathId);
+          if (facts.completionPct < 100) continue;
+          const existing = await this.prisma.certificate.findFirst({
+            where: {
+              userId,
+              activityKind: 'LEARNING_PATH',
+              activityId: pathId,
+              deletedAt: null,
+              revoked: false,
+            },
+            select: { id: true },
+          });
+          items.push({
+            userId,
+            learningPathId: pathId,
+            outcome: existing ? 'SKIPPED' : 'ELIGIBLE',
+          });
+          continue;
+        }
+        const r = await this.evaluate(userId, pathId);
+        if (!r) continue;
+        const done = r.outcome === 'ISSUED' || r.outcome === 'PENDING_APPROVAL';
+        if (done) issued++;
+        items.push({ userId, learningPathId: pathId, outcome: done ? 'ISSUED' : 'SKIPPED' });
       } catch (e) {
+        items.push({ userId, learningPathId: pathId, outcome: 'ERROR' });
         this.logger.error(
-          `Reconciliação da trilha ${row.learningPathId} (utilizador ${row.userId}): ${
+          `Reconciliação da trilha ${pathId} (utilizador ${userId}): ${
             e instanceof Error ? e.message : String(e)
           }`,
         );
       }
     }
-    return { checked: rows.length, issued };
+    return {
+      dryRun,
+      checked: rows.length,
+      eligible: items.filter(i => i.outcome === 'ELIGIBLE').length,
+      issued,
+      items,
+    };
   }
 
   private async evaluateAll(userId: number, pathIds: number[]): Promise<IssueResult[]> {
