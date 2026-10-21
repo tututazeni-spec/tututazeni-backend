@@ -85,10 +85,19 @@ export class AiProvidersService {
     maxTokens = 1024,
     temperature = 0.7,
     onToken?: (delta: string) => void,
+    // Só Groq: modelo alternativo (quota própria na Groq) para tarefas auxiliares.
+    modelOverride?: string,
   ): Promise<AiResponse> {
     switch (this.provider) {
       case 'groq':
-        return this.chatGroq(systemPrompt, messages, maxTokens, temperature, onToken);
+        return this.chatGroq(
+          systemPrompt,
+          messages,
+          maxTokens,
+          temperature,
+          onToken,
+          modelOverride,
+        );
       case 'gemini':
         return this.emitWhole(
           await this.chatGemini(systemPrompt, messages, maxTokens, temperature),
@@ -142,7 +151,9 @@ export class AiProvidersService {
     maxTokens: number,
     temperature: number,
     onToken?: (delta: string) => void,
+    modelOverride?: string,
   ): Promise<AiResponse> {
+    const model = modelOverride ?? this.groqModel;
     if (!this.groqApiKey) {
       throw new InternalServerErrorException(
         'GROQ_API_KEY não configurada. Obtenha gratuitamente em https://console.groq.com',
@@ -150,19 +161,18 @@ export class AiProvidersService {
     }
 
     const body = {
-      model: this.groqModel,
+      model,
       max_tokens: maxTokens,
       temperature,
       messages: [{ role: 'system', content: system }, ...messages],
       // Os modelos gpt-oss "pensam" antes de responder; no tutor por voz isso
       // só atrasa a resposta, por isso o esforço de raciocínio fica baixo.
-      ...(this.groqModel.includes('gpt-oss') ? { reasoning_effort: 'low' } : {}),
+      ...(model.includes('gpt-oss') ? { reasoning_effort: 'low' } : {}),
       ...(onToken ? { stream: true } : {}),
     };
 
-    let res: Response;
-    try {
-      res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const send = () =>
+      fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -170,6 +180,16 @@ export class AiProvidersService {
         },
         body: JSON.stringify(body),
       });
+
+    let res: Response;
+    try {
+      res = await send();
+      // 429 (limite por minuto): espera o que a Groq indicar (até 5s) e tenta uma vez.
+      if (res.status === 429) {
+        const wait = Math.min(Number(res.headers?.get?.('retry-after')) || 2, 5);
+        await new Promise(r => setTimeout(r, wait * 1000));
+        res = await send();
+      }
     } catch (err: unknown) {
       this.logger.error({
         provider: 'groq',
@@ -194,7 +214,7 @@ export class AiProvidersService {
         text: data.choices?.[0]?.message?.content ?? '',
         tokensUsed: data.usage?.completion_tokens ?? 0,
         provider: 'groq',
-        model: this.groqModel,
+        model,
       };
     } catch (err: unknown) {
       this.logger.error({

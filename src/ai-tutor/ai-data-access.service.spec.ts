@@ -42,42 +42,48 @@ describe('AiDataAccessService', () => {
 
   beforeEach(() => {
     chat.mockReset();
-    fetchMock = jest
-      .fn()
-      .mockResolvedValue({
-        ok: true,
-        status: 200,
-        text: async () => '{"a":1,"password":"x","n":[1]}',
-      });
+    fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => '{"a":1,"password":"x","n":[1]}',
+    });
     (global as any).fetch = fetchMock;
   });
 
+  // 1.ª chamada escolhe módulos, as seguintes escolhem rotas.
+  const plan = (modules: string[], rounds: string[][]) => {
+    let r = 0;
+    chat.mockImplementation(async (sys: string) =>
+      sys.includes('"modules"')
+        ? { text: JSON.stringify({ modules }) }
+        : { text: JSON.stringify({ calls: rounds[r++] ?? [] }) },
+    );
+  };
+
   it('catálogo respeita @Roles, @Public e prefixos negados', async () => {
-    chat.mockResolvedValue({ text: '{"calls":[]}' });
+    plan([], []);
     await svc.gatherContext(emp, { token: 't' }, 'olá');
-    const catalogEmp = chat.mock.calls[0][0] as string;
-    expect(catalogEmp).toContain('/courses/my');
-    expect(catalogEmp).not.toContain('/payroll/runs');
-    expect(catalogEmp).not.toContain('/auth/me');
-    expect(catalogEmp).not.toContain('/courses/open');
+    const modsEmp = chat.mock.calls[0][0] as string;
+    expect(modsEmp).toContain('courses');
+    expect(modsEmp).not.toContain('payroll');
+    expect(modsEmp).not.toContain('auth');
     chat.mockClear();
     await svc.gatherContext(hr, { token: 't' }, 'olá');
-    expect(chat.mock.calls[0][0]).toContain('/payroll/runs');
+    expect(chat.mock.calls[0][0]).toContain('payroll');
   });
 
   it('rejeita rotas fora do catálogo do role (não chama a API)', async () => {
-    chat.mockResolvedValue({
-      text: '{"calls":["/payroll/runs","/auth/me","//evil.com","/courses/../payroll/runs"]}',
-    });
-    const out = await svc.gatherContext(emp, { token: 't' }, 'salários?');
+    plan(
+      ['courses', 'payroll', 'auth'],
+      [['/payroll/runs', '/auth/me', '//evil.com', '/courses/../payroll/runs']],
+    );
+    const out = await svc.gatherContext(emp, { token: 'jwt' }, 'salários?');
     expect(fetchMock).not.toHaveBeenCalled();
     expect(out).toBe('');
   });
 
   it('chama com o token do utilizador, higieniza e devolve bloco', async () => {
-    chat
-      .mockResolvedValueOnce({ text: '{"calls":["/courses/my","/courses/12"]}' })
-      .mockResolvedValue({ text: '{"calls":[]}' });
+    plan(['courses'], [['/courses/my', '/courses/12']]);
     const out = await svc.gatherContext(emp, { token: 'jwt' }, 'os meus cursos');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[0][1].headers.Cookie).toBe('token=jwt');
@@ -87,9 +93,7 @@ describe('AiDataAccessService', () => {
 
   it('403 da API vira aviso de falta de permissão', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 403, text: async () => '' });
-    chat
-      .mockResolvedValueOnce({ text: '{"calls":["/courses/my"]}' })
-      .mockResolvedValue({ text: '{"calls":[]}' });
+    plan(['courses'], [['/courses/my']]);
     const out = await svc.gatherContext(emp, { token: 'jwt' }, 'x');
     expect(out).toContain('SEM PERMISSÃO');
   });
