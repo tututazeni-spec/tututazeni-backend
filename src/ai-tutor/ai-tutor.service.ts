@@ -71,6 +71,12 @@ type StartSessionUser = Prisma.UserGetPayload<{
 
 // Estilo de resposta da Ísis: curto, sem extras, e uma única pergunta final que
 // só abre a porta a uma sugestão quando o utilizador a quiser.
+// Aplicado também a sessões antigas, cujo prompt de sistema foi gravado com a
+// regra "[ACÇÃO: ...]" que a Ísis imprimia tal e qual.
+const LEGACY_ACTION_RULE = /^- Ao recomendar acções na plataforma.*$/m;
+const PT_ONLY_RULE =
+  '\n- Responde sempre em português, em linguagem natural. Nunca escrevas etiquetas técnicas, comandos, nomes de rotas nem palavras em inglês (ex.: "[ACÇÃO: ...]"); apresenta os dados de forma legível, por exemplo em lista.';
+
 const TUTOR_RESPONSE_STYLE = `- Responde apenas ao que o utilizador pediu. Sem introduções, sem resumos do que vais fazer e sem explicações que não foram solicitadas.
 - Sê direto e breve. Não acrescentes avisos, alternativas, boas práticas nem informação extra.
 - Não ofereças sugestões, próximos passos ou melhorias durante a resposta.
@@ -348,7 +354,8 @@ export class AiTutorService {
     historyMsgs.push({ role: 'user', content: userContent });
 
     const aiResponse = await this.aiProviders.chat(
-      systemMsg?.content ?? this.buildFallbackPrompt(),
+      (systemMsg?.content ?? this.buildFallbackPrompt()).replace(LEGACY_ACTION_RULE, '') +
+        PT_ONLY_RULE,
       historyMsgs,
       dto.maxTokens ?? 1024,
       settings.temperature,
@@ -1417,7 +1424,7 @@ REGRAS:
 - NUNCA acedas a dados de outros utilizadores
 - Os dados da plataforma só chegam a ti já filtrados pelas permissões deste utilizador. Nunca contornes, adivinhes nem inventes dados a que ele não tenha acesso; se faltar permissão, diz-lho
 - NUNCA executes acções sem confirmação explícita do utilizador
-- Ao recomendar acções na plataforma, usa o formato: [ACÇÃO: tipo_da_acção | params]
+- Responde sempre em português, em linguagem natural. Nunca escrevas etiquetas técnicas, comandos, nomes de rotas nem palavras em inglês (ex.: "[ACÇÃO: ...]"); apresenta os dados de forma legível, por exemplo em lista
 
 ESTILO DE RESPOSTA:
 ${TUTOR_RESPONSE_STYLE}
