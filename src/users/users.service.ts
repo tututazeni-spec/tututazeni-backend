@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
   ConflictException,
@@ -17,6 +18,12 @@ import { SecuritySettingsService } from '../settings/security-settings.service';
 import { BCRYPT_COST_FACTOR } from '../common/config/security.config';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { flattenRolePermissions } from '../common/utils/role-permissions';
+import {
+  checkEmailAgainstPolicy,
+  EmailPolicyConfig,
+  suggestEmail,
+  suggestEmailAlternatives,
+} from '../common/helpers/email-policy';
 import {
   CreateUserDto,
   UpdateUserDto,
@@ -91,6 +98,78 @@ export class UsersService {
   private sanitize<T extends { password?: string | null }>(user: T): Omit<T, 'password'> {
     const { password, ...rest } = user;
     return rest;
+  }
+
+  // ─── FORMATO DE EMAIL DO TENANT ───────────────────────────────────────────
+  // docs/innova-formato-email-carrinho-sa.md. Sem emailDomain no tenant não há restrições.
+
+  /**
+   * ENFORCE: lança 400 com as violações. SUGGEST: devolve-as como avisos.
+   * `config` permite à importação em massa ler a configuração uma só vez.
+   */
+  private async applyEmailPolicy(email: string, config?: EmailPolicyConfig): Promise<string[]> {
+    const policy = config ?? (await this.settings?.getEmailPolicy());
+    if (!policy?.emailDomain) return [];
+    const violations = checkEmailAgainstPolicy(email, policy);
+    if (violations.length > 0 && policy.emailPolicyMode === 'ENFORCE') {
+      throw new BadRequestException(violations);
+    }
+    return violations;
+  }
+
+  /** Mensagem de email duplicado, com alternativas quando o tenant tem formato definido. */
+  private async duplicateEmailMessage(email: string, fullName?: string): Promise<string> {
+    const base = 'Email já registado';
+    const policy = await this.settings?.getEmailPolicy();
+    if (!policy?.emailDomain || !fullName) return base;
+    const alternatives = await this.findFreeEmailAlternatives(fullName, policy.emailDomain);
+    return alternatives.length > 0
+      ? `${base}. Alternativas livres: ${alternatives.join(', ')}`
+      : base;
+  }
+
+  private async findFreeEmailAlternatives(fullName: string, domain: string): Promise<string[]> {
+    const candidates = suggestEmailAlternatives(fullName, domain, new Set(), 12);
+    if (candidates.length === 0) return [];
+    const taken = await this.prisma.user.findMany({
+      where: { email: { in: candidates } },
+      select: { email: true },
+    });
+    const takenSet = new Set(taken.map(u => u.email));
+    return candidates.filter(c => !takenSet.has(c)).slice(0, 4);
+  }
+
+  /** Pré-validação para o formulário do Diretório (sugestão, estado e homónimos). */
+  async checkEmail(fullName: string, email?: string) {
+    const policy = await this.settings?.getEmailPolicy();
+    if (!policy?.emailDomain) {
+      return {
+        enforced: false,
+        domain: null,
+        mode: null,
+        suggestion: null,
+        violations: [] as string[],
+        taken: false,
+        alternatives: [] as string[],
+      };
+    }
+    const suggestion = suggestEmail(fullName, policy.emailDomain);
+    const candidate = (email ?? suggestion ?? '').trim();
+    const taken = candidate
+      ? (await this.prisma.user.findUnique({
+          where: { email: candidate },
+          select: { id: true },
+        })) !== null
+      : false;
+    return {
+      enforced: true,
+      domain: policy.emailDomain,
+      mode: policy.emailPolicyMode,
+      suggestion,
+      violations: candidate ? checkEmailAgainstPolicy(candidate, policy) : [],
+      taken,
+      alternatives: taken ? await this.findFreeEmailAlternatives(fullName, policy.emailDomain) : [],
+    };
   }
 
   // ─── LISTAGEM ─────────────────────────────────────────────────────────────
@@ -242,8 +321,11 @@ export class UsersService {
     if (this.settings && !opts.skipPolicy) dto = await this.settings.applyUserPolicy(dto);
 
     // Guards de unicidade antes da escrita: força primary para não validar contra réplica atrasada.
+    const emailWarnings = await this.applyEmailPolicy(dto.email);
     const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    if (exists) throw new ConflictException('Email já registado');
+    if (exists) {
+      throw new ConflictException(await this.duplicateEmailMessage(dto.email, dto.fullName));
+    }
 
     if (dto.employeeNumber) {
       const empExists = await this.prisma.user.findFirst({
@@ -413,7 +495,8 @@ export class UsersService {
       email: user.email,
     });
 
-    return this.sanitize(user);
+    const sanitized = this.sanitize(user);
+    return emailWarnings.length > 0 ? { ...sanitized, emailWarnings } : sanitized;
   }
 
   // ─── ACTUALIZAR ───────────────────────────────────────────────────────────
@@ -421,12 +504,21 @@ export class UsersService {
   async update(id: number, dto: UpdateUserDto, updatedById?: number) {
     const existing = await this.findOne(id);
 
+    let emailWarnings: string[] = [];
     if (dto.email && dto.email !== existing.email) {
+      emailWarnings = await this.applyEmailPolicy(dto.email);
       // Guards de unicidade antes da escrita: força primary.
       const emailExists = await this.prisma.user.findFirst({
         where: { email: dto.email, id: { not: id } },
       });
-      if (emailExists) throw new ConflictException('Email já em uso');
+      if (emailExists) {
+        throw new ConflictException(
+          (await this.duplicateEmailMessage(dto.email, dto.fullName ?? existing.fullName)).replace(
+            'registado',
+            'em uso',
+          ),
+        );
+      }
     }
 
     if (dto.employeeNumber && dto.employeeNumber !== existing.employeeNumber) {
@@ -454,7 +546,8 @@ export class UsersService {
     await this.logFieldChanges(id, updatedById ?? id, existing, dto, user);
     await this.writeAuditLog(id, updatedById ?? id, 'USER_UPDATED', { fields: Object.keys(dto) });
 
-    return this.sanitize(user);
+    const sanitized = this.sanitize(user);
+    return emailWarnings.length > 0 ? { ...sanitized, emailWarnings } : sanitized;
   }
 
   // Regista os eventos granulares do Ponto 6 (Departamento/Cargo/Gestor/Perfil
@@ -822,6 +915,8 @@ export class UsersService {
     };
 
     const seenInFile = new Set<string>();
+    // Lida uma só vez: a importação pode ter milhares de linhas.
+    const emailPolicy = await this.settings?.getEmailPolicy();
 
     for (let i = 0; i < dto.rows.length; i++) {
       const line = i + 1;
@@ -834,6 +929,21 @@ export class UsersService {
         }
         if (!row.fullName || row.fullName.trim().length < 2) {
           throw new Error('Nome completo inválido ou em falta');
+        }
+        // ENFORCE rejeita só esta linha (vai para o relatório); SUGGEST segue com aviso.
+        let policyWarning: string | undefined;
+        if (emailPolicy) {
+          try {
+            const warnings = await this.applyEmailPolicy(email, emailPolicy);
+            if (warnings.length > 0) policyWarning = warnings.join(' ');
+          } catch (e: unknown) {
+            const violations = e instanceof BadRequestException ? e.getResponse() : null;
+            const msg =
+              violations && typeof violations === 'object' && 'message' in violations
+                ? [(violations as { message: string | string[] }).message].flat().join(' ')
+                : 'Email fora do formato da organização';
+            throw new Error(msg);
+          }
         }
 
         // Duplicado dentro do próprio ficheiro — não deixar a 2ª ocorrência
@@ -895,7 +1005,7 @@ export class UsersService {
             );
           }
           report.updated++;
-          report.rows.push({ line, email, outcome: 'update' });
+          report.rows.push({ line, email, outcome: 'update', detail: policyWarning });
         } else {
           if (!dryRun) {
             await this.create(
@@ -913,7 +1023,7 @@ export class UsersService {
             );
           }
           report.created++;
-          report.rows.push({ line, email, outcome: 'create' });
+          report.rows.push({ line, email, outcome: 'create', detail: policyWarning });
         }
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : String(e);
@@ -943,8 +1053,11 @@ export class UsersService {
     if (this.settings) dto = await this.settings.applyUserPolicy(dto, { invite: true });
 
     // Guard de unicidade antes da escrita: força primary.
+    // A validação do formato do tenant corre em create(), chamado logo abaixo.
     const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    if (exists) throw new ConflictException('Email já registado');
+    if (exists) {
+      throw new ConflictException(await this.duplicateEmailMessage(dto.email, dto.fullName));
+    }
 
     // CSPRNG — 12 bytes = 24 chars hexadecimais, mais um sufixo fixo para cumprir sempre a
     // política de palavras-passe (maiúscula, símbolo, dígito) quando a organização a aperta.

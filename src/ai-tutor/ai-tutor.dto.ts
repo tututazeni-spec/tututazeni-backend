@@ -9,6 +9,8 @@ import {
   IsBoolean,
   IsObject,
   Min,
+  IsNotEmpty,
+  MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
@@ -290,4 +292,12 @@ export class UpdateAiTutorSettingsDto {
   @IsOptional()
   @IsString()
   customSystemPromptAddendum?: string;
+}
+
+export class AvatarSpeechDto {
+  @ApiProperty({ example: 'Olá! Em que posso ajudar?' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(2500)
+  text!: string;
 }

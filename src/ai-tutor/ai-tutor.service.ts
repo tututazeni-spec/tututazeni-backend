@@ -64,6 +64,16 @@ type StartSessionUser = Prisma.UserGetPayload<{
   };
 }>;
 
+// Estilo de resposta da Ísis: curto, sem extras, e uma única pergunta final que
+// só abre a porta a uma sugestão quando o utilizador a quiser.
+const TUTOR_RESPONSE_STYLE = `- Responde apenas ao que o utilizador pediu. Sem introduções, sem resumos do que vais fazer e sem explicações que não foram solicitadas.
+- Sê direto e breve. Não acrescentes avisos, alternativas, boas práticas nem informação extra.
+- Não ofereças sugestões, próximos passos ou melhorias durante a resposta.
+- No final de cada resposta, faz sempre esta única pergunta: "Gostaria de uma sugestão?"
+- Só dês uma sugestão se o utilizador responder que sim. Se responder que não, ou ignorar a pergunta, não sugiras nada.
+- Quando deres a sugestão, mantém-na curta: uma só, e a mais relevante.
+- Faz no máximo uma pergunta por resposta (a da sugestão).`;
+
 @Injectable()
 export class AiTutorService {
   private readonly logger = new Logger(AiTutorService.name);
@@ -230,7 +240,7 @@ export class AiTutorService {
 
   // ─── ENVIAR MENSAGEM ──────────────────────────────────────────────────────
 
-  async sendMessage(userId: number, dto: SendAiMessageDto) {
+  async sendMessage(userId: number, dto: SendAiMessageDto, onToken?: (delta: string) => void) {
     const session = await this.prisma.read.aiTutorSession.findFirst({
       where: { id: dto.sessionId, userId },
       include: {
@@ -311,6 +321,7 @@ export class AiTutorService {
       historyMsgs,
       dto.maxTokens ?? 1024,
       settings.temperature,
+      onToken,
     );
 
     const latency = Date.now() - start;
@@ -1370,15 +1381,21 @@ REGRAS:
 - Responde SEMPRE em português europeu/angolano, de forma clara e didáctica
 - Adapta a linguagem e complexidade ao cargo e nível do utilizador
 - Dá exemplos práticos do contexto bancário/empresarial angolano quando relevante
-- Se não souberes, diz honestamente e sugere onde procurar
+- Se não souberes, diz honestamente que não sabes
 - Respostas concisas mas completas (máximo 3-4 parágrafos)
 - NUNCA acedas a dados de outros utilizadores
 - NUNCA executes acções sem confirmação explícita do utilizador
 - Ao recomendar acções na plataforma, usa o formato: [ACÇÃO: tipo_da_acção | params]
+
+ESTILO DE RESPOSTA:
+${TUTOR_RESPONSE_STYLE}
 ${settings.customSystemPromptAddendum ? `\nINSTRUÇÕES ADICIONAIS DA ACADEMIA:\n${settings.customSystemPromptAddendum}` : ''}`;
   }
 
   private buildFallbackPrompt(): string {
-    return `És a Ísis, o Tutor de IA da plataforma INNOVA. Responde em português, de forma clara e didáctica.`;
+    return `És a Ísis, o Tutor de IA da plataforma INNOVA. Responde em português, de forma clara e didáctica.
+
+ESTILO DE RESPOSTA:
+${TUTOR_RESPONSE_STYLE}`;
   }
 }

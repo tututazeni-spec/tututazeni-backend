@@ -34,6 +34,10 @@ interface ProviderInfo {
 
 // Formas das respostas JSON de cada fornecedor — só os campos consumidos
 // abaixo, o resto da resposta real é ignorado.
+interface GroqStreamChunk {
+  choices?: { delta?: { content?: string } }[];
+}
+
 interface GroqChatResponse {
   choices?: { message?: { content?: string } }[];
   usage?: { completion_tokens?: number };
@@ -80,18 +84,31 @@ export class AiProvidersService {
     messages: ChatMessage[],
     maxTokens = 1024,
     temperature = 0.7,
+    onToken?: (delta: string) => void,
   ): Promise<AiResponse> {
     switch (this.provider) {
       case 'groq':
-        return this.chatGroq(systemPrompt, messages, maxTokens, temperature);
+        return this.chatGroq(systemPrompt, messages, maxTokens, temperature, onToken);
       case 'gemini':
-        return this.chatGemini(systemPrompt, messages, maxTokens, temperature);
+        return this.emitWhole(
+          await this.chatGemini(systemPrompt, messages, maxTokens, temperature),
+          onToken,
+        );
       case 'ollama':
-        return this.chatOllama(systemPrompt, messages, maxTokens, temperature);
+        return this.emitWhole(
+          await this.chatOllama(systemPrompt, messages, maxTokens, temperature),
+          onToken,
+        );
       default:
         this.logger.warn(`Fornecedor desconhecido: ${this.provider}. A usar Groq.`);
-        return this.chatGroq(systemPrompt, messages, maxTokens, temperature);
+        return this.chatGroq(systemPrompt, messages, maxTokens, temperature, onToken);
     }
+  }
+
+  // Fornecedores sem streaming: a resposta inteira sai de uma vez no onToken.
+  private emitWhole(res: AiResponse, onToken?: (delta: string) => void): AiResponse {
+    if (onToken && res.text) onToken(res.text);
+    return res;
   }
 
   getProviderInfo(): { provider: string; model: string; free: boolean; docs: string } {
@@ -124,6 +141,7 @@ export class AiProvidersService {
     messages: ChatMessage[],
     maxTokens: number,
     temperature: number,
+    onToken?: (delta: string) => void,
   ): Promise<AiResponse> {
     if (!this.groqApiKey) {
       throw new InternalServerErrorException(
@@ -136,6 +154,10 @@ export class AiProvidersService {
       max_tokens: maxTokens,
       temperature,
       messages: [{ role: 'system', content: system }, ...messages],
+      // Os modelos gpt-oss "pensam" antes de responder; no tutor por voz isso
+      // só atrasa a resposta, por isso o esforço de raciocínio fica baixo.
+      ...(this.groqModel.includes('gpt-oss') ? { reasoning_effort: 'low' } : {}),
+      ...(onToken ? { stream: true } : {}),
     };
 
     let res: Response;
@@ -164,6 +186,8 @@ export class AiProvidersService {
       throw new InternalServerErrorException(`Erro Groq: ${res.status}`);
     }
 
+    if (onToken) return this.readGroqStream(res, onToken);
+
     try {
       const data = (await res.json()) as GroqChatResponse;
       return {
@@ -181,6 +205,42 @@ export class AiProvidersService {
       });
       throw err;
     }
+  }
+
+  // Lê a resposta em streaming (SSE "data: {...}") e entrega cada pedaço de
+  // texto ao onToken à medida que chega.
+  private async readGroqStream(
+    res: Response,
+    onToken: (delta: string) => void,
+  ): Promise<AiResponse> {
+    if (!res.body) throw new InternalServerErrorException('Groq não devolveu stream');
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let text = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        const payload = trimmed.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+        try {
+          const delta = (JSON.parse(payload) as GroqStreamChunk).choices?.[0]?.delta?.content;
+          if (delta) {
+            text += delta;
+            onToken(delta);
+          }
+        } catch {
+          // linha parcial/ruído: ignora, o resto do stream continua
+        }
+      }
+    }
+    return { text, tokensUsed: 0, provider: 'groq', model: this.groqModel };
   }
 
   // ── GOOGLE GEMINI ─────────────────────────────────────────────────────────

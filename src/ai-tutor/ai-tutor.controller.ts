@@ -10,6 +10,7 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
+  Res,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -17,6 +18,9 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AiTutorService } from './ai-tutor.service';
 import { AiProvidersService } from './ai-providers.service';
 import { AiKnowledgeService } from './ai-knowledge.service';
+import { SimliService } from './simli.service';
+import { IsisSpeechService } from './isis-speech.service';
+import { Response } from 'express';
 import {
   StartAiSessionDto,
   SendAiMessageDto,
@@ -29,6 +33,7 @@ import {
   KnowledgeSearchDto,
   AcceptRecommendationDto,
   UpdateAiTutorSettingsDto,
+  AvatarSpeechDto,
 } from './ai-tutor.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -47,6 +52,8 @@ export class AiTutorController {
     private readonly svc: AiTutorService,
     private readonly providers: AiProvidersService,
     private readonly knowledge: AiKnowledgeService,
+    private readonly simli: SimliService,
+    private readonly speech: IsisSpeechService,
   ) {}
 
   // ── Info ──────────────────────────────────────────────────────────────────
@@ -55,6 +62,38 @@ export class AiTutorController {
   @ApiOperation({ summary: 'Fornecedor IA activo (Groq/Gemini/Ollama)' })
   getProvider() {
     return this.providers.getProviderInfo();
+  }
+
+  @Get('avatar/status')
+  @ApiOperation({ summary: 'O avatar Simli da Ísis está configurado?' })
+  avatarStatus(@CurrentUser() user: CurrentUserData) {
+    return { enabled: this.simli.isConfigured() && this.simli.isAllowedFor(user.role?.name) };
+  }
+
+  @Post('avatar/session')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Token temporário de sessão do avatar Simli da Ísis' })
+  createAvatarSession(@CurrentUser() user: CurrentUserData) {
+    this.simli.assertAllowedFor(user.role?.name);
+    return this.simli.createSession();
+  }
+
+  @Post('avatar/speech')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Voz da Ísis em PCM16 16 kHz (ElevenLabs) para alimentar o avatar' })
+  async avatarSpeech(
+    @CurrentUser() user: CurrentUserData,
+    @Body() dto: AvatarSpeechDto,
+    @Res() res: Response,
+  ) {
+    this.simli.assertAllowedFor(user.role?.name);
+    const pcm = await this.speech.synthesizePcm16k(dto.text);
+    res.set({
+      'Content-Type': 'application/octet-stream',
+      'Content-Length': pcm.length,
+      'Cache-Control': 'no-store',
+    });
+    res.end(pcm);
   }
 
   @Get('stats')
@@ -125,6 +164,36 @@ export class AiTutorController {
   })
   startSession(@CurrentUser() user: CurrentUserData, @Body() dto: StartAiSessionDto) {
     return this.svc.startSession(user.id, dto);
+  }
+
+  // Igual a sessions/message, mas o texto sai à medida que é gerado (SSE):
+  // `event: token` com {t} por pedaço e `event: done` com a resposta final.
+  // Permite à Ísis começar a falar sem esperar pela resposta inteira.
+  @Post('sessions/message/stream')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Enviar mensagem ao tutor com resposta em streaming (SSE)' })
+  async sendMessageStream(
+    @CurrentUser() user: CurrentUserData,
+    @Body() dto: SendAiMessageDto,
+    @Res() res: Response,
+  ) {
+    res.set({
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders();
+    const send = (event: string, data: unknown) =>
+      res.write(['event: ' + event, 'data: ' + JSON.stringify(data), '', ''].join('\n'));
+    try {
+      const result = await this.svc.sendMessage(user.id, dto, t => send('token', { t }));
+      send('done', result);
+    } catch (e) {
+      send('error', { message: e instanceof Error ? e.message : 'Erro ao gerar a resposta' });
+    } finally {
+      res.end();
+    }
   }
 
   @Post('sessions/message')

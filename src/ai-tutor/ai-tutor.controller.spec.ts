@@ -3,6 +3,8 @@ import { AiTutorController } from './ai-tutor.controller';
 import { AiTutorService } from './ai-tutor.service';
 import { AiProvidersService } from './ai-providers.service';
 import { AiKnowledgeService } from './ai-knowledge.service';
+import { SimliService } from './simli.service';
+import { IsisSpeechService } from './isis-speech.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -32,6 +34,15 @@ const mockKnowledge = {
   search: jest.fn().mockResolvedValue([]),
 };
 
+const mockSimli = {
+  isConfigured: jest.fn().mockReturnValue(true),
+  isAllowedFor: jest.fn().mockReturnValue(true),
+  assertAllowedFor: jest.fn(),
+  createSession: jest.fn().mockResolvedValue({ sessionToken: 't' }),
+};
+
+const mockSpeech = { synthesizePcm16k: jest.fn().mockResolvedValue(Buffer.from([1, 2])) };
+
 const mockUser = { id: 1, email: 'test@innova.com', role: { name: 'ADMIN' } };
 
 describe('AiTutorController', () => {
@@ -45,6 +56,8 @@ describe('AiTutorController', () => {
         { provide: AiTutorService, useValue: mockSvc },
         { provide: AiProvidersService, useValue: mockProviders },
         { provide: AiKnowledgeService, useValue: mockKnowledge },
+        { provide: SimliService, useValue: mockSimli },
+        { provide: IsisSpeechService, useValue: mockSpeech },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -58,6 +71,22 @@ describe('AiTutorController', () => {
   it('getProvider → getProviderInfo', () => {
     controller.getProvider();
     expect(mockProviders.getProviderInfo).toHaveBeenCalled();
+  });
+
+  it('avatarStatus → enabled conforme a configuração', () => {
+    expect(controller.avatarStatus(mockUser as any)).toEqual({ enabled: true });
+  });
+
+  it('createAvatarSession → SimliService.createSession', async () => {
+    await controller.createAvatarSession(mockUser as any);
+    expect(mockSimli.createSession).toHaveBeenCalled();
+  });
+
+  it('avatarSpeech → PCM devolvido em octet-stream', async () => {
+    const res = { set: jest.fn(), end: jest.fn() };
+    await controller.avatarSpeech(mockUser as any, { text: 'Olá' }, res as any);
+    expect(mockSpeech.synthesizePcm16k).toHaveBeenCalledWith('Olá');
+    expect(res.end).toHaveBeenCalledWith(Buffer.from([1, 2]));
   });
 
   it('stats → getUsageStats', async () => {

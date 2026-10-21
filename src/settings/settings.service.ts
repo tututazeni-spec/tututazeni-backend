@@ -5,6 +5,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { writeChainedAuditLog } from '../common/helpers/audit-chain';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
+import { EmailPolicyConfig, normalizeDomain } from '../common/helpers/email-policy';
 import { UpdateOrganizationSettingsDto, UpdateUserPolicyDto } from './settings.dto';
 import {
   POLICY_REQUIRED_FIELD_OPTIONS,
@@ -83,16 +84,32 @@ export class SettingsService {
       dateFormat: t.dateFormat,
       timeFormat: t.timeFormat,
       numberFormat: t.numberFormat,
+      emailDomain: t.emailDomain,
+      emailPattern: t.emailPattern,
+      emailPolicyMode: t.emailPolicyMode,
       updatedAt: t.updatedAt,
+    };
+  }
+
+  /** Formato de email do tenant; sem `emailDomain` não há restrições. */
+  async getEmailPolicy(): Promise<EmailPolicyConfig> {
+    const t = await this.tenant();
+    return {
+      emailDomain: t.emailDomain,
+      emailPattern: t.emailPattern,
+      emailPolicyMode: t.emailPolicyMode,
     };
   }
 
   async updateOrganization(dto: UpdateOrganizationSettingsDto, actorId?: number) {
     const t = await this.tenant();
     // "" -> undefined já foi tratado pelo DTO; só se grava o que veio no payload.
+    const { emailDomain, ...otherFields } = dto;
     const data = Object.fromEntries(
-      Object.entries(dto).filter(([, v]) => v !== undefined),
-    ) as UpdateOrganizationSettingsDto;
+      Object.entries(otherFields).filter(([, v]) => v !== undefined),
+    ) as Omit<UpdateOrganizationSettingsDto, 'emailDomain'> & { emailDomain?: string | null };
+    // emailDomain: "" desactiva a regra (null), ao contrário dos restantes campos.
+    if (emailDomain !== undefined) data.emailDomain = normalizeDomain(emailDomain) || null;
     if (Object.keys(data).length > 0) {
       await this.prisma.tenantConfig.update({ where: { id: t.id }, data });
     }
