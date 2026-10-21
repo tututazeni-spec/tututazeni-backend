@@ -4,12 +4,13 @@ import { AiTutorService } from './ai-tutor.service';
 import { AiTutorController } from './ai-tutor.controller';
 import { AiProvidersService } from './ai-providers.service';
 import { AiKnowledgeService } from './ai-knowledge.service';
+import { SimliService } from './simli.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { SettingsModule } from '../settings/settings.module';
 
 @Module({
   imports: [PrismaModule, SettingsModule],
-  providers: [AiProvidersService, AiTutorService, AiKnowledgeService],
+  providers: [AiProvidersService, AiTutorService, AiKnowledgeService, SimliService],
   controllers: [AiTutorController],
   exports: [AiTutorService, AiProvidersService, AiKnowledgeService],
 })

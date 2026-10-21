@@ -42,6 +42,12 @@ export const envValidationSchema = Joi.object({
   ELEVENLABS_API_KEY: Joi.string().optional().allow(''),
   ELEVENLABS_VOICE_ID: Joi.string().optional().allow(''),
 
+  // Avatar da Ísis (Simli) — opcionais; sem eles a Ísis usa imagem estática
+  SIMLI_API_KEY: Joi.string().optional().allow(''),
+  SIMLI_FACE_ID: Joi.string().optional().allow(''),
+  SIMLI_MAX_SESSION_SECONDS: Joi.number().integer().min(30).default(600),
+  SIMLI_MAX_IDLE_SECONDS: Joi.number().integer().min(30).default(180),
+
   // Runtime
   JWT_USER_CACHE_TTL_MS: Joi.number().default(30000),
   LOG_LEVEL: Joi.string().valid('trace', 'debug', 'info', 'warn', 'error', 'fatal').default('info'),

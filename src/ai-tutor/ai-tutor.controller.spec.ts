@@ -3,6 +3,7 @@ import { AiTutorController } from './ai-tutor.controller';
 import { AiTutorService } from './ai-tutor.service';
 import { AiProvidersService } from './ai-providers.service';
 import { AiKnowledgeService } from './ai-knowledge.service';
+import { SimliService } from './simli.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -32,6 +33,11 @@ const mockKnowledge = {
   search: jest.fn().mockResolvedValue([]),
 };
 
+const mockSimli = {
+  isConfigured: jest.fn().mockReturnValue(true),
+  createSession: jest.fn().mockResolvedValue({ sessionToken: 't' }),
+};
+
 const mockUser = { id: 1, email: 'test@innova.com', role: { name: 'ADMIN' } };
 
 describe('AiTutorController', () => {
@@ -45,6 +51,7 @@ describe('AiTutorController', () => {
         { provide: AiTutorService, useValue: mockSvc },
         { provide: AiProvidersService, useValue: mockProviders },
         { provide: AiKnowledgeService, useValue: mockKnowledge },
+        { provide: SimliService, useValue: mockSimli },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -58,6 +65,15 @@ describe('AiTutorController', () => {
   it('getProvider → getProviderInfo', () => {
     controller.getProvider();
     expect(mockProviders.getProviderInfo).toHaveBeenCalled();
+  });
+
+  it('avatarStatus → enabled conforme a configuração', () => {
+    expect(controller.avatarStatus()).toEqual({ enabled: true });
+  });
+
+  it('createAvatarSession → SimliService.createSession', async () => {
+    await controller.createAvatarSession();
+    expect(mockSimli.createSession).toHaveBeenCalled();
   });
 
   it('stats → getUsageStats', async () => {

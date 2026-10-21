@@ -17,6 +17,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AiTutorService } from './ai-tutor.service';
 import { AiProvidersService } from './ai-providers.service';
 import { AiKnowledgeService } from './ai-knowledge.service';
+import { SimliService } from './simli.service';
 import {
   StartAiSessionDto,
   SendAiMessageDto,
@@ -47,6 +48,7 @@ export class AiTutorController {
     private readonly svc: AiTutorService,
     private readonly providers: AiProvidersService,
     private readonly knowledge: AiKnowledgeService,
+    private readonly simli: SimliService,
   ) {}
 
   // ── Info ──────────────────────────────────────────────────────────────────
@@ -55,6 +57,19 @@ export class AiTutorController {
   @ApiOperation({ summary: 'Fornecedor IA activo (Groq/Gemini/Ollama)' })
   getProvider() {
     return this.providers.getProviderInfo();
+  }
+
+  @Get('avatar/status')
+  @ApiOperation({ summary: 'O avatar Simli da Ísis está configurado?' })
+  avatarStatus() {
+    return { enabled: this.simli.isConfigured() };
+  }
+
+  @Post('avatar/session')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Token temporário de sessão do avatar Simli da Ísis' })
+  createAvatarSession() {
+    return this.simli.createSession();
   }
 
   @Get('stats')
