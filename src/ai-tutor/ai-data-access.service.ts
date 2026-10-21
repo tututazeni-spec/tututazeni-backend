@@ -66,6 +66,10 @@ const MAX_ROUNDS = 2;
 const MAX_RESULT_CHARS = 5000;
 const MAX_TOTAL_CHARS = 12000;
 const MAX_CATALOG_ROUTES = 400;
+const MAX_MODULES_PICKED = 3;
+// Modelo leve e com quota própria na Groq, para o planeamento não gastar o limite
+// por minuto do modelo que responde ao utilizador.
+const plannerModel = () => process.env.AI_TUTOR_PLANNER_MODEL ?? 'llama-3.1-8b-instant';
 const REQUEST_TIMEOUT_MS = 8000;
 
 @Injectable()
@@ -101,8 +105,24 @@ export class AiDataAccessService {
     let total = 0;
     const already = new Set<string>();
 
+    // Módulos relevantes escolhidos uma só vez (passo barato); as rondas seguintes
+    // reutilizam-nos para o prompt continuar pequeno.
+    const moduleOf = (p: string) => p.split('/')[1] ?? '';
+    const names = [...new Set(catalog.map(moduleOf))].filter(Boolean);
+    const picked = await this.pickModules(names, message).catch(e => {
+      this.logger.warn({
+        userId: user.id,
+        action: 'AI_TUTOR_DATA_PLAN',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao escolher módulos para a Ísis consultar',
+      });
+      return [] as string[];
+    });
+    if (picked.length === 0) return '';
+    const scoped = catalog.filter(p => picked.includes(moduleOf(p)));
+
     for (let round = 0; round < MAX_ROUNDS; round++) {
-      const calls = await this.plan(catalog, message, blocks).catch(e => {
+      const calls = await this.pickRoutes(scoped, message, blocks).catch(e => {
         this.logger.warn({
           userId: user.id,
           action: 'AI_TUTOR_DATA_PLAN',
@@ -144,7 +164,32 @@ export class AiDataAccessService {
 
   // ─── Planeamento (modelo escolhe as rotas do catálogo) ────────────────────
 
-  private async plan(catalog: string[], message: string, done: string[]): Promise<string[]> {
+  private async pickModules(names: string[], message: string): Promise<string[]> {
+    const system = [
+      'És o planeador de consultas da Ísis (tutora de IA da plataforma INNOVA).',
+      'Indica que módulos da plataforma têm os dados de que a pergunta precisa.',
+      `Responde APENAS com JSON: {"modules":["nome", ...]} com no máximo ${MAX_MODULES_PICKED} nomes da lista, ou {"modules":[]} se não precisa de dados (conversa, explicações, conceitos).`,
+      'MÓDULOS: ' + names.join(', '),
+    ].join('\n');
+    const res = await this.providers.chat(
+      system,
+      [{ role: 'user', content: message }],
+      120,
+      0,
+      undefined,
+      plannerModel(),
+    );
+    const match = res.text.match(/\{[\s\S]*\}/);
+    if (!match) return [];
+    const parsed = JSON.parse(match[0]) as { modules?: unknown };
+    return Array.isArray(parsed.modules)
+      ? parsed.modules
+          .filter((m): m is string => typeof m === 'string' && names.includes(m))
+          .slice(0, MAX_MODULES_PICKED)
+      : [];
+  }
+
+  private async pickRoutes(catalog: string[], message: string, done: string[]): Promise<string[]> {
     const system = [
       'És o planeador de consultas da Ísis (tutora de IA da plataforma INNOVA).',
       'Decide se a pergunta do utilizador precisa de dados da plataforma. Só podes escolher rotas GET da lista.',
@@ -159,7 +204,14 @@ export class AiDataAccessService {
       (done.length
         ? `\n\nDados já obtidos (se bastam, responde {"calls":[]}):\n${done.join('\n---\n').slice(0, 4000)}`
         : '');
-    const res = await this.providers.chat(system, [{ role: 'user', content: userMsg }], 300, 0);
+    const res = await this.providers.chat(
+      system,
+      [{ role: 'user', content: userMsg }],
+      300,
+      0,
+      undefined,
+      plannerModel(),
+    );
     const match = res.text.match(/\{[\s\S]*\}/);
     if (!match) return [];
     const parsed = JSON.parse(match[0]) as { calls?: unknown };
