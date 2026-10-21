@@ -41,6 +41,7 @@ export const envValidationSchema = Joi.object({
   // GET /lessons/:id/audio devolve 503 se não configurados)
   ELEVENLABS_API_KEY: Joi.string().optional().allow(''),
   ELEVENLABS_VOICE_ID: Joi.string().optional().allow(''),
+  ELEVENLABS_MODEL_ID: Joi.string().optional().allow(''),
 
   // Avatar da Ísis (Simli) — opcionais; sem eles a Ísis usa imagem estática
   SIMLI_API_KEY: Joi.string().optional().allow(''),

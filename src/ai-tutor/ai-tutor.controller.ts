@@ -10,6 +10,7 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
+  Res,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -18,6 +19,8 @@ import { AiTutorService } from './ai-tutor.service';
 import { AiProvidersService } from './ai-providers.service';
 import { AiKnowledgeService } from './ai-knowledge.service';
 import { SimliService } from './simli.service';
+import { IsisSpeechService } from './isis-speech.service';
+import { Response } from 'express';
 import {
   StartAiSessionDto,
   SendAiMessageDto,
@@ -30,6 +33,7 @@ import {
   KnowledgeSearchDto,
   AcceptRecommendationDto,
   UpdateAiTutorSettingsDto,
+  AvatarSpeechDto,
 } from './ai-tutor.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -49,6 +53,7 @@ export class AiTutorController {
     private readonly providers: AiProvidersService,
     private readonly knowledge: AiKnowledgeService,
     private readonly simli: SimliService,
+    private readonly speech: IsisSpeechService,
   ) {}
 
   // ── Info ──────────────────────────────────────────────────────────────────
@@ -70,6 +75,19 @@ export class AiTutorController {
   @ApiOperation({ summary: 'Token temporário de sessão do avatar Simli da Ísis' })
   createAvatarSession() {
     return this.simli.createSession();
+  }
+
+  @Post('avatar/speech')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Voz da Ísis em PCM16 16 kHz (ElevenLabs) para alimentar o avatar' })
+  async avatarSpeech(@Body() dto: AvatarSpeechDto, @Res() res: Response) {
+    const pcm = await this.speech.synthesizePcm16k(dto.text);
+    res.set({
+      'Content-Type': 'application/octet-stream',
+      'Content-Length': pcm.length,
+      'Cache-Control': 'no-store',
+    });
+    res.end(pcm);
   }
 
   @Get('stats')
