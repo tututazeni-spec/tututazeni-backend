@@ -17,7 +17,7 @@ export class IsisSpeechService {
     if (!apiKey || !voiceId) {
       throw new ServiceUnavailableException('Voz da Ísis não configurada');
     }
-    const modelId = this.config.get<string>('ELEVENLABS_MODEL_ID') || 'eleven_multilingual_v2';
+    const modelId = this.config.get<string>('ELEVENLABS_MODEL_ID') || 'eleven_flash_v2_5';
 
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=pcm_16000`,

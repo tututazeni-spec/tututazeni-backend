@@ -136,6 +136,9 @@ export class AiProvidersService {
       max_tokens: maxTokens,
       temperature,
       messages: [{ role: 'system', content: system }, ...messages],
+      // Os modelos gpt-oss "pensam" antes de responder; no tutor por voz isso
+      // só atrasa a resposta, por isso o esforço de raciocínio fica baixo.
+      ...(this.groqModel.includes('gpt-oss') ? { reasoning_effort: 'low' } : {}),
     };
 
     let res: Response;
