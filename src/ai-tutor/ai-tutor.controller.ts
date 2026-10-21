@@ -10,6 +10,7 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
+  Req,
   Res,
   HttpCode,
   HttpStatus,
@@ -20,7 +21,7 @@ import { AiProvidersService } from './ai-providers.service';
 import { AiKnowledgeService } from './ai-knowledge.service';
 import { SimliService } from './simli.service';
 import { IsisSpeechService } from './isis-speech.service';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import {
   StartAiSessionDto,
   SendAiMessageDto,
@@ -42,6 +43,14 @@ import { Role } from '../auth/enums/role.enum';
 import { isPrivileged } from '../common/authz/ownership';
 
 const AI_TUTOR_ADMIN_ROLES = [Role.ADMIN, Role.RH];
+
+// Credenciais do próprio utilizador (cookie httpOnly ou Bearer) que a Ísis
+// reencaminha ao consultar os módulos — nunca uma conta de serviço.
+function accessFrom(user: CurrentUserData, req: Request) {
+  const cookies = (req?.cookies ?? {}) as Record<string, string | undefined>;
+  const bearer = req?.headers?.authorization?.replace(/^Bearer\s+/i, '');
+  return { user, auth: { token: cookies.token ?? bearer } };
+}
 
 @ApiTags('AI Tutor — Ísis (Groq / Gemini / Ollama)')
 @ApiBearerAuth()
@@ -175,6 +184,7 @@ export class AiTutorController {
   async sendMessageStream(
     @CurrentUser() user: CurrentUserData,
     @Body() dto: SendAiMessageDto,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
     res.set({
@@ -187,7 +197,12 @@ export class AiTutorController {
     const send = (event: string, data: unknown) =>
       res.write(['event: ' + event, 'data: ' + JSON.stringify(data), '', ''].join('\n'));
     try {
-      const result = await this.svc.sendMessage(user.id, dto, t => send('token', { t }));
+      const result = await this.svc.sendMessage(
+        user.id,
+        dto,
+        t => send('token', { t }),
+        accessFrom(user, req),
+      );
       send('done', result);
     } catch (e) {
       send('error', { message: e instanceof Error ? e.message : 'Erro ao gerar a resposta' });
@@ -198,8 +213,12 @@ export class AiTutorController {
 
   @Post('sessions/message')
   @ApiOperation({ summary: 'Enviar mensagem ao tutor e receber resposta contextualizada' })
-  sendMessage(@CurrentUser() user: CurrentUserData, @Body() dto: SendAiMessageDto) {
-    return this.svc.sendMessage(user.id, dto);
+  sendMessage(
+    @CurrentUser() user: CurrentUserData,
+    @Body() dto: SendAiMessageDto,
+    @Req() req: Request,
+  ) {
+    return this.svc.sendMessage(user.id, dto, undefined, accessFrom(user, req));
   }
 
   @Patch('sessions/:id/end')
