@@ -13,6 +13,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AiProvidersService } from './ai-providers.service';
 import { AiKnowledgeService } from './ai-knowledge.service';
 import {
+  AiDataAccessService,
+  type DataAccessAuth,
+  type DataAccessUser,
+} from './ai-data-access.service';
+import {
   StartAiSessionDto,
   SendAiMessageDto,
   AiSessionFilterDto,
@@ -84,6 +89,8 @@ export class AiTutorService {
     private knowledge: AiKnowledgeService,
     // Definições §6: Ísis ligada/desligada, módulos activos e limite por utilizador.
     @Optional() private orgIntegrations?: IntegrationSettingsService,
+    // Acesso de leitura aos módulos, sempre com as permissões do próprio utilizador.
+    @Optional() private dataAccess?: AiDataAccessService,
   ) {}
 
   // ─── INICIAR SESSÃO ───────────────────────────────────────────────────────
@@ -240,7 +247,12 @@ export class AiTutorService {
 
   // ─── ENVIAR MENSAGEM ──────────────────────────────────────────────────────
 
-  async sendMessage(userId: number, dto: SendAiMessageDto, onToken?: (delta: string) => void) {
+  async sendMessage(
+    userId: number,
+    dto: SendAiMessageDto,
+    onToken?: (delta: string) => void,
+    access?: { user: DataAccessUser; auth: DataAccessAuth },
+  ) {
     const session = await this.prisma.read.aiTutorSession.findFirst({
       where: { id: dto.sessionId, userId },
       include: {
@@ -310,9 +322,28 @@ export class AiTutorService {
             .join('\n')}`
         : '';
 
+    // Dados dos módulos (só leitura, pelas rotas reais com o token do utilizador —
+    // guards e ownership de cada módulo continuam a aplicar-se).
+    const platformData =
+      access && this.dataAccess
+        ? await this.dataAccess.gatherContext(access.user, access.auth, dto.message).catch(e => {
+            this.logger.warn({
+              userId,
+              sessionId: dto.sessionId,
+              action: 'AI_TUTOR_DATA_ACCESS',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao consultar dados dos módulos — a prosseguir sem eles',
+            });
+            return '';
+          })
+        : '';
+
     // Adicionar contexto extra se fornecido
     const userContent =
-      (dto.contextHint ? `[Contexto: ${dto.contextHint}]\n\n` : '') + dto.message + knowledgeBlock;
+      (dto.contextHint ? `[Contexto: ${dto.contextHint}]\n\n` : '') +
+      dto.message +
+      knowledgeBlock +
+      platformData;
 
     historyMsgs.push({ role: 'user', content: userContent });
 
@@ -1384,6 +1415,7 @@ REGRAS:
 - Se não souberes, diz honestamente que não sabes
 - Respostas concisas mas completas (máximo 3-4 parágrafos)
 - NUNCA acedas a dados de outros utilizadores
+- Os dados da plataforma só chegam a ti já filtrados pelas permissões deste utilizador. Nunca contornes, adivinhes nem inventes dados a que ele não tenha acesso; se faltar permissão, diz-lho
 - NUNCA executes acções sem confirmação explícita do utilizador
 - Ao recomendar acções na plataforma, usa o formato: [ACÇÃO: tipo_da_acção | params]
 

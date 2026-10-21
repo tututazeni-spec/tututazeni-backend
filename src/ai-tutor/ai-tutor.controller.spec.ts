@@ -114,8 +114,14 @@ describe('AiTutorController', () => {
 
   it('sendMessage → sendMessage(userId, dto)', async () => {
     const dto = {} as any;
-    await controller.sendMessage(mockUser as any, dto);
-    expect(mockSvc.sendMessage).toHaveBeenCalledWith(1, dto);
+    await controller.sendMessage(mockUser as any, dto, {
+      cookies: { token: 'jwt' },
+      headers: {},
+    } as any);
+    expect(mockSvc.sendMessage).toHaveBeenCalledWith(1, dto, undefined, {
+      user: mockUser,
+      auth: { token: 'jwt' },
+    });
   });
 
   it('endSession → endSession(userId, id)', async () => {
