@@ -1,6 +1,9 @@
 // src/ai-tutor/simli.service.ts
 // Avatar em tempo real da Ísis (Simli). A chave de API fica só aqui, no
 // backend: o browser recebe apenas um token temporário de sessão.
+// Chama a API do Simli por fetch em vez de usar o simli-client: o pacote faz
+// require('./transports/...') mas publica a pasta como `Transports/`, o que
+// rebenta em Linux (CI/produção).
 import {
   ForbiddenException,
   Injectable,
@@ -8,7 +11,8 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { generateSimliSessionToken } from 'simli-client';
+
+const SIMLI_API_URL = 'https://api.simli.ai';
 
 export interface SimliSession {
   sessionToken: string;
@@ -55,16 +59,19 @@ export class SimliService {
     const maxIdleTime = this.config.get<number>('SIMLI_MAX_IDLE_SECONDS') ?? 180;
 
     try {
-      const { session_token } = await generateSimliSessionToken({
-        apiKey,
-        config: {
+      const res = await fetch(`${SIMLI_API_URL}/compose/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-simli-api-key': apiKey },
+        body: JSON.stringify({
           faceId,
           // O áudio é enviado pelo browser via sendAudioData, não por microfone.
           handleSilence: true,
           maxSessionLength,
           maxIdleTime,
-        },
+        }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+      const { session_token } = (await res.json()) as { session_token: string };
       return { sessionToken: session_token, maxSessionLength, maxIdleTime };
     } catch (err) {
       // O Simli lança o corpo da resposta como string; fica só no log.
