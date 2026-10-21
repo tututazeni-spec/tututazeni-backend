@@ -160,6 +160,36 @@ export class AiTutorController {
     return this.svc.startSession(user.id, dto);
   }
 
+  // Igual a sessions/message, mas o texto sai à medida que é gerado (SSE):
+  // `event: token` com {t} por pedaço e `event: done` com a resposta final.
+  // Permite à Ísis começar a falar sem esperar pela resposta inteira.
+  @Post('sessions/message/stream')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Enviar mensagem ao tutor com resposta em streaming (SSE)' })
+  async sendMessageStream(
+    @CurrentUser() user: CurrentUserData,
+    @Body() dto: SendAiMessageDto,
+    @Res() res: Response,
+  ) {
+    res.set({
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders();
+    const send = (event: string, data: unknown) =>
+      res.write(['event: ' + event, 'data: ' + JSON.stringify(data), '', ''].join('\n'));
+    try {
+      const result = await this.svc.sendMessage(user.id, dto, t => send('token', { t }));
+      send('done', result);
+    } catch (e) {
+      send('error', { message: e instanceof Error ? e.message : 'Erro ao gerar a resposta' });
+    } finally {
+      res.end();
+    }
+  }
+
   @Post('sessions/message')
   @ApiOperation({ summary: 'Enviar mensagem ao tutor e receber resposta contextualizada' })
   sendMessage(@CurrentUser() user: CurrentUserData, @Body() dto: SendAiMessageDto) {

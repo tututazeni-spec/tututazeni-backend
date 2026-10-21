@@ -230,7 +230,7 @@ export class AiTutorService {
 
   // ─── ENVIAR MENSAGEM ──────────────────────────────────────────────────────
 
-  async sendMessage(userId: number, dto: SendAiMessageDto) {
+  async sendMessage(userId: number, dto: SendAiMessageDto, onToken?: (delta: string) => void) {
     const session = await this.prisma.read.aiTutorSession.findFirst({
       where: { id: dto.sessionId, userId },
       include: {
@@ -311,6 +311,7 @@ export class AiTutorService {
       historyMsgs,
       dto.maxTokens ?? 1024,
       settings.temperature,
+      onToken,
     );
 
     const latency = Date.now() - start;
