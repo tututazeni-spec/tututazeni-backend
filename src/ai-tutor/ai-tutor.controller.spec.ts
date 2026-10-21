@@ -36,6 +36,8 @@ const mockKnowledge = {
 
 const mockSimli = {
   isConfigured: jest.fn().mockReturnValue(true),
+  isAllowedFor: jest.fn().mockReturnValue(true),
+  assertAllowedFor: jest.fn(),
   createSession: jest.fn().mockResolvedValue({ sessionToken: 't' }),
 };
 
@@ -72,17 +74,17 @@ describe('AiTutorController', () => {
   });
 
   it('avatarStatus → enabled conforme a configuração', () => {
-    expect(controller.avatarStatus()).toEqual({ enabled: true });
+    expect(controller.avatarStatus(mockUser as any)).toEqual({ enabled: true });
   });
 
   it('createAvatarSession → SimliService.createSession', async () => {
-    await controller.createAvatarSession();
+    await controller.createAvatarSession(mockUser as any);
     expect(mockSimli.createSession).toHaveBeenCalled();
   });
 
   it('avatarSpeech → PCM devolvido em octet-stream', async () => {
     const res = { set: jest.fn(), end: jest.fn() };
-    await controller.avatarSpeech({ text: 'Olá' }, res as any);
+    await controller.avatarSpeech(mockUser as any, { text: 'Olá' }, res as any);
     expect(mockSpeech.synthesizePcm16k).toHaveBeenCalledWith('Olá');
     expect(res.end).toHaveBeenCalledWith(Buffer.from([1, 2]));
   });

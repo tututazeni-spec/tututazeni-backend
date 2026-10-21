@@ -20,6 +20,19 @@ describe('SimliService', () => {
     expect(build({ SIMLI_API_KEY: 'k', SIMLI_FACE_ID: 'f' }).isConfigured()).toBe(true);
   });
 
+  it('SIMLI_ALLOWED_ROLES limita o avatar aos perfis indicados', () => {
+    const svc = build({ SIMLI_ALLOWED_ROLES: 'admin, RH' });
+    expect(svc.isAllowedFor('ADMIN')).toBe(true);
+    expect(svc.isAllowedFor('RH')).toBe(true);
+    expect(svc.isAllowedFor('COLABORADOR')).toBe(false);
+    expect(svc.isAllowedFor(null)).toBe(false);
+    expect(() => svc.assertAllowedFor('COLABORADOR')).toThrow('perfil');
+  });
+
+  it('sem SIMLI_ALLOWED_ROLES todos os perfis têm acesso', () => {
+    expect(build({}).isAllowedFor('COLABORADOR')).toBe(true);
+  });
+
   it('createSession devolve só o token e aplica os limites por omissão', async () => {
     mockGenerate.mockResolvedValue({ session_token: 'tok' });
     const res = await build({ SIMLI_API_KEY: 'k', SIMLI_FACE_ID: 'f' }).createSession();

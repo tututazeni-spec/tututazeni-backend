@@ -46,6 +46,7 @@ export const envValidationSchema = Joi.object({
   // Avatar da Ísis (Simli) — opcionais; sem eles a Ísis usa imagem estática
   SIMLI_API_KEY: Joi.string().optional().allow(''),
   SIMLI_FACE_ID: Joi.string().optional().allow(''),
+  SIMLI_ALLOWED_ROLES: Joi.string().optional().allow(''),
   SIMLI_MAX_SESSION_SECONDS: Joi.number().integer().min(30).default(600),
   SIMLI_MAX_IDLE_SECONDS: Joi.number().integer().min(30).default(180),
 

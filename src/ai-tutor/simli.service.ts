@@ -1,7 +1,12 @@
 // src/ai-tutor/simli.service.ts
 // Avatar em tempo real da Ísis (Simli). A chave de API fica só aqui, no
 // backend: o browser recebe apenas um token temporário de sessão.
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { generateSimliSessionToken } from 'simli-client';
 
@@ -21,6 +26,23 @@ export class SimliService {
     return Boolean(
       this.config.get<string>('SIMLI_API_KEY') && this.config.get<string>('SIMLI_FACE_ID'),
     );
+  }
+
+  // SIMLI_ALLOWED_ROLES (ex.: "ADMIN,RH,GESTOR"): só estes perfis usam o
+  // avatar, que cobra por tempo de uso. Vazio = todos os perfis autenticados.
+  isAllowedFor(roleName: string | null | undefined): boolean {
+    const raw = this.config.get<string>('SIMLI_ALLOWED_ROLES') ?? '';
+    const allowed = raw
+      .split(',')
+      .map(r => r.trim().toUpperCase())
+      .filter(Boolean);
+    return allowed.length === 0 || (!!roleName && allowed.includes(roleName.toUpperCase()));
+  }
+
+  assertAllowedFor(roleName: string | null | undefined): void {
+    if (!this.isAllowedFor(roleName)) {
+      throw new ForbiddenException('O teu perfil não tem acesso ao avatar da Ísis');
+    }
   }
 
   async createSession(): Promise<SimliSession> {

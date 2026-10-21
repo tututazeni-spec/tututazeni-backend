@@ -66,21 +66,27 @@ export class AiTutorController {
 
   @Get('avatar/status')
   @ApiOperation({ summary: 'O avatar Simli da Ísis está configurado?' })
-  avatarStatus() {
-    return { enabled: this.simli.isConfigured() };
+  avatarStatus(@CurrentUser() user: CurrentUserData) {
+    return { enabled: this.simli.isConfigured() && this.simli.isAllowedFor(user.role?.name) };
   }
 
   @Post('avatar/session')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Token temporário de sessão do avatar Simli da Ísis' })
-  createAvatarSession() {
+  createAvatarSession(@CurrentUser() user: CurrentUserData) {
+    this.simli.assertAllowedFor(user.role?.name);
     return this.simli.createSession();
   }
 
   @Post('avatar/speech')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Voz da Ísis em PCM16 16 kHz (ElevenLabs) para alimentar o avatar' })
-  async avatarSpeech(@Body() dto: AvatarSpeechDto, @Res() res: Response) {
+  async avatarSpeech(
+    @CurrentUser() user: CurrentUserData,
+    @Body() dto: AvatarSpeechDto,
+    @Res() res: Response,
+  ) {
+    this.simli.assertAllowedFor(user.role?.name);
     const pcm = await this.speech.synthesizePcm16k(dto.text);
     res.set({
       'Content-Type': 'application/octet-stream',
