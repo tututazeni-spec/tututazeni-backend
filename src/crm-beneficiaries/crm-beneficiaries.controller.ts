@@ -32,6 +32,7 @@ import {
   UpdateParticipationDto,
 } from './dto';
 import { Role } from '../auth/enums/role.enum';
+import { parseDateQuery } from '../common/helpers/parse-date-query';
 
 @ApiTags('CRM — Beneficiários')
 @ApiBearerAuth()
@@ -76,7 +77,7 @@ export class CrmBeneficiariesController {
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Relatório por período' })
   getReport(@Query('start') start: string, @Query('end') end: string) {
-    return this.service.getReport(new Date(start), new Date(end));
+    return this.service.getReport(parseDateQuery(start, 'start'), parseDateQuery(end, 'end'));
   }
 
   @Get(':id')

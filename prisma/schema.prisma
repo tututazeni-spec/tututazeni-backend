@@ -2354,6 +2354,10 @@ model Course {
   primaryInstructorId     Int?
   requiredCourseId        Int?
   publishedAt             DateTime?
+  // Reciclagem: eliminar põe deletedAt; fica 30 dias restaurável e depois é
+  // apagado em definitivo por CoursesService.purgeExpiredDeleted.
+  deletedAt               DateTime?
+  deletedById             Int?
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
   department              Department?             @relation(fields: [departmentId], references: [id])
@@ -2389,6 +2393,7 @@ model Course {
   @@index([createdAt])
   @@index([primaryInstructorId])
   @@index([requiredCourseId])
+  @@index([deletedAt])
 }
 
 model CourseInstructor {

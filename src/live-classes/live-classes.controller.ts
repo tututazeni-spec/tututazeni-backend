@@ -35,6 +35,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
+import { parseDateQuery } from '../common/helpers/parse-date-query';
 
 @ApiTags('Live Classes')
 @ApiBearerAuth()
@@ -64,6 +65,8 @@ export class LiveClassesController {
   @Get('calendar')
   @ApiOperation({ summary: 'Aulas e sessões num intervalo de datas' })
   calendar(@Query('from') from: string, @Query('to') to: string) {
+    parseDateQuery(from, 'from');
+    parseDateQuery(to, 'to');
     return this.svc.getCalendar(from, to);
   }
 

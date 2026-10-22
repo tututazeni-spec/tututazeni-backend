@@ -23,6 +23,7 @@ const mockPrisma = {
     findMany: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
+    count: jest.fn(),
   },
   lesson: {
     create: jest.fn(),
@@ -227,6 +228,7 @@ describe('CoursesService', () => {
   describe('publish', () => {
     it('deve publicar curso com módulos', async () => {
       mockPrisma.course.findUnique.mockResolvedValue(baseCourse);
+      mockPrisma.courseModule.count.mockResolvedValue(1);
       mockPrisma.course.update.mockResolvedValue({ ...baseCourse, status: 'PUBLISHED' });
 
       const result = await service.publish(1);
@@ -240,6 +242,19 @@ describe('CoursesService', () => {
         _count: { enrollments: 0, feedbacks: 0, modules: 0 },
       });
       await expect(service.publish(1)).rejects.toThrow(BadRequestException);
+    });
+
+    // Regressão: o curso 53 foi publicado só com um módulo em DRAFT, os alunos
+    // inscreveram-se e o /learn mostrava "Módulo não publicado" em todas as aulas.
+    it('deve lançar BadRequestException se nenhum módulo estiver publicado', async () => {
+      mockPrisma.course.findUnique.mockResolvedValue(baseCourse); // _count.modules = 2 (rascunhos)
+      mockPrisma.courseModule.count.mockResolvedValue(0);
+
+      await expect(service.publish(1)).rejects.toThrow(/Publique pelo menos um módulo/);
+      expect(mockPrisma.courseModule.count).toHaveBeenCalledWith({
+        where: { courseId: 1, status: 'PUBLISHED' },
+      });
+      expect(mockPrisma.course.update).not.toHaveBeenCalled();
     });
   });
 

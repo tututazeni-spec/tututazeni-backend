@@ -6,6 +6,8 @@
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
+import { assertValidLessonFile } from '../common/authz/lesson-files';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CertificatesService } from '../certificates/certificates.service';
@@ -91,6 +93,9 @@ function toDateOrNull(value?: string | null) {
 // chamado por ambos. Não fundido fisicamente por agora (risco/custo de reescrever
 // duas UIs admin distintas); mesmo padrão de "documentar em vez de fundir" já
 // usado no repo para os dois AuditService (ver CLAUDE.md).
+/** Dias que um curso eliminado fica na reciclagem antes de ser apagado. */
+const RECYCLE_DAYS = 30;
+
 @Injectable()
 export class CoursesService {
   private readonly logger = new Logger(CoursesService.name);
@@ -119,7 +124,7 @@ export class CoursesService {
     } = filters;
     const { skip, take } = calculatePagination(page, limit);
 
-    const where: Prisma.CourseWhereInput = {};
+    const where: Prisma.CourseWhereInput = { deletedAt: null };
     if (status) where.status = status;
     if (category) where.category = category;
     if (level) where.level = level;
@@ -179,7 +184,7 @@ export class CoursesService {
       where: { id },
       include: COURSE_DETAIL_INCLUDE,
     });
-    if (!course) throw new NotFoundException('Curso não encontrado');
+    if (!course || course.deletedAt) throw new NotFoundException('Curso não encontrado');
 
     // docs/06-modulo-courses.md secções 11-12 — "Cursos relacionados" e
     // "Este curso faz parte de: Percurso X". Sem isto o resto da página de
@@ -194,7 +199,7 @@ export class CoursesService {
     const [relatedCourses, pathLinks] = await Promise.all([
       relatedWhere.length > 0
         ? this.prisma.read.course.findMany({
-            where: { id: { not: id }, status: 'PUBLISHED', OR: relatedWhere },
+            where: { id: { not: id }, status: 'PUBLISHED', deletedAt: null, OR: relatedWhere },
             take: 6,
             select: {
               id: true,
@@ -222,7 +227,7 @@ export class CoursesService {
   async getCategories() {
     const cats = await this.prisma.read.course.groupBy({
       by: ['category'],
-      where: { category: { not: null }, status: 'PUBLISHED' },
+      where: { category: { not: null }, status: 'PUBLISHED', deletedAt: null },
       _count: { id: true },
     });
     return cats.map(c => ({ category: c.category, count: c._count.id })).filter(c => c.category);
@@ -275,6 +280,14 @@ export class CoursesService {
     const course = await this.findOne(id);
     if (course._count.modules === 0) {
       throw new BadRequestException('Curso sem módulos não pode ser publicado');
+    }
+    // `_count.modules` inclui rascunhos: um curso só com módulos DRAFT ficava
+    // PUBLISHED mas o aluno via "Módulo não publicado" em todas as aulas.
+    const publishedModules = await this.prisma.courseModule.count({
+      where: { courseId: id, status: 'PUBLISHED' },
+    });
+    if (publishedModules === 0) {
+      throw new BadRequestException('Publique pelo menos um módulo antes de publicar o curso');
     }
     return this.prisma.course.update({
       where: { id },
@@ -342,7 +355,7 @@ export class CoursesService {
           thumbnailUrl: mod.thumbnailUrl,
           learningObjectives: mod.learningObjectives,
           seq: mod.seq,
-          status: 'DRAFT',
+          status: 'PUBLISHED',
           type: mod.type,
           progressionType: mod.progressionType,
           completionRule: mod.completionRule,
@@ -433,15 +446,81 @@ export class CoursesService {
     return copy;
   }
 
-  async remove(id: number) {
+  /** Eliminar = mover para a reciclagem (RECYCLE_DAYS dias, restaurável). */
+  async remove(id: number, userId?: number) {
     const course = await this.findOne(id);
     if (course.status === 'PUBLISHED' && course._count.enrollments > 0) {
       throw new ForbiddenException(
         'Curso publicado com matrículas não pode ser eliminado. Archive-o primeiro.',
       );
     }
-    await this.prisma.course.delete({ where: { id } });
-    return { message: 'Curso eliminado' };
+    await this.prisma.course.update({
+      where: { id },
+      data: { deletedAt: new Date(), deletedById: userId ?? null },
+    });
+    return { message: 'Curso movido para a reciclagem' };
+  }
+
+  async listDeleted() {
+    const courses = await this.prisma.read.course.findMany({
+      where: { deletedAt: { not: null } },
+      orderBy: { deletedAt: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        category: true,
+        thumbnailUrl: true,
+        deletedAt: true,
+        deletedById: true,
+        _count: { select: { modules: true, enrollments: true } },
+      },
+    });
+    const now = Date.now();
+    return courses.map(c => {
+      const purgeAt = c.deletedAt.getTime() + RECYCLE_DAYS * 86_400_000;
+      return {
+        ...c,
+        purgeAt: new Date(purgeAt),
+        daysLeft: Math.max(0, Math.ceil((purgeAt - now) / 86_400_000)),
+      };
+    });
+  }
+
+  async restore(id: number) {
+    const course = await this.prisma.course.findUnique({ where: { id } });
+    if (!course || !course.deletedAt) {
+      throw new NotFoundException('Curso não encontrado na reciclagem');
+    }
+    await this.prisma.course.update({
+      where: { id },
+      data: { deletedAt: null, deletedById: null },
+    });
+    return { message: 'Curso restaurado' };
+  }
+
+  /** Apaga em definitivo os cursos na reciclagem há mais de RECYCLE_DAYS dias. */
+  @Cron('10 4 * * *')
+  async purgeExpiredDeleted() {
+    const cutoff = new Date(Date.now() - RECYCLE_DAYS * 86_400_000);
+    const expired = await this.prisma.course.findMany({
+      where: { deletedAt: { lt: cutoff } },
+      select: { id: true },
+    });
+    let purged = 0;
+    for (const { id } of expired) {
+      try {
+        await this.prisma.course.delete({ where: { id } });
+        purged++;
+      } catch (e: unknown) {
+        // FK sem cascade (ex.: matrículas): fica na reciclagem e tenta-se amanhã.
+        this.logger.warn({
+          err: { message: e instanceof Error ? e.message : 'erro desconhecido' },
+          msg: `Curso ${id} não pôde ser apagado em definitivo`,
+        });
+      }
+    }
+    return { purged };
   }
 
   // ─── Competências ─────────────────────────────────────────────────────────
@@ -465,7 +544,12 @@ export class CoursesService {
     await this.findOne(courseId);
     const { competencyIds, ...data } = dto;
     const mod = await this.prisma.courseModule.create({
-      data: { courseId, ...data, availableFrom: toDateOrNull(dto.availableFrom) },
+      data: {
+        courseId,
+        ...data,
+        status: data.status ?? 'PUBLISHED',
+        availableFrom: toDateOrNull(dto.availableFrom),
+      },
     });
     await this.syncModuleCompetencies(mod.id, competencyIds);
     return mod;
@@ -536,6 +620,7 @@ export class CoursesService {
   async createLesson(moduleId: number, dto: CreateLessonDto) {
     const mod = await this.prisma.courseModule.findUnique({ where: { id: moduleId } });
     if (!mod) throw new NotFoundException('Módulo não encontrado');
+    assertValidLessonFile(dto.type, dto.contentUrl);
     return this.prisma.lesson.create({
       data: {
         moduleId,
@@ -550,6 +635,7 @@ export class CoursesService {
   async updateLesson(lessonId: number, dto: UpdateLessonDto) {
     const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
     if (!lesson) throw new NotFoundException('Aula não encontrada');
+    assertValidLessonFile(dto.type ?? lesson.type, dto.contentUrl);
     return this.prisma.lesson.update({
       where: { id: lessonId },
       data: {
@@ -862,7 +948,7 @@ export class CoursesService {
 
   async getMyEnrollments(userId: number) {
     return this.prisma.read.enrollment.findMany({
-      where: { userId },
+      where: { userId, course: { deletedAt: null } },
       include: {
         course: {
           select: {
@@ -1728,6 +1814,7 @@ export class CoursesService {
         room: dto.room,
         schedule: dto.schedule,
         capacity,
+        status: 'OPEN',
         startDate: new Date(dto.startDate),
         endDate: dto.endDate ? new Date(dto.endDate) : null,
         // Nested create: turma e participantes gravados atomicamente.
@@ -1923,6 +2010,7 @@ export class CoursesService {
     const category = await this.prisma.courseCategory.findUnique({ where: { id } });
     if (!category) throw new NotFoundException('Categoria não encontrada');
     const courses = await this.prisma.read.course.findMany({
+      where: { deletedAt: null },
       select: { id: true, title: true, status: true, category: true },
       orderBy: { title: 'asc' },
     });

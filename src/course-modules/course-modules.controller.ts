@@ -31,6 +31,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
+import { canManageLessonContent, redactModuleFiles } from '../common/authz/lesson-files';
 
 @ApiTags('Course Modules & Lessons')
 @ApiBearerAuth()
@@ -50,8 +51,10 @@ export class CourseModulesController {
 
   @Get('modules/:id')
   @ApiOperation({ summary: 'Detalhe do módulo (aulas + materiais)' })
-  findModule(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.findModuleOrFail(id);
+  async findModule(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    const mod = await this.svc.findModuleOrFail(id);
+    // Os PDFs inline só vão por inteiro a quem gere conteúdos.
+    return canManageLessonContent(user) ? mod : redactModuleFiles(mod);
   }
 
   @Get('modules/:id/analytics')
@@ -168,6 +171,26 @@ export class CourseModulesController {
     return this.svc.markLessonComplete(user.id, dto);
   }
 
+  @Get('lessons/:id/file')
+  @ApiOperation({
+    summary: 'PDF da aula (valida matrícula/publicação/drip; gestores de conteúdos sempre)',
+  })
+  async getLessonFile(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: CurrentUserData,
+    @Res() res: Response,
+  ) {
+    const pdf = await this.svc.getLessonFile(id, user.id, canManageLessonContent(user));
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Length': pdf.length,
+      'Content-Disposition': 'inline; filename="aula.pdf"',
+      'Cache-Control': 'private, no-store',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    res.end(pdf);
+  }
+
   @Get('lessons/:id/audio')
   @ApiOperation({
     summary: 'Áudio da aula gerado por text-to-speech (proxy — chave fica no backend)',
@@ -197,7 +220,7 @@ export class CourseModulesController {
     @Param('courseId', ParseIntPipe) courseId: number,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.getLessonProgress(user.id, courseId);
+    return this.svc.getLessonProgress(user.id, courseId, canManageLessonContent(user));
   }
 
   @Get('modules/:id/completed')

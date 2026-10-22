@@ -51,8 +51,34 @@ describe('CourseModulesController', () => {
   });
 
   it('findModule → findModuleOrFail(id)', async () => {
-    await controller.findModule(2);
+    await controller.findModule(2, mockUser as any);
     expect(mockSvc.findModuleOrFail).toHaveBeenCalledWith(2);
+  });
+
+  it('findModule esconde o PDF inline a quem não gere conteúdos', async () => {
+    mockSvc.findModuleOrFail.mockResolvedValue({
+      id: 2,
+      lessons: [{ id: 1, contentUrl: 'data:application/pdf;base64,JVBERi0x' }],
+    });
+    const colaborador = { id: 9, role: { name: 'COLABORADOR' } };
+    const asStudent = (await controller.findModule(2, colaborador as any)) as any;
+    expect(asStudent.lessons[0]).toMatchObject({ contentUrl: null, hasFile: true });
+    const asAdmin = (await controller.findModule(2, mockUser as any)) as any;
+    expect(asAdmin.lessons[0].contentUrl).toBe('data:application/pdf;base64,JVBERi0x');
+  });
+
+  it('getLessonFile → envia o PDF inline com cabeçalhos privados', async () => {
+    mockSvc.getLessonFile = jest.fn().mockResolvedValue(Buffer.from('%PDF-1'));
+    const res = { set: jest.fn(), end: jest.fn() };
+    await controller.getLessonFile(4, { id: 9, role: { name: 'COLABORADOR' } } as any, res as any);
+    expect(mockSvc.getLessonFile).toHaveBeenCalledWith(4, 9, false);
+    expect(res.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'Content-Type': 'application/pdf',
+        'Cache-Control': 'private, no-store',
+      }),
+    );
+    expect(res.end).toHaveBeenCalledWith(Buffer.from('%PDF-1'));
   });
 
   it('moduleAnalytics → getModuleAnalytics(id)', async () => {
@@ -136,7 +162,7 @@ describe('CourseModulesController', () => {
 
   it('getCourseProgress → getLessonProgress(userId, courseId)', async () => {
     await controller.getCourseProgress(5, mockUser as any);
-    expect(mockSvc.getLessonProgress).toHaveBeenCalledWith(1, 5);
+    expect(mockSvc.getLessonProgress).toHaveBeenCalledWith(1, 5, true);
   });
 
   it('isModuleCompleted → isModuleCompleted(id, userId)', async () => {

@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { LiveClassesController } from './live-classes.controller';
 import { LiveClassesService } from './live-classes.service';
@@ -128,6 +129,13 @@ describe('LiveClassesController', () => {
   it('calendar → getCalendar(from, to)', async () => {
     await controller.calendar('2026-07-01', '2026-07-31');
     expect(mockSvc.getCalendar).toHaveBeenCalledWith('2026-07-01', '2026-07-31');
+  });
+
+  it('calendar sem from/to → 400 em vez de 500', () => {
+    expect(() => controller.calendar(undefined as unknown as string, '2026-07-31')).toThrow(
+      BadRequestException,
+    );
+    expect(mockSvc.getCalendar).not.toHaveBeenCalled();
   });
 
   it('start → start(id)', async () => {
