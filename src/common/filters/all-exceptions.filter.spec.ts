@@ -66,14 +66,14 @@ describe('AllExceptionsFilter', () => {
     ]);
   });
 
-  it('4xx: não inclui stack trace no log (só mensagem)', () => {
+  it('4xx: inclui stack trace no log (regra 2)', () => {
     const res = makeRes();
     new AllExceptionsFilter(logger).catch(
       new NotFoundException('x'),
       makeHost({ method: 'GET', url: '/z', id: 'req-4' }, res),
     );
     expect(logger.warn).toHaveBeenCalled();
-    expect(logger.warn.mock.calls[0][0].err.stack).toBeUndefined();
+    expect(logger.warn.mock.calls[0][0].err.stack).toEqual(expect.any(String));
     expect(logger.warn.mock.calls[0][0].err.message).toBe('x');
   });
 

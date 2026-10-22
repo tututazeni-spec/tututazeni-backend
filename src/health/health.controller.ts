@@ -3,6 +3,7 @@ import { HealthCheck, HealthCheckService, HealthCheckResult } from '@nestjs/term
 import { Public } from '../common/decorators';
 import { PrismaHealthIndicator } from './prisma.health';
 import { RedisHealthIndicator } from './redis.health';
+import { SystemHealthIndicator } from './system.health';
 
 @Controller('health')
 export class HealthController {
@@ -10,6 +11,7 @@ export class HealthController {
     private readonly health: HealthCheckService,
     private readonly prisma: PrismaHealthIndicator,
     private readonly redis: RedisHealthIndicator,
+    private readonly system: SystemHealthIndicator,
   ) {}
 
   // Liveness: a app está viva. Não toca em dependências → sempre 200.
@@ -29,17 +31,27 @@ export class HealthController {
     return this.live();
   }
 
-  // Readiness: Postgres é crítico (controla o 503). Redis é informativo.
+  // Readiness: Postgres é crítico (controla o 503). Redis, filas, disco, heap e
+  // event loop são informativos — aparecem em `details` com estado e números.
   @Get('ready')
   @Public()
   @HealthCheck()
   async ready(): Promise<HealthCheckResult> {
     const result = await this.health.check([() => this.prisma.isHealthy('postgres')]);
-    const redis = await this.redis.check('redis');
+    const extras = Object.assign(
+      {},
+      ...(await Promise.all([
+        this.redis.check('redis'),
+        this.system.queues('queues'),
+        this.system.disk('disk'),
+      ])),
+      this.system.memory('memory'),
+      this.system.eventLoop('eventLoop'),
+    );
     return {
       ...result,
-      info: { ...result.info, ...redis },
-      details: { ...result.details, ...redis },
+      info: { ...result.info, ...extras },
+      details: { ...result.details, ...extras },
     };
   }
 }
