@@ -351,7 +351,7 @@ export class CoursesService {
           thumbnailUrl: mod.thumbnailUrl,
           learningObjectives: mod.learningObjectives,
           seq: mod.seq,
-          status: 'DRAFT',
+          status: 'PUBLISHED',
           type: mod.type,
           progressionType: mod.progressionType,
           completionRule: mod.completionRule,
@@ -474,7 +474,12 @@ export class CoursesService {
     await this.findOne(courseId);
     const { competencyIds, ...data } = dto;
     const mod = await this.prisma.courseModule.create({
-      data: { courseId, ...data, availableFrom: toDateOrNull(dto.availableFrom) },
+      data: {
+        courseId,
+        ...data,
+        status: data.status ?? 'PUBLISHED',
+        availableFrom: toDateOrNull(dto.availableFrom),
+      },
     });
     await this.syncModuleCompetencies(mod.id, competencyIds);
     return mod;
@@ -1739,6 +1744,7 @@ export class CoursesService {
         room: dto.room,
         schedule: dto.schedule,
         capacity,
+        status: 'OPEN',
         startDate: new Date(dto.startDate),
         endDate: dto.endDate ? new Date(dto.endDate) : null,
         // Nested create: turma e participantes gravados atomicamente.
