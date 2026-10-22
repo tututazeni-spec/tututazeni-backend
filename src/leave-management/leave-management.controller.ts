@@ -50,6 +50,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 import { assertCanAccess } from '../common/authz/ownership';
+import { parseDateQuery } from '../common/helpers/parse-date-query';
 
 @ApiTags('Leave Management')
 @ApiBearerAuth()
@@ -291,6 +292,8 @@ export class LeaveManagementController {
     // A10-23: sem isto, qualquer autenticado podia sondar se um colega tinha
     // férias marcadas num período arbitrário.
     assertCanAccess({}, +userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+    parseDateQuery(startDate, 'startDate');
+    parseDateQuery(endDate, 'endDate');
     return this.svc.getConflictCheck(+userId, startDate, endDate);
   }
 
