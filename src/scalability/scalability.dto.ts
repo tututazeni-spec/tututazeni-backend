@@ -21,6 +21,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
+import { IsHttpsUrl } from '../common/validators/is-https-url.decorator';
 
 // -------------------------------------------------------
 // ENUMS (espelhar do Prisma)
@@ -201,7 +202,7 @@ export class CreateIntegrationConfigDto {
   @MaxLength(120)
   platform?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
-  @ApiPropertyOptional() @IsOptional() @IsUrl() baseUrl?: string;
+  @ApiPropertyOptional() @IsOptional() @IsHttpsUrl() baseUrl?: string;
   @ApiPropertyOptional({ enum: IntegrationAuthType })
   @IsOptional()
   @IsEnum(IntegrationAuthType)
@@ -212,7 +213,7 @@ export class CreateIntegrationConfigDto {
   @ApiPropertyOptional() @IsOptional() @IsString() clientSecret?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() accessToken?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() apiKey?: string;
-  @ApiPropertyOptional() @IsOptional() @IsUrl() authUrl?: string;
+  @ApiPropertyOptional() @IsOptional() @IsHttpsUrl() authUrl?: string;
   @ApiPropertyOptional({ enum: IntegrationEnvironment })
   @IsOptional()
   @IsEnum(IntegrationEnvironment)
@@ -245,7 +246,7 @@ export class CreateIntegrationConfigDto {
   @ApiPropertyOptional({ description: 'Mapeamento de campos origem→destino' })
   @IsOptional()
   fieldMapping?: Record<string, string>;
-  @ApiPropertyOptional() @IsOptional() @IsUrl() webhookUrl?: string;
+  @ApiPropertyOptional() @IsOptional() @IsHttpsUrl() webhookUrl?: string;
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
@@ -370,7 +371,7 @@ export class UpdateSlaConfigDto extends PartialType(CreateSlaConfigDto) {}
 // -------------------------------------------------------
 export class UpdateContentDeliveryConfigDto {
   @ApiPropertyOptional() @IsOptional() @IsString() cdnProvider?: string;
-  @ApiPropertyOptional() @IsOptional() @IsUrl() cdnBaseUrl?: string;
+  @ApiPropertyOptional() @IsOptional() @IsHttpsUrl() cdnBaseUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() adaptiveBitrate?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsString() bitrateProfiles?: string; // JSON
   @ApiPropertyOptional() @IsOptional() @IsBoolean() offlineSyncEnabled?: boolean;
