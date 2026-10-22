@@ -84,6 +84,13 @@ export class CoursesController {
     return this.svc.listCategoriesManaged();
   }
 
+  @Get('deleted')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Reciclagem: cursos eliminados nos últimos 30 dias' })
+  listDeleted() {
+    return this.svc.listDeleted();
+  }
+
   @Get('reports')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Relatórios do módulo Cursos' })
@@ -180,9 +187,16 @@ export class CoursesController {
 
   @Delete(':id')
   @Roles(Role.ADMIN, Role.RH)
-  @ApiOperation({ summary: 'Eliminar curso (apenas DRAFT sem matrículas)' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.remove(id);
+  @ApiOperation({ summary: 'Eliminar curso (vai para a reciclagem durante 30 dias)' })
+  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.remove(id, user.id);
+  }
+
+  @Post(':id/restore')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Restaurar curso da reciclagem' })
+  restore(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.restore(id);
   }
 
   // ── Competências ──────────────────────────────────────────────────────────

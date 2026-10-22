@@ -278,9 +278,50 @@ describe('CoursesService (additional)', () => {
         _count: { ...baseCourse._count, enrollments: 0 },
       };
       mockPrisma.course.findUnique.mockResolvedValue(draftCourse);
-      mockPrisma.course.delete.mockResolvedValue(draftCourse);
-      const result = await service.remove(1);
-      expect(result.message).toBe('Curso eliminado');
+      mockPrisma.course.update.mockResolvedValue(draftCourse);
+      const result = await service.remove(1, 7);
+      expect(result.message).toBe('Curso movido para a reciclagem');
+      expect(mockPrisma.course.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { deletedAt: expect.any(Date), deletedById: 7 },
+      });
+      expect(mockPrisma.course.delete).not.toHaveBeenCalled();
+    });
+
+    it('deve lançar NotFoundException para curso já na reciclagem', async () => {
+      mockPrisma.course.findUnique.mockResolvedValue({ ...baseCourse, deletedAt: new Date() });
+      await expect(service.remove(1)).rejects.toThrow(NotFoundException);
+    });
+
+    it('restore limpa deletedAt', async () => {
+      mockPrisma.course.findUnique.mockResolvedValue({ ...baseCourse, deletedAt: new Date() });
+      mockPrisma.course.update.mockResolvedValue(baseCourse);
+      await service.restore(1);
+      expect(mockPrisma.course.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { deletedAt: null, deletedById: null },
+      });
+    });
+
+    it('restore falha se o curso não está na reciclagem', async () => {
+      mockPrisma.course.findUnique.mockResolvedValue({ ...baseCourse, deletedAt: null });
+      await expect(service.restore(1)).rejects.toThrow(NotFoundException);
+    });
+
+    it('listDeleted devolve dias restantes', async () => {
+      const deletedAt = new Date(Date.now() - 10 * 86_400_000);
+      mockPrisma.course.findMany.mockResolvedValue([{ id: 1, title: 'X', deletedAt }]);
+      const [row] = await service.listDeleted();
+      expect(row.daysLeft).toBe(20);
+    });
+
+    it('purgeExpiredDeleted apaga só os expirados e tolera falhas', async () => {
+      mockPrisma.course.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
+      mockPrisma.course.delete
+        .mockResolvedValueOnce({})
+        .mockRejectedValueOnce(new Error('FK'));
+      const res = await service.purgeExpiredDeleted();
+      expect(res).toEqual({ purged: 1 });
     });
 
     it('deve lançar ForbiddenException para PUBLISHED com matrículas', async () => {

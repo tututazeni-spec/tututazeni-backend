@@ -147,8 +147,20 @@ describe('CoursesController', () => {
   });
 
   it('remove → remove(id)', async () => {
-    await controller.remove(1);
-    expect(mockSvc.remove).toHaveBeenCalledWith(1);
+    await controller.remove(1, { id: 7 } as never);
+    expect(mockSvc.remove).toHaveBeenCalledWith(1, 7);
+  });
+
+  it('restore → restore(id)', async () => {
+    mockSvc.restore = jest.fn().mockResolvedValue({});
+    await controller.restore(1);
+    expect(mockSvc.restore).toHaveBeenCalledWith(1);
+  });
+
+  it('listDeleted → listDeleted()', async () => {
+    mockSvc.listDeleted = jest.fn().mockResolvedValue([]);
+    await controller.listDeleted();
+    expect(mockSvc.listDeleted).toHaveBeenCalled();
   });
 
   it('addCompetency → addCompetency(id, cId)', async () => {
