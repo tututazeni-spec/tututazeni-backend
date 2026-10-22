@@ -1,0 +1,31 @@
+# Stack de monitorização LOCAL: Prometheus (9090) + Alertmanager (9093).
+#   1) Gerar o token:   node -e "..."  → ver README abaixo / `npm run monitoring:up`
+#   2) docker compose -f ops/monitoring/local/docker-compose.monitoring.local.yml up -d
+# O token tem de ser igual ao METRICS_TOKEN do .env do backend.
+name: innova-monitoring-local
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: innova-prometheus-local
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=3d'
+    volumes:
+      - ./prometheus.local.yml:/etc/prometheus/prometheus.yml:ro
+      - ../alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - ./metrics_token:/etc/prometheus/secrets/metrics_token:ro
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    ports:
+      - '127.0.0.1:9090:9090'
+    depends_on:
+      - alertmanager
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: innova-alertmanager-local
+    volumes:
+      - ./alertmanager.local.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - '127.0.0.1:9093:9093'
