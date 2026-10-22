@@ -1,4 +1,4 @@
-import { Controller, Get, RequestMethod } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AiDataAccessService } from './ai-data-access.service';
 import { Roles } from '../common/decorators/roles.decorator';

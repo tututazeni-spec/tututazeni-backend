@@ -134,7 +134,9 @@ export class AiDataAccessService {
         return round === 0
           ? picked
               .filter(m => scoped.includes(`/${m}`))
-              .map(m => (m === 'courses' ? '/courses?status=PUBLISHED&limit=100' : `/${m}?limit=100`))
+              .map(m =>
+                m === 'courses' ? '/courses?status=PUBLISHED&limit=100' : `/${m}?limit=100`,
+              )
           : ([] as string[]);
       });
       const fresh = calls.filter(c => !already.has(c)).slice(0, MAX_CALLS_PER_ROUND);
@@ -197,10 +199,7 @@ export class AiDataAccessService {
 
   /** Plano B quando o modelo planeador falha: palavras da pergunta → módulos. */
   private guessModules(names: string[], message: string): string[] {
-    const text = message
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '');
+    const text = message.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     const aliases: Record<string, RegExp> = {
       courses: /curso|catalogo|licao|licoes|matricula|inscri/,
       trainings: /formac/,
