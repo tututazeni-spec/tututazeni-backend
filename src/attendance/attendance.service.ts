@@ -798,7 +798,7 @@ export class AttendanceService {
           overtimeMin: 0,
         });
       }
-      const u = userMap.get(uid)!;
+      const u = userMap.get(uid);
       const n = r._count;
       if (r.status === AttendanceStatus.PRESENT || r.status === AttendanceStatus.PARTIAL)
         u.present += n;

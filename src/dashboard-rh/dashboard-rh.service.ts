@@ -615,14 +615,6 @@ export class DashboardRhService {
   async getSkillsPanel(departmentId?: number) {
     // Só colaboradores activos e competências activas do catálogo — mesma base
     // do denominador (totalUsers), para a taxa de avaliação não passar de 100%.
-    const uWhere = {
-      user: { active: true, ...(departmentId ? { departmentId } : {}) },
-      competency: { isActive: true },
-    };
-
-    // FIX: legacyEmployeeSkill era pedido aqui mas nunca usado no resto da
-    // função (achado ao tipar) — query removida, deixou de desperdiçar uma
-    // consulta a cada carregamento do dashboard.
     // Agregado por competência na BD: utilizadores × competências dá dezenas de
     // milhares de linhas. Gap = (alvo, ou topo da escala) − nível, só se > 0.
     const deptFilter = departmentId
