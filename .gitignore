@@ -114,3 +114,10 @@ ops/caddy/origin/*.pem
 .superpowers/
 worktrees/
 *.tsbuildinfo
+
+# Artefactos locais que não pertencem ao repositório
+dev.db
+errors.txt
+dev-output.txt
+check_roles_tmp.js
+fix-all.js
