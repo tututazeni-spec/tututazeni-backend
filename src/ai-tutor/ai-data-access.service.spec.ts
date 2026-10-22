@@ -105,4 +105,28 @@ describe('AiDataAccessService', () => {
     delete process.env.AI_TUTOR_DATA_ACCESS;
     expect(chat).not.toHaveBeenCalled();
   });
+  it('compacta listas paginadas: metadados primeiro e itens só com campos simples', () => {
+    const out = (svc as any).compact({
+      data: [
+        {
+          id: 1,
+          title: 'Curso A',
+          status: 'PUBLISHED',
+          competencies: [{}, {}],
+          primaryInstructor: { id: 3, fullName: 'Ana' },
+          _count: { enrollments: 4 },
+        },
+      ],
+      meta: { total: 8 },
+    });
+    expect(Object.keys(out)).toEqual(['meta', 'data']);
+    expect(out.data[0]).toEqual({
+      id: 1,
+      title: 'Curso A',
+      status: 'PUBLISHED',
+      competenciesTotal: 2,
+      primaryInstructor: 'Ana',
+      enrollments: 4,
+    });
+  });
 });

@@ -63,8 +63,8 @@ const SENSITIVE_KEY = /pass(word)?|secret|token|hash|salt|apikey|api_key|authori
 
 const MAX_CALLS_PER_ROUND = 3;
 const MAX_ROUNDS = 2;
-const MAX_RESULT_CHARS = 5000;
-const MAX_TOTAL_CHARS = 12000;
+const MAX_RESULT_CHARS = 9000;
+const MAX_TOTAL_CHARS = 14000;
 const MAX_CATALOG_ROUTES = 400;
 const MAX_MODULES_PICKED = 3;
 // Modelo leve e com quota própria na Groq, para o planeamento não gastar o limite
@@ -196,6 +196,8 @@ export class AiDataAccessService {
       `Responde APENAS com JSON: {"calls":["/rota?query", ...]} com no máximo ${MAX_CALLS_PER_ROUND} rotas, ou {"calls":[]} se não precisares de dados (conversa, explicações, conceitos).`,
       'Substitui :param por valores reais (só se os souberes a partir da pergunta ou dos dados já obtidos). Não inventes ids.',
       'Prefere rotas "my"/"me" para dados do próprio utilizador.',
+      'Em listas, junta sempre limit=100 (ou o máximo que a rota aceitar) para trazer tudo numa só consulta.',
+      'Cursos "disponíveis", "no catálogo" ou "criados" no módulo Cursos = cursos publicados: usa /courses?status=PUBLISHED&limit=100 (é o que o catálogo mostra). Só uses outro estado (DRAFT, PAUSED, ARCHIVED) se o utilizador o pedir.',
       'ROTAS DISPONÍVEIS:',
       catalog.join('\n'),
     ].join('\n');
@@ -315,16 +317,56 @@ export class AiDataAccessService {
       } catch {
         return text.slice(0, MAX_RESULT_CHARS);
       }
-      const out = JSON.stringify(this.sanitize(body));
+      const out = JSON.stringify(this.compact(this.sanitize(body)));
       return out.length > MAX_RESULT_CHARS ? out.slice(0, MAX_RESULT_CHARS) + '…[truncado]' : out;
     } catch (e) {
       return `ERRO: consulta falhou (${e instanceof Error ? e.name : 'desconhecido'}).`;
     }
   }
 
+  /**
+   * Torna listas paginadas cabíveis no limite: metadados (total, página…) vêm
+   * primeiro, para nunca serem os cortados, e cada item fica só com campos
+   * simples (os objectos aninhados reduzem-se ao nome/título e as listas
+   * aninhadas à contagem). Assim cabem muitos mais itens por consulta.
+   */
+  private compact(value: unknown): unknown {
+    const slim = (item: unknown): unknown => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(item)) {
+        if (v === null || v === undefined || v === '') continue;
+        if (Array.isArray(v)) {
+          out[`${k}Total`] = v.length;
+        } else if (typeof v === 'object') {
+          const o = v as Record<string, unknown>;
+          const label = o.name ?? o.title ?? o.fullName;
+          if (k === '_count') Object.assign(out, o);
+          else if (label !== undefined) out[k] = label;
+        } else if (typeof v === 'string' && v.length > 120) {
+          out[k] = v.slice(0, 120) + '…';
+        } else {
+          out[k] = v;
+        }
+      }
+      return out;
+    };
+    if (Array.isArray(value)) return value.map(slim);
+    if (value && typeof value === 'object') {
+      const entries = Object.entries(value as Record<string, unknown>);
+      const meta = entries.filter(([, v]) => !Array.isArray(v));
+      const lists = entries.filter(([, v]) => Array.isArray(v));
+      return Object.fromEntries([
+        ...meta,
+        ...lists.map(([k, v]) => [k, (v as unknown[]).map(slim)] as const),
+      ]);
+    }
+    return value;
+  }
+
   private sanitize(value: unknown, depth = 0): unknown {
     if (depth > 6) return undefined;
-    if (Array.isArray(value)) return value.slice(0, 25).map(v => this.sanitize(v, depth + 1));
+    if (Array.isArray(value)) return value.slice(0, 100).map(v => this.sanitize(v, depth + 1));
     if (value && typeof value === 'object') {
       const out: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(value)) {
