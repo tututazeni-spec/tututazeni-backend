@@ -75,7 +75,7 @@ type StartSessionUser = Prisma.UserGetPayload<{
 // regra "[ACÇÃO: ...]" que a Ísis imprimia tal e qual.
 const LEGACY_ACTION_RULE = /^- Ao recomendar acções na plataforma.*$/m;
 const PT_ONLY_RULE =
-  '\n- Responde sempre em português, em linguagem natural. Nunca escrevas etiquetas técnicas, comandos, nomes de rotas nem palavras em inglês (ex.: "[ACÇÃO: ...]"); apresenta os dados de forma legível, por exemplo em lista.';
+  '\n- Responde sempre em português, em linguagem natural. Nunca escrevas etiquetas técnicas, comandos, nomes de rotas nem palavras em inglês (ex.: "[ACÇÃO: ...]"); apresenta os dados de forma legível, por exemplo em lista. Nunca digas que acção vais fazer nem o que estás a fazer (ex.: "vou consultar", "a pesquisar", "acção:"); dá directamente a resposta.';
 
 const TUTOR_RESPONSE_STYLE = `- Responde apenas ao que o utilizador pediu. Sem introduções, sem resumos do que vais fazer e sem explicações que não foram solicitadas.
 - Sê direto e breve. Não acrescentes avisos, alternativas, boas práticas nem informação extra.
