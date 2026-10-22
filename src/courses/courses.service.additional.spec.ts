@@ -317,9 +317,7 @@ describe('CoursesService (additional)', () => {
 
     it('purgeExpiredDeleted apaga só os expirados e tolera falhas', async () => {
       mockPrisma.course.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
-      mockPrisma.course.delete
-        .mockResolvedValueOnce({})
-        .mockRejectedValueOnce(new Error('FK'));
+      mockPrisma.course.delete.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('FK'));
       const res = await service.purgeExpiredDeleted();
       expect(res).toEqual({ purged: 1 });
     });

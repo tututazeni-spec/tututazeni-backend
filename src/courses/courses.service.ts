@@ -478,7 +478,7 @@ export class CoursesService {
     });
     const now = Date.now();
     return courses.map(c => {
-      const purgeAt = c.deletedAt!.getTime() + RECYCLE_DAYS * 86_400_000;
+      const purgeAt = c.deletedAt.getTime() + RECYCLE_DAYS * 86_400_000;
       return {
         ...c,
         purgeAt: new Date(purgeAt),
@@ -515,7 +515,7 @@ export class CoursesService {
       } catch (e: unknown) {
         // FK sem cascade (ex.: matrículas): fica na reciclagem e tenta-se amanhã.
         this.logger.warn({
-          err: { message: e instanceof Error ? e.message : String(e) },
+          err: { message: e instanceof Error ? e.message : 'erro desconhecido' },
           msg: `Curso ${id} não pôde ser apagado em definitivo`,
         });
       }

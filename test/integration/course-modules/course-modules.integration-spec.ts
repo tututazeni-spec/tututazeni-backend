@@ -99,7 +99,7 @@ describe('Course Modules Integration', () => {
         .send({ courseId, title: 'Módulo 1', seq: 0, type: 'THEORETICAL' })
         .expect(201);
       moduleId = res.body.id;
-      expect(res.body.status).toBe('DRAFT');
+      expect(res.body.status).toBe('PUBLISHED');
       expect(res.body.mandatory).toBe(true);
     });
 
@@ -287,7 +287,7 @@ describe('Course Modules Integration', () => {
         .expect(201);
       clonedModuleId = res.body.id;
       expect(res.body.title).toContain('(cópia)');
-      expect(res.body.status).toBe('DRAFT');
+      expect(res.body.status).toBe('PUBLISHED');
       expect(res.body.lessons.length).toBeGreaterThanOrEqual(1);
     });
 
@@ -369,14 +369,22 @@ describe('Course Modules Integration', () => {
       expect(mod.pct).toBe(100);
     });
 
-    it('module-progress — colaborador inscrito recebe o contentUrl do PDF', async () => {
+    it('module-progress — colaborador inscrito não recebe o PDF no JSON mas pode pedi-lo em /lessons/:id/file', async () => {
       const res = await request(app.getHttpServer())
         .get(`/courses/${courseId}/module-progress`)
         .set('Authorization', `Bearer ${employeeToken}`)
         .expect(200);
       const mod = res.body.find((m: any) => m.id === moduleId);
       const lesson = mod.lessons.find((l: any) => l.id === lessonId);
-      expect(lesson.contentUrl).toBe(LESSON_PDF_DATA_URL);
+      // PDFs inline não vão no JSON (1-5 MB por lição): hasFile avisa o leitor.
+      expect(lesson.contentUrl).toBeNull();
+      expect(lesson.hasFile).toBe(true);
+
+      const file = await request(app.getHttpServer())
+        .get(`/lessons/${lessonId}/file`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      expect(file.headers['content-type']).toContain('application/pdf');
     });
 
     it('module-progress — utilizador NÃO inscrito recebe contentUrl null', async () => {
