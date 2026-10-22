@@ -28,6 +28,7 @@ const mockPrisma = {
     findMany: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
+    count: jest.fn(),
   },
   lesson: {
     create: jest.fn(),
@@ -243,6 +244,7 @@ describe('CoursesService (additional)', () => {
     it('deve publicar curso com módulos', async () => {
       const courseWithModules = { ...baseCourse, _count: { ...baseCourse._count, modules: 2 } };
       mockPrisma.course.findUnique.mockResolvedValue(courseWithModules);
+      mockPrisma.courseModule.count.mockResolvedValue(2);
       mockPrisma.course.update.mockResolvedValue({ ...courseWithModules, status: 'PUBLISHED' });
       const result = await service.publish(1);
       expect(result.status).toBe('PUBLISHED');
@@ -404,6 +406,15 @@ describe('CoursesService (additional)', () => {
       mockPrisma.courseModule.findUnique.mockResolvedValue(null);
       await expect(service.createLesson(99, {} as any)).rejects.toThrow(NotFoundException);
     });
+
+    it('rejeita um "PDF" que não é PDF e não grava nada', async () => {
+      mockPrisma.courseModule.findUnique.mockResolvedValue({ id: 1 });
+      const fake = `data:application/pdf;base64,${Buffer.from('<html>').toString('base64')}`;
+      await expect(
+        service.createLesson(1, { title: 'x', type: 'PDF', contentUrl: fake } as any),
+      ).rejects.toThrow(/só são aceites PDFs/);
+      expect(mockPrisma.lesson.create).not.toHaveBeenCalled();
+    });
   });
 
   // ─── updateLesson ─────────────────────────────────────────────
@@ -419,6 +430,14 @@ describe('CoursesService (additional)', () => {
     it('deve lançar NotFoundException se aula não existe', async () => {
       mockPrisma.lesson.findUnique.mockResolvedValue(null);
       await expect(service.updateLesson(99, {} as any)).rejects.toThrow(NotFoundException);
+    });
+
+    it('valida o ficheiro usando o tipo guardado quando o pedido não o traz', async () => {
+      mockPrisma.lesson.findUnique.mockResolvedValue({ id: 1, type: 'PDF' });
+      await expect(
+        service.updateLesson(1, { contentUrl: 'data:text/html;base64,PGI+' } as any),
+      ).rejects.toThrow(/só são aceites PDFs/);
+      expect(mockPrisma.lesson.update).not.toHaveBeenCalled();
     });
   });
 

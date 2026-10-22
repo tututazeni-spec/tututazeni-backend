@@ -6,6 +6,7 @@
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { assertValidLessonFile } from '../common/authz/lesson-files';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CertificatesService } from '../certificates/certificates.service';
@@ -276,6 +277,14 @@ export class CoursesService {
     if (course._count.modules === 0) {
       throw new BadRequestException('Curso sem módulos não pode ser publicado');
     }
+    // `_count.modules` inclui rascunhos: um curso só com módulos DRAFT ficava
+    // PUBLISHED mas o aluno via "Módulo não publicado" em todas as aulas.
+    const publishedModules = await this.prisma.courseModule.count({
+      where: { courseId: id, status: 'PUBLISHED' },
+    });
+    if (publishedModules === 0) {
+      throw new BadRequestException('Publique pelo menos um módulo antes de publicar o curso');
+    }
     return this.prisma.course.update({
       where: { id },
       data: { status: 'PUBLISHED', publishedAt: new Date() },
@@ -536,6 +545,7 @@ export class CoursesService {
   async createLesson(moduleId: number, dto: CreateLessonDto) {
     const mod = await this.prisma.courseModule.findUnique({ where: { id: moduleId } });
     if (!mod) throw new NotFoundException('Módulo não encontrado');
+    assertValidLessonFile(dto.type, dto.contentUrl);
     return this.prisma.lesson.create({
       data: {
         moduleId,
@@ -550,6 +560,7 @@ export class CoursesService {
   async updateLesson(lessonId: number, dto: UpdateLessonDto) {
     const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
     if (!lesson) throw new NotFoundException('Aula não encontrada');
+    assertValidLessonFile(dto.type ?? lesson.type, dto.contentUrl);
     return this.prisma.lesson.update({
       where: { id: lessonId },
       data: {

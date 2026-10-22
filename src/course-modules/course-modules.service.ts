@@ -19,6 +19,7 @@ import {
   CreateModuleMaterialDto,
   CloneModuleDto,
 } from './course-modules.dto';
+import { assertValidLessonFile, decodePdfDataUrl, isInlinePdf } from '../common/authz/lesson-files';
 
 // NOTA — dois sistemas paralelos de Módulos/Lições: ver comentário equivalente
 // no topo de courses/courses.service.ts. Este service é a rota usada por
@@ -267,6 +268,7 @@ export class CourseModulesService {
   async createLesson(dto: CreateModuleLessonDto) {
     const mod = await this.prisma.read.courseModule.findUnique({ where: { id: dto.moduleId } });
     if (!mod) throw new NotFoundException('Módulo não encontrado');
+    assertValidLessonFile(dto.contentType, dto.contentUrl);
 
     return this.prisma.lesson.create({
       data: {
@@ -287,7 +289,27 @@ export class CourseModulesService {
   async updateLesson(id: number, dto: UpdateModuleLessonDto) {
     const lesson = await this.prisma.read.lesson.findUnique({ where: { id } });
     if (!lesson) throw new NotFoundException('Aula não encontrada');
+    assertValidLessonFile(dto.contentType ?? lesson.type, dto.contentUrl);
     return this.prisma.lesson.update({ where: { id }, data: dto });
+  }
+
+  /**
+   * Bytes do PDF de uma lição. Só quem gere conteúdos (`canManage`) ou tem a
+   * lição acessível (matrícula, módulo publicado, drip, sequência, pré-requisitos)
+   * os recebe — o resto leva 403/404, nunca o ficheiro.
+   */
+  async getLessonFile(lessonId: number, userId: number, canManage: boolean): Promise<Buffer> {
+    if (!canManage) {
+      const access = await this.isLessonAccessible(lessonId, userId);
+      if (!access.accessible) throw new ForbiddenException(access.reason ?? 'Aula não acessível');
+    }
+    const lesson = await this.prisma.read.lesson.findUnique({
+      where: { id: lessonId },
+      select: { contentUrl: true },
+    });
+    const bytes = decodePdfDataUrl(lesson?.contentUrl);
+    if (!bytes) throw new NotFoundException('Esta aula não tem ficheiro PDF carregado');
+    return bytes;
   }
 
   async moveLesson(lessonId: number, dto: MoveLessonDto) {
@@ -504,10 +526,16 @@ export class CourseModulesService {
       throw new ServiceUnavailableException('Leitura por voz não configurada');
     }
 
-    const text =
-      lesson.textContent.length > 5000
-        ? lesson.textContent.slice(0, 5000) + '...'
-        : lesson.textContent;
+    // textContent guarda HTML do editor: o TTS não pode ler as tags em voz alta.
+    const plain = lesson.textContent
+      .replace(/<(br|\/p|\/h[1-6]|\/li|\/blockquote)\s*\/?>/gi, '\n')
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .trim();
+    const text = plain.length > 5000 ? plain.slice(0, 5000) + '...' : plain;
 
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
@@ -575,7 +603,7 @@ export class CourseModulesService {
       });
   }
 
-  async getLessonProgress(userId: number, courseId: number) {
+  async getLessonProgress(userId: number, courseId: number, canManage = false) {
     const modules = await this.prisma.read.courseModule.findMany({
       where: { courseId },
       orderBy: { seq: 'asc' },
@@ -601,7 +629,7 @@ export class CourseModulesService {
       where: { userId, courseId },
       select: { id: true },
     });
-    const canSeeContent = !!enrollment;
+    const canSeeContent = !!enrollment || canManage;
 
     // FIX: todos os casts `as any`/`(l: any)` eram desnecessários — `mod` já
     // vem totalmente tipado do `include` acima (lessons+progress, materials).
@@ -647,7 +675,10 @@ export class CourseModulesService {
             durationMinutes: l.durationMinutes,
             isFree: l.isFree,
             allowDownload: l.allowDownload,
-            contentUrl: canSeeContent ? l.contentUrl : null,
+            // PDFs inline não vão no JSON (1-5 MB por lição): o leitor pede-os a
+            // GET /lessons/:id/file, que volta a validar o acesso.
+            contentUrl: canSeeContent && !isInlinePdf(l.contentUrl) ? l.contentUrl : null,
+            hasFile: canSeeContent && !!l.contentUrl,
             // Só disponíveis a quem está inscrito — mesma regra de canSeeContent
             // já aplicada a contentUrl (ver comentário acima).
             textContent: canSeeContent ? l.textContent : null,

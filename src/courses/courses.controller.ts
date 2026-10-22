@@ -47,6 +47,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
+import { canManageLessonContent, redactCourseFiles } from '../common/authz/lesson-files';
 import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 
 @ApiTags('Courses')
@@ -119,8 +120,10 @@ export class CoursesController {
   @Get(':id')
   @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Detalhe completo do curso (módulos, aulas, feedback)' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.findOne(id);
+  async findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    const course = await this.svc.findOne(id);
+    // PDFs das aulas só vão por inteiro a quem gere conteúdos; o aluno usa /lessons/:id/file.
+    return canManageLessonContent(user) ? course : redactCourseFiles(course);
   }
 
   @Get(':id/analytics')

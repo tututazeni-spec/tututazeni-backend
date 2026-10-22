@@ -465,15 +465,96 @@ describe('CourseModulesService (progress)', () => {
       it('inclui contentUrl e allowDownload quando o utilizador está inscrito', async () => {
         mockPrisma.enrollment.findFirst.mockResolvedValue({ id: 99 });
         const result = (await service.getLessonProgress(1, 10)) as any[];
-        expect(result[0].lessons[0].contentUrl).toBe('data:application/pdf;base64,JVBERi0x');
+        // O PDF inline já não vai no JSON: o leitor pede-o a GET /lessons/:id/file.
+        expect(result[0].lessons[0].contentUrl).toBeNull();
+        expect(result[0].lessons[0].hasFile).toBe(true);
         expect(result[0].lessons[0].allowDownload).toBe(true);
+      });
+
+      it('gestores de conteúdos pré-visualizam sem matrícula', async () => {
+        mockPrisma.enrollment.findFirst.mockResolvedValue(null);
+        const result = (await service.getLessonProgress(1, 10, true)) as any[];
+        expect(result[0].lessons[0].hasFile).toBe(true);
       });
 
       it('devolve contentUrl null quando o utilizador não está inscrito', async () => {
         mockPrisma.enrollment.findFirst.mockResolvedValue(null);
         const result = (await service.getLessonProgress(1, 10)) as any[];
         expect(result[0].lessons[0].contentUrl).toBeNull();
+        expect(result[0].lessons[0].hasFile).toBe(false);
       });
+    });
+  });
+
+  // ─── getLessonFile ──────────────────────────────────────────────────────────
+
+  describe('getLessonFile', () => {
+    const pdf = `data:application/pdf;base64,${Buffer.from('%PDF-1.7 x').toString('base64')}`;
+
+    it('recusa quem não tem a aula acessível (sem matrícula) e nunca lê o ficheiro', async () => {
+      mockPrisma.lesson.findUnique.mockResolvedValueOnce({
+        id: 1,
+        module: { status: 'PUBLISHED', course: { id: 10 } },
+      });
+      mockPrisma.enrollment.findFirst.mockResolvedValueOnce(null);
+      await expect(service.getLessonFile(1, 7, false)).rejects.toThrow(/matriculado/);
+    });
+
+    it('recusa módulo não publicado', async () => {
+      mockPrisma.lesson.findUnique.mockResolvedValueOnce({
+        id: 1,
+        module: { status: 'DRAFT', course: { id: 10 } },
+      });
+      await expect(service.getLessonFile(1, 7, false)).rejects.toThrow(/não publicado/);
+    });
+
+    it('gestores de conteúdos saltam o gate e recebem os bytes', async () => {
+      mockPrisma.lesson.findUnique.mockResolvedValueOnce({ contentUrl: pdf });
+      const bytes = await service.getLessonFile(1, 7, true);
+      expect(bytes.toString('latin1')).toBe('%PDF-1.7 x');
+    });
+
+    it('404 se a aula não tem PDF inline', async () => {
+      mockPrisma.lesson.findUnique.mockResolvedValueOnce({ contentUrl: null });
+      await expect(service.getLessonFile(1, 7, true)).rejects.toThrow(/não tem ficheiro/);
+    });
+  });
+
+  // ─── getLessonAudio ─────────────────────────────────────────────────────────
+
+  describe('getLessonAudio', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+      delete process.env.ELEVENLABS_API_KEY;
+      delete process.env.ELEVENLABS_VOICE_ID;
+    });
+
+    it('envia ao TTS o texto sem tags HTML do editor', async () => {
+      process.env.ELEVENLABS_API_KEY = 'k';
+      process.env.ELEVENLABS_VOICE_ID = 'v';
+      mockPrisma.lesson.findUnique.mockResolvedValue({
+        id: 1,
+        requiredLessonId: null,
+        textContent: '<h2>Título</h2><p>Olá <strong>mundo</strong> &amp; todos</p>',
+        module: {
+          status: 'PUBLISHED',
+          seq: 0,
+          progressionType: 'FREE',
+          dripDays: null,
+          availableFrom: null,
+          requiredModuleId: null,
+          course: { id: 10 },
+        },
+      });
+      mockPrisma.enrollment.findFirst.mockResolvedValue({ id: 1, enrolledAt: new Date() });
+      const fetchSpy = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue({ ok: true, arrayBuffer: async () => new ArrayBuffer(1) } as Response);
+
+      await service.getLessonAudio(1, 7);
+
+      const sent = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+      expect(sent.text).toBe('Título\nOlá mundo & todos');
     });
   });
 

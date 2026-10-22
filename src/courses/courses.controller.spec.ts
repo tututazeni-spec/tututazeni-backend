@@ -92,9 +92,21 @@ describe('CoursesController', () => {
   });
 
   it('findOne → findOne(id)', async () => {
-    const result = await controller.findOne(1);
+    const result = await controller.findOne(1, mockUser as any);
     expect(mockSvc.findOne).toHaveBeenCalledWith(1);
     expect(result).toHaveProperty('title');
+  });
+
+  it('findOne esconde o PDF inline das aulas a quem não gere conteúdos', async () => {
+    mockSvc.findOne.mockResolvedValueOnce({
+      id: 1,
+      modules: [{ lessons: [{ contentUrl: 'data:application/pdf;base64,JVBERi0x' }] }],
+    });
+    const result = (await controller.findOne(1, {
+      id: 9,
+      role: { name: 'COLABORADOR' },
+    } as any)) as any;
+    expect(result.modules[0].lessons[0]).toMatchObject({ contentUrl: null, hasFile: true });
   });
 
   it('analytics → getCourseAnalytics', async () => {
