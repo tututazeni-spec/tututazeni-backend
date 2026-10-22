@@ -18,7 +18,9 @@ const RH_PASSWORD = process.env.SMOKE_RH_PASSWORD ?? 'Test@1234';
 export async function resolveCourseId(token: string): Promise<number | null> {
   if (process.env.SMOKE_COURSE_ID) return Number(process.env.SMOKE_COURSE_ID);
   const stateFile = path.join(__dirname, '.seed-state.json');
-  if (fs.existsSync(stateFile)) {
+  // Em modo SMOKE_SEED=false a BD não é a do seed: o ficheiro de estado pode ser
+  // de uma execução anterior noutra BD e apontar para um curso que não existe.
+  if (process.env.SMOKE_SEED !== 'false' && fs.existsSync(stateFile)) {
     return JSON.parse(fs.readFileSync(stateFile, 'utf8')).courseId as number;
   }
   const list = await get('/courses', token);
@@ -125,8 +127,8 @@ describe('Fluxos críticos — RH / RBAC', () => {
     expect(EMPLOYEE_EMAIL).not.toBe(RH_EMAIL);
     const rh = await get('/auth/me', rhToken);
     const emp = await get('/auth/me', employeeToken);
-    expect(emp.body.roleCode).toBe('COLABORADOR');
-    expect(emp.body.roleCode).not.toBe(rh.body.roleCode);
+    expect(emp.body.role.code).toBe('COLABORADOR');
+    expect(emp.body.role.code).not.toBe(rh.body.role.code);
   });
 
   it('GET /users como RH → 200', async () => {
