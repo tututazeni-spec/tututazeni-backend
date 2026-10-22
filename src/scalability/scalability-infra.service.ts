@@ -10,8 +10,21 @@ import { getDatabaseSizeBytes } from '../common/helpers/db-size';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { register } from 'prom-client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { FrontendPerfSampleDto } from './frontend-perf.dto';
+
+// pg_total_relation_size() faz stat a todos os ficheiros de cada tabela+índices
+// (segundos em Windows com ~500 tabelas). Pré-filtra as 40 maiores por relpages
+// (catálogo, sem tocar em ficheiros) e só calcula o tamanho exacto nessas.
+const TOP_TABLES_BY_PAGES = Prisma.sql`
+  SELECT s.relid, s.relname, s.n_live_tup
+  FROM pg_stat_user_tables s
+  JOIN pg_class c ON c.oid = s.relid
+  ORDER BY c.relpages + COALESCE(
+    (SELECT sum(i.relpages) FROM pg_index x JOIN pg_class i ON i.oid = x.indexrelid
+     WHERE x.indrelid = c.oid), 0) DESC
+  LIMIT 40`;
 
 interface HistogramValue {
   labels: Record<string, string | number>;
@@ -348,8 +361,9 @@ export class ScalabilityInfraService {
   private async recordSizeSample() {
     const size = { bytes: await getDatabaseSizeBytes(this.prisma, 0) };
     const tables = await this.prisma.$queryRaw<{ name: string; bytes: bigint }[]>`
-      /* heavy-ok */ SELECT relname AS name, pg_total_relation_size(relid) AS bytes
-      FROM pg_stat_user_tables ORDER BY pg_total_relation_size(relid) DESC LIMIT 30`;
+      /* heavy-ok */ SELECT t.relname AS name, pg_total_relation_size(t.relid) AS bytes
+      FROM (${TOP_TABLES_BY_PAGES}) t
+      ORDER BY 2 DESC LIMIT 30`;
     await this.prisma.databaseSizeSample.create({
       data: {
         sizeBytes: size.bytes,
@@ -449,8 +463,9 @@ export class ScalabilityInfraService {
         'tables',
         () =>
           this.prisma.$queryRaw<{ name: string; bytes: bigint; rows: bigint }[]>`
-            /* heavy-ok */ SELECT relname AS name, pg_total_relation_size(relid) AS bytes, n_live_tup AS rows
-            FROM pg_stat_user_tables ORDER BY pg_total_relation_size(relid) DESC LIMIT 10`,
+            /* heavy-ok */ SELECT t.relname AS name, pg_total_relation_size(t.relid) AS bytes, t.n_live_tup AS rows
+            FROM (${TOP_TABLES_BY_PAGES}) t
+            ORDER BY 2 DESC LIMIT 10`,
         [],
       ),
       slowCatalog(

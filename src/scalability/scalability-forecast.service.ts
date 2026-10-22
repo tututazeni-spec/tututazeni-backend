@@ -10,6 +10,7 @@ import { SharedResult } from '../common/helpers/shared-result';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
+import { CacheService } from '../cache/cache.service';
 import { ScalabilityStorageService } from './scalability-storage.service';
 import {
   Confidence,
@@ -23,6 +24,9 @@ import {
 const SETTINGS_ID = 'default';
 const HORIZONS = [3, 6, 12] as const;
 const MONTHS_BACK = 12;
+// Agregados mensais mudam devagar e varrem ~60k linhas de scalability_metrics
+// a cada abertura da aba — cacheados para não repetir a query (slow query).
+const FORECAST_AGG_CACHE_TTL = 600; // segundos
 
 interface MonthlyRow {
   month: string;
@@ -40,6 +44,7 @@ export class ScalabilityForecastService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly storage: ScalabilityStorageService,
+    private readonly cache: CacheService,
   ) {}
 
   private round(n: number, d = 1) {
@@ -158,8 +163,16 @@ export class ScalabilityForecastService {
           FROM users WHERE "createdAt" >= ${since} GROUP BY 1 ORDER BY 1`.catch(
           () => [] as { month: string; n: number }[],
         ),
-        this.prisma.read.user.count({ where: { createdAt: { lt: since } } }),
-        this.prisma.$queryRaw<MonthlyRow[]>`
+        this.cache.getOrSet(
+          `scalability:forecast:base-users:${since.toISOString()}`,
+          FORECAST_AGG_CACHE_TTL,
+          () => this.prisma.read.user.count({ where: { createdAt: { lt: since } } }),
+        ),
+        this.cache.getOrSet(
+          `scalability:forecast:metric-months:${since.toISOString()}`,
+          FORECAST_AGG_CACHE_TTL,
+          () =>
+            this.prisma.$queryRaw<MonthlyRow[]>`
           SELECT to_char(date_trunc('month', "capturedAt"), 'YYYY-MM') AS month,
                  avg("cpuUsagePercent")::float AS avg_cpu,
                  avg("memoryUsagePercent")::float AS avg_mem,
@@ -167,6 +180,7 @@ export class ScalabilityForecastService {
                  max("concurrentSessions")::float AS max_conc
           FROM scalability_metrics WHERE "capturedAt" >= ${since}
           GROUP BY 1 ORDER BY 1`.catch(() => [] as MonthlyRow[]),
+        ),
         this.prisma.databaseSizeSample.findMany({
           where: { capturedAt: { gte: since } },
           orderBy: { capturedAt: 'asc' },
