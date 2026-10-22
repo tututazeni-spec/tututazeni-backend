@@ -69,7 +69,7 @@ const MAX_CATALOG_ROUTES = 400;
 const MAX_MODULES_PICKED = 3;
 // Modelo leve e com quota própria na Groq, para o planeamento não gastar o limite
 // por minuto do modelo que responde ao utilizador.
-const plannerModel = () => process.env.AI_TUTOR_PLANNER_MODEL ?? 'llama-3.1-8b-instant';
+const plannerModel = () => process.env.AI_TUTOR_PLANNER_MODEL ?? 'openai/gpt-oss-20b';
 const REQUEST_TIMEOUT_MS = 8000;
 
 @Injectable()
@@ -116,10 +116,11 @@ export class AiDataAccessService {
         err: { message: e instanceof Error ? e.message : String(e) },
         msg: 'Falha ao escolher módulos para a Ísis consultar',
       });
-      return [] as string[];
+      // Planeador indisponível: não deixa a Ísis sem dados, escolhe por palavras-chave.
+      return this.guessModules(names, message);
     });
     if (picked.length === 0) return '';
-    const scoped = catalog.filter(p => picked.includes(moduleOf(p)));
+    const scoped = catalog.filter(p => picked.includes(moduleOf(p))).slice(0, MAX_CATALOG_ROUTES);
 
     for (let round = 0; round < MAX_ROUNDS; round++) {
       const calls = await this.pickRoutes(scoped, message, blocks).catch(e => {
@@ -129,7 +130,12 @@ export class AiDataAccessService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao planear consultas de dados da Ísis',
         });
-        return [] as string[];
+        // Sem planeador: consulta a listagem de cada módulo escolhido.
+        return round === 0
+          ? picked
+              .filter(m => scoped.includes(`/${m}`))
+              .map(m => (m === 'courses' ? '/courses?status=PUBLISHED&limit=100' : `/${m}?limit=100`))
+          : ([] as string[]);
       });
       const fresh = calls.filter(c => !already.has(c)).slice(0, MAX_CALLS_PER_ROUND);
       if (fresh.length === 0) break;
@@ -174,7 +180,7 @@ export class AiDataAccessService {
     const res = await this.providers.chat(
       system,
       [{ role: 'user', content: message }],
-      120,
+      600,
       0,
       undefined,
       plannerModel(),
@@ -187,6 +193,36 @@ export class AiDataAccessService {
           .filter((m): m is string => typeof m === 'string' && names.includes(m))
           .slice(0, MAX_MODULES_PICKED)
       : [];
+  }
+
+  /** Plano B quando o modelo planeador falha: palavras da pergunta → módulos. */
+  private guessModules(names: string[], message: string): string[] {
+    const text = message
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '');
+    const aliases: Record<string, RegExp> = {
+      courses: /curso|catalogo|licao|licoes|matricula|inscri/,
+      trainings: /formac/,
+      events: /evento/,
+      leave: /ferias|licenca|ausencia/,
+      users: /utilizador|colaborador|funcionario/,
+      departments: /departamento/,
+      competencies: /competenc/,
+      career: /carreira|sucess/,
+      'development-plans': /pdi|plano.*desenvolvimento/,
+      payroll: /folha|salari|recibo|pagamento/,
+      onboarding: /onboarding|integracao/,
+      evaluation: /avaliac/,
+      reports: /relatorio/,
+      analytics: /indicador|desempenho/,
+      crm: /beneficiari|financiador|parceiro/,
+      'live-classes': /aula.*vivo/,
+      'content-library': /biblioteca/,
+      certificates: /certificad/,
+    };
+    const hits = names.filter(n => aliases[n]?.test(text) || text.includes(n.toLowerCase()));
+    return hits.slice(0, MAX_MODULES_PICKED);
   }
 
   private async pickRoutes(catalog: string[], message: string, done: string[]): Promise<string[]> {
@@ -209,7 +245,7 @@ export class AiDataAccessService {
     const res = await this.providers.chat(
       system,
       [{ role: 'user', content: userMsg }],
-      300,
+      800,
       0,
       undefined,
       plannerModel(),
@@ -228,8 +264,7 @@ export class AiDataAccessService {
     const role = user.role?.name;
     return this.getRoutes()
       .filter(r => !r.roles || (!!role && r.roles.includes(role)))
-      .map(r => r.path)
-      .slice(0, MAX_CATALOG_ROUTES);
+      .map(r => r.path);
   }
 
   private getRoutes(): RouteInfo[] {
