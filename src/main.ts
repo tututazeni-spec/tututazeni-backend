@@ -3,11 +3,11 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
-import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { Request, Response } from 'express';
 import { AppModule } from './app.module';
+import { buildHelmet } from './common/security/security-headers';
 import { enforceHttpsMiddleware } from './common/security/enforce-https';
 import { parseAllowedOrigins } from './common/security/allowed-origins';
 import { createSwaggerAuthMiddleware } from './common/security/swagger-auth.middleware';
@@ -46,12 +46,8 @@ async function bootstrap() {
   // Atrás da borda Caddy: X-Forwarded-* passam a alimentar req.secure/req.ip.
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
 
-  app.use(
-    helmet({
-      // Coerente com o HSTS emitido pela borda (auditoria A-1, achado B5).
-      hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
-    }),
-  );
+  // HSTS coerente com o emitido pela borda (auditoria A-1, achado B5).
+  app.use(buildHelmet());
   app.use(enforceHttpsMiddleware(isProd));
   app.use(compression());
   app.use(cookieParser());
