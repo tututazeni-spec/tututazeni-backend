@@ -1470,14 +1470,19 @@ export class CoursesService {
           course: { select: { id: true, title: true } },
         },
       }),
-      this.prisma.read.enrollment.findMany({
-        where: { enrolledAt: { gte: sixMonthsAgo } },
-        select: { enrolledAt: true },
-      }),
-      this.prisma.read.enrollment.findMany({
-        where: { status: 'COMPLETED', completedAt: { gte: sixMonthsAgo } },
-        select: { completedAt: true },
-      }),
+      // Contagem por mês feita na BD (antes carregava uma linha por matrícula).
+      this.prisma.read.$queryRaw<{ month: string; count: bigint }[]>`
+        SELECT TO_CHAR("enrolledAt", 'YYYY-MM') AS month, COUNT(*) AS count
+        FROM "Enrollment"
+        WHERE "enrolledAt" >= ${sixMonthsAgo}
+        GROUP BY month
+      `,
+      this.prisma.read.$queryRaw<{ month: string; count: bigint }[]>`
+        SELECT TO_CHAR("completedAt", 'YYYY-MM') AS month, COUNT(*) AS count
+        FROM "Enrollment"
+        WHERE "status" = 'COMPLETED' AND "completedAt" >= ${sixMonthsAgo}
+        GROUP BY month
+      `,
       this.prisma.read.courseFeedback.aggregate({ _avg: { rating: true } }),
       this.prisma.read.quizAttempt.groupBy({ by: ['passed'], _count: true }),
       this.prisma.read.courseAnalytics.findMany({
@@ -1556,17 +1561,12 @@ export class CoursesService {
     const avgPassRate = quizTotal > 0 ? Math.round((quizPassed / quizTotal) * 100) : 0;
 
     const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const bucketByMonth = (dates: Date[]) => {
-      const buckets = new Map<string, number>();
-      for (let i = 0; i < 6; i++) {
-        const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
-        buckets.set(monthKey(d), 0);
-      }
-      for (const d of dates) {
-        const key = monthKey(d);
-        if (buckets.has(key)) buckets.set(key, (buckets.get(key) ?? 0) + 1);
-      }
-      return Array.from(buckets.entries()).map(([month, count]) => ({ month, count }));
+    const bucketByMonth = (rows: { month: string; count: bigint }[]) => {
+      const counts = new Map(rows.map(r => [r.month, Number(r.count)]));
+      return Array.from({ length: 6 }, (_, i) => {
+        const month = monthKey(new Date(now.getFullYear(), now.getMonth() - 5 + i, 1));
+        return { month, count: counts.get(month) ?? 0 };
+      });
     };
 
     const competencyCompletions = new Map<string, { id: number; name: string; count: number }>();
@@ -1688,10 +1688,8 @@ export class CoursesService {
         certificates: recentCertificates,
       },
       monthlyTrend: {
-        enrollments: bucketByMonth(monthlyEnrollments.map(e => e.enrolledAt)),
-        completions: bucketByMonth(
-          monthlyCompletions.map(e => e.completedAt).filter((d): d is Date => !!d),
-        ),
+        enrollments: bucketByMonth(monthlyEnrollments),
+        completions: bucketByMonth(monthlyCompletions),
       },
       topCompetencies,
       alerts,

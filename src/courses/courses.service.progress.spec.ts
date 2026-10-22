@@ -40,6 +40,7 @@ const baseEnrollment = {
 };
 
 const mockPrisma: any = {
+  $queryRaw: jest.fn().mockResolvedValue([]),
   course: {
     findUnique: jest.fn(),
     findFirst: jest.fn(),
