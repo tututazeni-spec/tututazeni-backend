@@ -33,6 +33,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
@@ -101,6 +103,49 @@ services:
       resources:
         limits:
           memory: 256M
+
+  # ─── Connection pooler (docs/db-architecture/06-pgbouncer-and-pg-monitoring.md) ──
+  # As 2 réplicas da app (até 50 ligações cada) multiplexam sobre ~20 ligações
+  # reais ao Postgres. Modo transaction: a app só usa advisory locks `_xact_`
+  # (audit-chain) e queries sem estado de sessão. `DATABASE_URL` (do .env.production)
+  # é o destino real; a app liga-se a `DATABASE_POOLER_URL` (pgbouncer:6432).
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.23.1-p2
+    container_name: innova-pgbouncer
+    env_file: .env.production
+    environment:
+      POOL_MODE: transaction
+      LISTEN_PORT: '6432'
+      AUTH_TYPE: scram-sha-256
+      MAX_CLIENT_CONN: '400'
+      DEFAULT_POOL_SIZE: '20'
+      MIN_POOL_SIZE: '5'
+      RESERVE_POOL_SIZE: '5'
+      SERVER_RESET_QUERY: DISCARD ALL
+      IGNORE_STARTUP_PARAMETERS: extra_float_digits,options
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -p 6432']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # ─── Métricas do Postgres (lag, ligações, cache hit, deadlocks) ──────────
+  # DATA_SOURCE_NAME vem do .env.production e aponta ao primary DIRECTO
+  # (não ao PgBouncer) com um utilizador `pg_monitor` só de leitura.
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: innova-postgres-exporter
+    env_file: .env.production
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64M
 
   redis:
     image: redis:7-alpine

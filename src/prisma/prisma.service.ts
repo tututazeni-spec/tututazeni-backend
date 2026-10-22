@@ -8,10 +8,10 @@ import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Histogram } from 'prom-client';
 import { logQueryEvent, observeQueryDuration, PrismaQueryEvent } from './query-logging';
 
-function makePool(connectionString: string | undefined, max: number): Pool {
+function makePool(connectionString: string | undefined, max: number, tls = true): Pool {
   return new Pool({
     connectionString,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    ssl: tls && process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
     max,
     idleTimeoutMillis: 600000,
     connectionTimeoutMillis: 30000,
@@ -56,9 +56,13 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     private readonly queryHistogram: Histogram<string>,
   ) {
     // ─── Primary (escrita) — mantém o comportamento e o pool actuais ───
+    // Com PgBouncer (DATABASE_POOLER_URL) o tráfego da app passa pelo pooler, dentro
+    // da rede Docker (sem TLS). O `migrate` continua a usar DATABASE_URL directo.
+    const poolerUrl = process.env.DATABASE_POOLER_URL;
     const writePool = makePool(
-      process.env.DATABASE_URL,
+      poolerUrl || process.env.DATABASE_URL,
       parseInt(process.env.DB_POOL_MAX || '50', 10),
+      !poolerUrl,
     );
     super({
       adapter: new PrismaPg(writePool),
