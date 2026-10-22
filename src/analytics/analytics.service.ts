@@ -567,11 +567,20 @@ export class AnalyticsService {
       `,
     ]);
 
-    const completedEnrollments = await this.prisma.read.enrollment.findMany({
-      where: { status: 'COMPLETED' },
-      include: { course: { select: { workloadHours: true } } },
-    });
-    const totalHours = completedEnrollments.reduce((s, e) => s + (e.course.workloadHours ?? 0), 0);
+    // Horas = workloadHours × matrículas concluídas por curso. Usa as contagens
+    // já agrupadas em vez de carregar todas as matrículas concluídas em memória.
+    const completedByCourse = enrollmentsByCourse.filter(r => r.status === 'COMPLETED');
+    const hoursRows = completedByCourse.length
+      ? await this.prisma.read.course.findMany({
+          where: { id: { in: completedByCourse.map(r => r.courseId) } },
+          select: { id: true, workloadHours: true },
+        })
+      : [];
+    const hoursByCourse = new Map(hoursRows.map(c => [c.id, c.workloadHours ?? 0]));
+    const totalHours = completedByCourse.reduce(
+      (sum, r) => sum + (hoursByCourse.get(r.courseId) ?? 0) * r._count,
+      0,
+    );
 
     const liveCounts = new Map<number, { total: number; completed: number }>();
     for (const r of enrollmentsByCourse) {

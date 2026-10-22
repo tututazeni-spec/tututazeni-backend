@@ -837,6 +837,7 @@ export class CoursesService {
       where: { courseId, status: 'PENDING_APPROVAL' },
       include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
       orderBy: { enrolledAt: 'asc' },
+      take: 500, // tecto de segurança: um curso com milhares de pedidos pendentes não rebenta a resposta
     });
   }
 
