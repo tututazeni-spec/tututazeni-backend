@@ -132,7 +132,7 @@
     "jsonwebtoken": "^9.0.3",
     "ldapts": "^9.2.0",
     "nestjs-pino": "^4.6.1",
-    "nodemailer": "^9.0.3",
+    "nodemailer": "^10.2.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pdfkit": "^0.18.0",
