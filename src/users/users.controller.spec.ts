@@ -146,7 +146,9 @@ describe('UsersController', () => {
   it('create → create(dto, admin.id)', async () => {
     const dto = {} as any;
     await controller.create(mockUser as any, dto);
-    expect(mockSvc.create).toHaveBeenCalledWith(dto, mockUser.id);
+    expect(mockSvc.create).toHaveBeenCalledWith(dto, mockUser.id, {
+      actorRole: (mockUser as any).role?.name,
+    });
   });
 
   it('invite → invite(dto)', async () => {
@@ -181,7 +183,7 @@ describe('UsersController', () => {
   it('update → update(id, dto, adminId)', async () => {
     const dto = {} as any;
     await controller.update(1, mockUser as any, dto);
-    expect(mockSvc.update).toHaveBeenCalledWith(1, dto, 1);
+    expect(mockSvc.update).toHaveBeenCalledWith(1, dto, 1, (mockUser as any).role?.name);
   });
 
   it('activate → activate(id)', async () => {

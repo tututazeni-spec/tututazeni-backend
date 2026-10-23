@@ -322,7 +322,12 @@ export class UsersService {
 
   // ─── CRIAR ────────────────────────────────────────────────────────────────
 
-  async create(dto: CreateUserDto, createdById?: number, opts: { skipPolicy?: boolean } = {}) {
+  async create(
+    dto: CreateUserDto,
+    createdById?: number,
+    opts: { skipPolicy?: boolean; actorRole?: string } = {},
+  ) {
+    await this.assertCanAssignRole(dto.roleId, opts.actorRole);
     if (this.settings && !opts.skipPolicy) dto = await this.settings.applyUserPolicy(dto);
 
     // Guards de unicidade antes da escrita: força primary para não validar contra réplica atrasada.
@@ -508,8 +513,11 @@ export class UsersService {
 
   // ─── ACTUALIZAR ───────────────────────────────────────────────────────────
 
-  async update(id: number, dto: UpdateUserDto, updatedById?: number) {
+  async update(id: number, dto: UpdateUserDto, updatedById?: number, actorRole?: string) {
     const existing = await this.findOne(id);
+    if (dto.roleId !== undefined && dto.roleId !== existing.roleId) {
+      await this.assertCanAssignRole(dto.roleId, actorRole, id === updatedById);
+    }
 
     let emailWarnings: string[] = [];
     if (dto.email && dto.email !== existing.email) {
@@ -643,6 +651,24 @@ export class UsersService {
     });
     await this.writeAuditLog(id, id, 'USER_ACTIVATED');
     return this.sanitize(user);
+  }
+
+  /**
+   * Menor privilégio na atribuição de papéis: só ADMIN atribui o papel ADMIN, e quem não é
+   * ADMIN não altera o próprio papel. `actorRole` indefinido = chamada interna de confiança
+   * (importações, seeds) e não é verificada aqui — a rota HTTP passa sempre o papel real.
+   */
+  private async assertCanAssignRole(
+    roleId: number | null | undefined,
+    actorRole: string | undefined,
+    isSelf = false,
+  ): Promise<void> {
+    if (!actorRole || actorRole === 'ADMIN' || roleId == null) return;
+    if (isSelf) throw new ForbiddenException('Não podes alterar o teu próprio perfil de acesso');
+    const target = await this.prisma.role.findUnique({ where: { id: roleId } });
+    if (target?.name === 'ADMIN') {
+      throw new ForbiddenException('Só um administrador pode atribuir o perfil ADMIN');
+    }
   }
 
   /** Utilizador deixou de poder entrar: mata os access tokens vivos e a cache em todas as instâncias. */

@@ -185,7 +185,7 @@ export class UsersController {
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar utilizador' })
   create(@CurrentUser() admin: CurrentUserData, @Body() dto: CreateUserDto) {
-    return this.svc.create(dto, admin.id);
+    return this.svc.create(dto, admin.id, { actorRole: admin.role?.name });
   }
 
   @Get('lookups/learning-paths')
@@ -236,7 +236,7 @@ export class UsersController {
     @CurrentUser() admin: CurrentUserData,
     @Body() dto: UpdateUserDto,
   ) {
-    return this.svc.update(id, dto, admin.id);
+    return this.svc.update(id, dto, admin.id, admin.role?.name);
   }
 
   @Patch(':id/activate')
