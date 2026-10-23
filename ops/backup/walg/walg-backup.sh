@@ -94,16 +94,20 @@ log "=========================================="
 case "$BACKUP_TYPE" in
   full)
     log "A iniciar backup FULL de $PGDATA..."
-    wal-g backup-push "$PGDATA" \
+    # WALG_DELTA_MAX_STEPS=0 força full, ignorando o valor global do walg.env
+    WALG_DELTA_MAX_STEPS=0 wal-g backup-push "$PGDATA" \
       || fail "wal-g backup-push (full) falhou"
     ;;
   delta|incr)
     log "A iniciar backup DELTA de $PGDATA..."
-    wal-g backup-push "$PGDATA" --delta-from-user-data LATEST \
+    # Sem flag: com WALG_DELTA_MAX_STEPS>0 o WAL-G faz delta do backup mais recente.
+    # (`--delta-from-user-data LATEST` procurava user-data literal "LATEST" e falhava
+    # sempre, caindo no fallback full: retenção real de 4 dias em vez de 4 semanas.)
+    wal-g backup-push "$PGDATA" \
       || {
            warn "Delta falhou — a tentar full como fallback..."
            ACTUAL_TYPE="full_fallback"
-           wal-g backup-push "$PGDATA" \
+           WALG_DELTA_MAX_STEPS=0 wal-g backup-push "$PGDATA" \
              || fail "wal-g backup-push (full fallback) falhou"
          }
     ;;
