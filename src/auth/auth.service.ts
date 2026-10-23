@@ -1,3 +1,4 @@
+import { setRequestUserId } from '../common/logging/request-context';
 import {
   Injectable,
   UnauthorizedException,
@@ -49,6 +50,16 @@ export function sessionIdleTimeoutMs(
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+
+  // Se o registo da tentativa falhada falhar, o bloqueio de conta deixa de
+  // funcionar — situação de segurança que não pode passar em silêncio.
+  private logLockoutFailure(userId: number | string, err: unknown): null {
+    this.logger.error(
+      { userId, err },
+      'falha ao registar tentativa de login falhada (lockout inoperante)',
+    );
+    return null;
+  }
 
   constructor(
     private prisma: PrismaService,
@@ -203,7 +214,9 @@ export class AuthService {
     }
     const check = await verifyPassword(dto.password, user.password);
     if (!check.valid) {
-      const lockedUntil = await this.security?.registerFailedAttempt(user.id).catch(() => null);
+      const lockedUntil = await this.security
+        ?.registerFailedAttempt(user.id)
+        .catch(err => this.logLockoutFailure(user.id, err));
       const err = this.failedLogin('BAD_PASSWORD', dto.email, user.id, ctx);
       if (lockedUntil) {
         throw new UnauthorizedException(
@@ -222,7 +235,9 @@ export class AuthService {
         });
       }
       if (!verifyTotp(decryptSecret(user.twoFactorSecret), dto.totpCode)) {
-        await this.security?.registerFailedAttempt(user.id).catch(() => null);
+        await this.security
+          ?.registerFailedAttempt(user.id)
+          .catch(err => this.logLockoutFailure(user.id, err));
         throw this.failedLogin('BAD_PASSWORD', dto.email, user.id, ctx);
       }
     }
@@ -587,6 +602,8 @@ export class AuthService {
       );
     }
 
+    // Login/refresh/SSO: ainda não há token no pedido, logo o userId só é conhecido aqui.
+    setRequestUserId(userId);
     const payload = { sub: userId, email };
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, { expiresIn: `${accessMinutes}m` }),

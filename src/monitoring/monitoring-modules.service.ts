@@ -7,6 +7,7 @@
 // O estado (Normal/Atenção/Degradado/Crítico/Indisponível) vem de
 // monitoring-status.ts.
 
+import { swallow } from '../common/logging/swallow';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -276,9 +277,35 @@ export class MonitoringModulesService {
           };
         }
         const [opsSince48, ops7d, err24h, backlog] = await Promise.all([
-          d.ops(sPrev).catch(() => null),
-          d.ops(s7).catch(() => null),
-          d.errors ? d.errors(s24).catch(() => null) : Promise.resolve(null),
+          d
+            .ops(sPrev)
+            .catch(
+              swallow(
+                'monitoring-modules.service',
+                'operação auxiliar falhou — a usar valor por omissão',
+                null,
+              ),
+            ),
+          d
+            .ops(s7)
+            .catch(
+              swallow(
+                'monitoring-modules.service',
+                'operação auxiliar falhou — a usar valor por omissão',
+                null,
+              ),
+            ),
+          d.errors
+            ? d
+                .errors(s24)
+                .catch(
+                  swallow(
+                    'monitoring-modules.service',
+                    'operação auxiliar falhou — a usar valor por omissão',
+                    null,
+                  ),
+                )
+            : Promise.resolve(null),
           d.backlog ? d.backlog().catch(() => 0) : Promise.resolve(0),
         ]);
         const ops24h = probe.value;

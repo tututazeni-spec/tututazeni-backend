@@ -1,3 +1,4 @@
+import { swallow } from '../common/logging/swallow';
 // ─── src/leave-management/leave-calendar.helper.ts ───────────────────────────
 // Feriados nacionais (Angola) e contagem de dias, partilhados pelo serviço de
 // pedidos e pelo serviço de overview/férias. Os feriados móveis (Sexta-feira
@@ -104,7 +105,7 @@ function refreshIfStale(): void {
   registryLoading = true;
   registryLoadedAt = Date.now(); // evita rajadas se o loader falhar
   void registryLoader()
-    .catch(() => undefined)
+    .catch(swallow('leave-calendar.helper', 'operação auxiliar falhou (ignorada)', undefined))
     .finally(() => {
       registryLoading = false;
     });

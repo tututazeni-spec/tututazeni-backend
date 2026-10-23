@@ -2,6 +2,7 @@
 // Módulo Definições §8 (Privacidade / LPDP): textos de consentimento, prazos
 // de retenção, contacto do DPO e gestão dos pedidos de direitos dos titulares
 // (modelo DataSubjectRequest).
+import { swallow } from '../common/logging/swallow';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { DsrStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -39,7 +40,14 @@ export class PrivacySettingsService {
       entity: 'Settings',
       severity: 'MEDIUM',
       metadata: JSON.stringify(metadata),
-    }).catch(() => undefined);
+    }).catch(
+      swallow(
+        'privacy-settings.service',
+        'falha ao gravar registo de auditoria',
+        undefined,
+        'error',
+      ),
+    );
   }
 
   // ─── Definições gerais + consentimento ────────────────────────────────────

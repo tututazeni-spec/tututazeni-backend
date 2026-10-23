@@ -10,6 +10,7 @@
 // (24 h) para a disponibilidade %. Limitações: o histórico perde-se no reinício
 // e, com várias instâncias, cada uma só conhece as suas próprias sondas.
 
+import { swallow } from '../common/logging/swallow';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { Cron, CronExpression, SchedulerRegistry } from '@nestjs/schedule';
@@ -115,7 +116,15 @@ export class MonitoringHealthService implements OnModuleInit, OnModuleDestroy {
   // ── Sondas ────────────────────────────────────────────────────────────────
 
   private async probeApi(): Promise<ProbeResult> {
-    const api = await this.infra.getApiMetrics().catch(() => null);
+    const api = await this.infra
+      .getApiMetrics()
+      .catch(
+        swallow(
+          'monitoring-health.service',
+          'operação auxiliar falhou — a usar valor por omissão',
+          null,
+        ),
+      );
     const uptimeSeconds = Math.round(process.uptime());
     const base = { uptimeSeconds, version: process.env.BUILD_SHA ?? 'unknown' };
     if (!api || api.totals.requests === 0) {
@@ -304,7 +313,13 @@ export class MonitoringHealthService implements OnModuleInit, OnModuleDestroy {
           // falha isolada = número de workers desconhecido, não fila em baixo.
           const workers = await withTimeout(queue.getWorkers(), QUEUE_TIMEOUT_MS)
             .then(w => w.length)
-            .catch(() => null);
+            .catch(
+              swallow(
+                'monitoring-health.service',
+                'operação auxiliar falhou — a usar valor por omissão',
+                null,
+              ),
+            );
           return {
             key,
             available: true,
@@ -401,7 +416,13 @@ export class MonitoringHealthService implements OnModuleInit, OnModuleDestroy {
     // Batimento: o cron do Scalability grava uma amostra por minuto.
     const beat = await this.prisma.read.scalabilityMetric
       .findFirst({ orderBy: { capturedAt: 'desc' }, select: { capturedAt: true } })
-      .catch(() => null);
+      .catch(
+        swallow(
+          'monitoring-health.service',
+          'operação auxiliar falhou — a usar valor por omissão',
+          null,
+        ),
+      );
     const beatAgeMs = beat ? Date.now() - beat.capturedAt.getTime() : null;
     const beatStale = beatAgeMs !== null && beatAgeMs > CRON_HEARTBEAT_STALE_MS;
 

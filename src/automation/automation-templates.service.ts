@@ -2,6 +2,7 @@
 // §11 — biblioteca de modelos pré-configurados. Instanciar um modelo cria uma
 // automação em RASCUNHO (inactiva) com os campos já preenchidos; o administrador
 // revê, testa e publica — nunca fica activa sem esse passo.
+import { swallow } from '../common/logging/swallow';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AutomationService } from './automation.service';
@@ -48,7 +49,13 @@ export class AutomationTemplatesService {
   private async instanceCounts(): Promise<Map<string, number>> {
     const rules = await this.prisma.read.automationRule
       .findMany({ where: { templateKey: { not: null } }, select: { templateKey: true } })
-      .catch(() => []);
+      .catch(
+        swallow(
+          'automation-templates.service',
+          'operação auxiliar falhou — a usar valor por omissão',
+          [],
+        ),
+      );
     const counts = new Map<string, number>();
     for (const r of rules) {
       if (r.templateKey) counts.set(r.templateKey, (counts.get(r.templateKey) ?? 0) + 1);

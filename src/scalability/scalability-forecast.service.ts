@@ -6,6 +6,7 @@
 // meses de histórico o recurso devolve `available: false` com o motivo.
 // Não persiste previsões — são recalculadas a cada pedido a partir do histórico.
 
+import { swallow } from '../common/logging/swallow';
 import { SharedResult } from '../common/helpers/shared-result';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -186,7 +187,15 @@ export class ScalabilityForecastService {
           orderBy: { capturedAt: 'asc' },
           select: { capturedAt: true, sizeBytes: true },
         }),
-        this.storage.getStorageMetrics().catch(() => null),
+        this.storage
+          .getStorageMetrics()
+          .catch(
+            swallow(
+              'scalability-forecast.service',
+              'operação auxiliar falhou — a usar valor por omissão',
+              null,
+            ),
+          ),
         this.prisma.read.user.count(),
       ]);
 

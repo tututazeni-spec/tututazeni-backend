@@ -3,6 +3,7 @@
 // src/modules/scalability/scalability.service.ts
 // ============================================================
 
+import { swallow } from '../common/logging/swallow';
 import {
   Inject,
   Injectable,
@@ -864,7 +865,9 @@ export class ScalabilityService {
       const snapshot = await this.collectSystemSnapshot();
 
       // O dashboard filtra por tenantId — sem ele nenhuma métrica era lida.
-      const tenantId = await this.resolveTenantId().catch(() => undefined);
+      const tenantId = await this.resolveTenantId().catch(
+        swallow('scalability.service', 'operação auxiliar falhou (ignorada)', undefined),
+      );
       await this.prisma.scalabilityMetric.create({
         data: { ...snapshot, ...(tenantId ? { tenantId } : {}) },
       });

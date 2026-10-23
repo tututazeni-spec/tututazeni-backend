@@ -1,3 +1,4 @@
+import { swallow } from '../common/logging/swallow';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { CertificateOrigin, CertificateStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -108,7 +109,7 @@ export class CertificatesService {
 
     void this.prisma.certificate
       .update({ where: { id: cert.id }, data: { verifyCount: { increment: 1 } } })
-      .catch(() => undefined);
+      .catch(swallow('certificates.service', 'operação auxiliar falhou (ignorada)', undefined));
 
     return {
       valid: status === 'ACTIVE',

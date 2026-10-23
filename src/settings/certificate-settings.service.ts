@@ -1,6 +1,7 @@
 // src/settings/certificate-settings.service.ts
 // Módulo Definições §7 (Certificados): valores globais (logo, assinatura,
 // texto padrão, numeração) + biblioteca de templates (CertificateTemplate).
+import { swallow } from '../common/logging/swallow';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { CertificateTemplateType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -36,7 +37,14 @@ export class CertificateSettingsService {
       entity: 'Settings',
       severity: 'MEDIUM',
       metadata: JSON.stringify(metadata),
-    }).catch(() => undefined);
+    }).catch(
+      swallow(
+        'certificate-settings.service',
+        'falha ao gravar registo de auditoria',
+        undefined,
+        'error',
+      ),
+    );
   }
 
   // ─── Definições globais ───────────────────────────────────────────────────

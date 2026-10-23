@@ -2,6 +2,7 @@
 // Definições de Email (docs/modulo_settings.md §12): templates por evento e
 // assinatura global. SMTP/servidor/porta/SSL-TLS/remetente continuam geridos
 // em IntegrationSettingsService (§6) — ver email-settings.ts para o porquê.
+import { swallow } from '../common/logging/swallow';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
@@ -72,7 +73,9 @@ export class EmailSettingsService {
       entity: 'Settings',
       severity: 'MEDIUM',
       metadata: JSON.stringify({ before: cur, after: next }),
-    }).catch(() => undefined);
+    }).catch(
+      swallow('email-settings.service', 'falha ao gravar registo de auditoria', undefined, 'error'),
+    );
 
     if (dto.smtp) await this.integrations.update({ smtp: dto.smtp }, actorId);
     return this.get();

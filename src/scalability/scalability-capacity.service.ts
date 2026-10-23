@@ -10,6 +10,7 @@
 // Resiliência: o que a app consegue verificar (BD, replicação, filas) mais factos
 // de infra declarados (réplicas, backups, DR) que não são observáveis daqui.
 
+import { swallow } from '../common/logging/swallow';
 import { SharedResult } from '../common/helpers/shared-result';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Prisma, ScalabilityInfraSettings } from '@prisma/client';
@@ -108,9 +109,33 @@ export class ScalabilityCapacityService {
           orderBy: { createdAt: 'asc' },
           select: { maxUsers: true },
         }),
-        this.infra.getApiMetrics().catch(() => null),
-        this.storage.getStorageMetrics().catch(() => null),
-        this.queues.getQueueMetrics().catch(() => null),
+        this.infra
+          .getApiMetrics()
+          .catch(
+            swallow(
+              'scalability-capacity.service',
+              'operação auxiliar falhou — a usar valor por omissão',
+              null,
+            ),
+          ),
+        this.storage
+          .getStorageMetrics()
+          .catch(
+            swallow(
+              'scalability-capacity.service',
+              'operação auxiliar falhou — a usar valor por omissão',
+              null,
+            ),
+          ),
+        this.queues
+          .getQueueMetrics()
+          .catch(
+            swallow(
+              'scalability-capacity.service',
+              'operação auxiliar falhou — a usar valor por omissão',
+              null,
+            ),
+          ),
         this.prisma.$queryRaw<{ total: number; max: number }[]>`
             SELECT count(*)::int AS total, current_setting('max_connections')::int AS max
             FROM pg_stat_activity WHERE datname = current_database()`.catch(
@@ -251,7 +276,15 @@ export class ScalabilityCapacityService {
     const p = this.policyView(s);
     const since = (m: number) => new Date(Date.now() - m * 60_000);
     const [api, latest, upWin, downWin] = await Promise.all([
-      this.infra.getApiMetrics().catch(() => null),
+      this.infra
+        .getApiMetrics()
+        .catch(
+          swallow(
+            'scalability-capacity.service',
+            'operação auxiliar falhou — a usar valor por omissão',
+            null,
+          ),
+        ),
       this.latestMetric(),
       this.prisma.scalabilityMetric.findMany({
         where: { capturedAt: { gte: since(p.scaleUpMinutes) } },
@@ -362,11 +395,25 @@ export class ScalabilityCapacityService {
       this.prisma.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
       this.prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM pg_stat_replication`
         .then(r => r[0]?.n ?? 0)
-        .catch(() => null),
+        .catch(
+          swallow(
+            'scalability-capacity.service',
+            'operação auxiliar falhou — a usar valor por omissão',
+            null,
+          ),
+        ),
       this.prisma.$queryRaw<{ r: boolean }[]>`SELECT pg_is_in_recovery() AS r`
         .then(r => r[0]?.r ?? false)
         .catch(() => false),
-      this.queues.getQueueMetrics().catch(() => null),
+      this.queues
+        .getQueueMetrics()
+        .catch(
+          swallow(
+            'scalability-capacity.service',
+            'operação auxiliar falhou — a usar valor por omissão',
+            null,
+          ),
+        ),
     ]);
     const dbLatencyMs = Date.now() - t0;
 

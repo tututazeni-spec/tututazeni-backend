@@ -11,6 +11,7 @@
 // componentes do Health Check). Cada regra tem no máximo um alerta aberto e
 // resolve-o sozinha quando deixa de se verificar — mesmo padrão do Scalability.
 
+import { swallow } from '../common/logging/swallow';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Cron } from '@nestjs/schedule';
@@ -413,7 +414,15 @@ export class MonitoringAlertsService {
       r.securityIncident.count({
         where: { status: { in: ['OPEN', 'IN_ANALYSIS'] }, severity: { in: ['HIGH', 'CRITICAL'] } },
       }),
-      this.health.current().catch(() => null),
+      this.health
+        .current()
+        .catch(
+          swallow(
+            'monitoring-alerts.service',
+            'operação auxiliar falhou — a usar valor por omissão',
+            null,
+          ),
+        ),
     ]);
 
     const rules: RuleResult[] = [

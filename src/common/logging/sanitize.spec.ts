@@ -1,4 +1,4 @@
-import { sanitizeForLog } from './sanitize';
+import { sanitizeForLog, sanitizeLogObject } from './sanitize';
 
 describe('sanitizeForLog', () => {
   describe('valores primitivos', () => {
@@ -151,5 +151,16 @@ describe('sanitizeForLog', () => {
       expect(result).not.toHaveProperty('password');
       expect(Object.keys(result).sort()).toEqual(['message', 'name', 'stack']);
     });
+  });
+});
+
+describe('sanitizeLogObject', () => {
+  it('mascara chaves sensíveis e emails, preserva err', () => {
+    const err = new Error('boom');
+    const out = sanitizeLogObject({ token: 'abc', email: 'maria@x.com', n: 1, err });
+    expect(out.token).toBe('[REDACTED]');
+    expect(out.email).toBe('ma***@x.com');
+    expect(out.n).toBe(1);
+    expect(out.err).toBe(err);
   });
 });

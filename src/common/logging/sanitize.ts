@@ -57,3 +57,22 @@ export function sanitizeForLog(input: unknown, depth = 0, seen = new WeakSet<obj
   }
   return output;
 }
+
+// `err`/`req`/`res` têm serializers próprios do pino (e `req`/`res` o `redact`);
+// converter um Error em objecto simples antes deles correrem perderia o `type`/stack.
+const PINO_NATIVE_KEYS = new Set(['err', 'error', 'req', 'res']);
+
+/**
+ * Rede de segurança global: aplicada pelo pino (`formatters.log`) a TODO objecto
+ * logado, para que nenhum `logger.warn({ email, token, ... })` vaze dados sensíveis
+ * mesmo que o autor da chamada se esqueça de chamar `sanitizeForLog`.
+ */
+export function sanitizeLogObject(obj: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (SENSITIVE_KEY_PATTERN.test(key)) out[key] = REDACTED;
+    else if (PINO_NATIVE_KEYS.has(key) || value instanceof Error) out[key] = value;
+    else out[key] = sanitizeForLog(value);
+  }
+  return out;
+}

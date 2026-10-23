@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD, APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_GUARD, APP_FILTER } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { envValidationSchema } from './config/env.validation';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { buildThrottlerOptions } from './common/config/throttler.config';
 import { LoggerModule } from 'nestjs-pino';
+import { sanitizeLogObject } from './common/logging/sanitize';
 import { randomUUID } from 'node:crypto';
 import { getRequestContext } from './common/logging/request-context';
 
@@ -95,9 +96,10 @@ import { MetricsModule } from './metrics/metrics.module';
 import { QueueModule } from './queue/queue.module';
 import { CacheModule } from './cache/cache.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
-import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+
+const accessPath = (url = ''): string => url.split('?')[0];
 
 @Module({
   imports: [
@@ -111,7 +113,30 @@ import { RolesGuard } from './common/guards/roles.guard';
     LoggerModule.forRoot({
       pinoHttp: {
         level: process.env.LOG_LEVEL ?? 'info',
-        autoLogging: false,
+        // Uma linha de acesso por pedido, emitida no `finish` da resposta — cobre também
+        // 401/403/404 rejeitados antes do handler. Health e métricas ficam de fora (ruído).
+        autoLogging: { ignore: req => /^\/(health|metrics)(\/|\?|$)/.test(req.url ?? '') },
+        customLogLevel: (_req, res, err) =>
+          err || res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info',
+        customSuccessMessage: (req, res) =>
+          `${req.method} ${accessPath(req.url)} ${res.statusCode}`,
+        customErrorMessage: (req, res) => `${req.method} ${accessPath(req.url)} ${res.statusCode}`,
+        customSuccessObject: (req, _res, val) => ({
+          ...val,
+          route: (req as { route?: { path?: string } }).route?.path ?? null,
+        }),
+        customErrorObject: (req, _res, _err, val) => ({
+          ...val,
+          route: (req as { route?: { path?: string } }).route?.path ?? null,
+        }),
+        // Sem headers/query/body no log de acesso: a query pode trazer tokens (reset, convite).
+        serializers: {
+          req: (r: { method: string; url: string }) => ({
+            method: r.method,
+            path: accessPath(r.url),
+          }),
+          res: (r: { statusCode: number }) => ({ statusCode: r.statusCode }),
+        },
         genReqId: (req, res) => {
           const incoming = req.headers['x-request-id'];
           const id = (Array.isArray(incoming) ? incoming[0] : incoming) || randomUUID();
@@ -124,6 +149,7 @@ import { RolesGuard } from './common/guards/roles.guard';
         // instância pino sob o capô. Resolve a ausência de contexto sem obrigar a
         // reescrever a assinatura de cada chamada de log existente.
         mixin: () => getRequestContext(),
+        formatters: { log: sanitizeLogObject },
         redact: {
           paths: [
             'req.headers.authorization',
@@ -208,7 +234,6 @@ import { RolesGuard } from './common/guards/roles.guard';
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
-    { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: ThrottlerGuard },

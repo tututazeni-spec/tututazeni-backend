@@ -3,6 +3,7 @@
 // destino, execução manual/agendada, restauração e estado. Backup = `pg_dump
 // --format=custom` para uma pasta local (o destino remoto — S3/FTP — fica fora
 // de âmbito: monte-se a partilha/volume nessa pasta).
+import { swallow } from '../common/logging/swallow';
 import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
@@ -155,7 +156,14 @@ export class BackupSettingsService {
       entity: 'Settings',
       severity: 'HIGH',
       metadata: JSON.stringify({ before: cur, after: next }),
-    }).catch(() => undefined);
+    }).catch(
+      swallow(
+        'backup-settings.service',
+        'falha ao gravar registo de auditoria',
+        undefined,
+        'error',
+      ),
+    );
     return this.get();
   }
 
@@ -217,7 +225,9 @@ export class BackupSettingsService {
           update: { lastBackupAt: done.finishedAt },
           create: { id: SCALABILITY_SETTINGS_ID, lastBackupAt: done.finishedAt },
         })
-        .catch(() => undefined);
+        .catch(
+          swallow('backup-settings.service', 'operação auxiliar falhou (ignorada)', undefined),
+        );
       await this.audit(actorId, 'SETTINGS_BACKUP_RUN', 'LOW', { id: done.id, trigger, size });
       await this.applyRetention(settings).catch(err =>
         this.logger.warn({ err: { message: String(err) }, msg: 'Falha ao aplicar a retenção' }),
@@ -334,7 +344,9 @@ export class BackupSettingsService {
       // A BD volta ao estado do snapshot: a linha pode já não existir — best-effort.
       await this.prisma.backupRun
         .updateMany({ where: { id }, data: { restoredAt: new Date(), restoredById: actorId } })
-        .catch(() => undefined);
+        .catch(
+          swallow('backup-settings.service', 'operação auxiliar falhou (ignorada)', undefined),
+        );
       await this.audit(actorId, 'SETTINGS_BACKUP_RESTORE_DONE', 'CRITICAL', { id });
       return { ok: true, safetyBackupId: safety.id };
     } catch (err: unknown) {
@@ -365,6 +377,13 @@ export class BackupSettingsService {
       entity: 'Settings',
       severity,
       metadata: JSON.stringify(metadata),
-    }).catch(() => undefined);
+    }).catch(
+      swallow(
+        'backup-settings.service',
+        'falha ao gravar registo de auditoria',
+        undefined,
+        'error',
+      ),
+    );
   }
 }

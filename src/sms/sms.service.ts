@@ -13,6 +13,7 @@
 // normaliza/valida o formato, só reencaminha para a API da Twilio (que
 // rejeita números inválidos — o erro fica registado no log, nunca rebenta
 // a acção que despoletou o envio).
+import { swallow } from '../common/logging/swallow';
 import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { Twilio } from 'twilio';
 import { sanitizeForLog } from '../common/logging/sanitize';
@@ -73,7 +74,9 @@ export class SmsService implements OnModuleInit {
     let from = this.whatsappFrom;
     if (this.orgIntegrations) {
       // `false` = a organização desligou o WhatsApp; `null` = nunca configurado (usa env).
-      const enabled = await this.orgIntegrations.isWhatsAppEnabledInSettings().catch(() => null);
+      const enabled = await this.orgIntegrations
+        .isWhatsAppEnabledInSettings()
+        .catch(swallow('sms.service', 'operação auxiliar falhou — a usar valor por omissão', null));
       if (enabled === false) {
         this.logger.warn({
           to: sanitizeForLog(to),
@@ -111,7 +114,9 @@ export class SmsService implements OnModuleInit {
         }
         return;
       }
-      const cfg = await this.orgIntegrations.getWhatsApp().catch(() => null);
+      const cfg = await this.orgIntegrations
+        .getWhatsApp()
+        .catch(swallow('sms.service', 'operação auxiliar falhou — a usar valor por omissão', null));
       if (cfg) {
         client = new Twilio(cfg.accountSid, cfg.authToken);
         from = cfg.from;

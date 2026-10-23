@@ -1,6 +1,7 @@
 // src/settings/integration-settings.service.ts
 // Módulo Definições §6 (Integrações): SMTP, WhatsApp (só envio), Ísis (IA) e
 // resumo das integrações/chaves de API/webhooks já geridas por api-integration.
+import { swallow } from '../common/logging/swallow';
 import { BadRequestException, Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import type { Redis } from 'ioredis';
 import * as nodemailer from 'nodemailer';
@@ -142,7 +143,14 @@ export class IntegrationSettingsService {
         whatsappTokenChanged: authToken !== undefined,
         isis: strip(dto.isis),
       }),
-    }).catch(() => undefined);
+    }).catch(
+      swallow(
+        'integration-settings.service',
+        'falha ao gravar registo de auditoria',
+        undefined,
+        'error',
+      ),
+    );
     return this.get();
   }
 

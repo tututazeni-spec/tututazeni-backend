@@ -2,6 +2,7 @@
 // Definições de WhatsApp (docs/modulo_settings.md §13): fornecedor (Twilio ou
 // Meta Cloud API), credenciais Meta, templates, eventos autorizados e estado da
 // integração. Activar/desactivar, número e limites vivem em IntegrationSettings (§6).
+import { swallow } from '../common/logging/swallow';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { writeChainedAuditLog } from '../common/helpers/audit-chain';
@@ -135,7 +136,14 @@ export class WhatsAppSettingsService {
         hourlyLimit: dto.hourlyLimit,
         dailyLimit: dto.dailyLimit,
       }),
-    }).catch(() => undefined);
+    }).catch(
+      swallow(
+        'whatsapp-settings.service',
+        'falha ao gravar registo de auditoria',
+        undefined,
+        'error',
+      ),
+    );
     return this.get();
   }
 
@@ -284,7 +292,14 @@ export class WhatsAppSettingsService {
         entity: 'Settings',
         severity: 'LOW',
         metadata: JSON.stringify({ provider }),
-      }).catch(() => undefined);
+      }).catch(
+        swallow(
+          'whatsapp-settings.service',
+          'falha ao gravar registo de auditoria',
+          undefined,
+          'error',
+        ),
+      );
       return { ok: true };
     } catch (err: unknown) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };

@@ -2,6 +2,7 @@
 // Geração, exportação e arquivo de relatórios executivos (docs §7 e §8):
 // modelos predefinidos, relatórios personalizados com pré-visualização, modelos
 // reutilizáveis, e histórico com o contexto de geração preservado (§12.4).
+import { swallow } from '../common/logging/swallow';
 import {
   BadRequestException,
   ForbiddenException,
@@ -399,7 +400,13 @@ export class ExecutiveReportsGenerationService {
           fileUrl: `/executive-reports/${report.id}/export`,
         },
       })
-      .catch(() => undefined);
+      .catch(
+        swallow(
+          'executive-reports.generation.service',
+          'operação auxiliar falhou (ignorada)',
+          undefined,
+        ),
+      );
 
     return {
       ...report,
@@ -490,7 +497,15 @@ export class ExecutiveReportsGenerationService {
   }
 
   private async logAccess(reportId: number, userId: number) {
-    await this.prisma.reportAccessLog.create({ data: { reportId, userId } }).catch(() => undefined);
+    await this.prisma.reportAccessLog
+      .create({ data: { reportId, userId } })
+      .catch(
+        swallow(
+          'executive-reports.generation.service',
+          'operação auxiliar falhou (ignorada)',
+          undefined,
+        ),
+      );
   }
 
   async getContent(id: number, user: CurrentUserData) {

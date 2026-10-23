@@ -47,7 +47,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? { message: exception.message, stack: exception.stack }
         : { value: exception };
 
-    const logPayload = { statusCode: status, method: req.method, path: req.url, err };
+    const logPayload = {
+      statusCode: status,
+      method: req.method,
+      path: req.originalUrl?.split('?')[0] ?? req.url,
+      err,
+    };
     const logMessage = exception instanceof Error ? exception.message : 'Unknown exception';
     if (isServerError) this.logger.error(logPayload, logMessage);
     else this.logger.warn(logPayload, logMessage);
