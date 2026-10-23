@@ -12,7 +12,8 @@ if (process.env.NODE_ENV === 'production') {
   process.exit(1);
 }
 
-const DB_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:5432/innova_dev';
+const DB_URL =
+  process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:5432/innova_dev';
 
 async function main() {
   const pool = new Pool({ connectionString: DB_URL });
@@ -54,9 +55,9 @@ async function main() {
 
   const users = [
     { email: 'int.employee@innova-test.com', fullName: 'Employee Int', roleCode: 'COLABORADOR' },
-    { email: 'int.manager@innova-test.com',  fullName: 'Manager Int',  roleCode: 'GESTOR' },
-    { email: 'int.rh@innova-test.com',       fullName: 'RH Int',       roleCode: 'RH' },
-    { email: 'int.admin@innova-test.com',     fullName: 'Admin Int',    roleCode: 'ADMIN' },
+    { email: 'int.manager@innova-test.com', fullName: 'Manager Int', roleCode: 'GESTOR' },
+    { email: 'int.rh@innova-test.com', fullName: 'RH Int', roleCode: 'RH' },
+    { email: 'int.admin@innova-test.com', fullName: 'Admin Int', roleCode: 'ADMIN' },
   ];
 
   for (const u of users) {
@@ -80,4 +81,7 @@ async function main() {
   console.log('✅ Utilizadores E2E criados com sucesso');
 }
 
-main().catch((e) => { console.error('❌', e); process.exit(1); });
+main().catch(e => {
+  console.error('❌', e);
+  process.exit(1);
+});

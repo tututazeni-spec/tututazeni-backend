@@ -21,7 +21,9 @@ function resolveAdminPassword(): string {
   const fromEnv = process.env.SEED_ADMIN_PASSWORD;
   if (IS_PROD) {
     if (!fromEnv || fromEnv.length < 12) {
-      throw new Error('NODE_ENV=production exige SEED_ADMIN_PASSWORD com pelo menos 12 caracteres.');
+      throw new Error(
+        'NODE_ENV=production exige SEED_ADMIN_PASSWORD com pelo menos 12 caracteres.',
+      );
     }
     return fromEnv;
   }
