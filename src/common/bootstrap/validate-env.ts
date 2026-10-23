@@ -27,7 +27,13 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
     );
   }
 
-  if (!env.APP_URL) {
+  if (env.NODE_ENV === 'production') {
+    // Links de certificados/QR, reset de senha e declarações são gerados a partir
+    // daqui: um fallback http://localhost ou um http:// real seria um downgrade.
+    if (!env.APP_URL?.startsWith('https://')) {
+      throw new Error('[BOOT] APP_URL é obrigatório em produção e tem de começar por https://');
+    }
+  } else if (!env.APP_URL) {
     bootWarn('APP_URL não definido — links em documentos e declarações usarão o valor hardcoded.');
   }
 

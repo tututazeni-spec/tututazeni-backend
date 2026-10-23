@@ -33,4 +33,24 @@ describe('validateEnv', () => {
   it('não lança mesmo com APP_URL em falta (apenas warn)', () => {
     expect(() => validateEnv(BASE)).not.toThrow();
   });
+
+  describe('APP_URL em produção', () => {
+    const PROD = { ...BASE, NODE_ENV: 'production' };
+
+    it('lança quando falta', () => {
+      expect(() => validateEnv(PROD)).toThrow('APP_URL');
+    });
+
+    it('lança quando é http://', () => {
+      expect(() => validateEnv({ ...PROD, APP_URL: 'http://innova.ao' })).toThrow('https://');
+    });
+
+    it('aceita https://', () => {
+      expect(() => validateEnv({ ...PROD, APP_URL: 'https://innova.ao' })).not.toThrow();
+    });
+
+    it('fora de produção não bloqueia', () => {
+      expect(() => validateEnv({ ...BASE, APP_URL: 'http://localhost:3000' })).not.toThrow();
+    });
+  });
 });

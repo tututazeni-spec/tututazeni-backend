@@ -8,6 +8,7 @@ import { LeaveManagementService } from '../leave-management/leave-management.ser
 import { AttendanceStatus, AttendanceContext } from './attendance.dto';
 
 const mockAttendanceRecord = {
+  groupBy: jest.fn().mockResolvedValue([]),
   findMany: jest.fn(),
   findUnique: jest.fn(),
   findFirst: jest.fn(),
@@ -513,31 +514,100 @@ describe('AttendanceService', () => {
   // ─── getMonthlyReport ─────────────────────────────────────────────────────
 
   describe('getMonthlyReport', () => {
-    it('deve retornar relatório mensal', async () => {
-      mockAttendanceRecord.findMany.mockResolvedValue([]);
+    it('soma por utilizador os agregados da BD (presenças, atrasos, faltas, horas)', async () => {
+      mockAttendanceRecord.groupBy.mockResolvedValue([
+        {
+          userId: 1,
+          status: 'PRESENT',
+          _count: 18,
+          _sum: { workMinutes: 8640, overtimeMinutes: 60 },
+        },
+        { userId: 1, status: 'LATE', _count: 2, _sum: { workMinutes: 900, overtimeMinutes: 0 } },
+        { userId: 1, status: 'ABSENT', _count: 1, _sum: { workMinutes: 0, overtimeMinutes: 0 } },
+        {
+          userId: 2,
+          status: 'REMOTE',
+          _count: 5,
+          _sum: { workMinutes: 2400, overtimeMinutes: null },
+        },
+      ]);
+      mockPrisma.user.findMany.mockResolvedValue([
+        { id: 1, fullName: 'Ana' },
+        { id: 2, fullName: 'Rui' },
+      ]);
+
       const result = await service.getMonthlyReport(2024, 7);
-      expect(result).toBeDefined();
+
+      expect(result.employees).toBe(2);
+      expect(result.summary[0]).toMatchObject({
+        userId: 1,
+        name: 'Ana',
+        present: 20, // 18 presentes + 2 atrasos
+        late: 2,
+        absent: 1,
+        totalWorkMin: 9540,
+        overtimeMin: 60,
+      });
+      expect(result.summary[1]).toMatchObject({ userId: 2, name: 'Rui', present: 5, remote: 5 });
+      expect(result.totals).toMatchObject({ totalPresent: 25, totalAbsent: 1 });
+      expect(mockAttendanceRecord.findMany).not.toHaveBeenCalled();
+    });
+
+    it('sem registos devolve resumo vazio e não consulta utilizadores', async () => {
+      mockAttendanceRecord.groupBy.mockResolvedValue([]);
+      mockPrisma.user.findMany.mockClear();
+      const result = await service.getMonthlyReport(2024, 7);
+      expect(result.employees).toBe(0);
+      expect(mockPrisma.user.findMany).not.toHaveBeenCalled();
     });
   });
 
   // ─── getKpiTrend ──────────────────────────────────────────────────────────
 
   describe('getKpiTrend', () => {
-    it('deve retornar tendência de KPIs', async () => {
-      mockAttendanceRecord.findMany.mockResolvedValue([]);
+    it('junta por dia os estados agregados pela BD', async () => {
+      const d1 = new Date('2024-07-01T00:00:00.000Z');
+      const d2 = new Date('2024-07-02T00:00:00.000Z');
+      mockAttendanceRecord.groupBy.mockResolvedValue([
+        { date: d1, status: 'PRESENT', _count: 10, _sum: { hoursWorked: 80 } },
+        { date: d1, status: 'LATE', _count: 2, _sum: { hoursWorked: 15.5 } },
+        { date: d1, status: 'ABSENT', _count: 3, _sum: { hoursWorked: null } },
+        { date: d2, status: 'REMOTE', _count: 4, _sum: { hoursWorked: 32 } },
+      ]);
+
       const result = await service.getKpiTrend(undefined, 30);
-      expect(result).toBeDefined();
+
+      expect(result).toEqual([
+        { date: '2024-07-01', present: 12, absent: 3, late: 2, totalHours: 95.5 },
+        { date: '2024-07-02', present: 4, absent: 0, late: 0, totalHours: 32 },
+      ]);
     });
   });
 
   // ─── getAbsenteeismReport ─────────────────────────────────────────────────
 
   describe('getAbsenteeismReport', () => {
-    it('deve retornar relatório de absentismo', async () => {
-      mockAttendanceRecord.findMany.mockResolvedValue([]);
-      mockAttendanceRecord.count.mockResolvedValue(0);
+    it('ordena por faltas (desc) com o nome do utilizador', async () => {
+      mockAttendanceRecord.groupBy.mockResolvedValue([
+        { userId: 1, _count: 2 },
+        { userId: 2, _count: 7 },
+      ]);
+      mockPrisma.user.findMany.mockResolvedValue([
+        { id: 1, fullName: 'Ana' },
+        { id: 2, fullName: 'Rui' },
+      ]);
+
       const result = await service.getAbsenteeismReport('2024-01-01', '2024-12-31');
-      expect(result).toBeDefined();
+
+      expect(result).toEqual([
+        { userId: 2, name: 'Rui', absences: 7 },
+        { userId: 1, name: 'Ana', absences: 2 },
+      ]);
+    });
+
+    it('sem faltas devolve lista vazia', async () => {
+      mockAttendanceRecord.groupBy.mockResolvedValue([]);
+      expect(await service.getAbsenteeismReport('2024-01-01', '2024-12-31')).toEqual([]);
     });
   });
 

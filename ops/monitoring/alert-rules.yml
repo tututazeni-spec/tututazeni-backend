@@ -243,3 +243,71 @@ groups:
           description: >
             A verificação semanal WAL-G está em atraso (esperada: Domingos 05:00).
             Verificar o cron no servidor PostgreSQL: crontab -l | grep WALG
+
+  # ─── Postgres (postgres-exporter) — lag, ligações, cache, deadlocks ───────
+  - name: innova-postgres
+    rules:
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Postgres inacessível pelo exporter'
+          description: 'O exporter não consegue ligar-se ao Postgres há mais de 1 minuto.'
+
+      - alert: PostgresExporterDown
+        expr: up{job="postgres"} == 0
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'postgres-exporter em baixo'
+          description: 'Sem métricas do Postgres — alertas de lag e ligações ficam cegos.'
+
+      - alert: PostgresConnectionsHigh
+        expr: sum(pg_stat_activity_count) / max(pg_settings_max_connections) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Ligações Postgres acima de 80% ({{ $value | humanizePercentage }})'
+          description: 'Perto do max_connections. Confirmar que a app usa o PgBouncer (DATABASE_POOLER_URL).'
+
+      - alert: PostgresReplicationLagHigh
+        expr: pg_replication_lag_seconds > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Lag de replicação {{ $value | printf "%.1f" }}s'
+          description: 'Réplica atrasada. Leituras na réplica podem devolver dados antigos; considerar USE_REPLICAS=false.'
+
+      - alert: PostgresReplicationLagCritical
+        expr: pg_replication_lag_seconds > 30
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Lag de replicação crítico ({{ $value | printf "%.0f" }}s)'
+          description: 'Desligar USE_REPLICAS e investigar a réplica / slot de replicação.'
+
+      - alert: PostgresCacheHitLow
+        expr: >
+          sum(rate(pg_stat_database_blks_hit[10m]))
+          / (sum(rate(pg_stat_database_blks_hit[10m])) + sum(rate(pg_stat_database_blks_read[10m]))) < 0.95
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Cache hit ratio do Postgres abaixo de 95%'
+          description: 'Falta RAM / shared_buffers, ou há scans sequenciais pesados.'
+
+      - alert: PostgresDeadlocks
+        expr: increase(pg_stat_database_deadlocks[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Deadlocks no Postgres'
+          description: 'Houve deadlocks nos últimos 10 minutos. Ver o log do Postgres.'

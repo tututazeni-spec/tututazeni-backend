@@ -40,11 +40,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     const isServerError = status >= 500;
-    // Stack trace só em 5xx. Erros de cliente (401/403/404) são rotineiros e,
-    // sob carga, gerariam ruído e custo de serialização desnecessários.
+    // Stack trace completo em TODOS os erros (regra 2). A resposta ao cliente
+    // nunca o inclui — só o log.
     const err =
       exception instanceof Error
-        ? { message: exception.message, ...(isServerError ? { stack: exception.stack } : {}) }
+        ? { message: exception.message, stack: exception.stack }
         : { value: exception };
 
     const logPayload = { statusCode: status, method: req.method, path: req.url, err };

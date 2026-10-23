@@ -40,6 +40,7 @@ const fallbackModel = () => ({
 });
 
 const mockPrismaBase: any = {
+  $queryRaw: jest.fn().mockResolvedValue([]),
   user: {
     count: jest.fn().mockResolvedValue(0),
     findMany: jest.fn().mockResolvedValue([]),
@@ -217,9 +218,53 @@ describe('DashboardRhService (additional)', () => {
   // ─── getSkillsPanel ───────────────────────────────────────────
 
   describe('getSkillsPanel', () => {
-    it('deve retornar painel de competências', async () => {
-      const result = await service.getSkillsPanel();
-      expect(result).toBeDefined();
+    it('agrega competências por nome a partir do SQL', async () => {
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([
+          // duas competências com o mesmo nome contam como uma só
+          {
+            id: 1,
+            name: 'Liderança',
+            type: 'LEADERSHIP',
+            scaleMax: 5,
+            count: 4n,
+            sumLevel: 8n,
+            totalGap: 10n,
+          },
+          {
+            id: 2,
+            name: 'Comunicação',
+            type: 'BEHAVIORAL',
+            scaleMax: 5,
+            count: 2n,
+            sumLevel: 8n,
+            totalGap: 0n,
+          },
+          {
+            id: 9,
+            name: 'Liderança',
+            type: 'LEADERSHIP',
+            scaleMax: 5,
+            count: 2n,
+            sumLevel: 4n,
+            totalGap: 2n,
+          },
+        ])
+        .mockResolvedValueOnce([{ n: 5n }]);
+      mockPrisma.user.count.mockResolvedValue(10);
+
+      const result = (await service.getSkillsPanel()) as any;
+
+      expect(result.totalUsers).toBe(10);
+      expect(result.assessed).toBe(5);
+      expect(result.assessmentRate).toBe(50);
+      expect(result.totalCompetencies).toBe(2);
+      // Liderança: (10+2)/(4+2) = 2 de gap médio → crítica
+      expect(result.topGaps[0].competency.name).toBe('Liderança');
+      expect(result.topGaps[0].avgGap).toBe(2);
+      expect(result.criticalGaps).toBe(1);
+      expect(result.topStrengths[0].competency.name).toBe('Comunicação');
+      expect(result.topStrengths[0].avgLevel).toBe(4);
     });
   });
 

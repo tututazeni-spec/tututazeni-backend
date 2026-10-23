@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CompetencyCategory } from './competencies.dto';
 
 const mockPrisma = {
+  $queryRaw: jest.fn(),
   competency: {
     findUnique: jest.fn(),
     findFirst: jest.fn(),
@@ -16,6 +17,8 @@ const mockPrisma = {
     groupBy: jest.fn(),
   },
   userCompetency: {
+    aggregate: jest.fn(),
+    count: jest.fn(),
     findFirst: jest.fn(),
     upsert: jest.fn(),
     findMany: jest.fn(),
@@ -313,24 +316,16 @@ describe('CompetenciesService', () => {
         { category: 'HARD_SKILL', _count: { category: 5 } },
         { category: 'SOFT_SKILL', _count: { category: 3 } },
       ]);
-      mockPrisma.userCompetency.findMany.mockResolvedValue([
-        {
-          userId: 1,
-          competencyId: 1,
-          currentLevel: 2,
-          targetLevel: 4,
-          selfLevel: 3,
-          managerLevel: null,
-        },
-        {
-          userId: 2,
-          competencyId: 1,
-          currentLevel: 4,
-          targetLevel: 4,
-          selfLevel: 4,
-          managerLevel: 4,
-        },
-      ]);
+      // Agregados na BD: média (2 utilizadores, níveis 2 e 4), 1 avaliação
+      // pendente, 2 utilizadores avaliados e a competência 1 com 1 lacuna.
+      mockPrisma.userCompetency.aggregate.mockResolvedValue({
+        _avg: { currentLevel: 3 },
+        _count: 2,
+      });
+      mockPrisma.userCompetency.count.mockResolvedValue(1);
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([{ n: 2n }]) // utilizadores avaliados
+        .mockResolvedValueOnce([{ competencyId: 1, n: 1n }]); // top lacunas
       mockPrisma.competency.findMany.mockResolvedValue([
         { id: 1, name: 'TypeScript', category: 'HARD_SKILL', isCritical: true },
       ]);
@@ -349,6 +344,7 @@ describe('CompetenciesService', () => {
       expect(result.criticalAlerts).toHaveLength(1);
       // só o utilizador 1 tem autoavaliação sem avaliação do gestor
       expect(result.pendingEvaluations).toBe(1);
+      expect(result.avgProficiency).toBe(3);
     });
   });
 

@@ -1364,39 +1364,38 @@ export class CompetenciesService {
     const categoryCounts: Record<string, number> = {};
     for (const c of byCategory) categoryCounts[c.category] = c._count.category;
 
-    const allUC = await this.prisma.read.userCompetency.findMany({
-      select: {
-        userId: true,
-        competencyId: true,
-        currentLevel: true,
-        targetLevel: true,
-        selfLevel: true,
-        managerLevel: true,
-      },
-    });
-
+    // Agregados calculados na base de dados: a tabela cresce com
+    // utilizadores × competências, por isso não se carrega em memória.
     // Avaliação pendente = autoavaliação já submetida que ainda aguarda a
-    // avaliação do gestor (UserCompetency.selfLevel preenchido, managerLevel
-    // por preencher).
-    const pendingEvaluations = allUC.filter(
-      uc => uc.selfLevel != null && uc.managerLevel == null,
-    ).length;
+    // avaliação do gestor (selfLevel preenchido, managerLevel por preencher).
+    const [levelStats, pendingEvaluations, evaluatedRows, gapRows] = await Promise.all([
+      this.prisma.read.userCompetency.aggregate({ _avg: { currentLevel: true }, _count: true }),
+      this.prisma.read.userCompetency.count({
+        where: { selfLevel: { not: null }, managerLevel: null },
+      }),
+      this.prisma.read.$queryRaw<{ n: bigint }[]>`
+        SELECT COUNT(DISTINCT "userId") AS n FROM "UserCompetency"
+      `,
+      // targetLevel > currentLevel compara duas colunas — o Prisma não o
+      // expressa em `where`, daí o SQL; top 5 competências com mais lacunas.
+      this.prisma.read.$queryRaw<{ competencyId: number; n: bigint }[]>`
+        SELECT "competencyId", COUNT(*) AS n
+        FROM "UserCompetency"
+        WHERE "targetLevel" > "currentLevel"
+        GROUP BY "competencyId"
+        ORDER BY n DESC
+        LIMIT 5
+      `,
+    ]);
 
-    const avgProficiency = allUC.length
-      ? Math.round((allUC.reduce((sum, uc) => sum + uc.currentLevel, 0) / allUC.length) * 10) / 10
+    const avgProficiency = levelStats._count
+      ? Math.round((levelStats._avg.currentLevel ?? 0) * 10) / 10
       : 0;
+    const evaluatedUsers = Number(evaluatedRows[0]?.n ?? 0);
 
     const gapMap: Record<number, number> = {};
-    for (const uc of allUC) {
-      if ((uc.targetLevel ?? 0) > (uc.currentLevel ?? 0)) {
-        gapMap[uc.competencyId] = (gapMap[uc.competencyId] ?? 0) + 1;
-      }
-    }
-
-    const topGapIds = Object.entries(gapMap)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 5)
-      .map(([id]) => parseInt(id));
+    for (const r of gapRows) gapMap[r.competencyId] = Number(r.n);
+    const topGapIds = gapRows.map(r => r.competencyId);
 
     const topGapComps = await this.prisma.read.competency.findMany({
       where: { id: { in: topGapIds } },
@@ -1424,7 +1423,7 @@ export class CompetenciesService {
       active,
       inReview,
       avgProficiency,
-      evaluatedUsers: new Set(allUC.map(uc => uc.userId)).size,
+      evaluatedUsers,
       biggestGaps,
       criticalAlerts,
       topCompetencies: await this.getTopCompetencies(5),

@@ -62,6 +62,7 @@ function buildMockPrisma() {
   });
 
   return {
+    $queryRaw: jest.fn().mockResolvedValue([]),
     user: crud(),
     department: crud(),
     position: crud(),
@@ -78,7 +79,7 @@ function buildMockPrisma() {
     surveyResponse: crud(),
     notificationLog: crud(),
     historyRecord: crud(),
-    payslip: crud(),
+    payslip: { ...crud(), aggregate: jest.fn() },
     legacyPdi: crud(),
     auditLog: crud(),
     badgeAward: crud(),
@@ -252,12 +253,53 @@ describe('DashboardRhService (progress)', () => {
   // ─── getSkillsPanel ─────────────────────────────────────────────
 
   describe('getSkillsPanel', () => {
-    it('deve retornar painel de competências', async () => {
-      mockPrisma.userCompetency.groupBy.mockResolvedValue([]);
-      mockPrisma.competency.findMany.mockResolvedValue([]);
-      mockPrisma.user.count.mockResolvedValue(50);
+    it('agrega competências por nome a partir do SQL', async () => {
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([
+          // duas competências com o mesmo nome contam como uma só
+          {
+            id: 1,
+            name: 'Liderança',
+            type: 'LEADERSHIP',
+            scaleMax: 5,
+            count: 4n,
+            sumLevel: 8n,
+            totalGap: 10n,
+          },
+          {
+            id: 2,
+            name: 'Comunicação',
+            type: 'BEHAVIORAL',
+            scaleMax: 5,
+            count: 2n,
+            sumLevel: 8n,
+            totalGap: 0n,
+          },
+          {
+            id: 9,
+            name: 'Liderança',
+            type: 'LEADERSHIP',
+            scaleMax: 5,
+            count: 2n,
+            sumLevel: 4n,
+            totalGap: 2n,
+          },
+        ])
+        .mockResolvedValueOnce([{ n: 5n }]);
+      mockPrisma.user.count.mockResolvedValue(10);
+
       const result = (await service.getSkillsPanel()) as any;
-      expect(result).toBeDefined();
+
+      expect(result.totalUsers).toBe(10);
+      expect(result.assessed).toBe(5);
+      expect(result.assessmentRate).toBe(50);
+      expect(result.totalCompetencies).toBe(2);
+      // Liderança: (10+2)/(4+2) = 2 de gap médio → crítica
+      expect(result.topGaps[0].competency.name).toBe('Liderança');
+      expect(result.topGaps[0].avgGap).toBe(2);
+      expect(result.criticalGaps).toBe(1);
+      expect(result.topStrengths[0].competency.name).toBe('Comunicação');
+      expect(result.topStrengths[0].avgLevel).toBe(4);
     });
   });
 
@@ -299,14 +341,15 @@ describe('DashboardRhService (progress)', () => {
 
   describe('getAnniversariesThisMonth', () => {
     it('deve retornar lista vazia quando sem utilizadores este mês', async () => {
-      mockPrisma.user.findMany.mockResolvedValue([]);
+      mockPrisma.$queryRaw.mockResolvedValueOnce([]);
       const result = (await service.getAnniversariesThisMonth()) as any[];
-      expect(Array.isArray(result)).toBe(true);
+      expect(result).toEqual([]);
     });
 
     it('deve retornar utilizadores com aniversário este mês', async () => {
       const now = new Date();
       const hireDate = new Date(now.getFullYear() - 3, now.getMonth(), 15);
+      mockPrisma.$queryRaw.mockResolvedValueOnce([{ id: 1 }]);
       mockPrisma.user.findMany.mockResolvedValue([
         {
           id: 1,
@@ -470,35 +513,27 @@ describe('DashboardRhService (progress)', () => {
 
   describe('getPayrollPanel', () => {
     it('deve retornar painel de folha salarial vazio', async () => {
-      mockPrisma.payslip.findMany.mockResolvedValue([]);
+      mockPrisma.payslip.aggregate.mockResolvedValue({ _count: 0, _sum: {} });
       const result = (await service.getPayrollPanel('2026-06')) as any;
       expect(result.period).toBe('2026-06');
       expect(result.headcount).toBe(0);
       expect(result.totalGross).toBe(0);
+      expect(result.avgGross).toBe(0);
     });
 
-    it('deve calcular totais salariais a partir dos payslips reais do período', async () => {
-      mockPrisma.payslip.findMany.mockResolvedValue([
-        {
-          grossSalary: 2000,
-          netSalary: 1600,
-          totalDeductions: 400,
-          user: { id: 1, fullName: 'Ana', department: { name: 'TI' } },
-        },
-        {
-          grossSalary: 3000,
-          netSalary: 2400,
-          totalDeductions: 600,
-          user: { id: 2, fullName: 'João', department: { name: 'RH' } },
-        },
-      ]);
+    it('deve calcular totais salariais a partir do agregado da BD', async () => {
+      mockPrisma.payslip.aggregate.mockResolvedValue({
+        _count: 2,
+        _sum: { grossSalary: 5000, netSalary: 4000, totalDeductions: 1000 },
+      });
       const result = (await service.getPayrollPanel('2026-06')) as any;
-      expect(mockPrisma.payslip.findMany).toHaveBeenCalledWith(
+      expect(mockPrisma.payslip.aggregate).toHaveBeenCalledWith(
         expect.objectContaining({ where: { period: '2026-06' } }),
       );
       expect(result.headcount).toBe(2);
       expect(result.totalGross).toBe(5000);
       expect(result.totalNet).toBe(4000);
+      expect(result.totalDeductions).toBe(1000);
       expect(result.avgGross).toBe(2500);
     });
   });

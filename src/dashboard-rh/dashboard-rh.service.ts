@@ -1,6 +1,6 @@
 // src/dashboard-rh/dashboard-rh.service.ts
 import { Injectable, Logger } from '@nestjs/common';
-import { EnrollmentStatus, ReviewStatus } from '@prisma/client';
+import { EnrollmentStatus, Prisma, ReviewStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
 import { DASHBOARD_CACHE_TTL } from '../cache/cache.constants';
@@ -63,6 +63,16 @@ function healthStatusInverse(
 // ─────────────────────────────────────────────────────────────────
 // SERVICE
 // ─────────────────────────────────────────────────────────────────
+
+interface SkillAggRow {
+  id: number;
+  name: string;
+  type: string;
+  scaleMax: number;
+  count: bigint;
+  sumLevel: bigint;
+  totalGap: bigint;
+}
 
 @Injectable()
 export class DashboardRhService {
@@ -501,10 +511,19 @@ export class DashboardRhService {
   async getPerformancePanel(departmentId?: number) {
     const uWhere = departmentId ? { departmentId } : {};
 
-    const [reviews, userCount, hiPos, activePlans] = await Promise.all([
+    const [reviews, topReviews, userCount, hiPos, activePlans] = await Promise.all([
+      // Só o necessário para os agregados: o avatar (data URL base64) de cada
+      // utilizador não era usado e multiplicava o tamanho da consulta.
       this.prisma.read.performanceReview.findMany({
         where: { user: uWhere },
-        include: {
+        select: { score: true, user: { select: { department: { select: { name: true } } } } },
+      }),
+      this.prisma.read.performanceReview.findMany({
+        where: { user: uWhere, score: { gte: 4 } },
+        orderBy: { createdAt: 'desc' },
+        take: 8,
+        select: {
+          score: true,
           user: {
             select: {
               id: true,
@@ -515,7 +534,6 @@ export class DashboardRhService {
             },
           },
         },
-        orderBy: { createdAt: 'desc' },
       }),
       this.prisma.read.user.count({ where: { active: true, ...uWhere } }),
       this.prisma.userCompetency
@@ -582,13 +600,10 @@ export class DashboardRhService {
           count: d.count,
         }))
         .sort((a, b) => b.avgScore - a.avgScore),
-      topPerformers: reviews
-        .filter(r => (r.score ?? 0) >= 4)
-        .slice(0, 8)
-        .map(r => ({
-          user: r.user,
-          score: r.score,
-        })),
+      topPerformers: topReviews.map(r => ({
+        user: r.user,
+        score: r.score,
+      })),
       insights: this.buildPerformanceInsights(avg, atRisk, reviews.length),
     };
   }
@@ -600,53 +615,66 @@ export class DashboardRhService {
   async getSkillsPanel(departmentId?: number) {
     // Só colaboradores activos e competências activas do catálogo — mesma base
     // do denominador (totalUsers), para a taxa de avaliação não passar de 100%.
-    const uWhere = {
-      user: { active: true, ...(departmentId ? { departmentId } : {}) },
-      competency: { isActive: true },
-    };
-
-    // FIX: legacyEmployeeSkill era pedido aqui mas nunca usado no resto da
-    // função (achado ao tipar) — query removida, deixou de desperdiçar uma
-    // consulta a cada carregamento do dashboard.
-    const [competencies, totalUsers] = await Promise.all([
-      this.prisma.userCompetency.findMany({
-        where: uWhere,
-        include: {
-          competency: {
-            select: { id: true, name: true, type: true, scaleMax: true },
-          },
-        },
-      }),
+    // Agregado por competência na BD: utilizadores × competências dá dezenas de
+    // milhares de linhas. Gap = (alvo, ou topo da escala) − nível, só se > 0.
+    const deptFilter = departmentId
+      ? Prisma.sql`AND u."departmentId" = ${departmentId}`
+      : Prisma.empty;
+    const [rows, assessedRows, totalUsers] = await Promise.all([
+      this.prisma.read.$queryRaw<SkillAggRow[]>`
+        SELECT c."id", c."name", c."type"::text AS "type", c."scaleMax",
+               COUNT(*) AS "count",
+               SUM(uc."currentLevel") AS "sumLevel",
+               SUM(GREATEST(COALESCE(uc."targetLevel", c."scaleMax") - uc."currentLevel", 0)) AS "totalGap"
+        FROM "UserCompetency" uc
+        JOIN "User" u ON u."id" = uc."userId"
+        JOIN "Competency" c ON c."id" = uc."competencyId"
+        WHERE u."active" = true AND c."isActive" = true ${deptFilter}
+        GROUP BY c."id"
+      `,
+      this.prisma.read.$queryRaw<{ n: bigint }[]>`
+        SELECT COUNT(DISTINCT uc."userId") AS "n"
+        FROM "UserCompetency" uc
+        JOIN "User" u ON u."id" = uc."userId"
+        JOIN "Competency" c ON c."id" = uc."competencyId"
+        WHERE u."active" = true AND c."isActive" = true ${deptFilter}
+      `,
       this.prisma.read.user.count({
         where: { active: true, ...(departmentId ? { departmentId } : {}) },
       }),
     ]);
 
-    type CompetencyRef = (typeof competencies)[number]['competency'];
+    // Competências com o mesmo nome contam como uma só (comportamento anterior).
     const byComp: Record<
       string,
-      { comp: CompetencyRef; count: number; totalGap: number; avgLevel: number }
+      {
+        comp: { id: number; name: string; type: string; scaleMax: number };
+        count: number;
+        totalGap: number;
+        sumLevel: number;
+      }
     > = {};
-    for (const c of competencies) {
-      const n = c.competency.name;
-      if (!byComp[n]) byComp[n] = { comp: c.competency, count: 0, totalGap: 0, avgLevel: 0 };
-      byComp[n].count++;
-      byComp[n].avgLevel += c.currentLevel;
-      // Gap real: nível alvo do colaborador nesta competência; sem alvo
-      // definido, o topo da escala da competência.
-      const gap = (c.targetLevel ?? c.competency.scaleMax) - c.currentLevel;
-      if (gap > 0) byComp[n].totalGap += gap;
+    for (const r of rows) {
+      const cur = (byComp[r.name] ??= {
+        comp: { id: r.id, name: r.name, type: r.type, scaleMax: r.scaleMax },
+        count: 0,
+        totalGap: 0,
+        sumLevel: 0,
+      });
+      cur.count += Number(r.count);
+      cur.sumLevel += Number(r.sumLevel);
+      cur.totalGap += Number(r.totalGap);
     }
     const skillData = Object.values(byComp)
       .map(c => ({
         competency: c.comp,
         count: c.count,
-        avgLevel: +(c.avgLevel / c.count).toFixed(2),
+        avgLevel: +(c.sumLevel / c.count).toFixed(2),
         avgGap: +(c.totalGap / c.count).toFixed(1),
       }))
       .sort((a, b) => b.avgGap - a.avgGap);
 
-    const assessed = new Set(competencies.map(c => c.userId)).size;
+    const assessed = Number(assessedRows[0]?.n ?? 0);
 
     return {
       totalUsers,
@@ -852,19 +880,26 @@ export class DashboardRhService {
   async getAnniversariesThisMonth() {
     const now = new Date();
     const month = now.getMonth() + 1;
-    const users = await this.prisma.read.user.findMany({
-      where: { active: true },
-      select: {
-        id: true,
-        fullName: true,
-        avatarUrl: true,
-        createdAt: true,
-        department: { select: { name: true } },
-        position: { select: { name: true } },
-      },
-    });
+    // O mês filtra-se na BD: antes lia todos os utilizadores activos (com avatar
+    // base64) para descartar quase todos em memória.
+    const monthRows = await this.prisma.read.$queryRaw<{ id: number }[]>`
+      SELECT "id" FROM "User"
+      WHERE "active" = true AND EXTRACT(MONTH FROM "createdAt") = ${month}
+    `;
+    const users = monthRows.length
+      ? await this.prisma.read.user.findMany({
+          where: { id: { in: monthRows.map(r => r.id) } },
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            createdAt: true,
+            department: { select: { name: true } },
+            position: { select: { name: true } },
+          },
+        })
+      : [];
     return users
-      .filter(u => new Date(u.createdAt).getMonth() + 1 === month)
       .map(u => ({
         id: u.id,
         fullName: u.fullName,
@@ -1076,48 +1111,39 @@ export class DashboardRhService {
       where: { active: true },
       select: { id: true, createdAt: true },
     });
-    const userIds = users.map(u => u.id);
-
-    const [perfReviews, enrollments, surveyResponses] = await Promise.all([
-      this.prisma.read.performanceReview.findMany({
-        where: { userId: { in: userIds } },
-        select: { userId: true, score: true },
+    // Totais por utilizador calculados na BD (soma/contagem), em vez de carregar
+    // todas as reviews, matrículas e respostas de todos os colaboradores activos.
+    const activeUser = { user: { active: true } };
+    const [perfRows, enrollRows, surveyRows] = await Promise.all([
+      this.prisma.read.performanceReview.groupBy({
+        by: ['userId'],
+        where: activeUser,
+        _count: true,
+        _sum: { score: true },
       }),
-      this.prisma.read.enrollment.findMany({
-        where: { userId: { in: userIds }, status: EnrollmentStatus.COMPLETED },
-        select: { userId: true },
+      this.prisma.read.enrollment.groupBy({
+        by: ['userId'],
+        where: { ...activeUser, status: EnrollmentStatus.COMPLETED },
+        _count: true,
       }),
-      this.prisma.read.surveyResponse.findMany({
-        where: { userId: { in: userIds } },
-        select: { userId: true, score: true },
+      this.prisma.read.surveyResponse.groupBy({
+        by: ['userId'],
+        where: activeUser,
+        _count: true,
+        _sum: { score: true },
       }),
     ]);
-
-    // Group by user
-    const groupBy = <T extends { userId: number }>(rows: T[]) => {
-      const map = new Map<number, T[]>();
-      for (const row of rows) {
-        const list = map.get(row.userId);
-        if (list) list.push(row);
-        else map.set(row.userId, [row]);
-      }
-      return map;
-    };
-    const perfByUser = groupBy(perfReviews);
-    const enrollByUser = groupBy(enrollments);
-    const surveyByUser = groupBy(surveyResponses);
+    const perfByUser = new Map(perfRows.map(r => [r.userId, r]));
+    const enrollByUser = new Map(enrollRows.map(r => [r.userId, r._count]));
+    const surveyByUser = new Map(surveyRows.map(r => [r.userId, r]));
 
     const byUser = users
       .map(({ id, createdAt }) => {
-        const perf = perfByUser.get(id) ?? [];
-        const courses = (enrollByUser.get(id) ?? []).length;
-        const surveys = surveyByUser.get(id) ?? [];
-        const avgPerf = perf.length
-          ? perf.reduce((a, r) => a + (r.score ?? 0), 0) / perf.length
-          : 0;
-        const avgEng = surveys.length
-          ? surveys.reduce((a, s) => a + (s.score ?? 0), 0) / surveys.length
-          : 0;
+        const perf = perfByUser.get(id);
+        const courses = enrollByUser.get(id) ?? 0;
+        const surveys = surveyByUser.get(id);
+        const avgPerf = perf?._count ? (perf._sum.score ?? 0) / perf._count : 0;
+        const avgEng = surveys?._count ? (surveys._sum.score ?? 0) / surveys._count : 0;
         return {
           id,
           avgPerf,
@@ -1177,25 +1203,21 @@ export class DashboardRhService {
   // ══════════════════════════════════════════════════════
 
   async getPayrollPanel(period: string) {
-    const payslips = await this.prisma.read.payslip.findMany({
+    // Soma e contagem na BD — antes carregava todos os recibos do período com o utilizador.
+    const agg = await this.prisma.read.payslip.aggregate({
       where: { period },
-      include: { user: { select: { id: true, fullName: true, department: true } } },
+      _count: true,
+      _sum: { grossSalary: true, netSalary: true, totalDeductions: true },
     });
-    const totals = payslips.reduce(
-      (acc, p) => ({
-        gross: acc.gross + p.grossSalary,
-        net: acc.net + p.netSalary,
-        deduct: acc.deduct + p.totalDeductions,
-      }),
-      { gross: 0, net: 0, deduct: 0 },
-    );
+    const headcount = agg._count;
+    const gross = agg._sum.grossSalary ?? 0;
     return {
       period,
-      headcount: payslips.length,
-      totalGross: +totals.gross.toFixed(2),
-      totalNet: +totals.net.toFixed(2),
-      totalDeductions: +totals.deduct.toFixed(2),
-      avgGross: payslips.length ? +(totals.gross / payslips.length).toFixed(2) : 0,
+      headcount,
+      totalGross: +gross.toFixed(2),
+      totalNet: +(agg._sum.netSalary ?? 0).toFixed(2),
+      totalDeductions: +(agg._sum.totalDeductions ?? 0).toFixed(2),
+      avgGross: headcount ? +(gross / headcount).toFixed(2) : 0,
     };
   }
 

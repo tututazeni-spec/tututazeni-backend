@@ -19,6 +19,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { IsHttpsUrl } from '../common/validators/is-https-url.decorator';
 import {
   CertificateTemplateType,
   DsrStatus,
@@ -676,7 +677,7 @@ class OidcSettingsDto {
     example: 'https://idp.empresa.ao',
   })
   @IsOptional()
-  @IsUrl()
+  @IsHttpsUrl()
   issuer?: string;
 }
 

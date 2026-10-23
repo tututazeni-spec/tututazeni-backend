@@ -7,6 +7,7 @@ export const envValidationSchema = Joi.object({
 
   // Base de dados
   DATABASE_URL: Joi.string().required(),
+  DATABASE_POOLER_URL: Joi.string().optional(),
 
   // JWT — rejeita o placeholder do .env.example
   JWT_SECRET: Joi.string().min(32).disallow('your_jwt_secret').required(),

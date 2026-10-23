@@ -1,0 +1,12 @@
+# Alertmanager LOCAL — sem email/Telegram (não há credenciais em dev).
+# Os alertas ficam visíveis na UI (http://localhost:9093) e na API.
+# Em produção usa-se ../alertmanager.yml.tpl (email + Telegram + dead-man).
+route:
+  receiver: 'ui'
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 1h
+
+receivers:
+  - name: 'ui'

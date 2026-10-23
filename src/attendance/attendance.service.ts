@@ -753,10 +753,21 @@ export class AttendanceService {
     if (department)
       where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
-    const records = await this.prisma.attendanceRecord.findMany({
+    // Agregado na BD por (utilizador, estado): com milhares de funcionários
+    // × ~22 dias úteis, carregar cada registo seria centenas de milhares de linhas.
+    const rows = await this.prisma.attendanceRecord.groupBy({
+      by: ['userId', 'status'],
       where,
-      include: { user: { select: { id: true, fullName: true, email: true } } },
+      _count: true,
+      _sum: { workMinutes: true, overtimeMinutes: true },
     });
+    const users = rows.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: [...new Set(rows.map(r => r.userId))] } },
+          select: { id: true, fullName: true },
+        })
+      : [];
+    const nameById = new Map(users.map(u => [u.id, u.fullName]));
 
     const workdays = this.countWorkdays(from, to);
 
@@ -772,12 +783,12 @@ export class AttendanceService {
       overtimeMin: number;
     }
     const userMap = new Map<number, UserMonthlyStats>();
-    for (const r of records) {
+    for (const r of rows) {
       const uid = r.userId;
       if (!userMap.has(uid)) {
         userMap.set(uid, {
           userId: uid,
-          name: r.user?.fullName,
+          name: nameById.get(uid),
           present: 0,
           late: 0,
           absent: 0,
@@ -787,33 +798,33 @@ export class AttendanceService {
           overtimeMin: 0,
         });
       }
-      const u = userMap.get(uid)!;
-      const presentStatuses: AttendanceStatus[] = [
-        AttendanceStatus.PRESENT,
-        AttendanceStatus.PARTIAL,
-      ];
-      if (presentStatuses.includes(r.status)) u.present++;
+      const u = userMap.get(uid);
+      const n = r._count;
+      if (r.status === AttendanceStatus.PRESENT || r.status === AttendanceStatus.PARTIAL)
+        u.present += n;
       if (r.status === AttendanceStatus.LATE) {
-        u.present++;
-        u.late++;
+        u.present += n;
+        u.late += n;
       }
-      if (r.status === AttendanceStatus.ABSENT) u.absent++;
-      if (r.status === AttendanceStatus.JUSTIFIED) u.justified++;
+      if (r.status === AttendanceStatus.ABSENT) u.absent += n;
+      if (r.status === AttendanceStatus.JUSTIFIED) u.justified += n;
       if (r.status === AttendanceStatus.REMOTE) {
-        u.present++;
-        u.remote++;
+        u.present += n;
+        u.remote += n;
       }
-      u.totalWorkMin += r.workMinutes ?? 0;
-      u.overtimeMin += r.overtimeMinutes ?? 0;
+      u.totalWorkMin += r._sum.workMinutes ?? 0;
+      u.overtimeMin += r._sum.overtimeMinutes ?? 0;
     }
 
-    const summary = Array.from(userMap.values()).map(u => ({
-      ...u,
-      totalHours: minutesToHours(u.totalWorkMin),
-      overtimeHours: minutesToHours(u.overtimeMin),
-      attendanceRate: workdays > 0 ? +((u.present / workdays) * 100).toFixed(1) : 0,
-      absenteeismRate: workdays > 0 ? +((u.absent / workdays) * 100).toFixed(1) : 0,
-    }));
+    const summary = Array.from(userMap.values())
+      .sort((x, y) => x.userId - y.userId)
+      .map(u => ({
+        ...u,
+        totalHours: minutesToHours(u.totalWorkMin),
+        overtimeHours: minutesToHours(u.overtimeMin),
+        attendanceRate: workdays > 0 ? +((u.present / workdays) * 100).toFixed(1) : 0,
+        absenteeismRate: workdays > 0 ? +((u.absent / workdays) * 100).toFixed(1) : 0,
+      }));
 
     const totals = summary.reduce(
       (a, u) => ({
@@ -843,7 +854,14 @@ export class AttendanceService {
     const [records, pendingLeaves, pendingJustifications, pendingOvertime] = await Promise.all([
       this.prisma.attendanceRecord.findMany({
         where,
-        include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
+        // Só o que a resposta usa: avatarUrl (data URL base64) nunca é devolvido aqui.
+        select: {
+          userId: true,
+          status: true,
+          clockIn: true,
+          clockOut: true,
+          user: { select: { fullName: true } },
+        },
       }),
       this.prisma.read.leaveRequest.count({ where: { status: LeaveStatus.PENDING } }),
       this.prisma.read.attendanceJustification.count({ where: { status: 'PENDING' } }),
@@ -888,25 +906,28 @@ export class AttendanceService {
     const where: Prisma.AttendanceRecordWhereInput = { date: { gte: from } };
     if (userId) where.userId = userId;
 
-    const records = await this.prisma.attendanceRecord.findMany({
+    // Agregado por dia e estado na BD (sem filtro de utilizador seriam
+    // utilizadores × dias linhas).
+    const rows = await this.prisma.attendanceRecord.groupBy({
+      by: ['date', 'status'],
       where,
+      _count: true,
+      _sum: { hoursWorked: true },
       orderBy: { date: 'asc' },
     });
 
-    const byDate = records.reduce<
-      Record<
-        string,
-        { date: string; present: number; absent: number; late: number; totalHours: number }
-      >
-    >((acc, r) => {
+    const byDate: Record<
+      string,
+      { date: string; present: number; absent: number; late: number; totalHours: number }
+    > = {};
+    for (const r of rows) {
       const key = r.date.toISOString().split('T')[0];
-      if (!acc[key]) acc[key] = { date: key, present: 0, absent: 0, late: 0, totalHours: 0 };
-      if (PRESENT_LIKE_STATUSES.includes(r.status)) acc[key].present++;
-      if (r.status === AttendanceStatus.ABSENT) acc[key].absent++;
-      if (r.status === AttendanceStatus.LATE) acc[key].late++;
-      acc[key].totalHours = +(acc[key].totalHours + (r.hoursWorked ?? 0)).toFixed(2);
-      return acc;
-    }, {});
+      const day = (byDate[key] ??= { date: key, present: 0, absent: 0, late: 0, totalHours: 0 });
+      if (PRESENT_LIKE_STATUSES.includes(r.status)) day.present += r._count;
+      if (r.status === AttendanceStatus.ABSENT) day.absent += r._count;
+      if (r.status === AttendanceStatus.LATE) day.late += r._count;
+      day.totalHours = +(day.totalHours + (r._sum.hoursWorked ?? 0)).toFixed(2);
+    }
 
     return Object.values(byDate);
   }
@@ -919,21 +940,22 @@ export class AttendanceService {
     if (department)
       where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
-    const records = await this.prisma.attendanceRecord.findMany({
+    const rows = await this.prisma.attendanceRecord.groupBy({
+      by: ['userId'],
       where,
-      include: { user: { select: { id: true, fullName: true } } },
+      _count: true,
     });
+    if (!rows.length) return [];
 
-    const byUser = records.reduce<
-      Record<number, { userId: number; name: string; absences: number }>
-    >((acc, r) => {
-      const uid = r.userId;
-      if (!acc[uid]) acc[uid] = { userId: uid, name: r.user?.fullName, absences: 0 };
-      acc[uid].absences++;
-      return acc;
-    }, {});
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: rows.map(r => r.userId) } },
+      select: { id: true, fullName: true },
+    });
+    const nameById = new Map(users.map(u => [u.id, u.fullName]));
 
-    return Object.values(byUser).sort((a, b) => b.absences - a.absences);
+    return rows
+      .map(r => ({ userId: r.userId, name: nameById.get(r.userId), absences: r._count }))
+      .sort((a, b) => b.absences - a.absences);
   }
 
   async checkInToEvent(userId: number, eventId: number, dto: ClockInDto) {

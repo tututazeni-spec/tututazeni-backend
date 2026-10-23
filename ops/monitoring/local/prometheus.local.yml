@@ -1,0 +1,24 @@
+# Prometheus LOCAL (desenvolvimento, Docker Desktop no Windows).
+# Faz scrape do backend que corre no host (porta 4000) e reutiliza as regras
+# de produção (../alert-rules.yml). Jobs de node-exporter/postgres-exporter não
+# existem aqui — os alertas que dependem deles ficam sem dados (não disparam).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alert-rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+scrape_configs:
+  - job_name: 'innova-app'
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/secrets/metrics_token
+    static_configs:
+      - targets: ['host.docker.internal:4000']
