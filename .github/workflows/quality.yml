@@ -56,6 +56,18 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
+      - name: Auditar dependências de produção (high/critical)
+        # Falha o CI se surgir uma vulnerabilidade alta ou crítica nas deps que
+        # vão para a imagem. Devs/ferramentas (artillery, bruno) ficam de fora.
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Procurar segredos no repositório (gitleaks)
+        # Imagem em vez de gitleaks-action: não exige licença. Config e
+        # allowlist em .gitleaks.toml.
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2 \
+            detect --source /repo --config /repo/.gitleaks.toml --redact --no-banner --verbose
+
       - name: Gerar cliente Prisma
         run: npx prisma generate
 

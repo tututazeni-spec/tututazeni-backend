@@ -1,0 +1,29 @@
+# Config do gitleaks (CI: .github/workflows/quality.yml)
+# Estende as regras por omissão. Revisto em 2026-10-23: os 19 achados históricos eram todos
+# falsos positivos (chaves de enum/catálogo, fixtures de teste, JWT de exemplo, badges, comentário
+# de CI). Nenhum segredo real. Só se ignora o que foi verificado.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Valores fictícios e falsos positivos verificados"
+paths = [
+  '''^\.env\.example$''',
+  '''^\.env\.test$''',                       # JWT/METRICS/GROQ de teste, fictícios
+  '''^ops/\.env\.production\.example$''',
+  '''^package-lock\.json$''',
+  '''^docs/''',
+  '''^test/''',                              # fixtures de integração (JWT_SECRET de teste)
+  '''\.spec\.ts$''',                        # fixtures (inclui o JWT de exemplo do jwt.io)
+  '''(^|/)README\.md$''',                   # URLs de badges
+  '''^[A-Z0-9-]+GUIDE\.md$''',               # guias com segredos de teste
+  '''^sonar-scan\.log$''',                  # organization key do Sonar (não é segredo)
+  '''^src/automation/automation-events\.catalog\.ts$''',    # chaves de eventos, não credenciais
+  '''^src/process-standard/process-integrations\.ts$''',     # idem
+]
+# Commits antigos de quality.yml: o "achado" era um comentário sobre workers/heap.
+commits = [
+  '9fc40f3cd2de69cc31e032ef124ceb3b05f57566',
+  'e71941822f12444f9711fa65001820c557770bc4',
+  '266d7e60ab76d160e873e03b6fe44f7b4dcccfe3',
+]
