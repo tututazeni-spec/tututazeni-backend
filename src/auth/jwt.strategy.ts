@@ -4,6 +4,7 @@ import { ExtractJwt, Strategy, JwtFromRequestFunction } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { runAsSystem } from '../common/rls/rls-context';
 import { withFlatPermissions } from '../common/utils/role-permissions';
 
 // Extrai o JWT do cookie httpOnly 'token' (definido pelo backend no login).
@@ -76,15 +77,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   private async loadUser(sub: number) {
-    const raw = await this.prisma.user.findUnique({
-      where: { id: sub },
-      include: {
-        role: { include: { rolePermissions: { include: { permission: true } } } },
-        unit: true,
-        department: true,
-        position: true,
-      },
-    });
+    // Ainda não há utilizador resolvido (é isto que o resolve): lookup de confiança, fora do RLS.
+    const raw = await runAsSystem(() =>
+      this.prisma.user.findUnique({
+        where: { id: sub },
+        include: {
+          role: { include: { rolePermissions: { include: { permission: true } } } },
+          unit: true,
+          department: true,
+          position: true,
+        },
+      }),
+    );
     if (!raw || !raw.active) {
       this.userCache.delete(sub);
       throw new UnauthorizedException('Utilizador inativo ou não encontrado');

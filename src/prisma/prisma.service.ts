@@ -6,10 +6,18 @@ import { Pool } from 'pg';
 import { PinoLogger } from 'nestjs-pino';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Histogram } from 'prom-client';
+import { RlsPool } from './rls-pool';
 import { logQueryEvent, observeQueryDuration, PrismaQueryEvent } from './query-logging';
 
+/**
+ * RLS_ENABLED=true: a app liga-se com a role innova_app (sem BYPASSRLS) e cada transacção
+ * recebe app.user_id/app.privileged (ver ops/db/rls/README.md). Desligado = comportamento antigo.
+ */
+const rlsEnabled = (): boolean => process.env.RLS_ENABLED === 'true';
+
 function makePool(connectionString: string | undefined, max: number, tls = true): Pool {
-  return new Pool({
+  const PoolImpl = rlsEnabled() ? RlsPool : Pool;
+  return new PoolImpl({
     connectionString,
     ssl: tls && process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
     max,
@@ -58,11 +66,16 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     // ─── Primary (escrita) — mantém o comportamento e o pool actuais ───
     // Com PgBouncer (DATABASE_POOLER_URL) o tráfego da app passa pelo pooler, dentro
     // da rede Docker (sem TLS). O `migrate` continua a usar DATABASE_URL directo.
-    const poolerUrl = process.env.DATABASE_POOLER_URL;
+    // Com RLS a app usa DATABASE_APP_URL (role innova_app); migrate/backups continuam no owner.
+    const appUrl = rlsEnabled() ? process.env.DATABASE_APP_URL : undefined;
+    if (rlsEnabled() && !appUrl) {
+      throw new Error('RLS_ENABLED=true exige DATABASE_APP_URL (role innova_app, sem BYPASSRLS).');
+    }
+    const poolerUrl = rlsEnabled() ? undefined : process.env.DATABASE_POOLER_URL;
     const writePool = makePool(
-      poolerUrl || process.env.DATABASE_URL,
+      appUrl || poolerUrl || process.env.DATABASE_URL,
       parseInt(process.env.DB_POOL_MAX || '50', 10),
-      !poolerUrl,
+      !poolerUrl && !(appUrl && /@pgbouncer[:/]/.test(appUrl)),
     );
     super({
       adapter: new PrismaPg(writePool),
@@ -76,7 +89,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     this.warmPools = [writePool];
 
     // ─── Réplica (leitura) — opcional, controlada por feature flag ───
-    const replicaUrl = process.env.DATABASE_REPLICA_URL;
+    const replicaUrl = rlsEnabled()
+      ? process.env.DATABASE_REPLICA_APP_URL
+      : process.env.DATABASE_REPLICA_URL;
     const useReplicas = process.env.USE_REPLICAS === 'true' && !!replicaUrl;
 
     if (useReplicas) {
@@ -145,8 +160,28 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     ) as unknown as PrismaService;
   }
 
+  /**
+   * Com RLS_ENABLED a ligação TEM de ser uma role sem superuser/BYPASSRLS — caso contrário o
+   * Postgres ignora todas as policies e o RLS fica activo só no papel.
+   */
+  private async assertRlsRoleIsRestricted() {
+    if (!rlsEnabled()) return;
+    const rows = await this.$queryRawUnsafe<{ current_user: string; bypass: boolean }[]>(
+      'SELECT current_user, (rolsuper OR rolbypassrls) AS bypass FROM pg_roles WHERE rolname = current_user',
+    );
+    const row = rows[0];
+    if (row?.bypass) {
+      const msg = `RLS_ENABLED=true mas a role "${row.current_user}" ignora RLS (superuser/BYPASSRLS). Use innova_app em DATABASE_APP_URL.`;
+      if (process.env.NODE_ENV === 'production') throw new Error(msg);
+      this.logger.error(msg);
+    } else {
+      this.logger.log(`RLS activo: ligado como "${row?.current_user}" (sem BYPASSRLS).`);
+    }
+  }
+
   async onModuleInit() {
     await this.$connect();
+    await this.assertRlsRoleIsRestricted();
     if (this.replicaClient) {
       await this.replicaClient.$connect();
     }

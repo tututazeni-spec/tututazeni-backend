@@ -3,6 +3,7 @@ import { ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/com
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { setRlsPrivileged, setRlsUser } from '../rls/rls-context';
 import { setRequestUserId } from '../logging/request-context';
 import { CurrentUserData } from '../types/current-user';
 
@@ -18,7 +19,11 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       context.getClass(),
     ]);
 
-    if (isPublic) return true; // ← ignora o guard se for rota pública
+    if (isPublic) {
+      // rota pública valida o seu próprio token/credenciais e precisa de acesso à BD sem utilizador
+      setRlsPrivileged(true);
+      return true; // ← ignora o guard se for rota pública
+    }
 
     return super.canActivate(context);
   }
@@ -28,6 +33,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       throw err || new UnauthorizedException('Token inválido ou expirado');
     }
     setRequestUserId(user?.id);
+    setRlsUser(user.id, user.roleCode ?? (user.role as { code?: string } | null)?.code);
     return user as TUser;
   }
 }

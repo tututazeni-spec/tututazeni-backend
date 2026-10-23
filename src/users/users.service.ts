@@ -1,3 +1,4 @@
+import { runAsSystem } from '../common/rls/rls-context';
 import {
   BadRequestException,
   Injectable,
@@ -808,24 +809,28 @@ export class UsersService {
       ];
     }
 
-    return this.prisma.read.user.findMany({
-      where,
-      select: {
-        id: true,
-        fullName: true,
-        email: true,
-        phone: true,
-        avatarUrl: true,
-        city: true,
-        country: true,
-        position: { select: { name: true } },
-        department: { select: { name: true } },
-      },
-      orderBy: { fullName: 'asc' },
-      // Listar um departamento inteiro (sem pesquisa) não tem limite — é usado
-      // para adicionar todos os membros a uma turma. Pesquisa livre fica a 100.
-      take: departmentId && !search ? undefined : 100,
-    });
+    // Diretório da empresa: devolve campos públicos de TODOS os colaboradores, por desenho
+    // (o RLS de utilizador só mostraria o próprio e o gestor).
+    return runAsSystem(() =>
+      this.prisma.read.user.findMany({
+        where,
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          phone: true,
+          avatarUrl: true,
+          city: true,
+          country: true,
+          position: { select: { name: true } },
+          department: { select: { name: true } },
+        },
+        orderBy: { fullName: 'asc' },
+        // Listar um departamento inteiro (sem pesquisa) não tem limite — é usado
+        // para adicionar todos os membros a uma turma. Pesquisa livre fica a 100.
+        take: departmentId && !search ? undefined : 100,
+      }),
+    );
   }
 
   // ─── BULK ACTIONS ─────────────────────────────────────────────────────────

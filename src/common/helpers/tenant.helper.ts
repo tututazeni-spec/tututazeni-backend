@@ -1,4 +1,5 @@
 import type { PrismaService } from '../../prisma/prisma.service';
+import { runAsSystem } from '../rls/rls-context';
 
 /**
  * Resolve o tenant a usar em escritas/filtros de modelos multi-tenant.
@@ -23,10 +24,13 @@ export async function resolveDefaultTenantId(
   tenantId?: string,
 ): Promise<string> {
   if (tenantId) return tenantId;
-  const existing = await prisma.tenantConfig.findFirst();
-  if (existing) return existing.id;
-  const created = await prisma.tenantConfig.create({
-    data: { tenantCode: 'DEFAULT', tenantName: 'Default Tenant' },
+  // Config global do tenant (guarda segredos de SSO/webhook): fora do RLS de utilizador.
+  return runAsSystem(async () => {
+    const existing = await prisma.tenantConfig.findFirst();
+    if (existing) return existing.id;
+    const created = await prisma.tenantConfig.create({
+      data: { tenantCode: 'DEFAULT', tenantName: 'Default Tenant' },
+    });
+    return created.id;
   });
-  return created.id;
 }

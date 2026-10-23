@@ -1,6 +1,7 @@
 // src/settings/settings.service.ts
 // Módulo Definições — docs/modulo_settings.md §1 (Visão Geral) e §3 (Utilizadores).
 // §2 (Permissões) reutiliza o módulo roles-permissions existente.
+import { runAsSystem } from '../common/rls/rls-context';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { writeChainedAuditLog } from '../common/helpers/audit-chain';
@@ -41,7 +42,8 @@ export class SettingsService {
 
   private async tenant() {
     const id = await resolveDefaultTenantId(this.prisma);
-    return this.prisma.tenantConfig.findUniqueOrThrow({ where: { id } });
+    // Config global (inclui branding lido por todos): acesso fora do RLS; a exposição é decidida pelos @Roles.
+    return runAsSystem(() => this.prisma.tenantConfig.findUniqueOrThrow({ where: { id } }));
   }
 
   /** Subconjunto não sensível para qualquer utilizador autenticado (cabeçalho, formatos). */
