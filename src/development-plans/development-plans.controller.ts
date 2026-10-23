@@ -1,4 +1,5 @@
 // src/development-plans/development-plans.controller.ts
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -49,12 +50,14 @@ export class DevelopmentPlansController {
 
   @Get('my')
   @ApiOperation({ summary: 'Os meus planos de desenvolvimento' })
+  @AnyAuthenticated()
   myPlans(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyPlans(user.id);
   }
 
   @Get('my/stats')
   @ApiOperation({ summary: 'As minhas estatísticas de PDI (planos, acções, XP)' })
+  @AnyAuthenticated()
   myStats(@CurrentUser() user: CurrentUserData) {
     return this.svc.getStats(user.id);
   }
@@ -77,6 +80,7 @@ export class DevelopmentPlansController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do plano (com acções, metas, checkpoints)' })
+  @AnyAuthenticated()
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(id, user);
   }
@@ -100,6 +104,7 @@ export class DevelopmentPlansController {
   @Patch(':id/submit')
   @ApiOperation({ summary: 'Submeter plano para aprovação (DRAFT → PENDING_APPROVAL)' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   submit(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.submitForApproval(id, user);
   }
@@ -123,12 +128,14 @@ export class DevelopmentPlansController {
 
   @Post('actions')
   @ApiOperation({ summary: 'Adicionar acção ao plano (curso, mentoria, projecto, etc.)' })
+  @AnyAuthenticated()
   addAction(@Body() dto: CreatePlanActionDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.addAction(dto, user);
   }
 
   @Put('actions/:actionId')
   @ApiOperation({ summary: 'Actualizar acção (status, progresso, notas)' })
+  @AnyAuthenticated()
   updateAction(
     @Param('actionId', ParseIntPipe) actionId: number,
     @CurrentUser() user: CurrentUserData,
@@ -139,6 +146,7 @@ export class DevelopmentPlansController {
 
   @Delete('actions/:actionId')
   @ApiOperation({ summary: 'Remover acção do plano' })
+  @AnyAuthenticated()
   removeAction(
     @Param('actionId', ParseIntPipe) actionId: number,
     @CurrentUser() user: CurrentUserData,
@@ -150,6 +158,7 @@ export class DevelopmentPlansController {
 
   @Post('evidence')
   @ApiOperation({ summary: 'Registar evidência de uma acção (upload, link ou nota)' })
+  @AnyAuthenticated()
   addEvidence(@CurrentUser() user: CurrentUserData, @Body() dto: AddEvidenceDto) {
     return this.svc.addEvidence(user, dto);
   }
@@ -158,6 +167,7 @@ export class DevelopmentPlansController {
 
   @Post('goals')
   @ApiOperation({ summary: 'Adicionar meta SMART ao plano' })
+  @AnyAuthenticated()
   addGoal(@Body() dto: CreatePlanGoalDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.addGoal(dto, user);
   }
@@ -165,6 +175,7 @@ export class DevelopmentPlansController {
   @Patch('goals/progress')
   @ApiOperation({ summary: 'Actualizar progresso de uma meta' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   updateGoalProgress(@CurrentUser() user: CurrentUserData, @Body() dto: UpdatePlanGoalProgressDto) {
     return this.svc.updateGoalProgress(user, dto);
   }
@@ -173,12 +184,14 @@ export class DevelopmentPlansController {
 
   @Post('competency-gaps')
   @ApiOperation({ summary: 'Adicionar competência a desenvolver ao plano (gap actual→desejado)' })
+  @AnyAuthenticated()
   addCompetencyGap(@Body() dto: AddCompetencyGapDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.addCompetencyGap(dto, user);
   }
 
   @Delete('competency-gaps/:gapId')
   @ApiOperation({ summary: 'Remover competência a desenvolver do plano' })
+  @AnyAuthenticated()
   removeCompetencyGap(
     @Param('gapId', ParseIntPipe) gapId: number,
     @CurrentUser() user: CurrentUserData,
@@ -190,6 +203,7 @@ export class DevelopmentPlansController {
 
   @Post('checkpoints')
   @ApiOperation({ summary: 'Agendar checkpoint/check-in do plano' })
+  @AnyAuthenticated()
   addCheckpoint(@Body() dto: CreateCheckpointDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.addCheckpoint(dto, user);
   }
@@ -197,6 +211,7 @@ export class DevelopmentPlansController {
   @Patch('checkpoints/complete')
   @ApiOperation({ summary: 'Registar conclusão de checkpoint' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   completeCheckpoint(@Body() dto: CompleteCheckpointDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.completeCheckpoint(dto, user);
   }
@@ -247,6 +262,7 @@ export class DevelopmentPlansController {
   @Patch(':id/accept')
   @ApiOperation({ summary: 'Aceite do colaborador ao PDI (secção 22)' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   acceptPlan(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: AcceptPlanDto,

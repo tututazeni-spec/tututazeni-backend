@@ -1,3 +1,4 @@
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -44,6 +45,7 @@ export class LibraryController {
 
   @Get('collections')
   @ApiOperation({ summary: 'Listar colecções' })
+  @AnyAuthenticated()
   findAllCollections() {
     return this.service.findAllCollections();
   }
@@ -68,12 +70,14 @@ export class LibraryController {
 
   @Get('items')
   @ApiOperation({ summary: 'Listar itens (paginado)' })
+  @AnyAuthenticated()
   findAllItems(@Query() filters: FilterItemDto) {
     return this.service.findAllItems(filters);
   }
 
   @Get('items/:id')
   @ApiOperation({ summary: 'Detalhe de item' })
+  @AnyAuthenticated()
   findItemById(@Param('id') id: string) {
     return this.service.findItemById(id);
   }
@@ -108,12 +112,14 @@ export class LibraryController {
 
   @Post('items/:id/view')
   @ApiOperation({ summary: 'Registar visualização' })
+  @AnyAuthenticated()
   view(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.service.view(id, user.id);
   }
 
   @Post('items/:id/download')
   @ApiOperation({ summary: 'Registar download e obter URL' })
+  @AnyAuthenticated()
   download(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.service.download(id, user.id);
   }
@@ -122,6 +128,7 @@ export class LibraryController {
 
   @Post('items/:id/rate')
   @ApiOperation({ summary: 'Avaliar item (1-5)' })
+  @AnyAuthenticated()
   rateItem(
     @Param('id') id: string,
     @Body() dto: CreateRatingDto,
@@ -134,6 +141,7 @@ export class LibraryController {
 
   @Post('items/:id/comments')
   @ApiOperation({ summary: 'Comentar item' })
+  @AnyAuthenticated()
   addComment(
     @Param('id') id: string,
     @Body() dto: LibraryCreateCommentDto,
@@ -145,6 +153,7 @@ export class LibraryController {
   @Delete('comments/:commentId')
   @ApiOperation({ summary: 'Remover comentário' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   deleteComment(@Param('commentId') commentId: string, @CurrentUser() user: CurrentUserData) {
     return this.service.deleteComment(commentId, user);
   }

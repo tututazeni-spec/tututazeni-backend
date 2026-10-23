@@ -2,6 +2,7 @@
 // Requisitos estruturados por cargo (habilitações, experiência, idiomas,
 // certificações). Competências técnicas/comportamentais continuam em
 // /competencies/map/position.
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Body,
   Controller,
@@ -33,6 +34,7 @@ export class PositionRequirementsController {
 
   @Get()
   @ApiOperation({ summary: 'Listar requisitos estruturados do cargo' })
+  @AnyAuthenticated()
   list(@Param('positionId', ParseIntPipe) positionId: number) {
     return this.svc.list(positionId);
   }

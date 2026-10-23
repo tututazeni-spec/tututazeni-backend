@@ -1,3 +1,4 @@
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -107,12 +108,14 @@ export class CoursesController {
 
   @Get('my/enrollments')
   @ApiOperation({ summary: 'As minhas matrículas e progresso' })
+  @AnyAuthenticated()
   myEnrollments(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyEnrollments(user.id);
   }
 
   @Get('my/certificates')
   @ApiOperation({ summary: 'Os meus certificados' })
+  @AnyAuthenticated()
   myCertificates(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyCertificates(user.id);
   }
@@ -142,6 +145,7 @@ export class CoursesController {
 
   @Get(':id/progress')
   @ApiOperation({ summary: 'Progresso do utilizador autenticado num curso' })
+  @AnyAuthenticated()
   progress(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.getCourseProgress(id, user.id);
   }
@@ -369,6 +373,7 @@ export class CoursesController {
   @Post('lessons/:lessonId/complete')
   @ApiOperation({ summary: 'Marcar aula como concluída e actualizar progresso' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   markComplete(
     @Param('lessonId', ParseIntPipe) lessonId: number,
     @CurrentUser() user: CurrentUserData,
@@ -439,6 +444,7 @@ export class CoursesController {
 
   @Post(':id/enroll')
   @ApiOperation({ summary: 'Matricular utilizador autenticado' })
+  @AnyAuthenticated()
   enroll(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: CurrentUserData,
@@ -509,6 +515,7 @@ export class CoursesController {
 
   @Get('quizzes/:quizId/attempt')
   @ApiOperation({ summary: 'Ler quiz para o aluno responder (sem respostas certas) + tentativas' })
+  @AnyAuthenticated()
   getQuizForAttempt(
     @Param('quizId', ParseIntPipe) quizId: number,
     @CurrentUser() user: CurrentUserData,
@@ -519,6 +526,7 @@ export class CoursesController {
   @Post('quizzes/:quizId/submit')
   @ApiOperation({ summary: 'Submeter respostas do quiz' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   submitQuiz(
     @Param('quizId', ParseIntPipe) quizId: number,
     @CurrentUser() user: CurrentUserData,
@@ -531,6 +539,7 @@ export class CoursesController {
 
   @Post(':id/feedback')
   @ApiOperation({ summary: 'Submeter ou actualizar feedback do curso' })
+  @AnyAuthenticated()
   feedback(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: CurrentUserData,

@@ -1,4 +1,5 @@
 // src/notifications/notifications.controller.ts
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -42,12 +43,14 @@ export class NotificationsController {
 
   @Get('my')
   @ApiOperation({ summary: 'As minhas notificações (com agrupamento por data)' })
+  @AnyAuthenticated()
   my(@CurrentUser() user: CurrentUserData, @Query() filters: NotificationFilterDto) {
     return this.svc.getMyNotifications(user.id, filters);
   }
 
   @Get('my/unread-count')
   @ApiOperation({ summary: 'Contagem de não lidas (badge do sino)' })
+  @AnyAuthenticated()
   unreadCount(@CurrentUser() user: CurrentUserData) {
     return this.svc.getUnreadCount(user.id);
   }
@@ -55,6 +58,7 @@ export class NotificationsController {
   @Patch('my/:id/read')
   @ApiOperation({ summary: 'Marcar notificação como lida' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   markRead(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.markAsRead(id, user.id);
   }
@@ -62,6 +66,7 @@ export class NotificationsController {
   @Patch('my/read-all')
   @ApiOperation({ summary: 'Marcar todas como lidas' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   readAll(@CurrentUser() user: CurrentUserData) {
     return this.svc.markAllAsRead(user.id);
   }
@@ -69,6 +74,7 @@ export class NotificationsController {
   @Patch('my/read-bulk')
   @ApiOperation({ summary: 'Marcar lista de IDs como lidas' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   readBulk(@CurrentUser() user: CurrentUserData, @Body() dto: ReadBulkDto) {
     return this.svc.markBulkAsRead(user.id, dto.ids);
   }
@@ -76,6 +82,7 @@ export class NotificationsController {
   @Patch('my/:id/archive')
   @ApiOperation({ summary: 'Arquivar notificação' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   archive(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.archiveNotification(id, user.id);
   }
@@ -84,6 +91,7 @@ export class NotificationsController {
 
   @Get('preferences')
   @ApiOperation({ summary: 'As minhas preferências de notificação' })
+  @AnyAuthenticated()
   getPrefs(@CurrentUser() user: CurrentUserData) {
     return this.svc.getPreferences(user.id);
   }
@@ -91,6 +99,7 @@ export class NotificationsController {
   @Patch('preferences')
   @ApiOperation({ summary: 'Actualizar preferências (canais, horário silencioso, digest)' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   updatePrefs(@CurrentUser() user: CurrentUserData, @Body() dto: UpdatePreferencesDto) {
     return this.svc.updatePreferences(user.id, dto);
   }

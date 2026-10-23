@@ -1,3 +1,4 @@
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -82,6 +83,7 @@ export class WorkDeclarationController {
   @ApiQuery({ name: 'employeeId', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
+  @AnyAuthenticated()
   async findAll(@Query() filters: DeclarationQueryDto, @CurrentUser() user: CurrentUserData) {
     return this.workDeclarationService.listDeclarations(undefined, user, filters);
   }
@@ -96,6 +98,7 @@ export class WorkDeclarationController {
   @Get(':id')
   @ApiOperation({ summary: 'Get a single declaration by ID' })
   @ApiParam({ name: 'id', description: 'Declaration ID (cuid)' })
+  @AnyAuthenticated()
   async findOne(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.workDeclarationService.getDeclaration(undefined, user, id);
   }
@@ -187,6 +190,7 @@ export class WorkDeclarationController {
 
   @Post(':id/export/pdf')
   @ApiOperation({ summary: 'Export declaration as PDF (with optional watermark)' })
+  @AnyAuthenticated()
   async exportPdf(
     @Param('id') id: string,
     @Body() dto: ExportDeclarationDto,
@@ -208,6 +212,7 @@ export class WorkDeclarationController {
 
   @Post(':id/export/docx')
   @ApiOperation({ summary: 'Export declaration as editable DOCX' })
+  @AnyAuthenticated()
   async exportDocx(
     @Param('id') id: string,
     @CurrentUser() user: CurrentUserData,
@@ -262,6 +267,7 @@ export class WorkDeclarationController {
 
   @Get('templates/library')
   @ApiOperation({ summary: 'List all available declaration templates' })
+  @AnyAuthenticated()
   async getTemplates(
     @Query('type') type: string,
     @Query('language') language: string,
@@ -281,6 +287,7 @@ export class WorkDeclarationController {
 
   @Get('templates/:id')
   @ApiOperation({ summary: 'Get a single template by ID' })
+  @AnyAuthenticated()
   async getTemplate(@Param('id', ParseIntPipe) id: number) {
     return this.workDeclarationService.getTemplate(undefined, id);
   }
@@ -317,6 +324,7 @@ export class WorkDeclarationController {
 
   @Post('templates/:id/preview')
   @ApiOperation({ summary: 'Preview a template rendered with sample or real employee data' })
+  @AnyAuthenticated()
   async previewTemplate(
     @Param('id', ParseIntPipe) id: number,
     @Body('employeeId') employeeId: number,

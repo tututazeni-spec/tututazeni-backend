@@ -1,3 +1,4 @@
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -78,18 +79,21 @@ export class OnboardingController {
 
   @Get('templates')
   @ApiOperation({ summary: 'Listar templates de onboarding' })
+  @AnyAuthenticated()
   findAllTemplates() {
     return this.svc.findAllTemplates();
   }
 
   @Get('templates/:id')
   @ApiOperation({ summary: 'Detalhe do template (com tarefas)' })
+  @AnyAuthenticated()
   findOneTemplate(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOneTemplate(id);
   }
 
   @Get('templates/:id/stages')
   @ApiOperation({ summary: 'Etapas do template — tarefas agrupadas por fase' })
+  @AnyAuthenticated()
   getTemplateStages(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getTemplateStages(id);
   }
@@ -150,6 +154,7 @@ export class OnboardingController {
 
   @Get('my')
   @ApiOperation({ summary: 'O meu plano de onboarding' })
+  @AnyAuthenticated()
   my(@CurrentUser() user: CurrentUserData) {
     return this.svc.findByUser(user.id);
   }
@@ -260,6 +265,7 @@ export class OnboardingController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do plano (tarefas por fase, progresso)' })
+  @AnyAuthenticated()
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(id, user);
   }
@@ -300,6 +306,7 @@ export class OnboardingController {
   @Post('tasks/complete')
   @ApiOperation({ summary: 'Concluir tarefa (com evidência opcional)' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   completeTask(@CurrentUser() user: CurrentUserData, @Body() dto: CompleteTaskDto) {
     return this.svc.completeTask(dto, user.id);
   }
@@ -324,6 +331,7 @@ export class OnboardingController {
 
   @Post('documents')
   @ApiOperation({ summary: 'Submeter documento do onboarding' })
+  @AnyAuthenticated()
   uploadDocument(@CurrentUser() user: CurrentUserData, @Body() dto: UploadDocumentDto) {
     return this.svc.uploadDocument(user.id, dto);
   }
@@ -340,6 +348,7 @@ export class OnboardingController {
 
   @Post('surveys')
   @ApiOperation({ summary: 'Submeter pesquisa de satisfação (Dia 1, 7, 30, 90)' })
+  @AnyAuthenticated()
   submitSurvey(@CurrentUser() user: CurrentUserData, @Body() dto: SubmitOnboardingSurveyDto) {
     return this.svc.submitSurvey(user.id, dto);
   }
@@ -371,6 +380,7 @@ export class OnboardingController {
 
   @Post('checkins/:id/employee-feedback')
   @ApiOperation({ summary: 'O colaborador regista o seu feedback no check-in' })
+  @AnyAuthenticated()
   submitCheckinEmployeeFeedback(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: SubmitCheckinEmployeeFeedbackDto,

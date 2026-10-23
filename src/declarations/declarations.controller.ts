@@ -1,4 +1,5 @@
 // ─── src/declarations/declarations.controller.ts ─────────────────────────────
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -60,6 +61,7 @@ export class DocumentDeclarationsController {
   @Get('purposes')
   @ApiOperation({ summary: 'Listar finalidades de declaração' })
   @ApiQuery({ name: 'activeOnly', required: false, type: Boolean })
+  @AnyAuthenticated()
   getPurposes(@Query('activeOnly') ao?: string) {
     return this.purposes.getPurposes(ao !== 'false');
   }
@@ -86,6 +88,7 @@ export class DocumentDeclarationsController {
   @ApiOperation({ summary: 'Listar templates de declaração' })
   @ApiQuery({ name: 'purposeId', required: false, type: Number })
   @ApiQuery({ name: 'language', required: false })
+  @AnyAuthenticated()
   getTemplates(
     @Query('purposeId') purposeId?: string,
     @Query('language') language?: string,
@@ -100,12 +103,14 @@ export class DocumentDeclarationsController {
 
   @Get('templates/:id')
   @ApiOperation({ summary: 'Detalhe do template' })
+  @AnyAuthenticated()
   getTemplate(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getTemplate(id);
   }
 
   @Get('templates/:id/preview')
   @ApiOperation({ summary: 'Preview do template com dados do colaborador' })
+  @AnyAuthenticated()
   previewTemplate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.previewTemplate(id, user.id);
   }
@@ -138,18 +143,21 @@ export class DocumentDeclarationsController {
 
   @Get('my')
   @ApiOperation({ summary: 'Meus pedidos de declaração' })
+  @AnyAuthenticated()
   myRequests(@CurrentUser() user: CurrentUserData) {
     return this.svc.findAll({ userId: user.id });
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe de um pedido' })
+  @AnyAuthenticated()
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(id, user);
   }
 
   @Post()
   @ApiOperation({ summary: 'Solicitar declaração (self-service)' })
+  @AnyAuthenticated()
   request(@CurrentUser() user: CurrentUserData, @Body() dto: CreateDocumentRequestDto) {
     return this.svc.request(user.id, dto);
   }
@@ -224,6 +232,7 @@ export class WorkDeclarationsController {
 
   @Get('forms/:id')
   @ApiOperation({ summary: 'Detalhe do formulário (com perguntas)' })
+  @AnyAuthenticated()
   getForm(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getForm(id);
   }
@@ -256,12 +265,14 @@ export class WorkDeclarationsController {
   // My pending (Employee)
   @Get('my/pending')
   @ApiOperation({ summary: 'Formulários pendentes para o utilizador actual' })
+  @AnyAuthenticated()
   getPending(@CurrentUser() user: CurrentUserData) {
     return this.svc.getPendingForUser(user.id);
   }
 
   @Get('my/submissions')
   @ApiOperation({ summary: 'Minhas submissões' })
+  @AnyAuthenticated()
   mySubmissions(@CurrentUser() user: CurrentUserData) {
     return this.svc.findSubmissions({ userId: user.id });
   }
@@ -276,12 +287,14 @@ export class WorkDeclarationsController {
 
   @Get('submissions/:id')
   @ApiOperation({ summary: 'Detalhe de uma submissão' })
+  @AnyAuthenticated()
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOneSubmission(id, user);
   }
 
   @Post('submit')
   @ApiOperation({ summary: 'Submeter declaração (suporta rascunho, assinatura digital)' })
+  @AnyAuthenticated()
   submit(@CurrentUser() user: CurrentUserData, @Body() dto: SubmitWorkDeclDto) {
     return this.svc.submit(user.id, dto);
   }

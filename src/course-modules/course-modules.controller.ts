@@ -1,3 +1,4 @@
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -51,6 +52,7 @@ export class CourseModulesController {
 
   @Get('modules/:id')
   @ApiOperation({ summary: 'Detalhe do módulo (aulas + materiais)' })
+  @AnyAuthenticated()
   async findModule(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     const mod = await this.svc.findModuleOrFail(id);
     // Os PDFs inline só vão por inteiro a quem gere conteúdos.
@@ -167,6 +169,7 @@ export class CourseModulesController {
   @Post('lessons/progress')
   @ApiOperation({ summary: 'Marcar aula como concluída (com validação de acesso)' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   markComplete(@CurrentUser() user: CurrentUserData, @Body() dto: MarkModuleLessonCompleteDto) {
     return this.svc.markLessonComplete(user.id, dto);
   }
@@ -175,6 +178,7 @@ export class CourseModulesController {
   @ApiOperation({
     summary: 'PDF da aula (valida matrícula/publicação/drip; gestores de conteúdos sempre)',
   })
+  @AnyAuthenticated()
   async getLessonFile(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: CurrentUserData,
@@ -195,6 +199,7 @@ export class CourseModulesController {
   @ApiOperation({
     summary: 'Áudio da aula gerado por text-to-speech (proxy — chave fica no backend)',
   })
+  @AnyAuthenticated()
   async getLessonAudio(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: CurrentUserData,
@@ -216,6 +221,7 @@ export class CourseModulesController {
   @ApiOperation({
     summary: 'Progresso completo do utilizador num curso, por módulo e aula (drip/sequencial)',
   })
+  @AnyAuthenticated()
   getCourseProgress(
     @Param('courseId', ParseIntPipe) courseId: number,
     @CurrentUser() user: CurrentUserData,
@@ -225,6 +231,7 @@ export class CourseModulesController {
 
   @Get('modules/:id/completed')
   @ApiOperation({ summary: 'Verificar se módulo está concluído pelo utilizador' })
+  @AnyAuthenticated()
   isModuleCompleted(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.isModuleCompleted(id, user.id);
   }

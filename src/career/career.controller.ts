@@ -1,4 +1,5 @@
 // src/career/career.controller.ts
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -49,18 +50,21 @@ export class CareerController {
 
   @Get('me')
   @ApiOperation({ summary: 'Dashboard de carreira do utilizador autenticado' })
+  @AnyAuthenticated()
   myProfile(@CurrentUser() user: CurrentUserData) {
     return this.svc.getCareerProfile(user.id);
   }
 
   @Get('me/gap-analysis')
   @ApiOperation({ summary: 'Análise de gap de competências para o cargo actual' })
+  @AnyAuthenticated()
   myGapAnalysis(@CurrentUser() user: CurrentUserData) {
     return this.svc.getCompetencyGapsForUser(user.id);
   }
 
   @Get('me/promotion-eligibility')
   @ApiOperation({ summary: 'Verificar elegibilidade para promoção' })
+  @AnyAuthenticated()
   myPromotionEligibility(@CurrentUser() user: CurrentUserData) {
     return this.svc.checkPromotionEligibility(user.id);
   }
@@ -68,6 +72,7 @@ export class CareerController {
   @Post('me/promotion-request')
   @ApiOperation({ summary: 'Submeter pedido de promoção' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   requestPromotion(
     @CurrentUser() user: CurrentUserData,
     @Body('targetPositionId', ParseIntPipe) targetPositionId: number,
@@ -78,12 +83,14 @@ export class CareerController {
 
   @Get('positions')
   @ApiOperation({ summary: 'Catálogo de cargos (para o seletor do simulador de carreira)' })
+  @AnyAuthenticated()
   listPositions() {
     return this.svc.listPositions();
   }
 
   @Get('me/simulate/:targetPositionId')
   @ApiOperation({ summary: 'Simulador de carreira — o que falta para chegar ao cargo X' })
+  @AnyAuthenticated()
   simulate(
     @CurrentUser() user: CurrentUserData,
     @Param('targetPositionId', ParseIntPipe) targetPositionId: number,
@@ -93,6 +100,7 @@ export class CareerController {
 
   @Put('me/interests')
   @ApiOperation({ summary: 'Atualizar interesses e objetivos de carreira' })
+  @AnyAuthenticated()
   updateInterests(@CurrentUser() user: CurrentUserData, @Body() dto: CareerInterestDto) {
     return this.svc.updateCareerInterests(user.id, dto);
   }
@@ -131,6 +139,7 @@ export class CareerController {
 
   @Get('job-families')
   @ApiOperation({ summary: 'Listar famílias profissionais' })
+  @AnyAuthenticated()
   findJobFamilies() {
     return this.svc.findAllJobFamilies();
   }
@@ -154,12 +163,14 @@ export class CareerController {
   @Get('paths')
   @ApiOperation({ summary: 'Listar trilhas de carreira' })
   @ApiQuery({ name: 'departmentId', required: false })
+  @AnyAuthenticated()
   findPaths(@Query('departmentId') deptId?: string) {
     return this.svc.findAllCareerPaths(deptId ? parseInt(deptId) : undefined);
   }
 
   @Get('paths/:id')
   @ApiOperation({ summary: 'Detalhe de uma trilha' })
+  @AnyAuthenticated()
   findPath(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOneCareerPath(id);
   }
@@ -203,18 +214,21 @@ export class CareerController {
 
   @Get('me/plan')
   @ApiOperation({ summary: 'Obter plano de carreira activo' })
+  @AnyAuthenticated()
   myPlan(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyCareerPlan(user.id);
   }
 
   @Post('me/plan')
   @ApiOperation({ summary: 'Criar plano de carreira' })
+  @AnyAuthenticated()
   createPlan(@CurrentUser() user: CurrentUserData, @Body() dto: CreateCareerPlanDto) {
     return this.svc.createCareerPlan(user.id, dto);
   }
 
   @Put('me/plan/:planId')
   @ApiOperation({ summary: 'Actualizar plano de carreira' })
+  @AnyAuthenticated()
   updatePlan(
     @CurrentUser() user: CurrentUserData,
     @Param('planId', ParseIntPipe) planId: number,
@@ -225,6 +239,7 @@ export class CareerController {
 
   @Post('me/plan/:planId/goals')
   @ApiOperation({ summary: 'Adicionar objetivo ao plano' })
+  @AnyAuthenticated()
   addGoal(
     @CurrentUser() user: CurrentUserData,
     @Param('planId', ParseIntPipe) planId: number,
@@ -236,6 +251,7 @@ export class CareerController {
   @Patch('me/goals/:goalId/progress')
   @ApiOperation({ summary: 'Atualizar progresso de um objetivo (0-100)' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   updateGoal(
     @CurrentUser() user: CurrentUserData,
     @Param('goalId', ParseIntPipe) goalId: number,
@@ -248,6 +264,7 @@ export class CareerController {
 
   @Get('vacancies')
   @ApiOperation({ summary: 'Listar vagas internas (com match score se autenticado)' })
+  @AnyAuthenticated()
   findVacancies(@Query() filters: VacancyFilterDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.findAllVacancies(filters, user.id);
   }
@@ -276,6 +293,7 @@ export class CareerController {
 
   @Post('vacancies/:id/apply')
   @ApiOperation({ summary: 'Candidatar-se a uma vaga interna' })
+  @AnyAuthenticated()
   apply(
     @Param('id', ParseIntPipe) vacancyId: number,
     @CurrentUser() user: CurrentUserData,
@@ -286,6 +304,7 @@ export class CareerController {
 
   @Get('me/applications')
   @ApiOperation({ summary: 'As minhas candidaturas' })
+  @AnyAuthenticated()
   myApplications(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyApplications(user.id);
   }
@@ -312,6 +331,7 @@ export class CareerController {
 
   @Get('me/history')
   @ApiOperation({ summary: 'Histórico de carreira do utilizador autenticado' })
+  @AnyAuthenticated()
   myHistory(@CurrentUser() user: CurrentUserData) {
     return this.svc.getCareerHistory(user.id);
   }

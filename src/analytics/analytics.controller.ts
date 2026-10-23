@@ -1,4 +1,5 @@
 // src/analytics/analytics.controller.ts
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import { Controller, Get, Post, Query, Param, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AnalyticsService } from './analytics.service';
@@ -28,6 +29,7 @@ export class AnalyticsController {
 
   @Get('me')
   @ApiOperation({ summary: 'Dashboard pessoal do colaborador autenticado' })
+  @AnyAuthenticated()
   myDashboard(@CurrentUser() user: CurrentUserData) {
     return this.svc.getCollaboratorDashboard(user.id);
   }

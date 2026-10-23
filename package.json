@@ -36,6 +36,7 @@
     "lint:check": "eslint \"src/**/*.ts\" --config eslint.config.staged.mjs --cache --cache-location .eslintcache --max-warnings=9999",
     "test": "jest --forceExit",
     "test:watch": "jest --watch",
+    "test:authz": "jest --config test/jest-authz.json --forceExit",
     "test:cov": "jest --coverage --forceExit",
     "test:coverage": "jest --coverage --forceExit --passWithNoTests",
     "test:coverage:watch": "jest --coverage --watch",

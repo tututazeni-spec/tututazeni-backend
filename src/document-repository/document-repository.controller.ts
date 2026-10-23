@@ -1,4 +1,5 @@
 // ─── src/document-repository/document-repository.controller.ts ───────────────
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -67,6 +68,7 @@ export class DocumentRepositoryController {
 
   @Get('tags')
   @ApiOperation({ summary: 'Todas as tags com contagem (para cloud de tags)' })
+  @AnyAuthenticated()
   getTags() {
     return this.svc.getAllTags();
   }
@@ -85,18 +87,21 @@ export class DocumentRepositoryController {
 
   @Get('pending-reads')
   @ApiOperation({ summary: 'Documentos obrigatórios que o utilizador ainda não confirmou' })
+  @AnyAuthenticated()
   getMyPendingReads(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyPendingReads(user.id);
   }
 
   @Get('favorites')
   @ApiOperation({ summary: 'Documentos marcados como favoritos pelo utilizador' })
+  @AnyAuthenticated()
   getMyFavorites(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyFavorites(user.id);
   }
 
   @Get('recent')
   @ApiOperation({ summary: 'Documentos vistos recentemente pelo utilizador' })
+  @AnyAuthenticated()
   getMyRecent(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyRecent(user.id);
   }
@@ -112,6 +117,7 @@ export class DocumentRepositoryController {
 
   @Get('categories')
   @ApiOperation({ summary: 'Listar categorias configuradas' })
+  @AnyAuthenticated()
   getCategories() {
     return this.svc.getCategories();
   }
@@ -136,18 +142,21 @@ export class DocumentRepositoryController {
 
   @Get()
   @ApiOperation({ summary: 'Listar documentos (filtros + busca inteligente por OCR text + tags)' })
+  @AnyAuthenticated()
   findAll(@Query() filters: DocumentFilterDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.findAll(filters, user.id, user.role?.name);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do documento com versões, permissões e metadata' })
+  @AnyAuthenticated()
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(id, user.id);
   }
 
   @Get(':id/download')
   @ApiOperation({ summary: 'Download (regista no audit log e incrementa contador)' })
+  @AnyAuthenticated()
   download(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.download(id, user.id);
   }
@@ -286,6 +295,7 @@ export class DocumentRepositoryController {
 
   @Post(':id/read')
   @ApiOperation({ summary: 'Registar que o utilizador leu o documento' })
+  @AnyAuthenticated()
   markRead(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: CurrentUserData,
@@ -297,6 +307,7 @@ export class DocumentRepositoryController {
 
   @Post(':id/confirm-read')
   @ApiOperation({ summary: 'Confirmar leitura/ciência do documento' })
+  @AnyAuthenticated()
   confirmRead(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: CurrentUserData,
@@ -308,6 +319,7 @@ export class DocumentRepositoryController {
 
   @Post(':id/favorite')
   @ApiOperation({ summary: 'Marcar/desmarcar documento como favorito' })
+  @AnyAuthenticated()
   toggleFavorite(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.toggleFavorite(id, user.id);
   }

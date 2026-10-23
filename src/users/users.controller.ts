@@ -1,3 +1,4 @@
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -43,36 +44,42 @@ export class UsersController {
 
   @Get('me')
   @ApiOperation({ summary: 'Perfil do utilizador autenticado' })
+  @AnyAuthenticated()
   me(@CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(user.id);
   }
 
   @Get('me/stats')
   @ApiOperation({ summary: 'Estatísticas de aprendizagem (utilizador autenticado)' })
+  @AnyAuthenticated()
   myStats(@CurrentUser() user: CurrentUserData) {
     return this.svc.getUserStats(user.id);
   }
 
   @Get('me/team')
   @ApiOperation({ summary: 'Equipa do utilizador autenticado (se for gestor)' })
+  @AnyAuthenticated()
   myTeam(@CurrentUser() user: CurrentUserData) {
     return this.svc.getTeam(user.id);
   }
 
   @Get('me/audit-logs')
   @ApiOperation({ summary: 'Logs de auditoria do utilizador autenticado' })
+  @AnyAuthenticated()
   myAuditLogs(@CurrentUser() user: CurrentUserData, @Query('page') page?: string) {
     return this.svc.getAuditLogs(user.id, page ? parseInt(page) : 1);
   }
 
   @Put('me/profile')
   @ApiOperation({ summary: 'Actualizar perfil do utilizador autenticado' })
+  @AnyAuthenticated()
   updateMyProfile(@CurrentUser() user: CurrentUserData, @Body() dto: UpdateProfileDto) {
     return this.svc.upsertProfile(user.id, dto);
   }
 
   @Patch('me/avatar')
   @ApiOperation({ summary: 'Definir a foto de perfil do utilizador autenticado' })
+  @AnyAuthenticated()
   setMyAvatar(@CurrentUser() user: CurrentUserData, @Body() dto: UpdateMyAvatarDto) {
     return this.svc.setAvatar(user.id, dto.avatarUrl);
   }
@@ -80,6 +87,7 @@ export class UsersController {
   @Delete('me/avatar')
   @ApiOperation({ summary: 'Remover a foto de perfil do utilizador autenticado' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   removeMyAvatar(@CurrentUser() user: CurrentUserData) {
     return this.svc.clearAvatar(user.id);
   }
@@ -87,6 +95,7 @@ export class UsersController {
   @Patch('me/password')
   @ApiOperation({ summary: 'Alterar password' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   changePassword(@CurrentUser() user: CurrentUserData, @Body() dto: UserChangePasswordDto) {
     return this.svc.changePassword(user.id, dto);
   }
@@ -104,6 +113,7 @@ export class UsersController {
   @ApiOperation({ summary: 'Diretório interno (pesquisa de colaboradores)' })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'departmentId', required: false })
+  @AnyAuthenticated()
   directory(@Query('search') search?: string, @Query('departmentId') departmentId?: string) {
     return this.svc.getDirectory(search, departmentId ? parseInt(departmentId) : undefined);
   }
@@ -136,6 +146,7 @@ export class UsersController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Perfil completo de um utilizador' })
+  @AnyAuthenticated()
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOne(id);
   }
