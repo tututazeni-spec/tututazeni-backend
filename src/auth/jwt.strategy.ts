@@ -64,9 +64,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     super({
       // Cookie httpOnly tem prioridade; Bearer desligável via AUTH_ALLOW_BEARER=false (A2-7).
-      jwtFromRequest: ExtractJwt.fromExtractors(
-        buildJwtExtractors(isBearerAllowed()),
-      ),
+      jwtFromRequest: ExtractJwt.fromExtractors(buildJwtExtractors(isBearerAllowed())),
       ignoreExpiration: false,
       secretOrKey: jwtSecret,
     });

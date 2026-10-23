@@ -13,7 +13,6 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
 } from './auth.dto';
-import { JwtAuthGuard } from './jwt-auth.guard';
 import { RefreshTokenGuard } from './refresh-token.guard';
 import { Request, Response } from 'express';
 import {
@@ -120,7 +119,6 @@ export class AuthController {
   }
 
   @Patch('change-password')
-  @UseGuards(JwtAuthGuard)
   @AnyAuthenticated()
   changePassword(@Req() req: AuthenticatedRequest, @Body() dto: ChangePasswordDto) {
     return this.authService.changePassword(req.user.id, dto);
@@ -142,7 +140,6 @@ export class AuthController {
   }
 
   @Get('me')
-  @UseGuards(JwtAuthGuard)
   @AnyAuthenticated()
   me(@Req() req: AuthenticatedRequest) {
     return this.authService.me(req.user.id);

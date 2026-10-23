@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController, authThrottleLimit, refreshThrottleLimit } from './auth.controller';
 import { AuthService } from './auth.service';
 import { PasswordResetService } from './password-reset.service';
-import { JwtAuthGuard } from './jwt-auth.guard';
 import { RefreshTokenGuard } from './refresh-token.guard';
 
 // C2: verifica comportamento do throttle por ambiente (env-independent)
@@ -65,8 +64,6 @@ describe('AuthController', () => {
         { provide: PasswordResetService, useValue: mockPasswordReset },
       ],
     })
-      .overrideGuard(JwtAuthGuard)
-      .useValue({ canActivate: () => true })
       .overrideGuard(RefreshTokenGuard)
       .useValue({ canActivate: () => true })
       .compile();
