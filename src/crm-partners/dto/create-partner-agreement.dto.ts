@@ -11,6 +11,7 @@ import {
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { PartnerAgreementType, PartnerAgreementStatus } from '@prisma/client';
+import { IsSafeFileName } from '../../common/files/sanitize-file-name';
 import { IsAllowedFileUrl } from '../../common/validators/is-allowed-file-url.validator';
 
 export class CreatePartnerAgreementDto {
@@ -87,6 +88,7 @@ export class UpdatePartnerAgreementDto extends PartialType(CreatePartnerAgreemen
 export class CreateAgreementVersionDto {
   @ApiProperty()
   @IsString()
+  @IsSafeFileName()
   fileName: string;
 
   @ApiProperty()

@@ -13,6 +13,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { createHash, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { sanitizeFileName } from '../common/files/sanitize-file-name';
 import { AuditService } from './audit.service';
 import type { AuditActor } from './audit-incidents.service';
 import { AuditPolicyService } from './audit-policy.service';
@@ -334,8 +335,7 @@ export class AuditExportsService {
     const ext = dto.fileName.includes('.') ? dto.fileName.split('.').pop()!.toLowerCase() : 'other';
     const saved = await this.saveFile({
       kind: 'EVIDENCE',
-      // Remove separadores de caminho do nome enviado pelo cliente.
-      fileName: dto.fileName.replace(/[\\/]/g, '_'),
+      fileName: sanitizeFileName(dto.fileName),
       mimeType: dto.mimeType ?? 'application/octet-stream',
       format: ['csv', 'xlsx', 'pdf'].includes(ext) ? ext : 'other',
       incidentId: dto.incidentId,

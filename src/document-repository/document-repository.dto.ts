@@ -12,7 +12,6 @@ import {
   IsDateString,
   IsNotEmpty,
   MaxLength,
-  Matches,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType, ApiSchema } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
@@ -30,10 +29,8 @@ import {
   MAX_FILE_SIZE_BYTES,
   MAX_FILE_NAME_LENGTH,
 } from '../common/validators/allowed-mime-types';
+import { IsSafeFileName } from '../common/files/sanitize-file-name';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
-
-const NO_PATH_SEPARATORS = /^[^/\\]+$/;
-const NO_PATH_SEPARATORS_MESSAGE = 'fileName não pode conter separadores de caminho (/ ou \\)';
 
 // ─── Categories (configuráveis) ───────────────────────────────────────────────
 
@@ -63,7 +60,7 @@ export class CreateDocumentDto {
   @IsOptional()
   @IsString()
   @MaxLength(MAX_FILE_NAME_LENGTH)
-  @Matches(NO_PATH_SEPARATORS, { message: NO_PATH_SEPARATORS_MESSAGE })
+  @IsSafeFileName()
   fileName?: string;
   @ApiPropertyOptional() @IsOptional() @IsArray() @IsString({ each: true }) tags?: string[];
   @ApiPropertyOptional() @IsOptional() @IsInt() ownerId?: number; // colaborador vinculado
@@ -125,7 +122,7 @@ export class NewVersionDto {
   @IsOptional()
   @IsString()
   @MaxLength(MAX_FILE_NAME_LENGTH)
-  @Matches(NO_PATH_SEPARATORS, { message: NO_PATH_SEPARATORS_MESSAGE })
+  @IsSafeFileName()
   fileName?: string;
   @ApiProperty() @IsString() changeDescription!: string;
 }
