@@ -11,6 +11,23 @@ const pool = new Pool({
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter } as any);
 
+const IS_PROD = process.env.NODE_ENV === 'production';
+
+/**
+ * Em produção a senha do admin vem obrigatoriamente de SEED_ADMIN_PASSWORD (nunca de um
+ * valor fixo no repositório). Fora de produção mantém-se o default usado pelos testes Bruno.
+ */
+function resolveAdminPassword(): string {
+  const fromEnv = process.env.SEED_ADMIN_PASSWORD;
+  if (IS_PROD) {
+    if (!fromEnv || fromEnv.length < 12) {
+      throw new Error('NODE_ENV=production exige SEED_ADMIN_PASSWORD com pelo menos 12 caracteres.');
+    }
+    return fromEnv;
+  }
+  return fromEnv || 'Admin@1234';
+}
+
 async function seedPayroll(prisma: PrismaClient) {
   const taxYear = new Date().getFullYear();
 
@@ -564,7 +581,7 @@ async function main() {
   console.log('✅ Roles criadas:', roleNames.join(', '));
 
   // 2. Criar / actualizar utilizador admin com role ADMIN
-  const adminPassword = await bcrypt.hash('Admin@1234', 10);
+  const adminPassword = await bcrypt.hash(resolveAdminPassword(), 10);
   const admin = await prisma.user.upsert({
     where: { email: 'admin@innova.com' },
     update: { roleId: roleMap['ADMIN'].id },
@@ -580,20 +597,22 @@ async function main() {
   console.log('✅ Admin criado/actualizado:', admin.email, '→ role ADMIN');
 
   // 3. Criar utilizador employee para testes Bruno
-  const employeePassword = await bcrypt.hash('Employee@1234', 10);
-  const employee = await prisma.user.upsert({
-    where: { email: 'test.employee@innova-test.com' },
-    update: { roleId: roleMap['COLABORADOR'].id },
-    create: {
-      fullName: 'Test Employee',
-      email: 'test.employee@innova-test.com',
-      password: employeePassword,
-      active: true,
-      roleId: roleMap['COLABORADOR'].id,
-      accountStatus: 'PENDING', // A2-8: força troca de senha no 1º login
-    },
-  });
-  console.log('✅ Employee criado/actualizado:', employee.email, '→ role COLABORADOR');
+  if (!IS_PROD) {
+    const employeePassword = await bcrypt.hash('Employee@1234', 10);
+    const employee = await prisma.user.upsert({
+      where: { email: 'test.employee@innova-test.com' },
+      update: { roleId: roleMap['COLABORADOR'].id },
+      create: {
+        fullName: 'Test Employee',
+        email: 'test.employee@innova-test.com',
+        password: employeePassword,
+        active: true,
+        roleId: roleMap['COLABORADOR'].id,
+        accountStatus: 'PENDING', // A2-8: força troca de senha no 1º login
+      },
+    });
+    console.log('✅ Employee criado/actualizado:', employee.email, '→ role COLABORADOR');
+  }
 
   // 4. Criar tipos de licença (LeaveTypeConfig) — catálogo de configuração do
   // módulo de Gestão de Ausências. Sem isto GET /leave/types devolve [] e o

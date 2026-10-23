@@ -11,6 +11,11 @@ import * as bcrypt from 'bcrypt';
 import * as fs from 'fs';
 import * as path from 'path';
 
+if (process.env.NODE_ENV === 'production') {
+  console.error('❌ Este seed cria dados de teste e não pode correr com NODE_ENV=production.');
+  process.exit(1);
+}
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,

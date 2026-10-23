@@ -7,6 +7,11 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import * as bcrypt from 'bcrypt';
 
+if (process.env.NODE_ENV === 'production') {
+  console.error('❌ Este seed cria dados de teste e não pode correr com NODE_ENV=production.');
+  process.exit(1);
+}
+
 const DB_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:5432/innova_dev';
 
 async function main() {
