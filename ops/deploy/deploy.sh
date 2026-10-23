@@ -29,6 +29,14 @@ if [ -f current_tag ] && [ "$(cat current_tag)" != "$TAG" ]; then
 fi
 echo "$TAG" > current_tag
 
+# ─── Backups: (re)instala os crons a partir dos scripts deste deploy ────────
+# Idempotente (bloco "# INNOVA-BACKUP"). Não bloqueia o deploy se faltar aws/pg_dump
+# ou o .env de backup — avisa e segue.
+if [ -f backup/install-cron.sh ]; then
+  echo "▶ a (re)instalar crons de backup"
+  INNOVA_DIR="$(pwd)" bash backup/install-cron.sh >/dev/null     || echo "⚠ install-cron.sh falhou — backups podem não estar agendados (ver ops/backup/setup-backup.sh)"
+fi
+
 # ─── Monitorização (regra 9): gerar segredos a partir do .env.production ─────
 # Prometheus/Alertmanager não expandem env vars — renderizamos aqui.
 env_val() { grep -E "^$1=" .env.production | head -1 | cut -d= -f2-; }

@@ -28,12 +28,15 @@ BACKUP_TMP="/tmp/innova-backup-$$"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 DATE_PATH=$(date +%Y/%m/%d)
 RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
+# S3-compatible (R2/B2/MinIO): AWS CLI v2 >= 2.13 lê AWS_ENDPOINT_URL nativamente.
+[ -z "${AWS_ENDPOINT:-}" ] || export AWS_ENDPOINT_URL="$AWS_ENDPOINT"
 S3_BUCKET="${BACKUP_S3_BUCKET:?BACKUP_S3_BUCKET não definida}"
 S3_PREFIX="${BACKUP_S3_PREFIX:-innova/postgres}"
 PASSPHRASE="${BACKUP_ENCRYPT_PASSPHRASE:?BACKUP_ENCRYPT_PASSPHRASE obrigatória. Ver .env.production.example}"
 
 # ── Logging ──────────────────────────────────────────────────
-log()  { echo "[$(date -Iseconds)] INFO  $*"; }
+# log -> stderr: as funções abaixo devolvem o caminho do ficheiro por stdout ($(...)).
+log()  { echo "[$(date -Iseconds)] INFO  $*" >&2; }
 warn() { echo "[$(date -Iseconds)] WARN  $*" >&2; }
 fail() {
   echo "[$(date -Iseconds)] ERROR $*" >&2
@@ -53,14 +56,17 @@ _notify() {
 }
 
 # ── Parse DATABASE_URL → variáveis pg* ───────────────────────
+# Decodifica %XX (utilizador/password vêm URL-encoded no DATABASE_URL).
+_urldecode() { local s="$1"; printf '%b' "${s//%/\\x}"; }
+
 _parse_db_url() {
   local url="${DATABASE_URL:?DATABASE_URL não definida}"
   # Remove prefixo postgresql:// ou postgres://
   url="${url#postgresql://}"; url="${url#postgres://}"
   local userinfo="${url%%@*}"
   local hostinfo="${url#*@}"
-  DB_USER="${userinfo%%:*}"
-  DB_PASS="${userinfo#*:}"
+  DB_USER="$(_urldecode "${userinfo%%:*}")"
+  DB_PASS="$(_urldecode "${userinfo#*:}")"
   local hostport="${hostinfo%%/*}"
   local rest="${hostinfo#*/}"
   DB_HOST="${hostport%%:*}"
@@ -112,8 +118,9 @@ _encrypt_if_configured() {
   fi
   log "A encriptar com GPG AES-256..."
   local enc_file="${file}.gpg"
-  gpg --batch --yes \
-    --passphrase "$PASSPHRASE" \
+  # passphrase por stdin: não aparece em `ps` nem em /proc/<pid>/cmdline
+  printf '%s' "$PASSPHRASE" | gpg --batch --yes \
+    --pinentry-mode loopback --passphrase-fd 0 \
     --symmetric \
     --cipher-algo AES256 \
     --output "$enc_file" \

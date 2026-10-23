@@ -12,6 +12,7 @@
 set -euo pipefail
 
 VERIFY_TMP="/tmp/innova-verify-$$"
+[ -z "${AWS_ENDPOINT:-}" ] || export AWS_ENDPOINT_URL="$AWS_ENDPOINT"
 S3_BUCKET="${BACKUP_S3_BUCKET:?BACKUP_S3_BUCKET não definida}"
 S3_PREFIX="${BACKUP_S3_PREFIX:-innova/postgres}"
 PASSPHRASE="${BACKUP_ENCRYPT_PASSPHRASE:-}"
@@ -90,8 +91,8 @@ main() {
       || fail "Ficheiro encriptado mas BACKUP_ENCRYPT_PASSPHRASE não definida"
     log "A desencriptar para verificação..."
     local decrypted="${local_file%.gpg}"
-    gpg --batch --yes \
-      --passphrase "$PASSPHRASE" \
+    printf '%s' "$PASSPHRASE" | gpg --batch --yes \
+      --pinentry-mode loopback --passphrase-fd 0 \
       --decrypt \
       --output "$decrypted" \
       "$local_file" \

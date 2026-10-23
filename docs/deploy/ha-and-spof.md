@@ -37,7 +37,7 @@
 
 | SPOF | Risco | Mitigação actual | Só resolve com… |
 |---|---|---|---|
-| **O VPS (host físico)** | Kernel panic, falha de disco, o datacenter em baixo, VPS suspenso → **outage total** | Cloudflare *Always Online* serve GETs em cache; backups off-box (pg_dump diário + WAL-G PITR); DR runbook; alerta externo (healthchecks.io dead-man) | 2º VPS atrás de LB (topologia "Médio") |
+| **O VPS (host físico)** | Kernel panic, falha de disco, o datacenter em baixo, VPS suspenso → **outage total** | Cloudflare *Always Online* serve GETs em cache; backups off-box (pg_dump diário cifrado no S3 + PITR do DigitalOcean); DR runbook; alerta externo (healthchecks.io dead-man) | 2º VPS atrás de LB (topologia "Médio") |
 | **Container Caddy** | Se o Caddy morre, não há borda → outage total (mesmo com as 2 réplicas vivas) | `restart: always` repõe o Caddy que **crashe ou seja morto por OOM**; **healthcheck** da admin API marca-o `unhealthy` (visível em `docker ps` / monitorização) mas o `docker compose` puro **não reinicia** por health — um Caddy *pendurado* (processo vivo, não serve) fica como risco residual até Swarm mode / sidecar autoheal / 2 VPS; config validada em CI; limite 256 MB isola de OOM do vizinho | Caddy replicado / LB gerido do provider |
 | **Frontend (mesma caixa)** | Partilha os SPOF do host / Caddy / Redis | 2 réplicas (falha de processo), `restart: unless-stopped` | 2º VPS (topologia "Médio") |
 | **Container Redis** | Filas Bull (webhooks, e-mail) e cache param; a app degrada mas **não perde dados de domínio** (Postgres é a fonte de verdade) | `--appendonly yes` (persiste entre restarts); `restart: unless-stopped`; readiness trata Redis como informativo (não derruba a app) | Redis gerido / Sentinel / cluster |

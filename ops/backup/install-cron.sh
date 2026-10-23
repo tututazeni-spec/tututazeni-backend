@@ -43,6 +43,7 @@ command -v pg_dump >/dev/null 2>&1 \
 chmod +x "${BACKUP_DIR}/backup-postgres.sh"
 chmod +x "${BACKUP_DIR}/restore-postgres.sh"
 chmod +x "${BACKUP_DIR}/verify-backup.sh"
+chmod +x "${BACKUP_DIR}/backup-secrets.sh"
 log "Permissões de execução definidas nos scripts de backup"
 
 # ── Ficheiro de log ───────────────────────────────────────────
@@ -56,10 +57,12 @@ log "Ficheiro de log: $LOG_FILE"
 # Usa um bloco delimitado para não duplicar em re-execuções
 
 CRON_MARKER="# INNOVA-BACKUP"
-CRON_DAILY="0 2 * * * . ${ENV_FILE} && ${BACKUP_DIR}/backup-postgres.sh >> ${LOG_FILE} 2>&1 ${CRON_MARKER}"
-CRON_WEEKLY="0 4 * * 0 . ${ENV_FILE} && ${BACKUP_DIR}/verify-backup.sh >> ${LOG_FILE} 2>&1 ${CRON_MARKER}"
+CRON_DAILY="0 2 * * * set -a; . ${ENV_FILE}; set +a; ${BACKUP_DIR}/backup-postgres.sh >> ${LOG_FILE} 2>&1 ${CRON_MARKER}"
+CRON_WEEKLY="0 4 * * 0 set -a; . ${ENV_FILE}; set +a; ${BACKUP_DIR}/verify-backup.sh >> ${LOG_FILE} 2>&1 ${CRON_MARKER}"
+# Segredos (.env.production + cert Origin CA) cifrados para o S3 — domingos 03:00
+CRON_SECRETS="0 3 * * 0 set -a; . ${ENV_FILE}; set +a; INNOVA_DIR=${INNOVA_DIR} ${BACKUP_DIR}/backup-secrets.sh >> ${LOG_FILE} 2>&1 ${CRON_MARKER}"
 # Métricas de backup para Prometheus (textfile collector do node-exporter)
-CRON_METRICS="*/15 * * * * . ${ENV_FILE} && ${BACKUP_DIR}/backup-metrics.sh >> ${LOG_FILE} 2>&1 ${CRON_MARKER}"
+CRON_METRICS="*/15 * * * * set -a; . ${ENV_FILE}; set +a; ${BACKUP_DIR}/backup-metrics.sh >> ${LOG_FILE} 2>&1 ${CRON_MARKER}"
 
 # Criar directório do textfile collector (lido pelo node-exporter dentro do Docker)
 TEXTFILE_DIR="/var/lib/node-exporter/textfile_collector"
@@ -72,6 +75,7 @@ fi
 (crontab -l 2>/dev/null | grep -v "$CRON_MARKER" || true
  echo "$CRON_DAILY"
  echo "$CRON_WEEKLY"
+ echo "$CRON_SECRETS"
  echo "$CRON_METRICS"
 ) | crontab -
 

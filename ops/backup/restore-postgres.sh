@@ -19,19 +19,23 @@
 set -euo pipefail
 
 RESTORE_TMP="/tmp/innova-restore-$$"
+[ -z "${AWS_ENDPOINT:-}" ] || export AWS_ENDPOINT_URL="$AWS_ENDPOINT"
 S3_BUCKET="${BACKUP_S3_BUCKET:?BACKUP_S3_BUCKET não definida}"
 S3_PREFIX="${BACKUP_S3_PREFIX:-innova/postgres}"
 PASSPHRASE="${BACKUP_ENCRYPT_PASSPHRASE:-}"
 
-log()  { echo "[$(date -Iseconds)] INFO  $*"; }
+log()  { echo "[$(date -Iseconds)] INFO  $*" >&2; }
 warn() { echo "[$(date -Iseconds)] WARN  $*" >&2; }
 fail() { echo "[$(date -Iseconds)] ERROR $*" >&2; exit 1; }
+
+# Decodifica %XX (utilizador/password vêm URL-encoded no DATABASE_URL).
+_urldecode() { local s="$1"; printf '%b' "${s//%/\\x}"; }
 
 _parse_db_url() {
   local url="${DATABASE_URL:?DATABASE_URL não definida}"
   url="${url#postgresql://}"; url="${url#postgres://}"
   local userinfo="${url%%@*}"; local hostinfo="${url#*@}"
-  DB_USER="${userinfo%%:*}"; DB_PASS="${userinfo#*:}"
+  DB_USER="$(_urldecode "${userinfo%%:*}")"; DB_PASS="$(_urldecode "${userinfo#*:}")"
   local hostport="${hostinfo%%/*}"; local rest="${hostinfo#*/}"
   DB_HOST="${hostport%%:*}"; DB_PORT="${hostport##*:}"
   DB_NAME="${rest%%\?*}"
@@ -83,8 +87,8 @@ _decrypt_if_needed() {
     || fail "Ficheiro encriptado (.gpg) mas BACKUP_ENCRYPT_PASSPHRASE não definida"
   log "A desencriptar backup GPG..."
   local decrypted="${file%.gpg}"
-  gpg --batch --yes \
-    --passphrase "$PASSPHRASE" \
+  printf '%s' "$PASSPHRASE" | gpg --batch --yes \
+    --pinentry-mode loopback --passphrase-fd 0 \
     --decrypt \
     --output "$decrypted" \
     "$file" \
@@ -195,7 +199,7 @@ main() {
   log " PASSOS SEGUINTES:"
   log "  1. Reiniciar a app: docker compose -f /opt/innova/docker-compose.prod.yml restart app"
   log "  2. Validar smoke test: curl https://\$DOMAIN/api/health/ready"
-  log "  3. Verificar logs da app: docker logs -f innova-app"
+  log "  3. Verificar logs da app: docker compose -f /opt/innova/docker-compose.prod.yml logs -f app"
 }
 
 main "$@"

@@ -1,5 +1,7 @@
 # Plano de Disaster Recovery — INNOVA
 
+> **Runbook operacional canónico:** `ops/dr/DISASTER-RECOVERY.md` (BD em DigitalOcean Managed PostgreSQL: PITR do provider + `pg_dump` cifrado no S3). Este documento é contexto de arquitectura e pode estar desactualizado onde divergir.
+
 > SRE Owner: ops@innova  
 > Última revisão: 2026-07-16  
 > RTO alvo: 4 horas | RPO alvo: 24 horas (máximo 1 dia de dados perdidos)
@@ -209,13 +211,6 @@ Criar um utilizador IAM `innova-backup` com APENAS esta policy (não usar root k
 
 ---
 
-## 8. Upgrade Futuro: WAL Archiving (PITR)
+## 8. PITR
 
-O setup actual usa dumps diários (RPO = 24h). Para reduzir RPO para minutos:
-
-1. Activar `archive_mode = on` no `postgresql.conf`
-2. Configurar `archive_command` para enviar WAL segments para S3
-3. Usar `pg_basebackup` semanal + WAL para Point-in-Time Recovery
-4. Ferramenta recomendada: **WAL-G** (open source, S3 nativo, muito mais simples que pgBackRest)
-
-Só necessário se o negócio exigir RPO < 1h. Para o uso interno actual (6000 funcionários, Academia + RH), o RPO de 24h é aceitável.
+A BD é DigitalOcean Managed PostgreSQL, que já inclui backup diário e PITR (WAL a cada ~5 min) com retenção de 7 dias; o restore cria sempre um cluster novo. Não é preciso WAL archiving próprio (WAL-G foi removido). O `pg_dump` cifrado no S3 mantém-se como cópia independente da conta DigitalOcean e com retenção superior a 7 dias. Procedimentos em `ops/dr/DISASTER-RECOVERY.md` (secções 10A e 10B).

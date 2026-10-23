@@ -55,14 +55,6 @@ if [ -n "$S3_BUCKET" ] && command -v aws >/dev/null 2>&1; then
   fi
 fi
 
-# ── Verificar métricas WAL-G (se existirem) ───────────────────
-WALG_METRICS_FILE="/var/lib/node-exporter/textfile_collector/innova_walg.prom"
-WALG_LAST_SUCCESS=0
-if [ -f "$WALG_METRICS_FILE" ]; then
-  WALG_LAST_SUCCESS=$(grep 'innova_walg_backup_last_success_timestamp_seconds{type="full"' "$WALG_METRICS_FILE" 2>/dev/null \
-                    | awk '{print $2}' || echo 0)
-fi
-
 # ── Escrever ficheiro de métricas ─────────────────────────────
 TMP_FILE="${METRICS_FILE}.tmp"
 
@@ -82,10 +74,6 @@ innova_backup_size_bytes ${BACKUP_SIZE_BYTES}
 # HELP innova_backup_s3_reachable Conectividade ao S3 de backup (1=OK, 0=falha)
 # TYPE innova_backup_s3_reachable gauge
 innova_backup_s3_reachable ${S3_OK}
-
-# HELP innova_walg_last_full_backup_timestamp_seconds Unix timestamp do último backup WAL-G full
-# TYPE innova_walg_last_full_backup_timestamp_seconds gauge
-innova_walg_last_full_backup_timestamp_seconds ${WALG_LAST_SUCCESS}
 
 # HELP innova_backup_metrics_generated_timestamp_seconds Quando estas métricas foram geradas
 # TYPE innova_backup_metrics_generated_timestamp_seconds gauge

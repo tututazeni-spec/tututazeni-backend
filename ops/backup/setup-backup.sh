@@ -76,15 +76,6 @@ for cmd in aws pg_dump gpg; do
   fi
 done
 
-WALG_AVAILABLE=false
-if command -v wal-g >/dev/null 2>&1; then
-  log "wal-g: $(command -v wal-g) — crons WAL-G serão configurados"
-  WALG_AVAILABLE=true
-else
-  warn "wal-g não encontrado — só pg_dump será configurado agora"
-  warn "Para instalar WAL-G depois: bash ${BACKUP_DIR}/walg/install-walg.sh"
-fi
-
 [ "$MISSING" -eq 0 ] \
   || fail "${MISSING} dependência(s) em falta. Instalar e correr de novo."
 
@@ -171,12 +162,6 @@ _section 5 "Instalar cron jobs"
 chmod +x "${BACKUP_DIR}/install-cron.sh"
 bash "${BACKUP_DIR}/install-cron.sh"
 
-if [ "$WALG_AVAILABLE" = "true" ]; then
-  chmod +x "${BACKUP_DIR}/walg/install-cron-walg.sh"
-  bash "${BACKUP_DIR}/walg/install-cron-walg.sh" \
-    || warn "Crons WAL-G: falha (instalar manualmente depois)"
-fi
-
 echo ""
 log "Crontab INNOVA activo:"
 crontab -l 2>/dev/null | grep "INNOVA" | sed 's/^/    /' || warn "Nenhum cron INNOVA encontrado"
@@ -196,10 +181,6 @@ echo ""
 echo " Próximos passos obrigatórios:"
 echo "  1. Preencher contactos em ops/dr/DISASTER-RECOVERY.md"
 echo "  2. Agendar DR drill (restore em staging)"
-if [ "$WALG_AVAILABLE" = "false" ]; then
-echo "  3. Instalar WAL-G (RPO ≤ 60s):"
-echo "     bash ${BACKUP_DIR}/walg/install-walg.sh"
-fi
 echo ""
 echo " Logs: tail -f /var/log/innova-backup.log"
 echo "════════════════════════════════════════════"

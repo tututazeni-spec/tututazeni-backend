@@ -23,9 +23,9 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "innova"
-      ManagedBy   = "terraform"
-      Component   = "backup"
+      Project   = "innova"
+      ManagedBy = "terraform"
+      Component = "backup"
     }
   }
 }
@@ -37,9 +37,9 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "innova"
-      ManagedBy   = "terraform"
-      Component   = "backup-replica"
+      Project   = "innova"
+      ManagedBy = "terraform"
+      Component = "backup-replica"
     }
   }
 }
