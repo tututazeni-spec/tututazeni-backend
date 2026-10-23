@@ -5,9 +5,15 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
-import * as bcrypt from 'bcrypt';
+import { hashPassword } from '../src/common/security/password-hasher';
 
-const DB_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:5432/innova_dev';
+if (process.env.NODE_ENV === 'production') {
+  console.error('❌ Este seed cria dados de teste e não pode correr com NODE_ENV=production.');
+  process.exit(1);
+}
+
+const DB_URL =
+  process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:5432/innova_dev';
 
 async function main() {
   const pool = new Pool({ connectionString: DB_URL });
@@ -16,7 +22,7 @@ async function main() {
 
   console.log('🌱 A criar utilizadores E2E em:', DB_URL.replace(/:[^:@]+@/, ':***@'));
 
-  const password = await bcrypt.hash('Test@1234', 10);
+  const password = await hashPassword('Test@1234');
 
   const roleEntries = [
     { code: 'ADMIN', name: 'ADMIN' },
@@ -49,9 +55,9 @@ async function main() {
 
   const users = [
     { email: 'int.employee@innova-test.com', fullName: 'Employee Int', roleCode: 'COLABORADOR' },
-    { email: 'int.manager@innova-test.com',  fullName: 'Manager Int',  roleCode: 'GESTOR' },
-    { email: 'int.rh@innova-test.com',       fullName: 'RH Int',       roleCode: 'RH' },
-    { email: 'int.admin@innova-test.com',     fullName: 'Admin Int',    roleCode: 'ADMIN' },
+    { email: 'int.manager@innova-test.com', fullName: 'Manager Int', roleCode: 'GESTOR' },
+    { email: 'int.rh@innova-test.com', fullName: 'RH Int', roleCode: 'RH' },
+    { email: 'int.admin@innova-test.com', fullName: 'Admin Int', roleCode: 'ADMIN' },
   ];
 
   for (const u of users) {
@@ -75,4 +81,7 @@ async function main() {
   console.log('✅ Utilizadores E2E criados com sucesso');
 }
 
-main().catch((e) => { console.error('❌', e); process.exit(1); });
+main().catch(e => {
+  console.error('❌', e);
+  process.exit(1);
+});

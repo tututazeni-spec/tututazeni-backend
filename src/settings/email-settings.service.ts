@@ -91,7 +91,7 @@ export class EmailSettingsService {
       USER_INVITE: {
         fullName: 'Utilizador de Teste',
         email: to ?? 'teste@innova.ao',
-        tempPassword: 'Exemplo@123',
+        setupLink: 'https://innova.exemplo/auth/reset-password?token=exemplo',
         expiryDays: 7,
       },
     };

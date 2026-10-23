@@ -8,6 +8,7 @@
 // Os limites e regras são lidos de facto pelo motor de alertas; a retenção é
 // aplicada por um cron diário; a frequência pelo cron de recolha de métricas.
 
+import { runAsSystem } from '../common/rls/rls-context';
 import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Prisma, ScalabilityInfraSettings } from '@prisma/client';
@@ -44,12 +45,15 @@ export class ScalabilitySettingsService {
     private readonly audit: AuditService,
   ) {}
 
+  // O próprio serviço autoriza por perfil depois de ler a linha, por isso a leitura é de confiança.
   private row(): Promise<ScalabilityInfraSettings> {
-    return this.prisma.scalabilityInfraSettings.upsert({
-      where: { id: SETTINGS_ID },
-      update: {},
-      create: { id: SETTINGS_ID },
-    });
+    return runAsSystem(() =>
+      this.prisma.scalabilityInfraSettings.upsert({
+        where: { id: SETTINGS_ID },
+        update: {},
+        create: { id: SETTINGS_ID },
+      }),
+    );
   }
 
   private authorized(s: ScalabilityInfraSettings): string[] {

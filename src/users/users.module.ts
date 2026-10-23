@@ -6,6 +6,7 @@ import { UserQualificationsService } from './user-qualifications.service';
 import { UserQualificationsController } from './user-qualifications.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { MailModule } from '../mail/mail.module';
+import { PasswordResetService } from '../auth/password-reset.service';
 import { EmailProcessor } from '../queue/processors/email.processor';
 // UsersModule único junta UsersController (/users), EmployeesController
 // (/employees) e RolesPermissionsController (/roles-permissions) — ex-
@@ -23,7 +24,7 @@ import { SettingsModule } from '../settings/settings.module';
     RolesPermissionsModule,
     SettingsModule,
   ],
-  providers: [UsersService, UserQualificationsService, EmailProcessor],
+  providers: [UsersService, UserQualificationsService, EmailProcessor, PasswordResetService],
   controllers: [UsersController, UserQualificationsController],
   exports: [UsersService, EmployeesModule, RolesPermissionsModule],
 })

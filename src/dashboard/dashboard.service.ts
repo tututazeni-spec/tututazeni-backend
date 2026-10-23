@@ -1,4 +1,5 @@
 // src/dashboard/dashboard.service.ts
+import { runAsSystem } from '../common/rls/rls-context';
 import { Injectable, Logger } from '@nestjs/common';
 import { EnrollmentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -880,16 +881,19 @@ export class DashboardService {
     const where: Prisma.UserWhereInput = { active: true };
     if (departmentId) where.departmentId = departmentId;
 
-    const users = await this.prisma.read.user.findMany({
-      where,
-      include: {
-        points: { select: { points: true } },
-        position: { select: { name: true } },
-        _count: { select: { badgeAwards: true } },
-      },
-      orderBy: { points: { points: 'desc' } },
-      take: limit,
-    });
+    // Ranking público por desenho: lê pontos/badges de todos (campos limitados abaixo).
+    const users = await runAsSystem(() =>
+      this.prisma.read.user.findMany({
+        where,
+        include: {
+          points: { select: { points: true } },
+          position: { select: { name: true } },
+          _count: { select: { badgeAwards: true } },
+        },
+        orderBy: { points: { points: 'desc' } },
+        take: limit,
+      }),
+    );
 
     return users.map((u, i) => ({
       rank: i + 1,

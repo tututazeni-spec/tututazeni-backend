@@ -181,7 +181,6 @@ describe('UsersService', () => {
     const createDto = {
       fullName: 'Novo User',
       email: 'novo@innova.com',
-      password: 'pass',
     };
 
     it('deve criar utilizador com userPoints e notificationLog', async () => {
@@ -368,7 +367,7 @@ describe('UsersService', () => {
       jest.clearAllMocks();
     });
 
-    it('gera tempPassword com 24 chars hexadecimais (CSPRNG) + sufixo de complexidade e passa-o no job de email', async () => {
+    it('cria a conta SEM senha e não põe nenhuma senha no job de email (zero-knowledge)', async () => {
       userMock.findUnique.mockResolvedValue(null);
       userMock.create.mockResolvedValue({ id: 1, email: 'novo@innova.com', fullName: 'Novo User' });
 
@@ -379,11 +378,16 @@ describe('UsersService', () => {
         departmentId: 1,
       });
 
-      const [, jobData] = mockEmailQueue.add.mock.calls[0] as [string, { tempPassword: string }];
-      // Definições §4: sufixo "Aa#1" garante maiúscula/minúscula/dígito/símbolo
-      // exigidos pela política de palavras-passe — ver users.service.ts#invite.
-      expect(jobData.tempPassword).toHaveLength(28);
-      expect(jobData.tempPassword).toMatch(/^[0-9a-f]{24}Aa#1$/);
+      const [, jobData] = mockEmailQueue.add.mock.calls[0] as [string, Record<string, unknown>];
+      expect(jobData).toEqual(expect.objectContaining({ userId: 1, email: 'novo@innova.com' }));
+      expect(jobData).not.toHaveProperty('tempPassword');
+      expect(userMock.create.mock.calls[0][0].data.password).toBeNull();
+    });
+
+    it('recusa que um administrador defina a senha de outro utilizador', async () => {
+      await expect(
+        service.create({ email: 'a@b.com', fullName: 'A', password: 'Abcdefghi1' } as never),
+      ).rejects.toThrow('administrador');
     });
 
     it('enfileira o job "userInvite" com email/fullName correctos e retry configurado', async () => {

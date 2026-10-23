@@ -1,9 +1,9 @@
 import { hashSharePassword, verifySharePassword } from './share-password';
 
 describe('share link password hashing', () => {
-  it('produz um hash bcrypt (não sha256 hex de 64 chars)', async () => {
+  it('produz um hash Argon2id (não sha256 hex de 64 chars)', async () => {
     const hash = await hashSharePassword('segredo');
-    expect(hash).toMatch(/^\$2[aby]\$/); // prefixo bcrypt
+    expect(hash).toMatch(/^\$argon2id\$/);
     expect(hash).not.toMatch(/^[a-f0-9]{64}$/); // não é sha256
   }, 20000);
 

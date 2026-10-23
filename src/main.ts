@@ -15,6 +15,7 @@ import { csrfHeaderMiddleware } from './common/security/csrf-header-guard';
 import { TOKEN_COOKIE } from './auth/token-cookie';
 import { validateEnv } from './common/bootstrap/validate-env';
 import { runWithRequestContext } from './common/logging/request-context';
+import { runWithRls } from './common/rls/rls-context';
 
 async function bootstrap() {
   validateEnv();
@@ -59,7 +60,7 @@ async function bootstrap() {
   // middleware corre depois do pino-http (que já atribuiu req.id) e antes dos
   // guards/interceptors/filters, que o preenchem (userId) ou o consomem.
   app.use((req: Request, _res: Response, next: () => void) => {
-    runWithRequestContext({ reqId: (req as Request & { id?: string }).id }, next);
+    runWithRequestContext({ reqId: (req as Request & { id?: string }).id }, () => runWithRls(next));
   });
 
   // O avatar de perfil e a thumbnail do curso chegam como data URL base64 no

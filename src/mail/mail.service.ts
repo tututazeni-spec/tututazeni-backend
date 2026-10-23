@@ -108,11 +108,12 @@ export class MailService implements OnModuleInit {
   async sendUserInvite(
     email: string,
     fullName: string,
-    tempPassword: string,
+    setupToken: string,
     expiryDays?: number,
   ): Promise<void> {
+    const setupLink = `${process.env.APP_URL ?? ''}/auth/reset-password?token=${setupToken}`;
     const rendered = await this.emailSettings
-      ?.render('USER_INVITE', { fullName, email, tempPassword, expiryDays: expiryDays ?? '' })
+      ?.render('USER_INVITE', { fullName, email, setupLink, expiryDays: expiryDays ?? '' })
       .catch(() => null);
     await this.send({
       to: email,
@@ -124,9 +125,8 @@ export class MailService implements OnModuleInit {
           '',
           'A sua conta foi criada no sistema INNOVA.',
           `Email: ${email}`,
-          `Password temporária: ${tempPassword}`,
           '',
-          'Por favor aceda e altere a sua password no primeiro login.',
+          `Defina a sua password através deste link (uso único): ${setupLink}`,
           ...(expiryDays ? [`Este convite é válido por ${expiryDays} dias.`] : []),
           '',
           '-- Sistema INNOVA',

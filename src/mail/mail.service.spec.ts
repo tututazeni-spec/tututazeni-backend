@@ -86,11 +86,12 @@ describe('MailService', () => {
       );
     });
 
-    it('sendUserInvite inclui fullName e tempPassword no body', async () => {
+    it('sendUserInvite inclui fullName e o link de definição de senha no body', async () => {
       await service.sendUserInvite('novo@innova.com', 'João Silva', 'abc123def456');
       const { text } = sendMailMock.mock.calls[0][0] as { text: string };
       expect(text).toContain('João Silva');
-      expect(text).toContain('abc123def456');
+      expect(text).toContain('/auth/reset-password?token=abc123def456');
+      expect(text).not.toMatch(/temporária/i);
     });
 
     it('sendUserInvite lança se o transporter rejeitar', async () => {

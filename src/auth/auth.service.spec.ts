@@ -29,12 +29,13 @@ describe('sessionIdleTimeoutMs', () => {
   });
 });
 
-jest.mock('bcrypt', () => ({
-  compare: jest.fn(),
-  hash: jest.fn().mockResolvedValue('hashed-password'),
+jest.mock('../common/security/password-hasher', () => ({
+  verifyPassword: jest.fn(),
+  hashPassword: jest.fn().mockResolvedValue('hashed-password'),
+  burnPasswordCheck: jest.fn().mockResolvedValue(undefined),
 }));
 
-import * as bcrypt from 'bcrypt';
+import { verifyPassword } from '../common/security/password-hasher';
 
 const mockPrisma = {
   user: {
@@ -106,7 +107,7 @@ describe('AuthService', () => {
 
   describe('login', () => {
     it('deve retornar user e tokens com credenciais válidas', async () => {
-      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      (verifyPassword as jest.Mock).mockResolvedValue({ valid: true, needsRehash: false });
       mockPrisma.user.findUnique.mockResolvedValue(baseUser);
 
       const result = await service.login({ email: 'test@innova.com', password: 'pass' });
@@ -115,7 +116,7 @@ describe('AuthService', () => {
       expect(result).toHaveProperty('refreshToken');
       expect(result.user).not.toHaveProperty('password');
       // A10-1: password é omitido por omissão (PrismaService) — login precisa
-      // do hash para o bcrypt.compare, por isso tem de pedir a excepção.
+      // do hash para o verifyPassword, por isso tem de pedir a excepção.
       // Definições §4: twoFactorSecret também pedido (verificação de 2FA no login),
       // via findUserWithRoleByEmail partilhado com o fluxo SSO/LDAP.
       expect(mockPrisma.user.findUnique).toHaveBeenCalledWith(
@@ -154,7 +155,7 @@ describe('AuthService', () => {
 
     it('regista FAILED com o userId quando a palavra-passe está errada', async () => {
       mockPrisma.auditLog.create.mockClear();
-      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+      (verifyPassword as jest.Mock).mockResolvedValue({ valid: false, needsRehash: false });
       mockPrisma.user.findUnique.mockResolvedValue(baseUser);
       await expect(service.login({ email: 'test@innova.com', password: 'x' })).rejects.toThrow(
         UnauthorizedException,
@@ -173,7 +174,7 @@ describe('AuthService', () => {
     });
 
     it('deve lançar UnauthorizedException se password inválida', async () => {
-      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+      (verifyPassword as jest.Mock).mockResolvedValue({ valid: false, needsRehash: false });
       mockPrisma.user.findUnique.mockResolvedValue(baseUser);
       await expect(service.login({ email: 'test@innova.com', password: 'wrong' })).rejects.toThrow(
         UnauthorizedException,
@@ -224,7 +225,7 @@ describe('AuthService', () => {
 
   describe('changePassword', () => {
     it('deve alterar password com sucesso', async () => {
-      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      (verifyPassword as jest.Mock).mockResolvedValue({ valid: true, needsRehash: false });
       mockPrisma.user.findUnique.mockResolvedValue(baseUser);
       mockPrisma.user.update.mockResolvedValue(baseUser);
 
@@ -253,7 +254,7 @@ describe('AuthService', () => {
     });
 
     it('deve lançar BadRequestException se password actual errada', async () => {
-      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+      (verifyPassword as jest.Mock).mockResolvedValue({ valid: false, needsRehash: false });
       mockPrisma.user.findUnique.mockResolvedValue(baseUser);
       await expect(
         service.changePassword(1, { currentPassword: 'wrong', newPassword: 'new' }),
@@ -288,7 +289,7 @@ describe('AuthService', () => {
 
   describe('generateTokens (via login)', () => {
     it('cada emissão de refresh token contém um jti único e distinto', async () => {
-      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      (verifyPassword as jest.Mock).mockResolvedValue({ valid: true, needsRehash: false });
       mockPrisma.user.findUnique.mockResolvedValue(baseUser);
 
       const signCalls: Array<[unknown, unknown]> = [];

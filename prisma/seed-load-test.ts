@@ -7,9 +7,14 @@ dotenv.config({ path: '.env' }); // carrega .env explicitamente (ts-node não o 
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
-import * as bcrypt from 'bcrypt';
+import { hashPassword } from '../src/common/security/password-hasher';
 import * as fs from 'fs';
 import * as path from 'path';
+
+if (process.env.NODE_ENV === 'production') {
+  console.error('❌ Este seed cria dados de teste e não pode correr com NODE_ENV=production.');
+  process.exit(1);
+}
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -27,7 +32,7 @@ async function main() {
   console.log('🌱 A iniciar seed de dados de teste de carga...\n');
 
   // rounds=4 para testes de carga — compare usa os rounds da hash armazenada
-  const passwordHash = await bcrypt.hash(TEST_PASSWORD, 4);
+  const passwordHash = await hashPassword(TEST_PASSWORD);
 
   // ── 1. Roles ─────────────────────────────────────────────────────────────
   // Valores reais confirmados nos controllers: COLABORADOR, GESTOR, LIDER, RH, ADMIN
@@ -60,7 +65,8 @@ async function main() {
 
   console.log(`\n⏳ A criar ${TOTAL_USERS} utilizadores...`);
   for (let i = 1; i <= TOTAL_USERS; i++) {
-    const roleName = i <= 10 ? 'ADMIN' : i <= 30 ? 'RH' : i <= 50 ? 'GESTOR' : i <= 70 ? 'LIDER' : 'COLABORADOR';
+    const roleName =
+      i <= 10 ? 'ADMIN' : i <= 30 ? 'RH' : i <= 50 ? 'GESTOR' : i <= 70 ? 'LIDER' : 'COLABORADOR';
 
     const email = `load.test.user${i}@innova-test.com`;
 
@@ -279,7 +285,7 @@ async function main() {
 }
 
 main()
-  .catch((e) => {
+  .catch(e => {
     console.error('❌ Erro no seed:', e);
     process.exit(1);
   })

@@ -122,3 +122,6 @@ errors.txt
 dev-output.txt
 check_roles_tmp.js
 fix-all.js
+
+# Cliente Prisma gerado localmente (prisma generate corre no postinstall)
+prisma/generated/

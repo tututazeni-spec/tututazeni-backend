@@ -10,7 +10,7 @@ export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[number];
 
 export const EMAIL_TEMPLATE_PLACEHOLDERS: Record<EmailTemplateKey, readonly string[]> = {
   PASSWORD_RESET: ['resetLink'],
-  USER_INVITE: ['fullName', 'email', 'tempPassword', 'expiryDays'],
+  USER_INVITE: ['fullName', 'email', 'setupLink', 'expiryDays'],
 };
 
 export interface EmailTemplate {
@@ -42,9 +42,8 @@ export const DEFAULT_EMAIL_TEMPLATES: Record<EmailTemplateKey, EmailTemplate> = 
       '',
       'A sua conta foi criada no sistema INNOVA.',
       'Email: {{email}}',
-      'Password temporária: {{tempPassword}}',
       '',
-      'Por favor aceda e altere a sua password no primeiro login.',
+      'Defina a sua password através deste link (uso único): {{setupLink}}',
       'Este convite é válido por {{expiryDays}} dias.',
     ].join('\n'),
   },
@@ -59,7 +58,10 @@ export function parseEmailSettings(raw: string | null | undefined): EmailSetting
   const d = DEFAULT_EMAIL_SETTINGS;
   if (!raw) return structuredClone(d);
   try {
-    const p = JSON.parse(raw) as Partial<EmailSettings>;
+    const p = JSON.parse(raw, (_k, v) =>
+      // Templates guardados antes de o convite passar a link: {{tempPassword}} -> {{setupLink}}.
+      typeof v === 'string' ? v.replace(/\{\{tempPassword\}\}/g, '{{setupLink}}') : v,
+    ) as Partial<EmailSettings>;
     return {
       signature: p.signature ?? d.signature,
       templates: {
