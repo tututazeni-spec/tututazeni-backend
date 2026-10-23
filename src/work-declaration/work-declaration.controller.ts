@@ -1,3 +1,5 @@
+import { Throttle } from '@nestjs/throttler';
+import { PUBLIC_VERIFY_THROTTLE } from '../common/security/public-throttle';
 import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
@@ -256,6 +258,7 @@ export class WorkDeclarationController {
 
   @Get('verify/:code')
   @Public()
+  @Throttle(PUBLIC_VERIFY_THROTTLE)
   @ApiOperation({ summary: 'Publicly verify a declaration by its unique code (QR / URL)' })
   async verifyDeclaration(@Param('code') code: string) {
     return this.workDeclarationService.verifyDeclaration({ code });

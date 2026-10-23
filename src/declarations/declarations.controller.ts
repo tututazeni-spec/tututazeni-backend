@@ -1,4 +1,6 @@
 // ─── src/declarations/declarations.controller.ts ─────────────────────────────
+import { Throttle } from '@nestjs/throttler';
+import { PUBLIC_VERIFY_THROTTLE } from '../common/security/public-throttle';
 import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
@@ -189,6 +191,7 @@ export class DocumentDeclarationsController {
 
   @Get('verify/:code')
   @Public()
+  @Throttle(PUBLIC_VERIFY_THROTTLE)
   @ApiOperation({ summary: 'Verificação pública de declaração por código (sem auth)' })
   verify(@Param('code') code: string) {
     return this.svc.verify(code);

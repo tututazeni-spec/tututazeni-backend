@@ -1,4 +1,6 @@
 // ─── src/document-repository/document-repository.controller.ts ───────────────
+import { Throttle } from '@nestjs/throttler';
+import { PUBLIC_SHARE_THROTTLE } from '../common/security/public-throttle';
 import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
@@ -11,6 +13,7 @@ import {
   Param,
   Query,
   Req,
+  HttpCode,
   ParseIntPipe,
   UseGuards,
 } from '@nestjs/common';
@@ -24,6 +27,7 @@ import {
   NewVersionDto,
   GrantPermissionDto,
   CreateShareLinkDto,
+  ResolveShareDto,
   CreateDocCategoryDto,
   OptionalReasonDto,
   UpdateExpiresAtDto,
@@ -133,9 +137,20 @@ export class DocumentRepositoryController {
 
   @Get('share/:token')
   @Public()
+  @Throttle(PUBLIC_SHARE_THROTTLE)
   @ApiOperation({ summary: 'Resolver link de partilha (sem autenticação)' })
   resolveShare(@Param('token') token: string, @Query('password') password?: string) {
     return this.svc.resolveShareLink(token, password);
+  }
+
+  // Preferir este POST: a password vai no corpo (a query string fica em logs/histórico).
+  @Post('share/:token')
+  @Public()
+  @HttpCode(200)
+  @Throttle(PUBLIC_SHARE_THROTTLE)
+  @ApiOperation({ summary: 'Resolver link de partilha com password no corpo (sem autenticação)' })
+  resolveShareWithPassword(@Param('token') token: string, @Body() dto: ResolveShareDto) {
+    return this.svc.resolveShareLink(token, dto.password);
   }
 
   // ── Core CRUD ─────────────────────────────────────────────────────
