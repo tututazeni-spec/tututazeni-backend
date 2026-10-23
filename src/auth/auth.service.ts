@@ -7,7 +7,6 @@ import {
   Optional,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,7 +17,11 @@ import { isPasswordExpired, isTwoFactorRequired } from '../settings/security-pol
 import { verifyTotp } from '../settings/totp';
 import { decryptSecret } from '../automation/automation-connections.service';
 import { LoginDto, RegisterDto, ChangePasswordDto } from './auth.dto';
-import { BCRYPT_COST_FACTOR } from '../common/config/security.config';
+import {
+  burnPasswordCheck,
+  hashPassword,
+  verifyPassword,
+} from '../common/security/password-hasher';
 import { withFlatPermissions } from '../common/utils/role-permissions';
 import { writeChainedAuditLog } from '../common/helpers/audit-chain';
 
@@ -144,7 +147,12 @@ export class AuthService {
     // credenciais tem de ver sempre a password mais recente (read-after-write).
     const user = await this.findUserWithRoleByEmail(dto.email);
 
-    if (!user) throw this.failedLogin('UNKNOWN_USER', dto.email, null, ctx);
+    if (!user) {
+      // Iguala o tempo ao ramo real: sem isto, "email inexistente" responde em ms
+      // e "senha errada" em ~250ms, o que permite enumerar contas por timing.
+      await burnPasswordCheck(dto.password);
+      throw this.failedLogin('UNKNOWN_USER', dto.email, null, ctx);
+    }
     if (!user.active) throw this.failedLogin('ACCOUNT_DISABLED', dto.email, user.id, ctx);
 
     // Definições §11: organização pode obrigar autenticação externa (SSO/LDAP)
@@ -170,7 +178,7 @@ export class AuthService {
       }
     }
 
-    // Definições §4: conta bloqueada por tentativas falhadas (antes do bcrypt —
+    // Definições §4: conta bloqueada por tentativas falhadas (antes do hash —
     // poupa CPU e impede força bruta durante o bloqueio).
     if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
       const minutes = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60_000);
@@ -189,9 +197,12 @@ export class AuthService {
       );
     }
 
-    if (!user.password) throw this.failedLogin('NO_PASSWORD', dto.email, user.id, ctx);
-    const valid = await bcrypt.compare(dto.password, user.password);
-    if (!valid) {
+    if (!user.password) {
+      await burnPasswordCheck(dto.password);
+      throw this.failedLogin('NO_PASSWORD', dto.email, user.id, ctx);
+    }
+    const check = await verifyPassword(dto.password, user.password);
+    if (!check.valid) {
       const lockedUntil = await this.security?.registerFailedAttempt(user.id).catch(() => null);
       const err = this.failedLogin('BAD_PASSWORD', dto.email, user.id, ctx);
       if (lockedUntil) {
@@ -216,6 +227,22 @@ export class AuthService {
       }
     }
     await this.security?.clearFailedAttempts(user.id, user.failedLoginAttempts);
+
+    // Hash legado (bcrypt), parâmetros Argon2 abaixo dos actuais ou pepper novo: re-hash
+    // transparente agora que temos a senha em claro. Best-effort — nunca falha o login.
+    if (check.needsRehash) {
+      hashPassword(dto.password)
+        .then(rehashed =>
+          this.prisma.user.update({ where: { id: user.id }, data: { password: rehashed } }),
+        )
+        .catch((err: unknown) =>
+          this.logger.warn({
+            userId: user.id,
+            err: { message: err instanceof Error ? err.message : String(err) },
+            msg: 'Falha ao actualizar o hash da senha',
+          }),
+        );
+    }
 
     const securityPolicy = await this.security?.getPolicy();
 
@@ -329,7 +356,7 @@ export class AuthService {
     if (exists) throw new ConflictException('Email já registado');
 
     await this.security?.assertPasswordAllowed(dto.password);
-    const hashed = await bcrypt.hash(dto.password, BCRYPT_COST_FACTOR);
+    const hashed = await hashPassword(dto.password);
 
     const collaboratorRole = await this.prisma.read.role.findFirst({
       where: { name: 'COLABORADOR' },
@@ -366,11 +393,11 @@ export class AuthService {
     if (!user) throw new UnauthorizedException();
 
     if (!user.password) throw new UnauthorizedException('Sem password definida');
-    const valid = await bcrypt.compare(dto.currentPassword, user.password);
+    const { valid } = await verifyPassword(dto.currentPassword, user.password);
     if (!valid) throw new BadRequestException('Senha atual incorreta');
 
     await this.security?.assertPasswordAllowed(dto.newPassword);
-    const hashed = await bcrypt.hash(dto.newPassword, BCRYPT_COST_FACTOR);
+    const hashed = await hashPassword(dto.newPassword);
     const now = new Date();
 
     // Mudar a senha invalida todas as sessões activas (incluindo a actual) —

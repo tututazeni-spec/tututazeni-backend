@@ -5,7 +5,7 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
-import * as bcrypt from 'bcrypt';
+import { hashPassword } from '../src/common/security/password-hasher';
 
 if (process.env.NODE_ENV === 'production') {
   console.error('❌ Este seed cria dados de teste e não pode correr com NODE_ENV=production.');
@@ -22,7 +22,7 @@ async function main() {
 
   console.log('🌱 A criar utilizadores E2E em:', DB_URL.replace(/:[^:@]+@/, ':***@'));
 
-  const password = await bcrypt.hash('Test@1234', 10);
+  const password = await hashPassword('Test@1234');
 
   const roleEntries = [
     { code: 'ADMIN', name: 'ADMIN' },

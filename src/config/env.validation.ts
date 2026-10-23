@@ -29,6 +29,14 @@ export const envValidationSchema = Joi.object({
     otherwise: Joi.string().optional(),
   }),
 
+  // Pepper das senhas (HMAC antes do Argon2id) — obrigatório em produção: sem ele um dump
+  // da BD bastaria para atacar as senhas offline.
+  PASSWORD_PEPPER: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string().min(32).required(),
+    otherwise: Joi.string().min(32).optional().allow(''),
+  }),
+
   // IA Tutor — opcionais (app funciona sem eles)
   AI_PROVIDER: Joi.string().valid('groq', 'gemini', 'ollama').optional(),
   GROQ_API_KEY: Joi.string().optional().allow(''),

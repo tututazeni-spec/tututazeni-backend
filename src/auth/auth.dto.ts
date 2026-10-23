@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength, IsOptional } from 'class-validator';
+import { IsEmail, IsString, MinLength, MaxLength, IsOptional } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsStrongPassword } from '../common/validators/strong-password.decorator';
 
@@ -10,6 +10,7 @@ export class LoginDto {
   @ApiProperty({ example: 'senha123' })
   @IsString()
   @MinLength(6)
+  @MaxLength(128)
   password!: string;
 
   @ApiPropertyOptional({ description: 'Código TOTP (só quando o utilizador tem 2FA activo)' })
@@ -30,6 +31,7 @@ export class RegisterDto {
   @ApiProperty({ minLength: 10 })
   @IsString()
   @IsStrongPassword()
+  @MaxLength(128)
   password!: string;
 
   @ApiPropertyOptional()
@@ -53,6 +55,7 @@ export class ChangePasswordDto {
   @ApiProperty({ minLength: 10 })
   @IsString()
   @IsStrongPassword()
+  @MaxLength(128)
   newPassword!: string;
 }
 
@@ -70,5 +73,6 @@ export class ResetPasswordDto {
   @ApiProperty({ minLength: 10 })
   @IsString()
   @IsStrongPassword()
+  @MaxLength(128)
   newPassword!: string;
 }

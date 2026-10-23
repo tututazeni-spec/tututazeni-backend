@@ -8,7 +8,6 @@ import {
   Logger,
   Optional,
 } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bull';
@@ -16,7 +15,7 @@ import { Queue } from 'bull';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { SecuritySettingsService } from '../settings/security-settings.service';
-import { BCRYPT_COST_FACTOR } from '../common/config/security.config';
+import { hashPassword, verifyPassword } from '../common/security/password-hasher';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { flattenRolePermissions } from '../common/utils/role-permissions';
 import {
@@ -37,6 +36,9 @@ import {
   ImportUsersDto,
   ModuleAuditLogFilterDto,
 } from './users.dto';
+
+const PASSWORD_BY_ADMIN_MESSAGE =
+  'A senha não pode ser definida por um administrador — o utilizador define-a pelo link de convite ou de recuperação';
 
 // Campos base a incluir em todas as queries (sem password)
 const USER_SELECT_SAFE = {
@@ -343,8 +345,10 @@ export class UsersService {
       if (usernameExists) throw new ConflictException(`Username ${dto.username} já existe`);
     }
 
-    if (dto.password) await this.security?.assertPasswordAllowed(dto.password);
-    const hashed = dto.password ? await bcrypt.hash(dto.password, BCRYPT_COST_FACTOR) : null;
+    // Zero-knowledge: nenhum administrador define ou conhece a senha de outro utilizador.
+    // A conta nasce sem senha e o próprio utilizador define-a pelo link de convite.
+    if (dto.password) throw new BadRequestException(PASSWORD_BY_ADMIN_MESSAGE);
+    const hashed = null;
 
     let user: Prisma.UserGetPayload<{ include: typeof USER_INCLUDE_BASIC }>;
     try {
@@ -530,10 +534,9 @@ export class UsersService {
     }
 
     const data: Prisma.UserUpdateInput = { ...dto };
-    if (dto.password) {
-      await this.security?.assertPasswordAllowed(dto.password);
-      data.password = await bcrypt.hash(dto.password, BCRYPT_COST_FACTOR);
-    }
+    // Nunca deixa passar a senha do DTO em claro (ex.: '' é falsy e escapava ao hash).
+    delete data.password;
+    if (dto.password) throw new BadRequestException(PASSWORD_BY_ADMIN_MESSAGE);
     if (dto.birthDate) data.birthDate = new Date(dto.birthDate);
     if (dto.hireDate) data.hireDate = new Date(dto.hireDate);
     if (dto.exitDate) data.exitDate = new Date(dto.exitDate);
@@ -692,11 +695,11 @@ export class UsersService {
     });
     if (!user) throw new NotFoundException();
 
-    const valid = user.password && (await bcrypt.compare(dto.currentPassword, user.password));
+    const valid = user.password && (await verifyPassword(dto.currentPassword, user.password)).valid;
     if (!valid) throw new ForbiddenException('Password actual incorrecta');
 
     await this.security?.assertPasswordAllowed(dto.newPassword);
-    const hashed = await bcrypt.hash(dto.newPassword, BCRYPT_COST_FACTOR);
+    const hashed = await hashPassword(dto.newPassword);
     const now = new Date();
 
     // Mudar a senha invalida todas as sessões activas (incluindo a actual) —
@@ -1064,17 +1067,12 @@ export class UsersService {
       throw new ConflictException(await this.duplicateEmailMessage(dto.email, dto.fullName));
     }
 
-    // CSPRNG — 12 bytes = 24 chars hexadecimais, mais um sufixo fixo para cumprir sempre a
-    // política de palavras-passe (maiúscula, símbolo, dígito) quando a organização a aperta.
-    const tempPassword = crypto.randomBytes(12).toString('hex') + 'Aa#1';
-
     // Mudança deliberada (Fase J): o utilizador é criado primeiro e o email de
     // convite vai para a fila `email` (retry gerido pelo Bull). Deixa de
     // bloquear a resposta e de impedir a criação quando o SMTP está em baixo.
     const user = await this.create(
       {
         ...dto,
-        password: tempPassword,
         accountStatus: AccountStatus.PENDING,
       },
       undefined,
@@ -1086,7 +1084,7 @@ export class UsersService {
       : undefined;
     await this.emailQueue.add(
       'userInvite',
-      { email: dto.email, fullName: dto.fullName, tempPassword, expiryDays },
+      { userId: user.id, email: dto.email, fullName: dto.fullName, expiryDays },
       { attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true },
     );
 

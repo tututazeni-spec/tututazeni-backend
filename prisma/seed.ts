@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
-import * as bcrypt from 'bcrypt';
+import { hashPassword } from '../src/common/security/password-hasher';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -583,7 +583,7 @@ async function main() {
   console.log('✅ Roles criadas:', roleNames.join(', '));
 
   // 2. Criar / actualizar utilizador admin com role ADMIN
-  const adminPassword = await bcrypt.hash(resolveAdminPassword(), 10);
+  const adminPassword = await hashPassword(resolveAdminPassword());
   const admin = await prisma.user.upsert({
     where: { email: 'admin@innova.com' },
     update: { roleId: roleMap['ADMIN'].id },
@@ -600,7 +600,7 @@ async function main() {
 
   // 3. Criar utilizador employee para testes Bruno
   if (!IS_PROD) {
-    const employeePassword = await bcrypt.hash('Employee@1234', 10);
+    const employeePassword = await hashPassword('Employee@1234');
     const employee = await prisma.user.upsert({
       where: { email: 'test.employee@innova-test.com' },
       update: { roleId: roleMap['COLABORADOR'].id },

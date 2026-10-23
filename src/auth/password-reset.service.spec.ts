@@ -2,10 +2,12 @@
 import { BadRequestException } from '@nestjs/common';
 import { PasswordResetService } from './password-reset.service';
 
-jest.mock('bcrypt', () => ({ hash: jest.fn().mockResolvedValue('bcrypt-hash') }));
+jest.mock('../common/security/password-hasher', () => ({
+  hashPassword: jest.fn().mockResolvedValue('argon-hash'),
+}));
 
-import * as bcrypt from 'bcrypt';
-const bcryptHash = bcrypt.hash as unknown as jest.Mock;
+import { hashPassword } from '../common/security/password-hasher';
+const bcryptHash = hashPassword as unknown as jest.Mock;
 
 const GENERIC = 'Se o email existir, receberás instruções de recuperação';
 
@@ -57,7 +59,7 @@ describe('PasswordResetService', () => {
     expect(mail.sendPasswordReset).not.toHaveBeenCalled();
   });
 
-  it('forgotPassword chama bcrypt.hash no ramo not-found (tempo constante, F2)', async () => {
+  it('forgotPassword chama o hash dummy no ramo not-found (tempo constante, F2)', async () => {
     bcryptHash.mockClear();
     const prisma = makePrisma();
     prisma.user.findUnique.mockResolvedValue(null);
@@ -65,8 +67,8 @@ describe('PasswordResetService', () => {
 
     await svc.forgotPassword('nao@existe.com');
 
-    // O ramo not-found deve executar um bcrypt.hash dummy para nivelar o tempo de resposta.
-    expect(bcryptHash).toHaveBeenCalledWith('dummy-timing-equalizer', 12);
+    // O ramo not-found deve executar um hash dummy para nivelar o tempo de resposta.
+    expect(bcryptHash).toHaveBeenCalledWith('dummy-timing-equalizer');
   });
 
   it('resetPassword rejeita token inexistente', async () => {
@@ -127,7 +129,7 @@ describe('PasswordResetService', () => {
       expect.objectContaining({
         where: { id: 7 },
         data: expect.objectContaining({
-          password: 'bcrypt-hash',
+          password: 'argon-hash',
           passwordChangedAt: expect.any(Date),
         }),
       }),

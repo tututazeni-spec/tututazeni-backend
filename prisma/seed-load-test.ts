@@ -7,7 +7,7 @@ dotenv.config({ path: '.env' }); // carrega .env explicitamente (ts-node não o 
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
-import * as bcrypt from 'bcrypt';
+import { hashPassword } from '../src/common/security/password-hasher';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -32,7 +32,7 @@ async function main() {
   console.log('🌱 A iniciar seed de dados de teste de carga...\n');
 
   // rounds=4 para testes de carga — compare usa os rounds da hash armazenada
-  const passwordHash = await bcrypt.hash(TEST_PASSWORD, 4);
+  const passwordHash = await hashPassword(TEST_PASSWORD);
 
   // ── 1. Roles ─────────────────────────────────────────────────────────────
   // Valores reais confirmados nos controllers: COLABORADOR, GESTOR, LIDER, RH, ADMIN

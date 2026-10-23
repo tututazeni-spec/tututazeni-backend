@@ -15,6 +15,12 @@ const VALID_ENV = {
 };
 
 describe('envValidationSchema', () => {
+  it('exige PASSWORD_PEPPER em produção', () => {
+    const prod = { ...VALID_ENV, NODE_ENV: 'production', SWAGGER_TOKEN: 'x' };
+    expect(validate(prod).error?.details.map(d => d.context?.key)).toContain('PASSWORD_PEPPER');
+    expect(validate({ ...prod, PASSWORD_PEPPER: 'p'.repeat(32) }).error).toBeUndefined();
+  });
+
   it('aceita um .env válido completo', () => {
     const { error } = validate(VALID_ENV);
     expect(error).toBeUndefined();
@@ -54,7 +60,7 @@ describe('envValidationSchema', () => {
   });
 
   it('exige SWAGGER_TOKEN apenas em NODE_ENV=production', () => {
-    const prodEnv = { ...VALID_ENV, NODE_ENV: 'production' };
+    const prodEnv = { ...VALID_ENV, NODE_ENV: 'production', PASSWORD_PEPPER: 'p'.repeat(32) };
     const { error: errSemToken } = validate(prodEnv);
     expect(errSemToken?.details.map(d => d.context?.key)).toContain('SWAGGER_TOKEN');
 
