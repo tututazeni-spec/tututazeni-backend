@@ -5,6 +5,7 @@
 // processo; os débitos (req/s, req/min) vêm do delta entre amostras em memória.
 // BD: consultas a pg_stat_* + histórico de tamanho em DatabaseSizeSample.
 
+import { swallow } from '../common/logging/swallow';
 import { SharedResult } from '../common/helpers/shared-result';
 import { getDatabaseSizeBytes } from '../common/helpers/db-size';
 import { Injectable, Logger } from '@nestjs/common';
@@ -404,7 +405,9 @@ export class ScalabilityInfraService {
       select: { capturedAt: true },
     });
     if (!last || Date.now() - last.capturedAt.getTime() > 60 * 60 * 1000) {
-      await this.recordSizeSample().catch(() => undefined);
+      await this.recordSizeSample().catch(
+        swallow('scalability-infra.service', 'operação auxiliar falhou (ignorada)', undefined),
+      );
     }
 
     const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {

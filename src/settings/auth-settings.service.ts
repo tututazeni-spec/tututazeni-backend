@@ -3,6 +3,7 @@
 // administrativa (CRUD) + testes de ligação (descoberta OIDC, bind LDAP). O
 // fluxo de login em si (redirecionamento OAuth/OIDC e bind LDAP por utilizador)
 // vive em src/auth/sso-auth.service.ts, que consome `get()`/`resolveOidcDiscovery`.
+import { swallow } from '../common/logging/swallow';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Client } from 'ldapts';
 import { SsoProvider } from '@prisma/client';
@@ -148,7 +149,9 @@ export class AuthSettingsService {
         ldapPasswordChanged: bindPassword !== undefined,
         enforceSsoOnly: next.enforceSsoOnly,
       }),
-    }).catch(() => undefined);
+    }).catch(
+      swallow('auth-settings.service', 'falha ao gravar registo de auditoria', undefined, 'error'),
+    );
     return this.get();
   }
 

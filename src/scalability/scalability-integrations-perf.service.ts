@@ -7,6 +7,7 @@
 // Performance: visão transversal que compõe as métricas já expostas pelas
 // abas API, Base de Dados, Conteúdo/Frontend e Filas, com classificação por KPI.
 
+import { swallow } from '../common/logging/swallow';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ScalabilityInfraService } from './scalability-infra.service';
@@ -83,7 +84,15 @@ export class ScalabilityIntegrationsPerfService {
           recordsFailed: true,
         },
       }),
-      this.queues.getQueueMetrics().catch(() => null),
+      this.queues
+        .getQueueMetrics()
+        .catch(
+          swallow(
+            'scalability-integrations-perf.service',
+            'operação auxiliar falhou — a usar valor por omissão',
+            null,
+          ),
+        ),
     ]);
 
     const logsBy = new Map<number, typeof logs>();
@@ -184,10 +193,42 @@ export class ScalabilityIntegrationsPerfService {
 
   async getPerformanceMetrics() {
     const [api, db, frontend, queue] = await Promise.all([
-      this.infra.getApiMetrics().catch(() => null),
-      this.infra.getDatabaseMetrics().catch(() => null),
-      this.infra.getFrontendMetrics().catch(() => null),
-      this.queues.getQueueMetrics().catch(() => null),
+      this.infra
+        .getApiMetrics()
+        .catch(
+          swallow(
+            'scalability-integrations-perf.service',
+            'operação auxiliar falhou — a usar valor por omissão',
+            null,
+          ),
+        ),
+      this.infra
+        .getDatabaseMetrics()
+        .catch(
+          swallow(
+            'scalability-integrations-perf.service',
+            'operação auxiliar falhou — a usar valor por omissão',
+            null,
+          ),
+        ),
+      this.infra
+        .getFrontendMetrics()
+        .catch(
+          swallow(
+            'scalability-integrations-perf.service',
+            'operação auxiliar falhou — a usar valor por omissão',
+            null,
+          ),
+        ),
+      this.queues
+        .getQueueMetrics()
+        .catch(
+          swallow(
+            'scalability-integrations-perf.service',
+            'operação auxiliar falhou — a usar valor por omissão',
+            null,
+          ),
+        ),
     ]);
 
     const responseMs = api && api.totals.requests ? api.totals.p95Ms : null;

@@ -3,6 +3,7 @@
 // estado. A execução reclama o agendamento de forma atómica (sem duplicados com
 // várias instâncias — §12.10), revalida as permissões dos destinatários no
 // momento da entrega e regista cada execução, incluindo falhas.
+import { swallow } from '../common/logging/swallow';
 import {
   BadRequestException,
   ForbiddenException,
@@ -344,7 +345,13 @@ export class ExecutiveReportsSchedulerService {
           type: 'EXECUTIVE_REPORT_FAILED',
           metadata: { scheduleId: id },
         })
-        .catch(() => undefined);
+        .catch(
+          swallow(
+            'executive-reports.scheduler.service',
+            'operação auxiliar falhou (ignorada)',
+            undefined,
+          ),
+        );
       return { runId: run.id, status: 'FAILED', error: message };
     }
   }

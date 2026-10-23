@@ -3,6 +3,7 @@
 // Regras determinísticas sobre o estado actual (capacidade, auto scaling, resiliência, filas)
 // e a tendência das métricas agregadas por hora. Não executa nada: só aconselha.
 
+import { swallow } from '../common/logging/swallow';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ScalabilityCapacityService } from './scalability-capacity.service';
@@ -151,7 +152,15 @@ export class ScalabilityRecommendationsService {
       this.capacity.getCapacityMetrics(),
       this.capacity.getAutoScaling(),
       this.capacity.getResilienceMetrics(),
-      this.queues.getQueueMetrics().catch(() => null),
+      this.queues
+        .getQueueMetrics()
+        .catch(
+          swallow(
+            'scalability-recommendations.service',
+            'operação auxiliar falhou — a usar valor por omissão',
+            null,
+          ),
+        ),
       this.prisma.scalabilityMetricHourly.findMany({
         where: { hour: { gte: new Date(Date.now() - days * 86_400_000) } },
         orderBy: { hour: 'asc' },

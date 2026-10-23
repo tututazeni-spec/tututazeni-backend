@@ -1,7 +1,7 @@
 // src/settings/security-settings.service.ts
 // Módulo Definições §4 (Segurança): política configurável, bloqueio de conta,
 // 2FA (TOTP), sessões activas e histórico de logins.
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { writeChainedAuditLog } from '../common/helpers/audit-chain';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
@@ -22,7 +22,15 @@ const POLICY_TTL_MS = 30_000;
 export class SecuritySettingsService {
   private cache: { at: number; policy: SecurityPolicy } | null = null;
 
+  private readonly logger = new Logger(SecuritySettingsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
+
+  // O audit log de segurança nunca deve rebentar o fluxo principal, mas a falha
+  // tem de ficar visível — antes era engolida sem rasto.
+  private readonly onAuditFailure = (err: unknown): void => {
+    this.logger.error({ err }, 'falha ao gravar audit log de segurança');
+  };
 
   // ─── Política ─────────────────────────────────────────────────────────────
 
@@ -69,7 +77,7 @@ export class SecuritySettingsService {
       entity: 'Settings',
       severity: 'HIGH',
       metadata: JSON.stringify({ before: current, changes: patch }),
-    }).catch(() => undefined);
+    }).catch(this.onAuditFailure);
     return this.getPolicyView();
   }
 
@@ -104,7 +112,7 @@ export class SecuritySettingsService {
       severity: 'HIGH',
       status: 'DENIED',
       metadata: JSON.stringify({ lockedUntil, attempts: policy.maxFailedAttempts }),
-    }).catch(() => undefined);
+    }).catch(this.onAuditFailure);
     return lockedUntil;
   }
 
@@ -127,7 +135,7 @@ export class SecuritySettingsService {
       entity: 'User',
       entityId: userId,
       severity: 'MEDIUM',
-    }).catch(() => undefined);
+    }).catch(this.onAuditFailure);
     return { userId, unlocked: true };
   }
 
@@ -182,7 +190,7 @@ export class SecuritySettingsService {
       entity: 'User',
       entityId: userId,
       severity: 'MEDIUM',
-    }).catch(() => undefined);
+    }).catch(this.onAuditFailure);
     return { enabled: true };
   }
 
@@ -211,7 +219,7 @@ export class SecuritySettingsService {
       entity: 'User',
       entityId: userId,
       severity: 'HIGH',
-    }).catch(() => undefined);
+    }).catch(this.onAuditFailure);
     return { enabled: false };
   }
 
@@ -233,7 +241,7 @@ export class SecuritySettingsService {
       entity: 'User',
       entityId: userId,
       severity: 'HIGH',
-    }).catch(() => undefined);
+    }).catch(this.onAuditFailure);
     return { userId, reset: true };
   }
 
@@ -288,7 +296,7 @@ export class SecuritySettingsService {
       entityId: row.userId,
       severity: 'MEDIUM',
       metadata: JSON.stringify({ sessionId }),
-    }).catch(() => undefined);
+    }).catch(this.onAuditFailure);
     return { sessionId, revoked: true };
   }
 
@@ -304,7 +312,7 @@ export class SecuritySettingsService {
       entityId: userId,
       severity: 'HIGH',
       metadata: JSON.stringify({ count }),
-    }).catch(() => undefined);
+    }).catch(this.onAuditFailure);
     return { userId, revoked: count };
   }
 

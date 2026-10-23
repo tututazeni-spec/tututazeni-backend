@@ -1,6 +1,7 @@
 // src/settings/system-settings.service.ts
 // Definições de Sistema (docs/modulo_settings.md §15): modo de manutenção,
 // tecto de paginação, limites de uploads, e operação de cache e filas (jobs).
+import { swallow } from '../common/logging/swallow';
 import { getDatabaseSizeBytes } from '../common/helpers/db-size';
 import { BadRequestException, Inject, Injectable, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
@@ -93,7 +94,15 @@ export class SystemSettingsService {
         SYSTEM_QUEUE_NAMES.map(async name => {
           const q = this.queues[name];
           const [counts, paused] = await Promise.all([
-            q.getJobCounts().catch(() => null),
+            q
+              .getJobCounts()
+              .catch(
+                swallow(
+                  'system-settings.service',
+                  'operação auxiliar falhou — a usar valor por omissão',
+                  null,
+                ),
+              ),
             q.isPaused().catch(() => false),
           ]);
           return { name, paused, counts };
@@ -226,6 +235,13 @@ export class SystemSettingsService {
       entity: 'Settings',
       severity,
       metadata: JSON.stringify(metadata),
-    }).catch(() => undefined);
+    }).catch(
+      swallow(
+        'system-settings.service',
+        'falha ao gravar registo de auditoria',
+        undefined,
+        'error',
+      ),
+    );
   }
 }

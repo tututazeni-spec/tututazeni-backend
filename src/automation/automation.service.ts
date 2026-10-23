@@ -1,4 +1,5 @@
 // src/automation/automation.service.ts
+import { swallow } from '../common/logging/swallow';
 import {
   BadRequestException,
   ForbiddenException,
@@ -1198,7 +1199,9 @@ export class AutomationService {
         where: { ruleId, dedupeKey, status: { in: ['RUNNING', 'SUCCESS'] } },
         select: { id: true },
       })
-      .catch(() => null);
+      .catch(
+        swallow('automation.service', 'operação auxiliar falhou — a usar valor por omissão', null),
+      );
     return !!found;
   }
 
@@ -2831,7 +2834,13 @@ export class AutomationService {
             where: { id: execId },
             select: { payload: true, eventId: true, correlationId: true },
           })
-          .catch(() => null)
+          .catch(
+            swallow(
+              'automation.service',
+              'operação auxiliar falhou — a usar valor por omissão',
+              null,
+            ),
+          )
       : null;
     let payload: Record<string, unknown> | undefined;
     try {

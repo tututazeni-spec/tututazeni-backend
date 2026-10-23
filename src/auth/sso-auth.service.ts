@@ -3,6 +3,7 @@
 // GOOGLE e MICROSOFT, que expõem descoberta OIDC padrão, e um fornecedor OIDC
 // próprio) e LDAP/Active Directory. A configuração/validação admin vive em
 // AuthSettingsService; este serviço só autentica utilizadores finais.
+import { swallow } from '../common/logging/swallow';
 import {
   BadRequestException,
   ForbiddenException,
@@ -149,7 +150,11 @@ export class SsoAuthService {
     if (!settings.ldap.enabled)
       throw new BadRequestException('LDAP/AD não está activo nesta organização');
 
-    const entry = await this.authSettings.findLdapUser(settings, email).catch(() => null);
+    const entry = await this.authSettings
+      .findLdapUser(settings, email)
+      .catch(
+        swallow('sso-auth.service', 'operação auxiliar falhou — a usar valor por omissão', null),
+      );
     if (!entry) throw new UnauthorizedException('Credenciais inválidas');
 
     const ok = await this.authSettings.verifyLdapCredentials(settings, entry.dn, password);

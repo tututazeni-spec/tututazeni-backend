@@ -1,3 +1,4 @@
+import { swallow } from '../common/logging/swallow';
 import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import type Mail from 'nodemailer/lib/mailer';
@@ -36,7 +37,11 @@ export class MailService implements OnModuleInit {
     if (this.orgIntegrations) {
       // Cache curto: evita reconstruir o transporter a cada email.
       if (this.dbTransport && Date.now() - this.dbTransport.at < 30_000) return this.dbTransport;
-      const cfg = await this.orgIntegrations.getSmtp().catch(() => null);
+      const cfg = await this.orgIntegrations
+        .getSmtp()
+        .catch(
+          swallow('mail.service', 'operação auxiliar falhou — a usar valor por omissão', null),
+        );
       if (cfg) {
         const key = JSON.stringify(cfg);
         const reuse = this.dbTransport?.key === key ? this.dbTransport.transporter : null;
@@ -87,7 +92,7 @@ export class MailService implements OnModuleInit {
     const resetLink = `${process.env.APP_URL ?? ''}/auth/reset-password?token=${token}`;
     const rendered = await this.emailSettings
       ?.render('PASSWORD_RESET', { resetLink })
-      .catch(() => null);
+      .catch(swallow('mail.service', 'operação auxiliar falhou — a usar valor por omissão', null));
     await this.send({
       to: email,
       subject: rendered?.subject ?? 'INNOVA — Recuperação de password',
@@ -114,7 +119,7 @@ export class MailService implements OnModuleInit {
     const setupLink = `${process.env.APP_URL ?? ''}/auth/reset-password?token=${setupToken}`;
     const rendered = await this.emailSettings
       ?.render('USER_INVITE', { fullName, email, setupLink, expiryDays: expiryDays ?? '' })
-      .catch(() => null);
+      .catch(swallow('mail.service', 'operação auxiliar falhou — a usar valor por omissão', null));
     await this.send({
       to: email,
       subject: rendered?.subject ?? 'Bem-vindo ao INNOVA — acesso à sua conta',

@@ -7,6 +7,7 @@
 // Regras cuja fonte não existe devolvem `UNAVAILABLE` com o motivo, nunca "OK".
 // Os limiares são constantes para já; a edição fica para a aba Configurações.
 
+import { swallow } from '../common/logging/swallow';
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Cron } from '@nestjs/schedule';
@@ -288,12 +289,60 @@ export class ScalabilityAlertsService {
         orderBy: { capturedAt: 'desc' },
         select: { cpuUsagePercent: true, memoryUsagePercent: true },
       }),
-      this.capacity.getCapacityMetrics().catch(() => null),
-      this.queues.getQueueMetrics().catch(() => null),
-      this.infra.getApiMetrics().catch(() => null),
-      this.infra.getDatabaseMetrics().catch(() => null),
-      this.forecasts.getForecasts().catch(() => null),
-      this.capacity.getResilienceMetrics().catch(() => null),
+      this.capacity
+        .getCapacityMetrics()
+        .catch(
+          swallow(
+            'scalability-alerts.service',
+            'operação auxiliar falhou — a usar valor por omissão',
+            null,
+          ),
+        ),
+      this.queues
+        .getQueueMetrics()
+        .catch(
+          swallow(
+            'scalability-alerts.service',
+            'operação auxiliar falhou — a usar valor por omissão',
+            null,
+          ),
+        ),
+      this.infra
+        .getApiMetrics()
+        .catch(
+          swallow(
+            'scalability-alerts.service',
+            'operação auxiliar falhou — a usar valor por omissão',
+            null,
+          ),
+        ),
+      this.infra
+        .getDatabaseMetrics()
+        .catch(
+          swallow(
+            'scalability-alerts.service',
+            'operação auxiliar falhou — a usar valor por omissão',
+            null,
+          ),
+        ),
+      this.forecasts
+        .getForecasts()
+        .catch(
+          swallow(
+            'scalability-alerts.service',
+            'operação auxiliar falhou — a usar valor por omissão',
+            null,
+          ),
+        ),
+      this.capacity
+        .getResilienceMetrics()
+        .catch(
+          swallow(
+            'scalability-alerts.service',
+            'operação auxiliar falhou — a usar valor por omissão',
+            null,
+          ),
+        ),
     ]);
 
     const apiTotals =

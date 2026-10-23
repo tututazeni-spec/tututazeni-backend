@@ -2,6 +2,7 @@
 // Módulo Definições §5 (Notificações): canais, eventos e horário permitido de envio.
 // Os templates das mensagens continuam em NotificationTemplate
 // (GET/POST/PATCH/DELETE /notifications/templates) — aqui só se lêem para o resumo.
+import { swallow } from '../common/logging/swallow';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { writeChainedAuditLog } from '../common/helpers/audit-chain';
@@ -78,7 +79,14 @@ export class NotificationSettingsService {
       entity: 'Settings',
       severity: 'MEDIUM',
       metadata: JSON.stringify({ before: current, after: next }),
-    }).catch(() => undefined);
+    }).catch(
+      swallow(
+        'notification-settings.service',
+        'falha ao gravar registo de auditoria',
+        undefined,
+        'error',
+      ),
+    );
     return this.get();
   }
 

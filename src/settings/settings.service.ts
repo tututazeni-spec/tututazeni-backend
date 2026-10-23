@@ -1,6 +1,7 @@
 // src/settings/settings.service.ts
 // Módulo Definições — docs/modulo_settings.md §1 (Visão Geral) e §3 (Utilizadores).
 // §2 (Permissões) reutiliza o módulo roles-permissions existente.
+import { swallow } from '../common/logging/swallow';
 import { runAsSystem } from '../common/rls/rls-context';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -35,7 +36,9 @@ export class SettingsService {
       entityId,
       severity: 'MEDIUM',
       metadata: JSON.stringify(metadata),
-    }).catch(() => undefined);
+    }).catch(
+      swallow('settings.service', 'falha ao gravar registo de auditoria', undefined, 'error'),
+    );
   }
 
   // ─── §1 Visão Geral ───────────────────────────────────────────────────────

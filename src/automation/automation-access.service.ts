@@ -3,6 +3,7 @@
 // executar, cancelar, eliminar) e limitação do acesso por departamento.
 // ADMIN tem sempre tudo e não é editável; os restantes perfis seguem a matriz
 // gravada em AutomationRolePermission (ou o valor por omissão abaixo).
+import { swallow } from '../common/logging/swallow';
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CurrentUserData } from '../common/decorators';
@@ -103,7 +104,13 @@ export class AutomationAccessService {
     if (roleCode === 'ADMIN') return DEFAULT_GRANTS.ADMIN;
     const row = await this.prisma.automationRolePermission
       .findUnique({ where: { roleCode } })
-      .catch(() => null);
+      .catch(
+        swallow(
+          'automation-access.service',
+          'operação auxiliar falhou — a usar valor por omissão',
+          null,
+        ),
+      );
     if (row) return rowToGrant(row);
     return DEFAULT_GRANTS[roleCode] ?? { roleCode, actions: { ...ALL_FALSE }, scope: 'ALL' };
   }

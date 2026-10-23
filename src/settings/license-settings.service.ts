@@ -3,6 +3,7 @@
 // geridos no módulo scalability (PATCH /scalability/tenants/:id) — aqui só se
 // lê esse estado para o separador de Definições. O que é novo são os módulos
 // activos/inactivos (feature flags), guardados em TenantConfig.moduleFlagsJson.
+import { swallow } from '../common/logging/swallow';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { writeChainedAuditLog } from '../common/helpers/audit-chain';
@@ -58,7 +59,14 @@ export class LicenseSettingsService {
       entity: 'Settings',
       severity: 'HIGH',
       metadata: JSON.stringify({ before: current, after: next }),
-    }).catch(() => undefined);
+    }).catch(
+      swallow(
+        'license-settings.service',
+        'falha ao gravar registo de auditoria',
+        undefined,
+        'error',
+      ),
+    );
     return this.get();
   }
 
