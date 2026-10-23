@@ -20,6 +20,7 @@ import {
   buildTokenCookieOptions,
   REFRESH_COOKIE,
   buildRefreshCookieOptions,
+  LEGACY_REFRESH_COOKIE_PATH,
 } from './token-cookie';
 
 // JwtStrategy.validate() devolve a entidade User (tem `id`, não `sub`).
@@ -103,6 +104,11 @@ export class AuthController {
     if (presented) await this.authService.revokeRefreshToken(presented, requestContext(req));
     res.clearCookie(TOKEN_COOKIE, { ...tokenCookieOptions, maxAge: undefined });
     res.clearCookie(REFRESH_COOKIE, { ...refreshCookieOptions, maxAge: undefined });
+    res.clearCookie(REFRESH_COOKIE, {
+      ...refreshCookieOptions,
+      path: LEGACY_REFRESH_COOKIE_PATH,
+      maxAge: undefined,
+    });
     return { message: 'Sessão terminada' };
   }
 
