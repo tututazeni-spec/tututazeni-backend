@@ -9,7 +9,7 @@
 # Usar AWS Secrets Manager ou variáveis de ambiente para as distribuir.
 # ============================================================
 
-# ── Utilizador de escrita (backup-postgres.sh + walg-backup.sh) ──────────
+# ── Utilizador de escrita (backup-postgres.sh + backup-secrets.sh) ──────────
 resource "aws_iam_user" "backup_writer" {
   name = var.iam_backup_user_name
   path = "/innova/backup/"
@@ -59,7 +59,7 @@ resource "aws_iam_user_policy" "backup_writer" {
 resource "aws_iam_access_key" "backup_writer" {
   user = aws_iam_user.backup_writer.name
   # A chave é guardada no tfstate — usar `terraform output -json` para obter
-  # e armazenar imediatamente no /etc/walg/walg.env e /opt/innova/.env.production
+  # e armazenar imediatamente no /opt/innova/.env.production
 }
 
 # ── Utilizador de leitura (restore + auditorias) ─────────────────────────

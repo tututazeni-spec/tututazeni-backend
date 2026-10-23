@@ -85,7 +85,7 @@ resource "aws_s3_bucket_object_lock_configuration" "backup_primary" {
 resource "aws_s3_bucket_lifecycle_configuration" "backup_primary" {
   bucket = aws_s3_bucket.backup_primary.id
 
-  # Backups pg_dump e WAL-G
+  # Backups pg_dump e segredos
   rule {
     id     = "backup-tiering"
     status = "Enabled"

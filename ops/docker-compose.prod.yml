@@ -213,7 +213,7 @@ services:
       - '--path.sysfs=/host/sys'
       - '--path.rootfs=/rootfs'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
-      # Textfile collector: lê métricas de backup geradas por backup-metrics.sh e walg-backup.sh
+      # Textfile collector: lê métricas de backup geradas por backup-metrics.sh
       # O directório host é criado pelo install-cron.sh
       - '--collector.textfile.directory=/textfile_collector'
     volumes:

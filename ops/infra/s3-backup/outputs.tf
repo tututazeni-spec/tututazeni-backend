@@ -19,7 +19,7 @@ output "replica_bucket_arn" {
 }
 
 output "backup_writer_access_key_id" {
-  description = "AWS_ACCESS_KEY_ID para o cron de backup (guardar no .env.production e walg.env)"
+  description = "AWS_ACCESS_KEY_ID para o cron de backup (guardar no .env.production)"
   value       = aws_iam_access_key.backup_writer.id
   sensitive   = true
 }
