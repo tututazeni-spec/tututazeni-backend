@@ -85,7 +85,10 @@ DECLARE
     || 'KeyResult|SuccessionP|CriticalPosition|Pdi|LegacyPdi|DevelopmentPlanAction|AiMessage|AvatarTraining(Session|Interaction|Assessment)|'
     || 'SurveyAnswer|OnboardingCheckin|PostClassEvaluation|TrainingImpact|Executive|AuditPolicy|tenant_configs|'
     || 'RoiConfig|ProcessIntegrationLog|MonitoringRecord|Dashboard(Snapshot)|AllowedLocation|CountryConfig|'
-    || 'automation_dead_letters|InstructorPayout|ReportApproval|ReportLog|TeamHealth|TrainingAssessment|AssessmentAttemptAnswer|WorkDeclReview|EnrollmentRun)';
+    || 'automation_dead_letters|InstructorPayout|ReportApproval|ReportLog|TeamHealth|TrainingAssessment|AssessmentAttemptAnswer|WorkDeclReview|EnrollmentRun|'
+    || 'ApiKey|AuditExport|AvatarTrainingProviderConfig|CostEntry|FundingGrant|GrantDisbursement|RoiAnalysis|LeadershipProgramCost|'
+    || 'SavedReport|ReportSchedule|InstitutionalSnapshot|ScalabilitySnapshot|GlobalSearchIndex|'
+    || 'leave_delegations|leave_setting_versions|content_delivery_configs|automation_connections)';
   -- Tabelas filhas sem coluna de dono: acesso decidido pelo pai (que já está sob RLS).
   -- formato 'filha:coluna_fk:pai' (pai com PK "id").
   via       text[] := ARRAY['PayslipItem:payslipId:Payslip',

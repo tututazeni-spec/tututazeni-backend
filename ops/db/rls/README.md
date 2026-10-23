@@ -40,11 +40,28 @@ acrescentar à lista `sensitive` o que for sensível (folha, avaliações, CRM, 
 Comparação GET sem RLS vs com RLS, 650 rotas sem parâmetros, como COLABORADOR (2 utilizadores) e ADMIN:
 ADMIN idêntico (só ruído de `health`/`metrics`); COLABORADOR idêntico excepto `/talent/plans` (antes qualquer colaborador
 via os 6 planos, agora só os seus — correcção de fuga). Login, refresh, `/auth/me` e INSERT do próprio (`clock-in`) funcionam.
-Zero violações de RLS nos logs, incluindo jobs em background. **Não coberto:** escritas/rotas com parâmetros de todos os módulos —
-correr a suite de integração e o smoke com `RLS_ENABLED=true` antes de activar em produção.
+Zero violações de RLS nos logs, incluindo jobs em background.
+
+## Verificado (suite de integração, 2026-10-23)
+`innova_test` com `01`+`02` aplicados, app ligada como `innova_app` (`RLS_ENABLED=true`), `npm run test:integration` (20 batches):
+sem falhas atribuíveis a RLS e sem erros `row-level security`/`permission denied` no log. Dois specs (`pdf`, `work-declaration`)
+falharam na 1.ª passagem por alterações não commitadas a meio (DI/compilação, não RLS) e passaram ao repetir (36/36).
+**Pendente (a fazer no final, com todos os testes):** re-correr a suite completa com a árvore estável e o smoke autenticado
+(`seed:loadtest` na BD usada; sem os utilizadores `load.test.userN@innova-test.com` o login dá 401 e o smoke não exercita RLS).
+Fazer ambos com `RLS_ENABLED=true` antes de activar em produção.
 
 ## Limites
 - Protege contra credenciais usadas fora da API e contra IDOR na camada de serviço, **não** contra um backend comprometido
   (a role da app consegue chamar `set_config`).
 - `FORCE RLS` (`psql -v force_rls=on`) só com role BYPASSRLS para migrations/pg_dump — no DO gerido não existe.
 - RLS não filtra colunas: `User.nif/nib` ficam visíveis na linha do próprio/gestor/equipa; a API continua a ter de as omitir.
+
+## Revisão da lista `sensitive` (2026-10-23)
+Das 194 tabelas abertas a leitura autenticada, passaram a deny-by-default 17 (agora 177 abertas): `ApiKey`, `AuditExport`,
+`AvatarTrainingProviderConfig`, `CostEntry`, `FundingGrant`, `GrantDisbursement`, `RoiAnalysis`, `LeadershipProgramCost`,
+`SavedReport`, `ReportSchedule`, `InstitutionalSnapshot`, `ScalabilitySnapshot`, `GlobalSearchIndex`, `leave_delegations`,
+`leave_setting_versions`, `content_delivery_configs`, `automation_connections` (segredos, finanças, relatórios, auditoria, índice de pesquisa).
+Só tocam rotas de gestão/ADMIN (os roles privilegiados continuam a ver tudo). Aplicado em `innova_test` e `innova_dev`; `02_verify` OK.
+**Deixadas abertas de propósito** (fechar exige `runAsSystem`/policy de dono, senão o COLABORADOR perde funcionalidade):
+`OnboardingTaskInstance` (colaborador conclui as suas tarefas), `DocShareLink` (criado pelo colaborador), `AiTutorSettings` (lido por cada chat),
+`AssessmentQuestion`/`QuizQuestion` (respostas certas; a API serve-as ao colaborador), restantes `automation_*` (há rotas `AUTHENTICATED_ROLES`).
