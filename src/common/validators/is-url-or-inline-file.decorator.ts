@@ -1,11 +1,12 @@
 // src/common/validators/is-url-or-inline-file.decorator.ts
-// Campo que aceita uma ligação (qualquer string não vazia, como antes) OU um
+// Campo que aceita uma ligação https externa (sem credenciais nem hosts internos) OU um
 // ficheiro enviado inline como data URL base64 (`data:<mime>;base64,…`) —
 // mesmo padrão dos PDFs de lição/documentos e do avatar (não há multipart
 // neste backend). O data URL é validado: MIME na allowlist e tamanho decodificado
 // até `maxBytes`. O tamanho em base64 também tem de caber no parser JSON (8 MB).
 import { registerDecorator, ValidationOptions } from 'class-validator';
 import { ALLOWED_MIME_TYPES } from './allowed-mime-types';
+import { safeFileUrlProblem } from './safe-file-url';
 
 // Só o cabeçalho passa por regex. O payload base64 pode ter milhões de caracteres e um regex
 // com captura sobre ele rebentava com "Maximum call stack size exceeded" no CI.
@@ -67,13 +68,17 @@ export function IsUrlOrInlineFile(options?: ValidationOptions & { maxBytes?: num
       validator: {
         validate(value: unknown): boolean {
           if (typeof value !== 'string' || !value.trim()) return false;
-          if (!value.startsWith('data:')) return true;
+          if (!value.startsWith('data:')) return safeFileUrlProblem(value) === null;
           return inlineFileProblem(value, maxBytes) === null;
         },
         defaultMessage(args): string {
           const v = args?.value;
           const problem =
-            typeof v === 'string' && v.startsWith('data:') ? inlineFileProblem(v, maxBytes) : null;
+            typeof v === 'string'
+              ? v.startsWith('data:')
+                ? inlineFileProblem(v, maxBytes)
+                : safeFileUrlProblem(v)
+              : null;
           return `${propertyName}: ${problem ?? 'deve ser uma ligação ou um ficheiro (máx. 5 MB)'}`;
         },
       },
