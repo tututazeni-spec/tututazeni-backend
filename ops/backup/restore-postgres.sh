@@ -19,11 +19,12 @@
 set -euo pipefail
 
 RESTORE_TMP="/tmp/innova-restore-$$"
+[ -z "${AWS_ENDPOINT:-}" ] || export AWS_ENDPOINT_URL="$AWS_ENDPOINT"
 S3_BUCKET="${BACKUP_S3_BUCKET:?BACKUP_S3_BUCKET não definida}"
 S3_PREFIX="${BACKUP_S3_PREFIX:-innova/postgres}"
 PASSPHRASE="${BACKUP_ENCRYPT_PASSPHRASE:-}"
 
-log()  { echo "[$(date -Iseconds)] INFO  $*"; }
+log()  { echo "[$(date -Iseconds)] INFO  $*" >&2; }
 warn() { echo "[$(date -Iseconds)] WARN  $*" >&2; }
 fail() { echo "[$(date -Iseconds)] ERROR $*" >&2; exit 1; }
 
@@ -83,8 +84,8 @@ _decrypt_if_needed() {
     || fail "Ficheiro encriptado (.gpg) mas BACKUP_ENCRYPT_PASSPHRASE não definida"
   log "A desencriptar backup GPG..."
   local decrypted="${file%.gpg}"
-  gpg --batch --yes \
-    --passphrase "$PASSPHRASE" \
+  printf '%s' "$PASSPHRASE" | gpg --batch --yes \
+    --pinentry-mode loopback --passphrase-fd 0 \
     --decrypt \
     --output "$decrypted" \
     "$file" \

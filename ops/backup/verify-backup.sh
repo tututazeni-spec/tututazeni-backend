@@ -12,6 +12,7 @@
 set -euo pipefail
 
 VERIFY_TMP="/tmp/innova-verify-$$"
+[ -z "${AWS_ENDPOINT:-}" ] || export AWS_ENDPOINT_URL="$AWS_ENDPOINT"
 S3_BUCKET="${BACKUP_S3_BUCKET:?BACKUP_S3_BUCKET não definida}"
 S3_PREFIX="${BACKUP_S3_PREFIX:-innova/postgres}"
 PASSPHRASE="${BACKUP_ENCRYPT_PASSPHRASE:-}"
