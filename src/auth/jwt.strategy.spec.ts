@@ -3,6 +3,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { JwtStrategy, buildJwtExtractors } from './jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
+import { SessionRevocationService } from './session-revocation.service';
 
 // C4: buildJwtExtractors respeita a flag AUTH_ALLOW_BEARER
 describe('buildJwtExtractors', () => {
@@ -18,6 +19,12 @@ const mockPrisma = {
   user: {
     findUnique: jest.fn(),
   },
+};
+
+const mockRevocation = {
+  isAccessTokenRevoked: jest.fn().mockResolvedValue(false),
+  revokedBefore: jest.fn().mockResolvedValue(null),
+  staleSince: jest.fn().mockResolvedValue(null),
 };
 
 const mockConfig = {
@@ -40,6 +47,9 @@ describe('JwtStrategy', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockRevocation.isAccessTokenRevoked.mockResolvedValue(false);
+    mockRevocation.revokedBefore.mockResolvedValue(null);
+    mockRevocation.staleSince.mockResolvedValue(null);
     Object.defineProperty(mockPrisma, 'read', {
       get() {
         return mockPrisma;
@@ -51,9 +61,45 @@ describe('JwtStrategy', () => {
         JwtStrategy,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: ConfigService, useValue: mockConfig },
+        { provide: SessionRevocationService, useValue: mockRevocation },
       ],
     }).compile();
     strategy = module.get<JwtStrategy>(JwtStrategy);
+  });
+
+  describe('revogação de sessão (Redis)', () => {
+    it('access token com jti revogado (logout) → 401', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(baseUser);
+      mockRevocation.isAccessTokenRevoked.mockResolvedValue(true);
+      await expect(
+        strategy.validate({ sub: 1, email: 'user@innova.com', jti: 'j1', iat: 100 }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('token emitido antes de revokedBefore → 401; emitido depois → ok', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(baseUser);
+      mockRevocation.revokedBefore.mockResolvedValue(1000);
+      await expect(
+        strategy.validate({ sub: 1, email: 'user@innova.com', jti: 'j', iat: 999 }),
+      ).rejects.toThrow(UnauthorizedException);
+      await expect(
+        strategy.validate({ sub: 1, email: 'user@innova.com', jti: 'j', iat: 1000 }),
+      ).resolves.toBeDefined();
+    });
+
+    it('utilizador marcado como stale recarrega da BD (mudança de papel/desativação imediata)', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(baseUser);
+      await strategy.validate({ sub: 1, email: 'user@innova.com' });
+      await strategy.validate({ sub: 1, email: 'user@innova.com' });
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledTimes(1); // cache hit
+
+      mockRevocation.staleSince.mockResolvedValue(Date.now() + 1000);
+      mockPrisma.user.findUnique.mockResolvedValue({ ...baseUser, active: false });
+      await expect(strategy.validate({ sub: 1, email: 'user@innova.com' })).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('validate', () => {

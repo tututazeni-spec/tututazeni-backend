@@ -14,6 +14,7 @@ import { Queue } from 'bull';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { SecuritySettingsService } from '../settings/security-settings.service';
+import { SessionRevocationService } from '../auth/session-revocation.service';
 import { hashPassword, verifyPassword } from '../common/security/password-hasher';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { flattenRolePermissions } from '../common/utils/role-permissions';
@@ -89,6 +90,8 @@ export class UsersService {
     @Optional() private readonly settings?: SettingsService,
     // Definições §4: política de palavras-passe (comprimento, símbolo).
     @Optional() private readonly security?: SecuritySettingsService,
+    // Revogação imediata de sessões (logout forçado, papel alterado).
+    @Optional() private readonly revocation?: SessionRevocationService,
   ) {}
 
   // ─── Sanitizar (remover password) ────────────────────────────────────────
@@ -599,6 +602,7 @@ export class UsersService {
       });
     }
     if (dto.roleId !== undefined && dto.roleId !== existing.roleId) {
+      await this.revocation?.invalidateUserCache(userId);
       await this.writeAuditLog(userId, actorId, 'PROFILE_CHANGED', {
         from: existing.role?.name ?? null,
         to: updated.role?.name ?? null,
@@ -641,6 +645,12 @@ export class UsersService {
     return this.sanitize(user);
   }
 
+  /** Utilizador deixou de poder entrar: mata os access tokens vivos e a cache em todas as instâncias. */
+  private async endSessions(id: number): Promise<void> {
+    await this.revocation?.revokeAllUserSessions(id);
+    await this.revocation?.invalidateUserCache(id);
+  }
+
   async deactivate(id: number, reason?: string) {
     const user = await this.findOne(id);
     if (user.accountStatus === 'INACTIVE') return user;
@@ -649,6 +659,7 @@ export class UsersService {
       where: { id },
       data: { active: false, accountStatus: 'INACTIVE' },
     });
+    await this.endSessions(id);
     await this.writeAuditLog(id, id, 'USER_DEACTIVATED', { reason });
     return this.sanitize(updated);
   }
@@ -659,6 +670,7 @@ export class UsersService {
       where: { id },
       data: { active: false, accountStatus: 'SUSPENDED' },
     });
+    await this.endSessions(id);
     await this.writeAuditLog(id, id, 'USER_SUSPENDED', { reason });
     return this.sanitize(user);
   }
@@ -680,6 +692,7 @@ export class UsersService {
       },
     });
 
+    await this.endSessions(id);
     await this.writeAuditLog(id, id, 'USER_SOFT_DELETED');
     return { message: 'Utilizador desactivado e marcado como saído (soft delete)' };
   }

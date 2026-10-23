@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Optional, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy, JwtFromRequestFunction } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
@@ -6,6 +6,7 @@ import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { runAsSystem } from '../common/rls/rls-context';
 import { withFlatPermissions } from '../common/utils/role-permissions';
+import { SessionRevocationService } from './session-revocation.service';
 
 // Extrai o JWT do cookie httpOnly 'token' (definido pelo backend no login).
 const cookieExtractor: JwtFromRequestFunction = (req: Request) => {
@@ -32,13 +33,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   // sincronizado se a query `include` mudar.
   private readonly userCache = new Map<
     number,
-    { user: Awaited<ReturnType<JwtStrategy['loadUser']>>; expiresAt: number }
+    { user: Awaited<ReturnType<JwtStrategy['loadUser']>>; expiresAt: number; loadedAt: number }
   >();
   private readonly cacheTtlMs = parseInt(process.env.JWT_USER_CACHE_TTL_MS || '30000', 10);
 
   constructor(
     private prisma: PrismaService,
     private config: ConfigService,
+    // Optional: specs/módulos sem CacheModule continuam a montar a estratégia.
+    @Optional() private readonly revocation?: SessionRevocationService,
   ) {
     // Sem JWT_SECRET não há forma segura de verificar tokens — falhar alto no
     // arranque em vez de aceitar/rejeitar tokens de forma imprevisível.
@@ -59,7 +62,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { sub: number; email: string; iat?: number }) {
+  async validate(payload: { sub: number; email: string; iat?: number; jti?: string }) {
+    if (this.revocation) {
+      if (payload.jti && (await this.revocation.isAccessTokenRevoked(payload.jti))) {
+        throw new UnauthorizedException('Sessão terminada');
+      }
+      const revokedBefore = await this.revocation.revokedBefore(payload.sub);
+      if (revokedBefore && payload.iat !== undefined && payload.iat < revokedBefore) {
+        throw new UnauthorizedException('Sessão revogada');
+      }
+      const staleSince = await this.revocation.staleSince(payload.sub);
+      const entry = this.userCache.get(payload.sub);
+      if (staleSince && entry && entry.loadedAt <= staleSince) this.userCache.delete(payload.sub);
+    }
     const cached = this.userCache.get(payload.sub);
     const user =
       cached && cached.expiresAt > Date.now() ? cached.user : await this.loadUser(payload.sub);
@@ -94,7 +109,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Utilizador inativo ou não encontrado');
     }
     const user = { ...raw, role: withFlatPermissions(raw.role) };
-    this.userCache.set(sub, { user, expiresAt: Date.now() + this.cacheTtlMs });
+    const now = Date.now();
+    this.userCache.set(sub, { user, expiresAt: now + this.cacheTtlMs, loadedAt: now });
     return user;
   }
 }

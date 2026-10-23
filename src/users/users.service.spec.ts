@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException } from '@nestjs/common';
 import { getQueueToken } from '@nestjs/bull';
+import { SessionRevocationService } from '../auth/session-revocation.service';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -110,6 +111,11 @@ const baseUser = {
   _count: { enrollments: 0, certificates: 0, badgeAwards: 0, subordinates: 0, userCompetencies: 0 },
 };
 
+const mockRevocation = {
+  revokeAllUserSessions: jest.fn().mockResolvedValue(undefined),
+  invalidateUserCache: jest.fn().mockResolvedValue(undefined),
+};
+
 describe('UsersService', () => {
   let service: UsersService;
 
@@ -126,6 +132,7 @@ describe('UsersService', () => {
         UsersService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: getQueueToken('email'), useValue: mockEmailQueue },
+        { provide: SessionRevocationService, useValue: mockRevocation },
       ],
     }).compile();
     service = module.get<UsersService>(UsersService);
@@ -256,6 +263,8 @@ describe('UsersService', () => {
       mockPrisma.user.update.mockResolvedValue({ ...baseUser, active: false });
       const result = await service.deactivate(1, 'Saída da empresa');
       expect(result).toBeDefined();
+      expect(mockRevocation.revokeAllUserSessions).toHaveBeenCalledWith(1);
+      expect(mockRevocation.invalidateUserCache).toHaveBeenCalledWith(1);
     });
   });
 
@@ -265,6 +274,7 @@ describe('UsersService', () => {
       mockPrisma.user.update.mockResolvedValue({ ...baseUser, active: false });
       const result = await service.suspend(1, 'Disciplinar');
       expect(result).toBeDefined();
+      expect(mockRevocation.revokeAllUserSessions).toHaveBeenCalledWith(1);
     });
   });
 

@@ -102,6 +102,12 @@ export class AuthController {
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const presented = (req.cookies ?? {}).refresh_token;
     if (presented) await this.authService.revokeRefreshToken(presented, requestContext(req));
+    // O access token (JWT stateless) continuaria válido até expirar: denylista-o já.
+    const bearer = req.headers?.authorization;
+    const access =
+      (req.cookies ?? {}).token ??
+      (typeof bearer === 'string' && bearer.startsWith('Bearer ') ? bearer.slice(7) : undefined);
+    if (access) await this.authService.revokeAccessToken(access);
     res.clearCookie(TOKEN_COOKIE, { ...tokenCookieOptions, maxAge: undefined });
     res.clearCookie(REFRESH_COOKIE, { ...refreshCookieOptions, maxAge: undefined });
     res.clearCookie(REFRESH_COOKIE, {

@@ -95,6 +95,7 @@ import { MetricsModule } from './metrics/metrics.module';
 // INFRA
 import { QueueModule } from './queue/queue.module';
 import { CacheModule } from './cache/cache.module';
+import { SessionRevocationModule } from './auth/session-revocation.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -173,6 +174,7 @@ const accessPath = (url = ''): string => url.split('?')[0];
     }),
     QueueModule,
     CacheModule,
+    SessionRevocationModule,
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

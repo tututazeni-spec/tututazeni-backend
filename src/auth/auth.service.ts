@@ -11,6 +11,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { SessionRevocationService } from './session-revocation.service';
 import { SettingsService } from '../settings/settings.service';
 import { SecuritySettingsService } from '../settings/security-settings.service';
 import { AuthSettingsService } from '../settings/auth-settings.service';
@@ -68,6 +69,7 @@ export class AuthService {
     @Optional() private readonly settings?: SettingsService,
     @Optional() private readonly security?: SecuritySettingsService,
     @Optional() private readonly authSettings?: AuthSettingsService,
+    @Optional() private readonly revocation?: SessionRevocationService,
   ) {}
 
   /** Mesmo include/omit usado para autenticar — reutilizado pelo SSO/LDAP (sso-auth.service.ts). */
@@ -434,6 +436,8 @@ export class AuthService {
       }),
     ]);
 
+    await this.revocation?.revokeAllUserSessions(userId);
+
     await writeChainedAuditLog(this.prisma, {
       userId,
       action: 'CHANGE_PASSWORD',
@@ -560,6 +564,21 @@ export class AuthService {
     return tokens;
   }
 
+  /** Logout: invalida já o access token (JWT stateless) até ao seu `exp`. Nunca lança. */
+  async revokeAccessToken(token: string): Promise<void> {
+    if (!this.revocation) return;
+    try {
+      const payload = await this.jwtService.verifyAsync<{ jti?: string; exp?: number }>(token);
+      if (!payload.jti || !payload.exp) return;
+      await this.revocation.revokeAccessToken(
+        payload.jti,
+        payload.exp - Math.floor(Date.now() / 1000),
+      );
+    } catch {
+      // token inválido/expirado: já não autentica, nada a revogar
+    }
+  }
+
   async revokeRefreshToken(presented: string, ctx?: AuthRequestContext): Promise<void> {
     const hash = crypto.createHash('sha256').update(presented).digest('hex');
     // Lido antes de revogar só para saber de quem é a sessão — o logout em
@@ -606,7 +625,11 @@ export class AuthService {
     setRequestUserId(userId);
     const payload = { sub: userId, email };
     const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(payload, { expiresIn: `${accessMinutes}m` }),
+      // jti do access token: permite denylist no logout (SessionRevocationService).
+      this.jwtService.signAsync(
+        { ...payload, jti: crypto.randomUUID() },
+        { expiresIn: `${accessMinutes}m` },
+      ),
       this.jwtService.signAsync(
         { ...payload, jti: crypto.randomUUID() },
         { expiresIn: '7d', secret: refreshSecret },
