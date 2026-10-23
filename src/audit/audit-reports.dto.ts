@@ -14,6 +14,7 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { AuditSeverity, AuditStatus } from './audit.dto';
+import { IsSafeFileName } from '../common/files/sanitize-file-name';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 export const AUDIT_REPORT_TYPES = [
@@ -173,6 +174,7 @@ export class UploadEvidenceDto {
   @ApiProperty()
   @IsString()
   @MaxLength(200)
+  @IsSafeFileName()
   fileName!: string;
 
   @ApiProperty({ description: 'Conteúdo do ficheiro em base64 (máx. ~5 MB)' })

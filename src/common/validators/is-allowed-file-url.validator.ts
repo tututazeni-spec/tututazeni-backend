@@ -1,4 +1,5 @@
 import { registerDecorator, ValidationArguments, ValidationOptions } from 'class-validator';
+import { safeFileUrlProblem } from './safe-file-url';
 
 const PDF_DATA_URL_PREFIX = 'data:application/pdf;base64,';
 const IMAGE_DATA_URL_PREFIXES = [
@@ -31,6 +32,13 @@ function isImageDataUrl(value: string, maxLength: number): boolean {
   return !!prefix && BASE64_RE.test(value.slice(prefix.length));
 }
 
+function allowedHosts(): string[] {
+  return (process.env.ALLOWED_FILE_HOST ?? '')
+    .split(',')
+    .map(h => h.trim())
+    .filter(Boolean);
+}
+
 export function IsAllowedFileUrl(options?: ValidationOptions, extras?: AllowedFileUrlExtras) {
   return function (object: object, propertyName: string) {
     registerDecorator({
@@ -44,35 +52,15 @@ export function IsAllowedFileUrl(options?: ValidationOptions, extras?: AllowedFi
           if (extras?.allowPdfDataUrl && isPdfDataUrl(value, extras.allowPdfDataUrl)) return true;
           if (extras?.allowImageDataUrl && isImageDataUrl(value, extras.allowImageDataUrl))
             return true;
-          let url: URL;
-          try {
-            url = new URL(value);
-          } catch {
-            return false;
-          }
-          if (url.protocol !== 'https:') return false;
-          const raw = process.env.ALLOWED_FILE_HOST ?? '';
-          const allowed = raw
-            .split(',')
-            .map(h => h.trim())
-            .filter(Boolean);
-          if (allowed.length === 0) return true;
-          return allowed.includes(url.hostname);
+          return safeFileUrlProblem(value, { allowedHosts: allowedHosts() }) === null;
         },
         defaultMessage(args: ValidationArguments): string {
           const v = args.value as string;
           if ((extras?.allowPdfDataUrl || extras?.allowImageDataUrl) && v?.startsWith?.('data:')) {
             return `${args.property} deve ser um PDF ou imagem válidos dentro do tamanho máximo, ou uma URL HTTPS`;
           }
-          let url: URL | null = null;
-          try {
-            url = new URL(v);
-          } catch {
-            /* not a url */
-          }
-          if (!url) return `${args.property} deve ser uma URL válida`;
-          if (url.protocol !== 'https:') return `${args.property} deve usar HTTPS`;
-          return `${args.property} aponta para um domínio não autorizado`;
+          const problem = safeFileUrlProblem(v, { allowedHosts: allowedHosts() });
+          return `${args.property} ${problem ?? 'é inválido'}`;
         },
       },
     });

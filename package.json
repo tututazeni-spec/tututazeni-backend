@@ -64,6 +64,7 @@
     "test:report:spike": "npx artillery report load-tests/reports/spike-report.json --output load-tests/reports/spike-report.html",
     "seed:loadtest": "ts-node --transpile-only prisma/seed-load-test.ts",
     "start:test": "cross-env UV_THREADPOOL_SIZE=16 NODE_ENV=test nest start --watch",
+    "audit:uploads": "ts-node -P tsconfig.json scripts/audit-upload-data.ts",
     "hash-password": "ts-node -P tsconfig.json scripts/hashPassword.ts",
     "check-user": "ts-node -P tsconfig.json scripts/checkUser.ts",
     "fix-role": "ts-node -P tsconfig.json scripts/fixUserRole.ts",
