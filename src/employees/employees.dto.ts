@@ -19,7 +19,8 @@ import {
 import { ApiProperty, ApiPropertyOptional, PartialType, ApiSchema } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
-import { ALLOWED_MIME_TYPES, MAX_FILE_SIZE_BYTES } from '../common/validators/allowed-mime-types';
+import { IsFileSizeWithinLimit } from '../common/files/is-file-size-within-limit.decorator';
+import { ALLOWED_MIME_TYPES } from '../common/validators/allowed-mime-types';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 import {
   EmployeeStatus,
@@ -297,7 +298,7 @@ export class EmployeesCreateDocumentDto {
   @IsOptional()
   @IsIn(ALLOWED_MIME_TYPES)
   mimeType?: string;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(MAX_FILE_SIZE_BYTES) fileSize?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @IsFileSizeWithinLimit() fileSize?: number;
   @ApiPropertyOptional() @IsOptional() @IsDateString() expiresAt?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() requiresSignature?: boolean;
 }

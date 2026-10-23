@@ -8,17 +8,14 @@ import {
   IsArray,
   IsDateString,
   Min,
-  Max,
   Length,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { LibraryItemType } from '@prisma/client';
 import { IsAllowedFileUrl } from '../../common/validators/is-allowed-file-url.validator';
-import {
-  ALLOWED_MIME_TYPES,
-  MAX_FILE_SIZE_BYTES,
-} from '../../common/validators/allowed-mime-types';
+import { ALLOWED_MIME_TYPES } from '../../common/validators/allowed-mime-types';
+import { IsFileSizeWithinLimit } from '../../common/files/is-file-size-within-limit.decorator';
 
 export class CreateItemDto {
   @ApiProperty({ enum: LibraryItemType })
@@ -48,8 +45,7 @@ export class CreateItemDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(1)
-  @Max(MAX_FILE_SIZE_BYTES)
+  @IsFileSizeWithinLimit()
   fileSize?: number;
 
   @ApiPropertyOptional({ enum: ALLOWED_MIME_TYPES })

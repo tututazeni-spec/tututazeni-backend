@@ -1,35 +1,25 @@
 import { registerDecorator, ValidationArguments, ValidationOptions } from 'class-validator';
+import { FilePolicy } from '../files/file-policies';
+import { parseDataUrl } from '../files/data-url';
 import { safeFileUrlProblem } from './safe-file-url';
-
-const PDF_DATA_URL_PREFIX = 'data:application/pdf;base64,';
-const IMAGE_DATA_URL_PREFIXES = [
-  'data:image/jpeg;base64,',
-  'data:image/png;base64,',
-  'data:image/webp;base64,',
-];
-const BASE64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
 
 export interface AllowedFileUrlExtras {
   /**
-   * Aceita também um PDF inline (`data:application/pdf;base64,…`) — mesmo
-   * padrão das lições PDF/avatar. Valor = comprimento máximo da string
-   * completa (o limite de tamanho do ficheiro, em base64).
+   * Aceita também um ficheiro inline (data URL base64) cujo MIME declarado conste da política e
+   * cujo tamanho descodificado não exceda `maxBytes`. A inspecção do conteúdo vive em
+   * `src/common/files` (inspectInlineFile).
    */
-  allowPdfDataUrl?: number;
-  /** Aceita também imagens inline (JPEG/PNG/WebP) em data URL, com o mesmo
-   *  limite de comprimento de `allowPdfDataUrl` (ou próprio se definido). */
-  allowImageDataUrl?: number;
+  inline?: FilePolicy;
 }
 
-function isPdfDataUrl(value: string, maxLength: number): boolean {
-  if (value.length > maxLength || !value.startsWith(PDF_DATA_URL_PREFIX)) return false;
-  return BASE64_RE.test(value.slice(PDF_DATA_URL_PREFIX.length));
-}
-
-function isImageDataUrl(value: string, maxLength: number): boolean {
-  if (value.length > maxLength) return false;
-  const prefix = IMAGE_DATA_URL_PREFIXES.find(p => value.startsWith(p));
-  return !!prefix && BASE64_RE.test(value.slice(prefix.length));
+/** Motivo da rejeição de um data URL pela política (MIME na lista, tamanho em bytes), ou `null`. */
+function inlineProblem(value: string, policy: FilePolicy): string | null {
+  const parsed = parseDataUrl(value, policy.maxBytes);
+  if (parsed.ok === false) return parsed.error;
+  if (!policy.mimes.includes(parsed.declaredMime)) {
+    return `tipo de ficheiro não permitido (${parsed.declaredMime})`;
+  }
+  return null;
 }
 
 function allowedHosts(): string[] {
@@ -49,15 +39,15 @@ export function IsAllowedFileUrl(options?: ValidationOptions, extras?: AllowedFi
       validator: {
         validate(value: unknown, _args: ValidationArguments): boolean {
           if (typeof value !== 'string' || !value) return false;
-          if (extras?.allowPdfDataUrl && isPdfDataUrl(value, extras.allowPdfDataUrl)) return true;
-          if (extras?.allowImageDataUrl && isImageDataUrl(value, extras.allowImageDataUrl))
-            return true;
+          if (extras?.inline && value.startsWith('data:')) {
+            return inlineProblem(value, extras.inline) === null;
+          }
           return safeFileUrlProblem(value, { allowedHosts: allowedHosts() }) === null;
         },
         defaultMessage(args: ValidationArguments): string {
           const v = args.value as string;
-          if ((extras?.allowPdfDataUrl || extras?.allowImageDataUrl) && v?.startsWith?.('data:')) {
-            return `${args.property} deve ser um PDF ou imagem válidos dentro do tamanho máximo, ou uma URL HTTPS`;
+          if (extras?.inline && v?.startsWith?.('data:')) {
+            return `${args.property}: ${inlineProblem(v, extras.inline)} Em alternativa, use uma URL HTTPS.`;
           }
           const problem = safeFileUrlProblem(v, { allowedHosts: allowedHosts() });
           return `${args.property} ${problem ?? 'é inválido'}`;

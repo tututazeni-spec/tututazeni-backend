@@ -13,6 +13,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { createHash, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { FILE_POLICIES } from '../common/files/file-policies';
 import { sanitizeFileName } from '../common/files/sanitize-file-name';
 import { AuditService } from './audit.service';
 import type { AuditActor } from './audit-incidents.service';
@@ -26,7 +27,7 @@ import {
 import { buildPaginatedResponse, calculatePagination } from '../common/helpers/pagination.helper';
 
 const DAY = 24 * 3600 * 1000;
-const MAX_EVIDENCE_BYTES = 5 * 1024 * 1024;
+const MAX_EVIDENCE_BYTES = FILE_POLICIES.EVIDENCE.maxBytes;
 
 export interface SaveFileInput {
   kind: 'REPORT' | 'EVIDENCE';
@@ -332,7 +333,7 @@ export class AuditExportsService {
       const ok = await this.prisma.internalAudit.count({ where: { id: dto.auditId } });
       if (!ok) throw new NotFoundException('Auditoria não encontrada');
     }
-    const ext = dto.fileName.includes('.') ? dto.fileName.split('.').pop()!.toLowerCase() : 'other';
+    const ext = dto.fileName.includes('.') ? dto.fileName.split('.').pop().toLowerCase() : 'other';
     const saved = await this.saveFile({
       kind: 'EVIDENCE',
       fileName: sanitizeFileName(dto.fileName),

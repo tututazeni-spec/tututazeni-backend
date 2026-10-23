@@ -3,7 +3,7 @@
 // só é aceite se bater com eles e com a política da categoria.
 import { detectFileType, FileKind } from './detect-file-type';
 import { FilePolicy } from './file-policies';
-import { parseDataUrl } from './data-url';
+import { formatLimit, parseDataUrl } from './data-url';
 import {
   gifInfo,
   imageProblem,
@@ -47,7 +47,7 @@ export function inspectBuffer(
   const declared = declaredMime.toLowerCase();
   if (bytes.length === 0) return fail('O ficheiro está vazio.');
   if (bytes.length > policy.maxBytes) {
-    return fail(`O ficheiro excede ${Math.round((policy.maxBytes / (1024 * 1024)) * 10) / 10} MB.`);
+    return fail(`O ficheiro excede ${formatLimit(policy.maxBytes)}.`);
   }
   if (!policy.mimes.includes(declared)) {
     return fail(`Tipo de ficheiro não permitido (${declared}).`);

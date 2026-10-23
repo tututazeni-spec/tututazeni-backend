@@ -29,6 +29,13 @@ export function base64PayloadLength(
   return { length: value.length - start, padding };
 }
 
+/** 5242880 -> "5 MB"; 153600 -> "150 KB". */
+export function formatLimit(bytes: number): string {
+  return bytes >= 1024 * 1024
+    ? `${Math.round((bytes / (1024 * 1024)) * 10) / 10} MB`
+    : `${Math.round(bytes / 1000)} KB`;
+}
+
 export type ParsedDataUrl =
   { ok: true; declaredMime: string; bytes: Buffer } | { ok: false; error: string };
 
@@ -42,7 +49,7 @@ export function parseDataUrl(value: unknown, maxBytes: number): ParsedDataUrl {
   if (!m) return invalid;
   const tooBig = {
     ok: false,
-    error: `O ficheiro excede ${Math.round((maxBytes / (1024 * 1024)) * 10) / 10} MB.`,
+    error: `O ficheiro excede ${formatLimit(maxBytes)}.`,
   } as const;
   // Rejeita pelo tamanho antes de percorrer o payload (o padding tira no máximo 2 bytes).
   if (maxDecodedBytes(value.length - m[0].length) - 2 > maxBytes) return tooBig;

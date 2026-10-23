@@ -1,9 +1,11 @@
+import { FILE_POLICIES } from '../../common/files/file-policies';
+
 /**
  * Validação segura de imagens carregadas para os certificados. Não confia no tipo
  * declarado: confere os bytes (assinatura do ficheiro, estrutura e dimensões).
  * Só PNG e JPEG — nunca SVG (pode conter scripts), GIF ou WebP.
  */
-export const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+export const MAX_IMAGE_BYTES = FILE_POLICIES.IMAGE.maxBytes;
 
 export type InspectedImage =
   | { ok: true; mime: 'image/png' | 'image/jpeg'; bytes: Buffer; width: number; height: number }

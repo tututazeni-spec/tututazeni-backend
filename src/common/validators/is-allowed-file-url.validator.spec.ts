@@ -66,10 +66,11 @@ describe('IsAllowedFileUrl', () => {
   });
 });
 
-describe('IsAllowedFileUrl — allowPdfDataUrl', () => {
-  const MAX = 100;
+describe('IsAllowedFileUrl — inline (política)', () => {
+  const MAX = 100; // caracteres base64 => 75 bytes
+  const POLICY = { name: 'T', mimes: ['application/pdf'], maxBytes: 60 };
   class PdfDto {
-    @IsAllowedFileUrl(undefined, { allowPdfDataUrl: MAX })
+    @IsAllowedFileUrl(undefined, { inline: POLICY })
     fileUrl!: string;
   }
   const errors = async (v: string) => {

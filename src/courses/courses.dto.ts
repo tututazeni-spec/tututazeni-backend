@@ -33,6 +33,7 @@ import {
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
+import { FILE_POLICIES, maxDataUrlChars } from '../common/files/file-policies';
 
 export {
   CourseLevel,
@@ -100,7 +101,7 @@ export class CreateCourseDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @MaxLength(700_000)
+  @MaxLength(maxDataUrlChars(FILE_POLICIES.CARD_IMAGE))
   thumbnailUrl?: string;
 
   @ApiPropertyOptional()

@@ -14,6 +14,7 @@ import {
 import { ApiProperty, ApiPropertyOptional, PartialType, OmitType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
+import { FILE_POLICIES } from '../common/files/file-policies';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 import {
   OnboardingStatus,
@@ -305,8 +306,6 @@ export class ApproveTaskDto {
 
 // ─── Document ─────────────────────────────────────────────────────────────────
 
-export const MAX_DOC_PDF_DATA_URL_LEN = 4_194_304 + 'data:application/pdf;base64,'.length;
-
 export class UploadDocumentDto {
   @ApiProperty()
   @IsInt()
@@ -316,10 +315,9 @@ export class UploadDocumentDto {
   @IsString()
   documentType!: string;
 
-  // URL HTTPS OU PDF inline (data URL base64) de até 3 MB: 3 MiB = 4 194 304
-  // caracteres em base64 + prefixo.
+  // URL HTTPS OU PDF inline (data URL base64) de até 3 MB.
   @ApiProperty()
-  @IsAllowedFileUrl(undefined, { allowPdfDataUrl: MAX_DOC_PDF_DATA_URL_LEN })
+  @IsAllowedFileUrl(undefined, { inline: FILE_POLICIES.ONBOARDING_PDF })
   fileUrl!: string;
 
   @ApiPropertyOptional()

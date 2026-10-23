@@ -5,13 +5,12 @@
 // por inteiro — o aluno obtém-no por GET /lessons/:id/file, que valida o acesso.
 import { BadRequestException } from '@nestjs/common';
 import { Role } from '../../auth/enums/role.enum';
+import { formatLimit, maxDecodedBytes } from '../files/data-url';
+import { FILE_POLICIES } from '../files/file-policies';
 import { isPrivileged } from './ownership';
 
 /** Papéis que criam/editam lições e por isso podem sempre ver os ficheiros. */
 export const CONTENT_MANAGER_ROLES: Role[] = [Role.ADMIN, Role.RH, Role.INSTRUCTOR];
-
-/** ~5 MB de PDF em base64 (mesmo limite do formulário). */
-export const MAX_PDF_DATA_URL_LENGTH = 7_000_000;
 
 const PDF_DATA_URL = /^data:application\/pdf;base64,/i;
 
@@ -44,8 +43,11 @@ export function assertValidLessonFile(
 ) {
   if (!contentUrl || (type !== 'PDF' && type !== 'TEXT')) return;
   if (!contentUrl.startsWith('data:')) return;
-  if (contentUrl.length > MAX_PDF_DATA_URL_LENGTH) {
-    throw new BadRequestException('O PDF excede o tamanho máximo de 5 MB');
+  const payloadChars = contentUrl.length - (contentUrl.indexOf(',') + 1);
+  if (maxDecodedBytes(payloadChars) - 2 > FILE_POLICIES.PDF.maxBytes) {
+    throw new BadRequestException(
+      `O PDF excede o tamanho máximo de ${formatLimit(FILE_POLICIES.PDF.maxBytes)}`,
+    );
   }
   const bytes = decodePdfDataUrl(contentUrl);
   if (!bytes || bytes.subarray(0, 5).toString('latin1') !== '%PDF-') {
