@@ -1,3 +1,4 @@
+/* eslint-disable no-script-url -- os "javascript:" são entradas maliciosas propositadas */
 import { validate } from 'class-validator';
 import { IsSafeFileUrl, isInternalHostname, safeFileUrlProblem } from './safe-file-url';
 import { IsAllowedFileUrl } from './is-allowed-file-url.validator';
