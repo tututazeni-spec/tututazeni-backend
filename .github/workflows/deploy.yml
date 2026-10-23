@@ -52,7 +52,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Setup Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Login no GHCR
         if: ${{ github.event_name != 'pull_request' }}
