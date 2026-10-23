@@ -15,11 +15,20 @@ import { logQueryEvent, observeQueryDuration, PrismaQueryEvent } from './query-l
  */
 const rlsEnabled = (): boolean => process.env.RLS_ENABLED === 'true';
 
+/**
+ * Com DB_SSL_CA (PEM do CA do Postgres gerido) o certificado do servidor é validado.
+ * Sem ele mantém-se o comportamento antigo (cifra sem validar a identidade) — definir DB_SSL_CA em produção.
+ */
+function sslOptions(): { ca?: string; rejectUnauthorized: boolean } {
+  const ca = process.env.DB_SSL_CA?.replace(/\\n/g, '\n');
+  return ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: false };
+}
+
 function makePool(connectionString: string | undefined, max: number, tls = true): Pool {
   const PoolImpl = rlsEnabled() ? RlsPool : Pool;
   return new PoolImpl({
     connectionString,
-    ssl: tls && process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    ssl: tls && process.env.NODE_ENV === 'production' ? sslOptions() : false,
     max,
     idleTimeoutMillis: 600000,
     connectionTimeoutMillis: 30000,
