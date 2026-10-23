@@ -11,6 +11,8 @@ export interface HandlerPolicy {
   file: string;
   /** roles | public | authenticated | permission | none */
   policy: 'roles' | 'public' | 'authenticated' | 'permission' | 'none';
+  /** Papéis de @Roles (handler tem prioridade sobre a classe); vazio se a política não é 'roles'. */
+  roles: string[];
 }
 
 const HTTP_METHOD_KEY = 'method'; // METHOD_METADATA do @nestjs/common
@@ -35,6 +37,12 @@ function policyOf(target: object, handler: object): HandlerPolicy['policy'] {
   return 'none';
 }
 
+function rolesOf(target: object, handler: object): string[] {
+  return (Reflect.getMetadata(ROLES_KEY, handler) ??
+    Reflect.getMetadata(ROLES_KEY, target) ??
+    []) as string[];
+}
+
 /** Lê os metadados de autorização de todos os handlers HTTP de todos os controllers em `srcDir`. */
 export function collectAuthzInventory(srcDir: string): HandlerPolicy[] {
   const result: HandlerPolicy[] = [];
@@ -57,6 +65,7 @@ export function collectAuthzInventory(srcDir: string): HandlerPolicy[] {
             .split(sep)
             .join('/'),
           policy: policyOf(exported, handler),
+          roles: rolesOf(exported, handler),
         });
       }
     }

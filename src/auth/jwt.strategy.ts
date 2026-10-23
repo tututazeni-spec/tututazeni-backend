@@ -25,6 +25,16 @@ export function buildJwtExtractors(allowBearer: boolean): JwtFromRequestFunction
   return extractors;
 }
 
+/**
+ * Bearer em header é superfície extra (token em logs/JS). Em produção só é aceite se
+ * AUTH_ALLOW_BEARER=true; fora dela mantém-se ligado por omissão (Swagger, testes).
+ */
+export function isBearerAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.AUTH_ALLOW_BEARER === 'true') return true;
+  if (env.AUTH_ALLOW_BEARER === 'false') return false;
+  return env.NODE_ENV !== 'production';
+}
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   // Cache por utilizador para evitar ~6 queries (user + 4 relações) em cada
@@ -55,7 +65,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       // Cookie httpOnly tem prioridade; Bearer desligável via AUTH_ALLOW_BEARER=false (A2-7).
       jwtFromRequest: ExtractJwt.fromExtractors(
-        buildJwtExtractors(process.env.AUTH_ALLOW_BEARER !== 'false'),
+        buildJwtExtractors(isBearerAllowed()),
       ),
       ignoreExpiration: false,
       secretOrKey: jwtSecret,

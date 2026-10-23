@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
-import { JwtStrategy, buildJwtExtractors } from './jwt.strategy';
+import { JwtStrategy, buildJwtExtractors, isBearerAllowed } from './jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { SessionRevocationService } from './session-revocation.service';
@@ -12,6 +12,20 @@ describe('buildJwtExtractors', () => {
   });
   it('só o cookie quando AUTH_ALLOW_BEARER=false', () => {
     expect(buildJwtExtractors(false)).toHaveLength(1);
+  });
+});
+
+describe('isBearerAllowed', () => {
+  it('produção: Bearer desligado por omissão (só cookie httpOnly)', () => {
+    expect(isBearerAllowed({ NODE_ENV: 'production' })).toBe(false);
+  });
+  it('produção: AUTH_ALLOW_BEARER=true reactiva explicitamente', () => {
+    expect(isBearerAllowed({ NODE_ENV: 'production', AUTH_ALLOW_BEARER: 'true' })).toBe(true);
+  });
+  it('fora de produção: ligado por omissão (Swagger/testes); =false desliga', () => {
+    expect(isBearerAllowed({ NODE_ENV: 'development' })).toBe(true);
+    expect(isBearerAllowed({ NODE_ENV: 'test' })).toBe(true);
+    expect(isBearerAllowed({ NODE_ENV: 'development', AUTH_ALLOW_BEARER: 'false' })).toBe(false);
   });
 });
 
