@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # ─── Stage 1: build — compila TypeScript (precisa das devDependencies) ───────
-FROM node:20-slim AS build
+FROM node:25-slim AS build
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
@@ -16,7 +16,7 @@ COPY src ./src
 RUN npm run build
 
 # ─── Stage 2: runtime — só dependências de produção ──────────────────────────
-FROM node:20-slim AS runtime
+FROM node:25-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
