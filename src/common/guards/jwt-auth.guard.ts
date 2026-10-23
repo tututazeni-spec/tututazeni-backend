@@ -4,7 +4,7 @@ import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { setRlsPrivileged, setRlsUser } from '../rls/rls-context';
-import { setRequestUserId } from '../logging/request-context';
+import { setRequestAction, setRequestUserId } from '../logging/request-context';
 import { CurrentUserData } from '../types/current-user';
 
 @Injectable()
@@ -14,6 +14,8 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   }
 
   canActivate(context: ExecutionContext) {
+    // Primeiro guard global: fixa a acção cedo para que todos os logs do pedido a incluam.
+    setRequestAction(`${context.getClass().name}.${context.getHandler().name}`);
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),

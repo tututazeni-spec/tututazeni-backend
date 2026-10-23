@@ -9,7 +9,8 @@ health, queries, cache, métricas, alertas, deploy). Estado real na plataforma.
   `pino-pretty` fica desligado → cada linha de log é **um objecto JSON** em stdout
   (`NODE_ENV=production`). Em desenvolvimento sai texto colorido legível.
 - Nível: variável `LOG_LEVEL` (omissão `info`; `debug` mostra todas as queries com tempo).
-- Campos sempre presentes: `level`, `time`, `msg`, `reqId` (+ `userId` quando autenticado,
+- **Log de acesso:** uma linha `GET /rota 200` por pedido (`req.method`, `req.path` sem query, `res.statusCode`, `responseTime`, `route`, `reqId`, `userId`), emitida no fim da resposta — inclui 401/403/404. Nível `info` (2xx/3xx), `warn` (4xx), `error` (5xx). `/health` e `/metrics` ficam de fora.
+- Campos sempre presentes: `level`, `time`, `msg`, `reqId` (+ `userId` quando autenticado e `action` = `Controller.handler` da rota, ex. `CoursesController.findAll`,
   injectados por `getRequestContext()` via AsyncLocalStorage — também nos `new Logger()`).
 - Dados sensíveis removidos pelo `redact` (`authorization`, `cookie`, `password`, `token`, `nif`, `nib`…).
 - Exemplo de pesquisa por pedido: `jq 'select(.reqId=="<id>")'`.
