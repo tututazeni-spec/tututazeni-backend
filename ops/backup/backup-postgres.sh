@@ -56,14 +56,17 @@ _notify() {
 }
 
 # ── Parse DATABASE_URL → variáveis pg* ───────────────────────
+# Decodifica %XX (utilizador/password vêm URL-encoded no DATABASE_URL).
+_urldecode() { local s="$1"; printf '%b' "${s//%/\\x}"; }
+
 _parse_db_url() {
   local url="${DATABASE_URL:?DATABASE_URL não definida}"
   # Remove prefixo postgresql:// ou postgres://
   url="${url#postgresql://}"; url="${url#postgres://}"
   local userinfo="${url%%@*}"
   local hostinfo="${url#*@}"
-  DB_USER="${userinfo%%:*}"
-  DB_PASS="${userinfo#*:}"
+  DB_USER="$(_urldecode "${userinfo%%:*}")"
+  DB_PASS="$(_urldecode "${userinfo#*:}")"
   local hostport="${hostinfo%%/*}"
   local rest="${hostinfo#*/}"
   DB_HOST="${hostport%%:*}"

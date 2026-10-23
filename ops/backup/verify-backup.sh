@@ -91,8 +91,8 @@ main() {
       || fail "Ficheiro encriptado mas BACKUP_ENCRYPT_PASSPHRASE não definida"
     log "A desencriptar para verificação..."
     local decrypted="${local_file%.gpg}"
-    gpg --batch --yes \
-      --passphrase "$PASSPHRASE" \
+    printf '%s' "$PASSPHRASE" | gpg --batch --yes \
+      --pinentry-mode loopback --passphrase-fd 0 \
       --decrypt \
       --output "$decrypted" \
       "$local_file" \

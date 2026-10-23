@@ -57,13 +57,15 @@ backup() {
     [ -e "${INNOVA_DIR}/${f}" ] && files+=("$f")
   done
 
-  local name="innova_secrets_$(date +%Y%m%d_%H%M%S).tar.gz.gpg"
+  local name
+  name="innova_secrets_$(date +%Y%m%d_%H%M%S).tar.gz.gpg"
   log "A empacotar: ${files[*]}"
   tar -C "$INNOVA_DIR" -czf - "${files[@]}" \
     | _gpg --symmetric --cipher-algo AES256 --output "${TMP}/${name}" \
     || fail "tar/gpg falhou"
 
-  local dest="s3://${S3_BUCKET}/${S3_PREFIX}/$(date +%Y/%m)/${name}"
+  local dest
+  dest="s3://${S3_BUCKET}/${S3_PREFIX}/$(date +%Y/%m)/${name}"
   aws s3 cp "${TMP}/${name}" "$dest" --storage-class STANDARD_IA >&2 || fail "Upload S3 falhou"
   printf '%s' "$dest" | aws s3 cp - "s3://${S3_BUCKET}/${S3_PREFIX}/latest.txt" >&2 \
     || fail "Não foi possível actualizar latest.txt"
