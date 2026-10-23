@@ -13,9 +13,7 @@ export function IsStrongPassword(options?: ValidationOptions) {
       options,
       validator: {
         validate: (value: unknown) =>
-          typeof value === 'string' &&
-          STRONG.test(value) &&
-          value.length <= 128,
+          typeof value === 'string' && STRONG.test(value) && value.length <= 128,
         defaultMessage: () =>
           'A senha deve ter pelo menos 10 caracteres, incluindo minúscula, maiúscula e dígito',
       },

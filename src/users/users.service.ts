@@ -8,7 +8,6 @@ import {
   Logger,
   Optional,
 } from '@nestjs/common';
-import * as crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
