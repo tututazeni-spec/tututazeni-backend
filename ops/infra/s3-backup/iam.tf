@@ -27,9 +27,9 @@ resource "aws_iam_user_policy" "backup_writer" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "ListBucket"
-        Effect = "Allow"
-        Action = ["s3:ListBucket", "s3:GetBucketLocation"]
+        Sid      = "ListBucket"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket", "s3:GetBucketLocation"]
         Resource = aws_s3_bucket.backup_primary.arn
         # Só o bucket principal — não precisa de acesso à réplica
       },
@@ -39,15 +39,15 @@ resource "aws_iam_user_policy" "backup_writer" {
         Action = [
           "s3:PutObject",
           "s3:PutObjectAcl",
-          "s3:GetObject",         # Necessário para verificar uploads
+          "s3:GetObject", # Necessário para verificar uploads
           "s3:GetObjectVersion"
         ]
         Resource = "${aws_s3_bucket.backup_primary.arn}/*"
       },
       {
-        Sid    = "DeleteExpiredBackups"
-        Effect = "Allow"
-        Action = ["s3:DeleteObject", "s3:DeleteObjectVersion"]
+        Sid      = "DeleteExpiredBackups"
+        Effect   = "Allow"
+        Action   = ["s3:DeleteObject", "s3:DeleteObjectVersion"]
         Resource = "${aws_s3_bucket.backup_primary.arn}/*"
         # Object Lock impede deleção dentro do período de retenção,
         # mesmo com esta permissão

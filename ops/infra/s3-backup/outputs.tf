@@ -44,7 +44,7 @@ output "backup_reader_secret_access_key" {
 
 output "env_production_snippet" {
   description = "Bloco pronto a colar no .env.production"
-  value = <<-ENV
+  value       = <<-ENV
     # ── Backups PostgreSQL → AWS S3 ──
     BACKUP_S3_BUCKET=${aws_s3_bucket.backup_primary.id}
     BACKUP_S3_PREFIX=innova/postgres
@@ -55,5 +55,5 @@ output "env_production_snippet" {
     BACKUP_ENCRYPT_PASSPHRASE=<gerar com: openssl rand -base64 32>
     BACKUP_MAX_AGE_HOURS=26
   ENV
-  sensitive = false
+  sensitive   = false
 }

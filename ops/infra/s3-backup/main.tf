@@ -27,7 +27,7 @@ resource "aws_s3_bucket" "backup_primary" {
   object_lock_enabled = true
 
   lifecycle {
-    prevent_destroy = true  # Terraform não apaga este bucket acidentalmente
+    prevent_destroy = true # Terraform não apaga este bucket acidentalmente
   }
 }
 
@@ -91,7 +91,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "backup_primary" {
     status = "Enabled"
 
     filter {
-      prefix = ""  # Aplica a todos os objectos
+      prefix = "" # Aplica a todos os objectos
     }
 
     # Após 90 dias → Glacier Instant Retrieval (acesso em ms, custo 68% menor)
@@ -107,10 +107,21 @@ resource "aws_s3_bucket_lifecycle_configuration" "backup_primary" {
 
     # Limpar versões antigas (após Object Lock expirar)
     noncurrent_version_expiration {
-      noncurrent_days = var.object_lock_days + 5  # margem de segurança
+      noncurrent_days = var.object_lock_days + 5 # margem de segurança
     }
 
-    # Limpar delete markers órfãos
+  }
+
+  # Delete markers órfãos numa regra própria: um só bloco `expiration` por regra, e
+  # `days` não coexiste com `expired_object_delete_marker`.
+  rule {
+    id     = "cleanup-delete-markers"
+    status = "Enabled"
+
+    filter {
+      prefix = ""
+    }
+
     expiration {
       expired_object_delete_marker = true
     }
