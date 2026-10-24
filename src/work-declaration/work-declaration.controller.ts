@@ -201,7 +201,7 @@ export class WorkDeclarationController {
   ) {
     // FIX: chamava exportDeclaration com format 'DOCX' num endpoint que
     // devolve/anuncia PDF — nunca gerava mesmo um PDF.
-    const result = await this.workDeclarationService.exportDeclaration(undefined, user.id, id, {
+    const result = await this.workDeclarationService.exportDeclaration(undefined, user, id, {
       format: 'PDF',
       includeWatermark: dto.includeWatermark,
     });
@@ -220,7 +220,7 @@ export class WorkDeclarationController {
     @CurrentUser() user: CurrentUserData,
     @Response({ passthrough: true }) res: ExpressResponse,
   ) {
-    const result = await this.workDeclarationService.exportDeclaration(undefined, user.id, id, {
+    const result = await this.workDeclarationService.exportDeclaration(undefined, user, id, {
       format: 'DOCX',
     });
     res.set({
