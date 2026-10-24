@@ -95,3 +95,27 @@ describe('envValidationSchema', () => {
     expect(error?.details.length ?? 0).toBeGreaterThanOrEqual(3);
   });
 });
+
+describe('envValidationSchema — validação de uploads', () => {
+  it('UPLOAD_VALIDATION_MODE é enforce por omissão e aceita enforce/warn', () => {
+    expect(validate(VALID_ENV).value.UPLOAD_VALIDATION_MODE).toBe('enforce');
+    expect(validate({ ...VALID_ENV, UPLOAD_VALIDATION_MODE: 'warn' }).error).toBeUndefined();
+  });
+
+  it('um typo em UPLOAD_VALIDATION_MODE falha o arranque em vez de passar despercebido', () => {
+    const keys = validate({ ...VALID_ENV, UPLOAD_VALIDATION_MODE: 'wran' }).error?.details.map(
+      d => d.context?.key,
+    );
+    expect(keys).toContain('UPLOAD_VALIDATION_MODE');
+  });
+
+  it('UPLOAD_THROTTLE_LIMIT tem de ser inteiro positivo', () => {
+    expect(validate({ ...VALID_ENV, UPLOAD_THROTTLE_LIMIT: '30' }).error).toBeUndefined();
+    for (const bad of ['0', '-3', '1.5', 'abc']) {
+      const keys = validate({ ...VALID_ENV, UPLOAD_THROTTLE_LIMIT: bad }).error?.details.map(
+        d => d.context?.key,
+      );
+      expect(keys).toContain('UPLOAD_THROTTLE_LIMIT');
+    }
+  });
+});

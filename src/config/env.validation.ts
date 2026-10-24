@@ -15,6 +15,12 @@ export const envValidationSchema = Joi.object({
 
   // Upload e CORS
   ALLOWED_FILE_HOST: Joi.string().required(),
+  // enforce (omissão): recusa ficheiros cujo conteúdo real não bate com o tipo/estrutura esperados.
+  // warn: só regista (rollout). Um valor inválido (ex.: "wran") falha o arranque em vez de passar
+  // despercebido.
+  UPLOAD_VALIDATION_MODE: Joi.string().valid('enforce', 'warn').default('enforce'),
+  // Pedidos de upload por utilizador e por minuto (omissão: 20).
+  UPLOAD_THROTTLE_LIMIT: Joi.number().integer().min(1).optional(),
   ALLOWED_ORIGINS: Joi.string().required(),
 
   // URLs de infra

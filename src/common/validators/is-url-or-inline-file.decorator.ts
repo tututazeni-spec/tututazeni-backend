@@ -46,9 +46,9 @@ export function IsUrlOrInlineFile(
 ) {
   const policy = options?.policy;
   const maxBytes = policy?.maxBytes ?? options?.maxBytes ?? DEFAULT_INLINE_FILE_BYTES;
-  const inlineProblemOf = (v: string): string | null => {
+  const inlineProblemOf = (v: string, report = true): string | null => {
     if (policy) {
-      const r = inspectInlineFile(v, policy);
+      const r = inspectInlineFile(v, policy, { report });
       return r.ok === false ? r.error : null;
     }
     return inlineFileProblem(v, maxBytes);
@@ -70,7 +70,7 @@ export function IsUrlOrInlineFile(
           const problem =
             typeof v === 'string'
               ? v.startsWith('data:')
-                ? inlineProblemOf(v)
+                ? inlineProblemOf(v, false)
                 : safeFileUrlProblem(v)
               : null;
           return `${propertyName}: ${problem ?? `deve ser uma ligação ou um ficheiro (máx. ${formatLimit(maxBytes)})`}`;

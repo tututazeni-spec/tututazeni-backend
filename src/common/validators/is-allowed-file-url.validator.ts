@@ -12,8 +12,8 @@ export interface AllowedFileUrlExtras {
 }
 
 /** Motivo da rejeição de um data URL pela política, ou `null`. */
-function inlineProblem(value: string, policy: FilePolicy): string | null {
-  const r = inspectInlineFile(value, policy);
+function inlineProblem(value: string, policy: FilePolicy, report = true): string | null {
+  const r = inspectInlineFile(value, policy, { report });
   return r.ok === false ? r.error : null;
 }
 
@@ -42,7 +42,7 @@ export function IsAllowedFileUrl(options?: ValidationOptions, extras?: AllowedFi
         defaultMessage(args: ValidationArguments): string {
           const v = args.value as string;
           if (extras?.inline && v?.startsWith?.('data:')) {
-            return `${args.property}: ${inlineProblem(v, extras.inline)} Em alternativa, use uma URL HTTPS.`;
+            return `${args.property}: ${inlineProblem(v, extras.inline, false)} Em alternativa, use uma URL HTTPS.`;
           }
           const problem = safeFileUrlProblem(v, { allowedHosts: allowedHosts() });
           return `${args.property} ${problem ?? 'é inválido'}`;

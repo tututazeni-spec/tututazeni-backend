@@ -24,7 +24,7 @@ export function IsBase64ImageDataUrl(
           const v = args?.value;
           const reason =
             typeof v === 'string' && v.startsWith('data:')
-              ? (inspectInlineFile(v, policy) as { error?: string }).error
+              ? (inspectInlineFile(v, policy, { report: false }) as { error?: string }).error
               : undefined;
           return `${args?.property} deve ser uma imagem válida (png, jpeg ou webp) em data URL base64${
             reason ? `: ${reason}` : ''

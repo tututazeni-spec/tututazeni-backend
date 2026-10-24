@@ -177,11 +177,47 @@ T1 e T5 não dependem de nada e podem arrancar já. T3 depende de T2 e T4.
 | T4 Limites | feita | `FILE_POLICIES` (bytes, sem alargar limites), `fileSize` por MIME, `/auth` com corpo máx. 100 KB. |
 | T5 Nomes | feita | `IsSafeFileName`/`sanitizeFileName`. |
 | T6 Downloads seguros | feita | `safe-download.ts` (`Content-Disposition` RFC 6266, MIME só da lista segura, `nosniff`, CSP `sandbox`) aplicado a 9 controllers com nome/tipo dinâmico. `helmet` já emite `nosniff` globalmente e as rotas só sobrepõem os headers que definem. |
-| T7 Complementares | pendente | CSV injection, rate limit nas rotas de upload, auditoria de rejeições, ClamAV (decisão de produto). |
-| T8 Rollout | parcial | Script `npm run audit:uploads` (só leitura) feito. Falta modo `warn`→`enforce` e correr o script em produção. |
+| T7 Complementares | feita (excepto ClamAV) | CSV: `csv-safe.util.ts` aplicado aos 4 geradores que não neutralizavam fórmulas (os outros 13 já o faziam). Rate limit: `@UploadThrottle()` em 22 handlers, 20/min por utilizador. Auditoria: `UploadRejectionAuditor` grava `UPLOAD_REJECTED`/`UPLOAD_FLAGGED` no AuditLog canónico. ClamAV: ver decisão abaixo. |
+| T8 Rollout | feita (falta executar em produção) | Modo `UPLOAD_VALIDATION_MODE=warn\|enforce`; `npm run audit:uploads` verifica URLs, nomes **e** ficheiros inline existentes; runbook em §9. |
 
 ### Limites conhecidos
 - JavaScript dentro de object streams comprimidos de PDF (≥ 1.5) não é visível sem descomprimir.
 - OOXML: tamanhos validados são os declarados no directório ZIP; só quem descomprime apanha uma mentira nesses campos.
 - Ficheiros Office legados (`.doc/.xls/.ppt`) deixaram de ser aceites em fluxos com política.
 - DNS: URLs externas validam o hostname literal, não a resolução (um domínio público que aponte para IP interno passa).
+
+## 9. Rollout em produção (runbook)
+
+A T3 recusa ficheiros que antes passavam (executáveis ou HTML com prefixo de imagem, PDF com
+JavaScript ou sem `%%EOF`, Office com macros, Office legado, JPEG com bytes depois do marcador final).
+Para não surpreender utilizadores reais, o rollout faz-se em três passos.
+
+1. **Medir o que já existe** (só leitura, pode correr em produção ou numa cópia):
+   `npm run audit:uploads -- --csv uploads.csv --limit 50`.
+   Mostra, por coluna, quantos URLs, nomes **e ficheiros inline** existentes falhariam hoje.
+   O conteúdo nunca é impresso (só tipo declarado, tamanho e motivo). Registos que falhem só
+   deixam de passar quando alguém os reenviar ou editar; os dados guardados não são tocados.
+2. **Modo `warn`** (1 a 2 semanas): `UPLOAD_VALIDATION_MODE=warn`.
+   - Falhas de **conteúdo** são aceites e registadas como `UPLOAD_FLAGGED` (AuditLog) e em log
+     (`event: upload_validation`, `enforced: false`).
+   - Formato inválido, tamanho e tipos fora da política **recusam sempre** (já recusavam).
+   - O arranque emite um aviso enquanto o modo for `warn`.
+   - Rever no AuditLog (`action = 'UPLOAD_FLAGGED'`, entidade `UploadValidation`) quem e o quê.
+     Severidade HIGH = executável/HTML/SVG disfarçado (investigar); MEDIUM = estrutura inválida
+     (muitas vezes só um PDF ou JPEG fora do padrão: ajustar a regra se for legítimo).
+3. **Modo `enforce`** (omissão): remover `UPLOAD_VALIDATION_MODE` ou pô-lo a `enforce`.
+   As recusas passam a `UPLOAD_REJECTED` (status DENIED). Um valor inválido na variável falha o
+   arranque (Joi), para que um typo nunca desligue a protecção sem ninguém reparar.
+
+Rollback: voltar a `warn` e reiniciar. Não há migrações de dados.
+
+Outras variáveis: `UPLOAD_THROTTLE_LIMIT` (uploads por utilizador/min, omissão 20) e
+`ALLOWED_FILE_HOST` (obrigatório).
+
+### Decisão em aberto: antivírus (ClamAV)
+Não implementado. Valor: apanhar malware conhecido em PDF/Office que as verificações estruturais
+não vêem (e JavaScript em object streams comprimidos). Custo: um daemon `clamd` com actualização de
+assinaturas, ~1 GB de RAM, latência por upload e um modo de falha (fail-open ou fail-closed) a
+decidir. Recomendação: só vale a pena se os ficheiros enviados forem abertos por **outros**
+utilizadores no browser/Office (biblioteca, documentos, evidências). Se for decidido avançar,
+o ponto de integração é `inspectBuffer`, que já tem o buffer descodificado e relata rejeições.

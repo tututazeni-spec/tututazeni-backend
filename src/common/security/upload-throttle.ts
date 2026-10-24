@@ -44,7 +44,7 @@ export class AppThrottlerGuard extends ThrottlerGuard {
   }
 
   protected async getTracker(req: TrackedRequest): Promise<string> {
-    const id = (req as TrackedRequest).user?.id;
+    const id = req.user?.id;
     if (req.__throttlePerUser && id !== undefined && id !== null) return `user:${String(id)}`;
     return super.getTracker(req);
   }
