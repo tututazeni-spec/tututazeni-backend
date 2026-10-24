@@ -18,7 +18,9 @@ describe('envValidationSchema', () => {
   it('AUTH_ALLOW_BEARER sem default: o Nest copia defaults para process.env e anularia o default por NODE_ENV do JwtStrategy', () => {
     const { value } = validate({ ...VALID_ENV, NODE_ENV: 'production' });
     expect(value.AUTH_ALLOW_BEARER).toBeUndefined();
-    expect(validate({ ...VALID_ENV, AUTH_ALLOW_BEARER: 'true' }).value.AUTH_ALLOW_BEARER).toBe(true);
+    expect(validate({ ...VALID_ENV, AUTH_ALLOW_BEARER: 'true' }).value.AUTH_ALLOW_BEARER).toBe(
+      true,
+    );
   });
 
   it('exige PASSWORD_PEPPER em produção', () => {
