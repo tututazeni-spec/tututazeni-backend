@@ -12,13 +12,13 @@ const settings = (over: Partial<SystemSettings> = {}): SystemSettings => ({
   ...over,
 });
 
-type Req = {
+interface Req {
   url: string;
   method: string;
   query?: Record<string, unknown>;
   body?: unknown;
   user?: { role?: { name?: string } };
-};
+}
 
 describe('SystemSettingsInterceptor', () => {
   let system: { load: jest.Mock };

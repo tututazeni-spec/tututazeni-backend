@@ -76,6 +76,7 @@ describe('biblioteca de conteúdos (CreateContentDto)', () => {
     const macro = docx([{ name: 'word/vbaProject.bin' }]);
     expect(await ok(CreateContentDto, 'url', dataUrl(DOCX_MIME, macro))).toBe(false);
     expect(await ok(CreateContentDto, 'url', dataUrl(DOCX_MIME, EXE))).toBe(false);
+    // eslint-disable-next-line no-script-url -- payload XSS de propósito
     expect(await ok(CreateContentDto, 'url', 'javascript:alert(1)')).toBe(false);
     expect(await ok(CreateContentDto, 'url', 'https://youtu.be/abc')).toBe(true);
   });
@@ -84,6 +85,7 @@ describe('biblioteca de conteúdos (CreateContentDto)', () => {
     expect(await ok(CreateContentDto, 'thumbnailUrl', dataUrl('image/png', HTML))).toBe(false);
     expect(await ok(CreateContentDto, 'thumbnailUrl', '')).toBe(true);
     expect(await ok(CreateContentDto, 'thumbnailUrl', 'https://cdn.innova.ao/a.png')).toBe(true);
+    // eslint-disable-next-line no-script-url -- payload XSS de propósito
     expect(await ok(CreateContentDto, 'thumbnailUrl', 'javascript:alert(1)')).toBe(false);
   });
 });
