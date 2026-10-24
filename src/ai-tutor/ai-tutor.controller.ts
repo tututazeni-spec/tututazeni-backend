@@ -1,4 +1,5 @@
 // src/ai-tutor/ai-tutor.controller.ts
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -69,12 +70,14 @@ export class AiTutorController {
 
   @Get('provider')
   @ApiOperation({ summary: 'Fornecedor IA activo (Groq/Gemini/Ollama)' })
+  @AnyAuthenticated()
   getProvider() {
     return this.providers.getProviderInfo();
   }
 
   @Get('avatar/status')
   @ApiOperation({ summary: 'O avatar Simli da Ísis está configurado?' })
+  @AnyAuthenticated()
   avatarStatus(@CurrentUser() user: CurrentUserData) {
     return { enabled: this.simli.isConfigured() && this.simli.isAllowedFor(user.role?.name) };
   }
@@ -82,6 +85,7 @@ export class AiTutorController {
   @Post('avatar/session')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Token temporário de sessão do avatar Simli da Ísis' })
+  @AnyAuthenticated()
   createAvatarSession(@CurrentUser() user: CurrentUserData) {
     this.simli.assertAllowedFor(user.role?.name);
     return this.simli.createSession();
@@ -90,6 +94,7 @@ export class AiTutorController {
   @Post('avatar/speech')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Voz da Ísis em PCM16 16 kHz (ElevenLabs) para alimentar o avatar' })
+  @AnyAuthenticated()
   async avatarSpeech(
     @CurrentUser() user: CurrentUserData,
     @Body() dto: AvatarSpeechDto,
@@ -117,6 +122,7 @@ export class AiTutorController {
     summary:
       'Visão Geral (secção 1): estatísticas da plataforma para ADMIN/RH, ou pessoais para os restantes',
   })
+  @AnyAuthenticated()
   overview(@CurrentUser() user: CurrentUserData) {
     return isPrivileged(user, AI_TUTOR_ADMIN_ROLES)
       ? this.svc.getUsageStats()
@@ -127,12 +133,14 @@ export class AiTutorController {
 
   @Get('knowledge/sources')
   @ApiOperation({ summary: 'Contagens de conteúdos indexados na Base de Conhecimento' })
+  @AnyAuthenticated()
   knowledgeSources() {
     return this.knowledge.getSources();
   }
 
   @Get('knowledge/search')
   @ApiOperation({ summary: 'Pesquisar conteúdos autorizados (RAG) por palavras-chave' })
+  @AnyAuthenticated()
   knowledgeSearch(@Query() dto: KnowledgeSearchDto) {
     return this.knowledge.search(dto.q, dto.limit ?? 5);
   }
@@ -141,6 +149,7 @@ export class AiTutorController {
 
   @Get('sessions')
   @ApiOperation({ summary: 'As minhas sessões com o tutor' })
+  @AnyAuthenticated()
   mySessions(@CurrentUser() user: CurrentUserData, @Query() filters: AiSessionFilterDto) {
     return this.svc.getMySessions(user.id, filters);
   }
@@ -154,12 +163,14 @@ export class AiTutorController {
 
   @Get('sessions/:id')
   @ApiOperation({ summary: 'Detalhe da sessão com histórico de mensagens' })
+  @AnyAuthenticated()
   getSession(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
     return this.svc.getSession(user.id, id, isPrivileged(user, AI_TUTOR_ADMIN_ROLES));
   }
 
   @Delete('sessions/:id')
   @ApiOperation({ summary: 'Eliminar histórico de uma sessão' })
+  @AnyAuthenticated()
   deleteSession(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
     return this.svc.deleteSession(
       id,
@@ -171,6 +182,7 @@ export class AiTutorController {
   @ApiOperation({
     summary: 'Iniciar sessão com Ísis (contexto de curso, lição, PDI, personalidade)',
   })
+  @AnyAuthenticated()
   startSession(@CurrentUser() user: CurrentUserData, @Body() dto: StartAiSessionDto) {
     return this.svc.startSession(user.id, dto);
   }
@@ -181,6 +193,7 @@ export class AiTutorController {
   @Post('sessions/message/stream')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Enviar mensagem ao tutor com resposta em streaming (SSE)' })
+  @AnyAuthenticated()
   async sendMessageStream(
     @CurrentUser() user: CurrentUserData,
     @Body() dto: SendAiMessageDto,
@@ -213,6 +226,7 @@ export class AiTutorController {
 
   @Post('sessions/message')
   @ApiOperation({ summary: 'Enviar mensagem ao tutor e receber resposta contextualizada' })
+  @AnyAuthenticated()
   sendMessage(
     @CurrentUser() user: CurrentUserData,
     @Body() dto: SendAiMessageDto,
@@ -224,6 +238,7 @@ export class AiTutorController {
   @Patch('sessions/:id/end')
   @ApiOperation({ summary: 'Encerrar sessão' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   endSession(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
     return this.svc.endSession(user.id, id);
   }
@@ -233,6 +248,7 @@ export class AiTutorController {
   @Patch('messages/rate')
   @ApiOperation({ summary: 'Avaliar qualidade de uma resposta do tutor (1-5)' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   rateMessage(@CurrentUser() user: CurrentUserData, @Body() dto: RateMessageDto) {
     return this.svc.rateMessage(user.id, dto);
   }
@@ -243,6 +259,7 @@ export class AiTutorController {
   @ApiOperation({
     summary: 'Executar acção agentic (inscrever curso, actualizar PDI, notificar gestor)',
   })
+  @AnyAuthenticated()
   executeAction(@CurrentUser() user: CurrentUserData, @Body() dto: ExecuteAgentActionDto) {
     return this.svc.executeAgentAction(user.id, dto);
   }
@@ -254,6 +271,7 @@ export class AiTutorController {
     summary:
       'Gerar exercícios (quiz, V/F, perguntas abertas, casos, simulações, cenários, flashcards), resumo ou plano de estudo com IA',
   })
+  @AnyAuthenticated()
   generateContent(@CurrentUser() user: CurrentUserData, @Body() dto: GenerateContentDto) {
     return this.svc.generateContent(user.id, dto);
   }
@@ -262,6 +280,7 @@ export class AiTutorController {
   @ApiOperation({
     summary: 'Obter feedback de IA sobre a resposta a um exercício aberto/caso/cenário',
   })
+  @AnyAuthenticated()
   exerciseFeedback(@CurrentUser() user: CurrentUserData, @Body() dto: ExerciseFeedbackDto) {
     return this.svc.exerciseFeedback(user.id, dto);
   }
@@ -270,12 +289,14 @@ export class AiTutorController {
 
   @Get('recommendations')
   @ApiOperation({ summary: 'Recomendações personalizadas de aprendizagem com insight IA' })
+  @AnyAuthenticated()
   recommendations(@CurrentUser() user: CurrentUserData) {
     return this.svc.getRecommendations(user.id);
   }
 
   @Post('recommendations/:id/accept')
   @ApiOperation({ summary: 'Aceitar uma recomendação e inscrever-se no curso' })
+  @AnyAuthenticated()
   acceptRecommendation(
     @CurrentUser() user: CurrentUserData,
     @Param('id', ParseIntPipe) id: number,
@@ -290,6 +311,7 @@ export class AiTutorController {
   @ApiOperation({
     summary: 'Feed de actividade: perguntas, exercícios, recomendações, conteúdos consultados',
   })
+  @AnyAuthenticated()
   history(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyActivity(user.id);
   }

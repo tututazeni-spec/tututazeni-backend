@@ -1,4 +1,7 @@
 // ─── src/document-repository/document-repository.controller.ts ───────────────
+import { Throttle } from '@nestjs/throttler';
+import { PUBLIC_SHARE_THROTTLE } from '../common/security/public-throttle';
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -10,6 +13,7 @@ import {
   Param,
   Query,
   Req,
+  HttpCode,
   ParseIntPipe,
   UseGuards,
 } from '@nestjs/common';
@@ -23,6 +27,7 @@ import {
   NewVersionDto,
   GrantPermissionDto,
   CreateShareLinkDto,
+  ResolveShareDto,
   CreateDocCategoryDto,
   OptionalReasonDto,
   UpdateExpiresAtDto,
@@ -68,6 +73,7 @@ export class DocumentRepositoryController {
 
   @Get('tags')
   @ApiOperation({ summary: 'Todas as tags com contagem (para cloud de tags)' })
+  @AnyAuthenticated()
   getTags() {
     return this.svc.getAllTags();
   }
@@ -86,18 +92,21 @@ export class DocumentRepositoryController {
 
   @Get('pending-reads')
   @ApiOperation({ summary: 'Documentos obrigatórios que o utilizador ainda não confirmou' })
+  @AnyAuthenticated()
   getMyPendingReads(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyPendingReads(user.id);
   }
 
   @Get('favorites')
   @ApiOperation({ summary: 'Documentos marcados como favoritos pelo utilizador' })
+  @AnyAuthenticated()
   getMyFavorites(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyFavorites(user.id);
   }
 
   @Get('recent')
   @ApiOperation({ summary: 'Documentos vistos recentemente pelo utilizador' })
+  @AnyAuthenticated()
   getMyRecent(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyRecent(user.id);
   }
@@ -113,6 +122,7 @@ export class DocumentRepositoryController {
 
   @Get('categories')
   @ApiOperation({ summary: 'Listar categorias configuradas' })
+  @AnyAuthenticated()
   getCategories() {
     return this.svc.getCategories();
   }
@@ -128,27 +138,41 @@ export class DocumentRepositoryController {
 
   @Get('share/:token')
   @Public()
+  @Throttle(PUBLIC_SHARE_THROTTLE)
   @ApiOperation({ summary: 'Resolver link de partilha (sem autenticação)' })
   resolveShare(@Param('token') token: string, @Query('password') password?: string) {
     return this.svc.resolveShareLink(token, password);
+  }
+
+  // Preferir este POST: a password vai no corpo (a query string fica em logs/histórico).
+  @Post('share/:token')
+  @Public()
+  @HttpCode(200)
+  @Throttle(PUBLIC_SHARE_THROTTLE)
+  @ApiOperation({ summary: 'Resolver link de partilha com password no corpo (sem autenticação)' })
+  resolveShareWithPassword(@Param('token') token: string, @Body() dto: ResolveShareDto) {
+    return this.svc.resolveShareLink(token, dto.password);
   }
 
   // ── Core CRUD ─────────────────────────────────────────────────────
 
   @Get()
   @ApiOperation({ summary: 'Listar documentos (filtros + busca inteligente por OCR text + tags)' })
+  @AnyAuthenticated()
   findAll(@Query() filters: DocumentFilterDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.findAll(filters, user.id, user.role?.name);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do documento com versões, permissões e metadata' })
+  @AnyAuthenticated()
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(id, user.id);
   }
 
   @Get(':id/download')
   @ApiOperation({ summary: 'Download (regista no audit log e incrementa contador)' })
+  @AnyAuthenticated()
   download(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.download(id, user.id);
   }
@@ -289,6 +313,7 @@ export class DocumentRepositoryController {
 
   @Post(':id/read')
   @ApiOperation({ summary: 'Registar que o utilizador leu o documento' })
+  @AnyAuthenticated()
   markRead(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: CurrentUserData,
@@ -300,6 +325,7 @@ export class DocumentRepositoryController {
 
   @Post(':id/confirm-read')
   @ApiOperation({ summary: 'Confirmar leitura/ciência do documento' })
+  @AnyAuthenticated()
   confirmRead(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: CurrentUserData,
@@ -311,6 +337,7 @@ export class DocumentRepositoryController {
 
   @Post(':id/favorite')
   @ApiOperation({ summary: 'Marcar/desmarcar documento como favorito' })
+  @AnyAuthenticated()
   toggleFavorite(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.toggleFavorite(id, user.id);
   }

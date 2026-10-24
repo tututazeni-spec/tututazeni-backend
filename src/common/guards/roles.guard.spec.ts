@@ -32,10 +32,47 @@ describe('RolesGuard', () => {
     reflector = module.get(Reflector);
   });
 
-  it('deve permitir acesso se não há roles requeridos', () => {
-    reflector.getAllAndOverride.mockReturnValue(undefined);
-    const ctx = mockContext({ id: 1, role: { name: 'COLABORADOR' } });
-    expect(guard.canActivate(ctx)).toBe(true);
+  // getAllAndOverride devolve conforme a chave pedida.
+  function meta(values: Record<string, unknown>) {
+    reflector.getAllAndOverride.mockImplementation(((key: string) => values[key]) as never);
+  }
+  const user = { id: 1, role: { name: 'COLABORADOR', permissions: [{ name: 'settings.write' }] } };
+
+  describe('deny-by-default', () => {
+    afterEach(() => delete process.env.AUTHZ_DENY_BY_DEFAULT);
+
+    it('handler sem nenhuma política → 403', () => {
+      meta({});
+      expect(() => guard.canActivate(mockContext(user))).toThrow(ForbiddenException);
+    });
+
+    it('@AnyAuthenticated com utilizador autenticado → permite', () => {
+      meta({ authenticatedOnly: true });
+      expect(guard.canActivate(mockContext(user))).toBe(true);
+    });
+
+    it('@AnyAuthenticated sem utilizador → 403 (nunca abre a anónimos)', () => {
+      meta({ authenticatedOnly: true });
+      expect(() => guard.canActivate(mockContext(undefined))).toThrow(ForbiddenException);
+    });
+
+    it('@Public → permite sem utilizador', () => {
+      meta({ isPublic: true });
+      expect(guard.canActivate(mockContext(undefined))).toBe(true);
+    });
+
+    it('@RequirePermission: permite com a permissão, nega sem ela', () => {
+      meta({ requiredPermission: ['settings.write'] });
+      expect(guard.canActivate(mockContext(user))).toBe(true);
+      meta({ requiredPermission: ['audit.export'] });
+      expect(() => guard.canActivate(mockContext(user))).toThrow(ForbiddenException);
+    });
+
+    it('AUTHZ_DENY_BY_DEFAULT=false repõe o comportamento antigo (rollback)', () => {
+      process.env.AUTHZ_DENY_BY_DEFAULT = 'false';
+      meta({});
+      expect(guard.canActivate(mockContext(user))).toBe(true);
+    });
   });
 
   it('deve permitir acesso se o utilizador tem o role correcto', () => {

@@ -1,3 +1,4 @@
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -43,12 +44,14 @@ export class EnrollmentsController {
 
   @Get('my')
   @ApiOperation({ summary: 'As minhas matrículas (agrupadas por estado)' })
+  @AnyAuthenticated()
   myEnrollments(@CurrentUser() user: CurrentUserData, @Query() filters: EnrollmentFilterDto) {
     return this.svc.getUserEnrollments(user.id, filters);
   }
 
   @Post('self-enroll/:courseId')
   @ApiOperation({ summary: 'Auto-matrícula num curso' })
+  @AnyAuthenticated()
   selfEnroll(
     @Param('courseId', ParseIntPipe) courseId: number,
     @CurrentUser() user: CurrentUserData,
@@ -68,6 +71,7 @@ export class EnrollmentsController {
   @Patch('my/:id/cancel')
   @ApiOperation({ summary: 'Cancelar a minha matrícula (apenas opcionais)' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   cancelMy(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: CurrentUserData,
@@ -79,6 +83,7 @@ export class EnrollmentsController {
   @Post('my/:id/certificate')
   @ApiOperation({ summary: 'Gerar/obter certificado da matrícula concluída' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   myCertificate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.generateCertificate(id, user);
   }
@@ -150,6 +155,7 @@ export class EnrollmentsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe da matrícula com progresso' })
+  @AnyAuthenticated()
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(id, user);
   }

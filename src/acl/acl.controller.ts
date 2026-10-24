@@ -1,4 +1,5 @@
 // src/acl/acl.controller.ts
+import { RoleGovernanceGuard } from '../common/guards/role-governance.guard';
 import {
   Controller,
   Get,
@@ -35,7 +36,7 @@ const ADMIN = [Role.ADMIN, Role.RH] as const;
 
 @ApiTags('ACL — Access Control')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, RoleGovernanceGuard)
 @Controller('acl')
 export class AclController {
   constructor(private readonly svc: RolesPermissionsService) {}
