@@ -1,4 +1,5 @@
 import { createHmac } from 'crypto';
+import { sign } from 'jsonwebtoken';
 import {
   Injectable,
   Logger,
@@ -118,20 +119,57 @@ export class LiveClassesService {
   }
 
   /**
-   * Nome da sala Jitsi. O servidor público meet.jit.si não tem autenticação,
-   * por isso o nome tem de ser impossível de adivinhar: HMAC do id com o
-   * JWT_SECRET. Só quem passa o JwtAuthGuard consegue obtê-lo.
+   * Acesso à sala Jitsi. O nome é um HMAC do id com o JWT_SECRET (impossível de
+   * adivinhar) e só é entregue a utilizadores autenticados. Se JITSI_APP_SECRET
+   * estiver definido (JaaS ou Jitsi próprio com autenticação por token), emite
+   * também um JWT por participante, de modo que a sala deixa de aceitar quem
+   * apenas conheça o nome. Sem ele, mantém-se o meet.jit.si público.
    */
-  async getRoomName(id: number): Promise<{ roomName: string }> {
+  async getRoomAccess(
+    id: number,
+    user: { id: number; email: string; fullName?: string | null; role?: { name: string } | null },
+  ): Promise<{ roomName: string; domain: string; jwt?: string }> {
     const secret = process.env.JWT_SECRET;
     if (!secret) throw new Error('JWT_SECRET em falta — impossível gerar a sala');
-    const exists = await this.prisma.read.liveClass.findUnique({
+    const lc = await this.prisma.read.liveClass.findUnique({
       where: { id },
       select: { id: true },
     });
-    if (!exists) throw new NotFoundException('Aula ao vivo não encontrada');
+    if (!lc) throw new NotFoundException('Aula ao vivo não encontrada');
+
     const digest = createHmac('sha256', secret).update(`jitsi-room:${id}`).digest('hex');
-    return { roomName: `innova-live-${id}-${digest.slice(0, 24)}` };
+    const roomName = `innova-live-${id}-${digest.slice(0, 24)}`;
+    const domain = process.env.JITSI_DOMAIN || 'meet.jit.si';
+
+    const appSecret = process.env.JITSI_APP_SECRET;
+    if (!appSecret) return { roomName, domain };
+
+    const appId = process.env.JITSI_APP_ID || 'innova';
+    const roleName = user.role?.name ?? '';
+    const moderator = ['ADMIN', 'RH', 'INSTRUCTOR'].includes(roleName);
+    const now = Math.floor(Date.now() / 1000);
+    const jwt = sign(
+      {
+        aud: 'jitsi',
+        iss: appId,
+        sub: process.env.JITSI_SUB || domain,
+        room: roomName,
+        iat: now,
+        exp: now + 4 * 60 * 60,
+        context: {
+          user: {
+            id: String(user.id),
+            name: user.fullName || user.email,
+            email: user.email,
+            moderator,
+          },
+        },
+        moderator,
+      },
+      appSecret,
+      { algorithm: 'HS256' },
+    );
+    return { roomName, domain, jwt };
   }
 
   private generateCode(type: string): string {

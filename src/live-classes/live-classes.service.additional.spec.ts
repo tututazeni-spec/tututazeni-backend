@@ -1,3 +1,4 @@
+import { verify } from 'jsonwebtoken';
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { LiveClassesService } from './live-classes.service';
@@ -366,6 +367,52 @@ describe('LiveClassesService (additional)', () => {
       const result = await service.getCalendar('2026-07-01', '2026-07-31');
       expect(result).toHaveLength(1);
       expect(result[0].liveClassId).toBe(1);
+    });
+  });
+
+  describe('getRoomAccess', () => {
+    const OLD = { ...process.env };
+    const colab = { id: 7, email: 'a@b.c', fullName: 'Ana', role: { name: 'COLABORADOR' } };
+    beforeEach(() => {
+      process.env.JWT_SECRET = 'test-secret';
+      delete process.env.JITSI_APP_SECRET;
+      delete process.env.JITSI_DOMAIN;
+      mockPrisma.liveClass.findUnique.mockResolvedValue({ id: 5 });
+    });
+    afterEach(() => {
+      process.env = { ...OLD };
+    });
+
+    it('devolve nome de sala não adivinhável e estável, sem jwt por omissão', async () => {
+      const a = await service.getRoomAccess(5, colab);
+      const b = await service.getRoomAccess(5, colab);
+      expect(a.roomName).toMatch(/^innova-live-5-[0-9a-f]{24}$/);
+      expect(a.roomName).toBe(b.roomName);
+      expect(a.domain).toBe('meet.jit.si');
+      expect(a.jwt).toBeUndefined();
+      expect((await service.getRoomAccess(6, colab)).roomName).not.toBe(a.roomName);
+    });
+
+    it('com JITSI_APP_SECRET emite JWT por participante ligado à sala', async () => {
+      process.env.JITSI_APP_SECRET = 'jitsi-secret';
+      process.env.JITSI_DOMAIN = 'jitsi.innova.ao';
+      const r = await service.getRoomAccess(5, colab);
+      const claims: any = verify(r.jwt!, 'jitsi-secret');
+      expect(r.domain).toBe('jitsi.innova.ao');
+      expect(claims.room).toBe(r.roomName);
+      expect(claims.context.user.moderator).toBe(false);
+      const admin = await service.getRoomAccess(5, { ...colab, role: { name: 'ADMIN' } });
+      expect((verify(admin.jwt!, 'jitsi-secret') as any).moderator).toBe(true);
+    });
+
+    it('404 se a aula não existe', async () => {
+      mockPrisma.liveClass.findUnique.mockResolvedValue(null);
+      await expect(service.getRoomAccess(99, colab)).rejects.toThrow('Aula ao vivo não encontrada');
+    });
+
+    it('falha sem JWT_SECRET', async () => {
+      delete process.env.JWT_SECRET;
+      await expect(service.getRoomAccess(5, colab)).rejects.toThrow('JWT_SECRET');
     });
   });
 });

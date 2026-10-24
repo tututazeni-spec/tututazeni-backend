@@ -164,8 +164,8 @@ export class LiveClassesController {
 
   @Get(':id/room')
   @ApiOperation({ summary: 'Nome (não adivinhável) da sala Jitsi da aula' })
-  room(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.getRoomName(id);
+  room(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.getRoomAccess(id, user);
   }
 
   @Get(':id')

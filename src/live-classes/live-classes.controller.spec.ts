@@ -9,6 +9,7 @@ const mockSvc = {
   findAll: jest.fn().mockResolvedValue({ data: [], total: 0 }),
   getUpcoming: jest.fn().mockResolvedValue([]),
   findOne: jest.fn().mockResolvedValue({ id: 1 }),
+  getRoomAccess: jest.fn().mockResolvedValue({ roomName: 'r', domain: 'meet.jit.si' }),
   getMessages: jest.fn().mockResolvedValue([]),
   getAttendanceReport: jest.fn().mockResolvedValue({}),
   create: jest.fn().mockResolvedValue({ id: 2 }),
@@ -60,6 +61,12 @@ describe('LiveClassesController', () => {
   it('upcoming → getUpcoming', async () => {
     await controller.upcoming();
     expect(mockSvc.getUpcoming).toHaveBeenCalled();
+  });
+
+  it('room → getRoomAccess(id, utilizador autenticado)', async () => {
+    const user = { id: 7, email: 'a@b.c', role: { name: 'COLABORADOR' } } as any;
+    await controller.room(2, user);
+    expect(mockSvc.getRoomAccess).toHaveBeenCalledWith(2, user);
   });
 
   it('findOne → findOne(id)', async () => {
