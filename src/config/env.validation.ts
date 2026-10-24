@@ -62,7 +62,8 @@ export const envValidationSchema = Joi.object({
   // Runtime
   JWT_USER_CACHE_TTL_MS: Joi.number().default(30000),
   LOG_LEVEL: Joi.string().valid('trace', 'debug', 'info', 'warn', 'error', 'fatal').default('info'),
-  AUTH_ALLOW_BEARER: Joi.boolean().default(true),
+  // Sem default de propósito: o JwtStrategy decide por NODE_ENV (produção = só cookie).
+  AUTH_ALLOW_BEARER: Joi.boolean(),
 
   // Invalidação de sessão por inactividade (A10-24) — 30 min por omissão.
   // Um refresh token não usado há mais tempo do que isto é tratado como
