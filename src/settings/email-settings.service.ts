@@ -54,11 +54,17 @@ export class EmailSettingsService {
   async update(dto: UpdateEmailSettingsDto, actorId?: number) {
     const id = await resolveDefaultTenantId(this.prisma);
     const cur = await this.load();
+    // Um campo `undefined` no DTO não pode apagar o texto guardado (o spread copia-o).
+    const defined = <T extends object>(o?: T) =>
+      Object.fromEntries(Object.entries(o ?? {}).filter(([, v]) => v !== undefined));
     const next: EmailSettings = {
       signature: dto.signature ?? cur.signature,
       templates: {
-        PASSWORD_RESET: { ...cur.templates.PASSWORD_RESET, ...dto.templates?.PASSWORD_RESET },
-        USER_INVITE: { ...cur.templates.USER_INVITE, ...dto.templates?.USER_INVITE },
+        PASSWORD_RESET: {
+          ...cur.templates.PASSWORD_RESET,
+          ...defined(dto.templates?.PASSWORD_RESET),
+        },
+        USER_INVITE: { ...cur.templates.USER_INVITE, ...defined(dto.templates?.USER_INVITE) },
       },
     };
 
