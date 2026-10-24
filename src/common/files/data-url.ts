@@ -29,6 +29,17 @@ export function base64PayloadLength(
   return { length: value.length - start, padding };
 }
 
+/**
+ * MIME a gravar para um ficheiro: se for um data URL, o do próprio cabeçalho (já confirmado pelos
+ * bytes pelo validador do DTO), ignorando o `mimeType` que o cliente enviou à parte; senão o declarado.
+ */
+export function mimeOfInlineFile(fileUrl: string, declared?: string | null): string | undefined {
+  const m = HEADER_RE.exec(fileUrl.slice(0, HEADER_MAX_CHARS));
+  if (!m) return declared ?? undefined;
+  const mime = m[1].toLowerCase();
+  return mime === 'image/jpg' ? 'image/jpeg' : mime;
+}
+
 /** 5242880 -> "5 MB"; 153600 -> "150 KB". */
 export function formatLimit(bytes: number): string {
   return bytes >= 1024 * 1024
@@ -59,5 +70,7 @@ export function parseDataUrl(value: unknown, maxBytes: number): ParsedDataUrl {
   const bytes = Buffer.from(value.slice(m[0].length), 'base64');
   if (bytes.length > maxBytes) return tooBig;
   if (bytes.length === 0) return { ok: false, error: 'O ficheiro está vazio.' };
-  return { ok: true, declaredMime: m[1].toLowerCase(), bytes };
+  // `image/jpg` não é um MIME oficial mas é o que alguns clientes enviam.
+  const declaredMime = m[1].toLowerCase() === 'image/jpg' ? 'image/jpeg' : m[1].toLowerCase();
+  return { ok: true, declaredMime, bytes };
 }

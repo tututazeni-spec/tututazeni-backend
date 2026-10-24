@@ -394,7 +394,7 @@ export class UpdateMyAvatarDto {
   })
   @IsString()
   @MaxLength(maxDataUrlChars(FILE_POLICIES.AVATAR)) // 150 KB descodificados; espelha o frontend
-  @IsBase64ImageDataUrl()
+  @IsBase64ImageDataUrl(undefined, FILE_POLICIES.AVATAR)
   avatarUrl!: string;
 }
 

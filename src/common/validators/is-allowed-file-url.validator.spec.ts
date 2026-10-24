@@ -80,13 +80,22 @@ describe('IsAllowedFileUrl — inline (política)', () => {
   };
 
   it('aceita PDF em data URL dentro do limite', async () => {
-    expect(await errors('data:application/pdf;base64,JVBERi0xLjQ=')).toHaveLength(0);
+    const tiny = Buffer.from('%PDF-1.4\n%%EOF\n').toString('base64');
+    expect(await errors(`data:application/pdf;base64,${tiny}`)).toHaveLength(0);
   });
 
   it('recusa PDF acima do limite', async () => {
     expect((await errors('data:application/pdf;base64,' + 'A'.repeat(MAX))).length).toBeGreaterThan(
       0,
     );
+  });
+
+  it('recusa PDF só na aparência (sem %%EOF, com JavaScript, ou outro conteúdo)', async () => {
+    const b64 = (s: string) => Buffer.from(s).toString('base64');
+    const bad = [b64('%PDF-1.4'), b64('<html>'), b64('%PDF-1\n/JS (x)\n%%EOF')];
+    for (const payload of bad) {
+      expect((await errors(`data:application/pdf;base64,${payload}`)).length).toBeGreaterThan(0);
+    }
   });
 
   it('recusa data URL que não é PDF', async () => {

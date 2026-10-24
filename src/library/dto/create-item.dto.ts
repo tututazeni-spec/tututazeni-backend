@@ -17,6 +17,7 @@ import { IsAllowedFileUrl } from '../../common/validators/is-allowed-file-url.va
 import { ALLOWED_MIME_TYPES } from '../../common/validators/allowed-mime-types';
 import { IsFileSizeWithinLimit } from '../../common/files/is-file-size-within-limit.decorator';
 
+import { IsOptionalImageRef } from '../../common/validators/optional-image-ref.decorator';
 export class CreateItemDto {
   @ApiProperty({ enum: LibraryItemType })
   @IsEnum(LibraryItemType)
@@ -56,6 +57,7 @@ export class CreateItemDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @IsOptionalImageRef()
   thumbnailUrl?: string;
 
   @ApiPropertyOptional()

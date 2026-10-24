@@ -8,7 +8,7 @@ import { AppModule } from '../../../src/app.module';
 import { getToken } from '../helpers/auth.helper';
 
 const TEST_DB_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/innova_test';
-const PDF = `data:application/pdf;base64,${Buffer.from('%PDF-1.4\n% escopo\n').toString('base64')}`;
+const PDF = `data:application/pdf;base64,${Buffer.from('%PDF-1.4\n% escopo\n%%EOF\n').toString('base64')}`;
 
 const binary = (res: request.Response, cb: (err: Error | null, body: Buffer) => void) => {
   const chunks: Buffer[] = [];

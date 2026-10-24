@@ -71,7 +71,7 @@ export class ImportExternalCertificateDto {
 
   @ApiProperty({ description: 'PDF carregado como data URL base64 (até 5 MB)' })
   @Matches(/^data:application\/pdf;base64,/, { message: 'o documento tem de ser um PDF carregado' })
-  @IsUrlOrInlineFile({ maxBytes: FILE_POLICIES.PDF.maxBytes })
+  @IsUrlOrInlineFile({ policy: FILE_POLICIES.PDF })
   document!: string;
 
   @ApiPropertyOptional({ description: 'Já validado por quem importa; senão aguarda validação' })

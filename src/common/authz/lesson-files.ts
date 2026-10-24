@@ -5,7 +5,8 @@
 // por inteiro — o aluno obtém-no por GET /lessons/:id/file, que valida o acesso.
 import { BadRequestException } from '@nestjs/common';
 import { Role } from '../../auth/enums/role.enum';
-import { formatLimit, maxDecodedBytes } from '../files/data-url';
+import { formatLimit } from '../files/data-url';
+import { inspectInlineFile } from '../files/inspect-inline-file';
 import { FILE_POLICIES } from '../files/file-policies';
 import { isPrivileged } from './ownership';
 
@@ -34,8 +35,8 @@ export function decodePdfDataUrl(contentUrl: string | null | undefined): Buffer 
 }
 
 /**
- * Rejeita ficheiros inline em lições PDF/TEXT que não sejam PDFs verdadeiros
- * (tipo declarado, assinatura `%PDF-` e tamanho). URLs http(s) passam.
+ * Rejeita ficheiros inline em lições PDF/TEXT que não sejam PDFs verdadeiros: tipo pelos bytes,
+ * estrutura, conteúdo activo (JS/Launch) e tamanho. URLs http(s) passam.
  */
 export function assertValidLessonFile(
   type: string | undefined,
@@ -43,15 +44,13 @@ export function assertValidLessonFile(
 ) {
   if (!contentUrl || (type !== 'PDF' && type !== 'TEXT')) return;
   if (!contentUrl.startsWith('data:')) return;
-  const payloadChars = contentUrl.length - (contentUrl.indexOf(',') + 1);
-  if (maxDecodedBytes(payloadChars) - 2 > FILE_POLICIES.PDF.maxBytes) {
+  const result = inspectInlineFile(contentUrl, FILE_POLICIES.PDF);
+  if (result.ok === false) {
     throw new BadRequestException(
-      `O PDF excede o tamanho máximo de ${formatLimit(FILE_POLICIES.PDF.maxBytes)}`,
+      result.error.includes('excede')
+        ? `O PDF excede o tamanho máximo de ${formatLimit(FILE_POLICIES.PDF.maxBytes)}`
+        : `Ficheiro inválido: só são aceites PDFs (${result.error})`,
     );
-  }
-  const bytes = decodePdfDataUrl(contentUrl);
-  if (!bytes || bytes.subarray(0, 5).toString('latin1') !== '%PDF-') {
-    throw new BadRequestException('Ficheiro inválido: só são aceites PDFs');
   }
 }
 

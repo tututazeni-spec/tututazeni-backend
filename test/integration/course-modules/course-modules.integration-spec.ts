@@ -10,7 +10,7 @@ import { Pool } from 'pg';
 const TEST_DB_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/innova_test';
 
 // PDF "carregado" inline em Lesson.contentUrl (mesmo padrão do avatar/thumbnail).
-const LESSON_PDF_DATA_URL = 'data:application/pdf;base64,JVBERi0xLjQK';
+const LESSON_PDF_DATA_URL = `data:application/pdf;base64,${Buffer.from('%PDF-1.4\n%%EOF\n').toString('base64')}`;
 
 describe('Course Modules Integration', () => {
   let app: INestApplication;

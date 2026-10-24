@@ -36,6 +36,7 @@ import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.valid
 import { FILE_POLICIES, maxDataUrlChars } from '../common/files/file-policies';
 import { IsBase64ImageDataUrl } from '../common/validators/is-base64-image-data-url.decorator';
 
+import { IsOptionalImageRef } from '../common/validators/optional-image-ref.decorator';
 // ─── Enums ────────────────────────────────────────────────────────────────────
 // NOTA: ParticipantStatus aqui é o `TrainingParticipantStatus` do Prisma —
 // nome local mantido por compatibilidade, distinto do `ParticipantStatus`
@@ -124,6 +125,7 @@ export class CreateTrainingDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @IsOptionalImageRef()
   thumbnailUrl?: string;
 
   @ApiPropertyOptional({ description: 'Índice da cor da formação (0-7)' })

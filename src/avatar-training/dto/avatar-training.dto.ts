@@ -80,7 +80,7 @@ export class CreateTrainingAvatarDto {
     description: 'Ligação (URL) ou imagem inline em data URL base64 (png/jpeg/webp/gif, máx. 5 MB)',
   })
   @IsOptional()
-  @IsUrlOrInlineFile({ maxBytes: FILE_POLICIES.TRAINING_AVATAR_IMAGE.maxBytes })
+  @IsUrlOrInlineFile({ policy: FILE_POLICIES.TRAINING_AVATAR_IMAGE })
   @Matches(/^(?!data:)|^data:image\/(png|jpe?g|webp|gif);base64,/, {
     message: 'imageUrl: o ficheiro inline tem de ser uma imagem (png, jpeg, webp ou gif)',
   })

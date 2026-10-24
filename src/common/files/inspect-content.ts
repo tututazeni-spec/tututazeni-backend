@@ -10,15 +10,44 @@ import { readZipDirectory } from './zip-directory';
 const PDF_ACTIVE = /\/(JavaScript|JS|Launch|EmbeddedFile|RichMedia)(?![A-Za-z0-9])/;
 const PDF_MAX_SCAN_BYTES = 16 * 1024 * 1024;
 
+/**
+ * Remove o conteúdo entre `stream` e `endstream`: são bytes (normalmente comprimidos) onde um
+ * "/JS" aparece por acaso — num PDF de 5 MB isso acontece com probabilidade não desprezável.
+ * Só se procuram acções activas nos dicionários. JS dentro de object streams comprimidos
+ * (PDF ≥ 1.5) não é visível aqui: limite conhecido, a mitigar com cabeçalho de download seguro.
+ */
+function withoutStreams(text: string): string {
+  const parts: string[] = [];
+  let pos = 0;
+  for (;;) {
+    const start = text.indexOf('stream', pos);
+    if (start < 0) break;
+    if (text.startsWith('endstream', start - 3)) {
+      parts.push(text.slice(pos, start + 6));
+      pos = start + 6;
+      continue;
+    }
+    const end = text.indexOf('endstream', start + 6);
+    parts.push(text.slice(pos, start + 6));
+    if (end < 0) {
+      pos = text.length;
+      break;
+    }
+    pos = end;
+  }
+  parts.push(text.slice(pos));
+  return parts.join('');
+}
+
 export function pdfProblem(b: Buffer): string | null {
   if (b.toString('latin1', 0, 5) !== '%PDF-') return 'O ficheiro não é um PDF válido.';
   if (!b.toString('latin1', Math.max(0, b.length - 1024)).includes('%%EOF')) {
     return 'PDF truncado ou corrompido.';
   }
-  const text = b
-    .subarray(0, PDF_MAX_SCAN_BYTES)
-    .toString('latin1')
-    .replace(/#([0-9a-fA-F]{2})/g, (_m, h: string) => String.fromCharCode(parseInt(h, 16)));
+  const text = withoutStreams(b.subarray(0, PDF_MAX_SCAN_BYTES).toString('latin1')).replace(
+    /#([0-9a-fA-F]{2})/g,
+    (_m, h: string) => String.fromCharCode(parseInt(h, 16)),
+  );
   const hit = PDF_ACTIVE.exec(text);
   if (hit) return `O PDF contém conteúdo activo não permitido (/${hit[1]}).`;
   return null;

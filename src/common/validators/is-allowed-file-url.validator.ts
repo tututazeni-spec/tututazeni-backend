@@ -1,25 +1,20 @@
 import { registerDecorator, ValidationArguments, ValidationOptions } from 'class-validator';
 import { FilePolicy } from '../files/file-policies';
-import { parseDataUrl } from '../files/data-url';
+import { inspectInlineFile } from '../files/inspect-inline-file';
 import { safeFileUrlProblem } from './safe-file-url';
 
 export interface AllowedFileUrlExtras {
   /**
-   * Aceita também um ficheiro inline (data URL base64) cujo MIME declarado conste da política e
-   * cujo tamanho descodificado não exceda `maxBytes`. A inspecção do conteúdo vive em
-   * `src/common/files` (inspectInlineFile).
+   * Aceita também um ficheiro inline (data URL base64): MIME na política, tamanho em bytes e
+   * conteúdo real validado pelos bytes (`inspectInlineFile`): tipo, estrutura, conteúdo activo.
    */
   inline?: FilePolicy;
 }
 
-/** Motivo da rejeição de um data URL pela política (MIME na lista, tamanho em bytes), ou `null`. */
+/** Motivo da rejeição de um data URL pela política, ou `null`. */
 function inlineProblem(value: string, policy: FilePolicy): string | null {
-  const parsed = parseDataUrl(value, policy.maxBytes);
-  if (parsed.ok === false) return parsed.error;
-  if (!policy.mimes.includes(parsed.declaredMime)) {
-    return `tipo de ficheiro não permitido (${parsed.declaredMime})`;
-  }
-  return null;
+  const r = inspectInlineFile(value, policy);
+  return r.ok === false ? r.error : null;
 }
 
 function allowedHosts(): string[] {

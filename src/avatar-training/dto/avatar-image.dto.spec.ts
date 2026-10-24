@@ -1,10 +1,11 @@
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { CreateTrainingAvatarDto } from './avatar-training.dto';
+import { dataUrl, png as makePng } from '../../common/files/file-fixtures';
 
 const check = async (imageUrl: string) =>
   validate(plainToInstance(CreateTrainingAvatarDto, { name: 'Isis', imageUrl }));
-const png = (bytes: number) => `data:image/png;base64,${Buffer.alloc(bytes, 1).toString('base64')}`;
+const png = (bytes: number) => dataUrl('image/png', makePng(10, 10, Math.max(0, bytes - 45)));
 
 describe('CreateTrainingAvatarDto.imageUrl', () => {
   it('aceita ligação e imagem inline até 5 MB', async () => {

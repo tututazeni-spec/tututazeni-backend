@@ -33,7 +33,7 @@ import {
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
-import { FILE_POLICIES, maxDataUrlChars } from '../common/files/file-policies';
+import { IsOptionalImageRef } from '../common/validators/optional-image-ref.decorator';
 
 export {
   CourseLevel,
@@ -101,7 +101,7 @@ export class CreateCourseDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @MaxLength(maxDataUrlChars(FILE_POLICIES.CARD_IMAGE))
+  @IsOptionalImageRef()
   thumbnailUrl?: string;
 
   @ApiPropertyOptional()
@@ -276,6 +276,7 @@ export class CreateCourseModuleDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @IsOptionalImageRef()
   thumbnailUrl?: string;
 
   @ApiPropertyOptional()

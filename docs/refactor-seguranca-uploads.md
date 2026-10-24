@@ -166,3 +166,22 @@ T1 e T5 não dependem de nada e podem arrancar já. T3 depende de T2 e T4.
 3. Ficheiros Office: manter permitidos ou passar a só-PDF?
 4. Quer ClamAV (T7.1), ou fica fora de âmbito?
 5. Vídeos/áudio: confirmo que ficam apenas por URL externa e nunca inline?
+
+## 8. Estado de execução (2026-10-23)
+
+| Tarefa | Estado | Notas |
+|---|---|---|
+| T1 URLs | feita | `safe-file-url.ts`; `IsUrlOrInlineFile`/`IsAllowedFileUrl` já não aceitam `javascript:`, `http:`, credenciais nem hosts internos. T1.3 já estava coberta por `validate-env.ts`/Joi. |
+| T2 Deteção por bytes | feita | `src/common/files/`: `detect-file-type`, `zip-directory`, `inspect-content`, `data-url`, `inspect-inline-file`. Sem dependências novas. |
+| T3 Aplicar nos fluxos | feita | Avatar, `imageUrl`, capas (`IsOptionalImageRef`), PDFs/imagens de licença/formação/onboarding, biblioteca, certificado externo, avatar-training, lições PDF e evidência de auditoria validam pelos bytes. |
+| T4 Limites | feita | `FILE_POLICIES` (bytes, sem alargar limites), `fileSize` por MIME, `/auth` com corpo máx. 100 KB. |
+| T5 Nomes | feita | `IsSafeFileName`/`sanitizeFileName`. |
+| T6 Downloads seguros | pendente | `Content-Disposition` e `nosniff` ao servir ficheiros. |
+| T7 Complementares | pendente | CSV injection, rate limit nas rotas de upload, auditoria de rejeições, ClamAV (decisão de produto). |
+| T8 Rollout | parcial | Script `npm run audit:uploads` (só leitura) feito. Falta modo `warn`→`enforce` e correr o script em produção. |
+
+### Limites conhecidos
+- JavaScript dentro de object streams comprimidos de PDF (≥ 1.5) não é visível sem descomprimir.
+- OOXML: tamanhos validados são os declarados no directório ZIP; só quem descomprime apanha uma mentira nesses campos.
+- Ficheiros Office legados (`.doc/.xls/.ppt`) deixaram de ser aceites em fluxos com política.
+- DNS: URLs externas validam o hostname literal, não a resolução (um domínio público que aponte para IP interno passa).

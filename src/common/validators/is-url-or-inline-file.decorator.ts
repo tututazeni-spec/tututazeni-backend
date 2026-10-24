@@ -7,7 +7,8 @@
 import { registerDecorator, ValidationOptions } from 'class-validator';
 import { ALLOWED_MIME_TYPES } from './allowed-mime-types';
 import { base64PayloadLength, formatLimit, maxDecodedBytes } from '../files/data-url';
-import { FILE_POLICIES } from '../files/file-policies';
+import { FILE_POLICIES, FilePolicy } from '../files/file-policies';
+import { inspectInlineFile } from '../files/inspect-inline-file';
 import { safeFileUrlProblem } from './safe-file-url';
 
 // Só o cabeçalho passa por regex (ver parseDataUrl): o payload base64 pode ter milhões de
@@ -35,8 +36,23 @@ export function inlineFileProblem(value: string, maxBytes: number): string | nul
   return null;
 }
 
-export function IsUrlOrInlineFile(options?: ValidationOptions & { maxBytes?: number }) {
-  const maxBytes = options?.maxBytes ?? DEFAULT_INLINE_FILE_BYTES;
+export function IsUrlOrInlineFile(
+  options?: ValidationOptions & {
+    maxBytes?: number;
+    /** Se definida, o ficheiro inline é inspeccionado pelos bytes (tipo real, estrutura) com esta
+     *  política; `maxBytes` passa a ser o da política. Sem ela, só MIME declarado + tamanho. */
+    policy?: FilePolicy;
+  },
+) {
+  const policy = options?.policy;
+  const maxBytes = policy?.maxBytes ?? options?.maxBytes ?? DEFAULT_INLINE_FILE_BYTES;
+  const inlineProblemOf = (v: string): string | null => {
+    if (policy) {
+      const r = inspectInlineFile(v, policy);
+      return r.ok === false ? r.error : null;
+    }
+    return inlineFileProblem(v, maxBytes);
+  };
   return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isUrlOrInlineFile',
@@ -47,14 +63,14 @@ export function IsUrlOrInlineFile(options?: ValidationOptions & { maxBytes?: num
         validate(value: unknown): boolean {
           if (typeof value !== 'string' || !value.trim()) return false;
           if (!value.startsWith('data:')) return safeFileUrlProblem(value) === null;
-          return inlineFileProblem(value, maxBytes) === null;
+          return inlineProblemOf(value) === null;
         },
         defaultMessage(args): string {
           const v = args?.value;
           const problem =
             typeof v === 'string'
               ? v.startsWith('data:')
-                ? inlineFileProblem(v, maxBytes)
+                ? inlineProblemOf(v)
                 : safeFileUrlProblem(v)
               : null;
           return `${propertyName}: ${problem ?? `deve ser uma ligação ou um ficheiro (máx. ${formatLimit(maxBytes)})`}`;

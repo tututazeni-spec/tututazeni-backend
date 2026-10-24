@@ -13,7 +13,9 @@ import {
 import { Prisma } from '@prisma/client';
 import { createHash, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { detectFileType } from '../common/files/detect-file-type';
 import { FILE_POLICIES } from '../common/files/file-policies';
+import { inspectBuffer } from '../common/files/inspect-inline-file';
 import { sanitizeFileName } from '../common/files/sanitize-file-name';
 import { AuditService } from './audit.service';
 import type { AuditActor } from './audit-incidents.service';
@@ -27,7 +29,6 @@ import {
 import { buildPaginatedResponse, calculatePagination } from '../common/helpers/pagination.helper';
 
 const DAY = 24 * 3600 * 1000;
-const MAX_EVIDENCE_BYTES = FILE_POLICIES.EVIDENCE.maxBytes;
 
 export interface SaveFileInput {
   kind: 'REPORT' | 'EVIDENCE';
@@ -322,9 +323,13 @@ export class AuditExportsService {
     }
     const buffer = Buffer.from(dto.contentBase64, 'base64');
     if (!buffer.length) throw new BadRequestException('Ficheiro vazio');
-    if (buffer.length > MAX_EVIDENCE_BYTES) {
-      throw new BadRequestException('Ficheiro acima do limite de 5 MB');
-    }
+    // O tipo vem dos bytes: o mimeType do cliente só é aceite se bater com eles.
+    const inspected = inspectBuffer(
+      buffer,
+      dto.mimeType ?? detectFileType(buffer).mimes[0] ?? 'application/octet-stream',
+      FILE_POLICIES.EVIDENCE,
+    );
+    if (inspected.ok === false) throw new BadRequestException(inspected.error);
     if (dto.incidentId) {
       const ok = await this.prisma.securityIncident.count({ where: { id: dto.incidentId } });
       if (!ok) throw new NotFoundException('Incidente não encontrado');
@@ -333,11 +338,11 @@ export class AuditExportsService {
       const ok = await this.prisma.internalAudit.count({ where: { id: dto.auditId } });
       if (!ok) throw new NotFoundException('Auditoria não encontrada');
     }
-    const ext = dto.fileName.includes('.') ? dto.fileName.split('.').pop().toLowerCase() : 'other';
+    const ext = inspected.ext;
     const saved = await this.saveFile({
       kind: 'EVIDENCE',
       fileName: sanitizeFileName(dto.fileName),
-      mimeType: dto.mimeType ?? 'application/octet-stream',
+      mimeType: inspected.mime,
       format: ['csv', 'xlsx', 'pdf'].includes(ext) ? ext : 'other',
       incidentId: dto.incidentId,
       auditId: dto.auditId,
