@@ -1,4 +1,5 @@
 // ─── src/competency-map/competency-map.controller.ts ─────────────────────────
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -58,6 +59,7 @@ export class CompetencyMapController {
 
   @Get('categories')
   @ApiOperation({ summary: 'Listar categorias de skills (com contagem)' })
+  @AnyAuthenticated()
   getCategories() {
     return this.svc.getCategories();
   }
@@ -73,12 +75,14 @@ export class CompetencyMapController {
 
   @Get('skills')
   @ApiOperation({ summary: 'Catálogo de skills com filtros' })
+  @AnyAuthenticated()
   getSkills(@Query() filters: SkillFilterDto) {
     return this.svc.getSkills(filters);
   }
 
   @Get('skills/:id')
   @ApiOperation({ summary: 'Detalhe da skill com níveis de proficiência e uso' })
+  @AnyAuthenticated()
   getSkill(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getSkill(id);
   }
@@ -101,6 +105,7 @@ export class CompetencyMapController {
 
   @Get('skills/:id/levels')
   @ApiOperation({ summary: 'Níveis de proficiência de uma skill' })
+  @AnyAuthenticated()
   getProficiencyLevels(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getProficiencyLevels(id);
   }
@@ -124,6 +129,7 @@ export class CompetencyMapController {
 
   @Get('role-matrix/:roleCode')
   @ApiOperation({ summary: 'Matriz de skills de um cargo específico' })
+  @AnyAuthenticated()
   getRoleMatrix(@Param('roleCode') roleCode: string) {
     return this.svc.getRoleSkillMatrix(roleCode);
   }
@@ -139,12 +145,14 @@ export class CompetencyMapController {
 
   @Get('my')
   @ApiOperation({ summary: 'Meu mapa de competências (skills + gap analysis + recomendações)' })
+  @AnyAuthenticated()
   myMap(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMap(user.id);
   }
 
   @Get('my/radar')
   @ApiOperation({ summary: 'Dados de radar chart do colaborador actual' })
+  @AnyAuthenticated()
   myRadar(@CurrentUser() user: CurrentUserData) {
     return this.svc.getRadarData(user.id);
   }
@@ -152,12 +160,14 @@ export class CompetencyMapController {
   @Get('my/gap')
   @ApiOperation({ summary: 'Gap analysis pessoal (vs cargo actual ou especificado)' })
   @ApiQuery({ name: 'roleCode', required: false })
+  @AnyAuthenticated()
   myGap(@CurrentUser() user: CurrentUserData, @Query('roleCode') roleCode?: string) {
     return this.svc.getUserGapAnalysis(user.id, roleCode);
   }
 
   @Get('my/history/:skillId')
   @ApiOperation({ summary: 'Histórico de evolução de uma skill' })
+  @AnyAuthenticated()
   mySkillHistory(
     @CurrentUser() user: CurrentUserData,
     @Param('skillId', ParseIntPipe) skillId: number,
@@ -209,6 +219,7 @@ export class CompetencyMapController {
 
   @Post('assess')
   @ApiOperation({ summary: 'Registar avaliação de skill (autoavaliação, gestor, 360°, etc.)' })
+  @AnyAuthenticated()
   assess(@Body() dto: UpsertEmployeeSkillDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.upsertEmployeeSkill(dto, user.id);
   }

@@ -1,4 +1,5 @@
 // src/process-standard/process-standard.controller.ts
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   BadRequestException,
   Controller,
@@ -117,6 +118,7 @@ export class ProcessStandardController {
 
   @Get()
   @ApiOperation({ summary: 'Listar processos (com filtros e paginação)' })
+  @AnyAuthenticated()
   findAll(@Query() filters: ProcessFilterDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.findAll(filters, user);
   }
@@ -133,6 +135,7 @@ export class ProcessStandardController {
 
   @Get('my-tasks')
   @ApiOperation({ summary: 'Minhas tarefas pendentes em instâncias activas' })
+  @AnyAuthenticated()
   myTasks(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyTasks(user.id);
   }
@@ -688,6 +691,7 @@ export class ProcessStandardController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do processo (com steps e versões)' })
+  @AnyAuthenticated()
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOne(id);
   }
@@ -732,6 +736,7 @@ export class ProcessStandardController {
 
   @Get(':id/qr-code')
   @ApiOperation({ summary: 'URL para QR Code do processo' })
+  @AnyAuthenticated()
   qrCode(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getQRCodeUrl(id);
   }
@@ -844,6 +849,7 @@ export class ProcessStandardController {
 
   @Get('instances/:instanceId')
   @ApiOperation({ summary: 'Detalhe de uma instância com progresso dos steps' })
+  @AnyAuthenticated()
   getInstance(@Param('instanceId', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.getInstanceDetail(id, user);
   }
@@ -889,6 +895,7 @@ export class ProcessStandardController {
   @Post('instances/:instanceId/steps/:stepId/complete')
   @ApiOperation({ summary: 'Completar etapa de uma instância' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   completeStep(
     @Param('instanceId', ParseIntPipe) instanceId: number,
     @Param('stepId', ParseIntPipe) stepId: number,
@@ -901,6 +908,7 @@ export class ProcessStandardController {
   @Post('instances/:instanceId/steps/:stepId/reject')
   @ApiOperation({ summary: 'Rejeitar etapa (coloca instância ON_HOLD)' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   rejectStep(
     @Param('instanceId', ParseIntPipe) instanceId: number,
     @Param('stepId', ParseIntPipe) stepId: number,

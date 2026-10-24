@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException } from '@nestjs/common';
 import { getQueueToken } from '@nestjs/bull';
+import { SessionRevocationService } from '../auth/session-revocation.service';
+import { ForbiddenException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -18,6 +20,7 @@ const userMock = {
 
 const mockPrismaBase = {
   user: userMock,
+  role: { findUnique: jest.fn() },
   userPoints: {
     create: jest.fn().mockResolvedValue({}),
     findUnique: jest.fn().mockResolvedValue({ points: 100 }),
@@ -110,6 +113,11 @@ const baseUser = {
   _count: { enrollments: 0, certificates: 0, badgeAwards: 0, subordinates: 0, userCompetencies: 0 },
 };
 
+const mockRevocation = {
+  revokeAllUserSessions: jest.fn().mockResolvedValue(undefined),
+  invalidateUserCache: jest.fn().mockResolvedValue(undefined),
+};
+
 describe('UsersService', () => {
   let service: UsersService;
 
@@ -126,6 +134,7 @@ describe('UsersService', () => {
         UsersService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: getQueueToken('email'), useValue: mockEmailQueue },
+        { provide: SessionRevocationService, useValue: mockRevocation },
       ],
     }).compile();
     service = module.get<UsersService>(UsersService);
@@ -176,6 +185,52 @@ describe('UsersService', () => {
   });
 
   // ─── create ───────────────────────────────────────────────────────────────
+
+  describe('escalada de privilégios (menor privilégio)', () => {
+    const adminRole = { id: 9, name: 'ADMIN' };
+    const rhRole = { id: 4, name: 'RH' };
+
+    it('RH não cria utilizador com papel ADMIN', async () => {
+      mockPrisma.role.findUnique.mockResolvedValue(adminRole);
+      await expect(
+        service.create({ fullName: 'X', email: 'x@innova.com', roleId: 9 } as any, 5, {
+          actorRole: 'RH',
+        }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('RH não promove outro utilizador a ADMIN', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ ...baseUser, id: 7, roleId: 1 });
+      mockPrisma.role.findUnique.mockResolvedValue(adminRole);
+      await expect(service.update(7, { roleId: 9 } as any, 5, 'RH')).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('ninguém não-ADMIN altera o próprio papel', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ ...baseUser, id: 5, roleId: 4 });
+      mockPrisma.role.findUnique.mockResolvedValue(rhRole);
+      await expect(service.update(5, { roleId: 1 } as any, 5, 'RH')).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('ADMIN pode atribuir ADMIN', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ ...baseUser, id: 7, roleId: 1 });
+      mockPrisma.user.findFirst.mockResolvedValue(null);
+      mockPrisma.role.findUnique.mockResolvedValue(adminRole);
+      mockPrisma.user.update.mockResolvedValue({ ...baseUser, id: 7 });
+      await expect(service.update(7, { roleId: 9 } as any, 1, 'ADMIN')).resolves.toBeDefined();
+    });
+
+    it('RH continua a poder atribuir papéis não-ADMIN a outros', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ ...baseUser, id: 7, roleId: 1 });
+      mockPrisma.user.findFirst.mockResolvedValue(null);
+      mockPrisma.role.findUnique.mockResolvedValue({ id: 3, name: 'GESTOR' });
+      mockPrisma.user.update.mockResolvedValue({ ...baseUser, id: 7 });
+      await expect(service.update(7, { roleId: 3 } as any, 5, 'RH')).resolves.toBeDefined();
+    });
+  });
 
   describe('create', () => {
     const createDto = {
@@ -256,6 +311,8 @@ describe('UsersService', () => {
       mockPrisma.user.update.mockResolvedValue({ ...baseUser, active: false });
       const result = await service.deactivate(1, 'Saída da empresa');
       expect(result).toBeDefined();
+      expect(mockRevocation.revokeAllUserSessions).toHaveBeenCalledWith(1);
+      expect(mockRevocation.invalidateUserCache).toHaveBeenCalledWith(1);
     });
   });
 
@@ -265,6 +322,7 @@ describe('UsersService', () => {
       mockPrisma.user.update.mockResolvedValue({ ...baseUser, active: false });
       const result = await service.suspend(1, 'Disciplinar');
       expect(result).toBeDefined();
+      expect(mockRevocation.revokeAllUserSessions).toHaveBeenCalledWith(1);
     });
   });
 

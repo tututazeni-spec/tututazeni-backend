@@ -211,3 +211,12 @@ export class ReasonDto {
   @MaxLength(1000)
   reason!: string;
 }
+
+/** Corpo do POST público share/:token — a password não deve viajar na query string. */
+export class ResolveShareDto {
+  @ApiPropertyOptional({ description: 'Password do link, se protegido' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  password?: string;
+}

@@ -1,4 +1,5 @@
 // src/departments/departments.controller.ts
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -271,12 +272,14 @@ export class UnitsController {
 
   @Get()
   @ApiOperation({ summary: 'Listar unidades' })
+  @AnyAuthenticated()
   findAll() {
     return this.svc.findAll();
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe da unidade' })
+  @AnyAuthenticated()
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOne(id);
   }
@@ -315,12 +318,14 @@ export class RolesController {
 
   @Get()
   @ApiOperation({ summary: 'Listar roles com permissões' })
+  @AnyAuthenticated()
   findAll() {
     return this.svc.findAll();
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe da role' })
+  @AnyAuthenticated()
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOne(id);
   }
@@ -399,12 +404,14 @@ export class PositionsController {
 
   @Get()
   @ApiOperation({ summary: 'Listar posições' })
+  @AnyAuthenticated()
   findAll() {
     return this.svc.findAll();
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe da posição' })
+  @AnyAuthenticated()
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOne(id);
   }
@@ -442,24 +449,28 @@ export class CareersController {
 
   @Get('ladder')
   @ApiOperation({ summary: 'Escada de carreira completa' })
+  @AnyAuthenticated()
   ladder() {
     return this.svc.getCareerLadder();
   }
 
   @Get('positions')
   @ApiOperation({ summary: 'Listar posições de carreira' })
+  @AnyAuthenticated()
   positions() {
     return this.svc.findAllPositions();
   }
 
   @Get('positions/:id')
   @ApiOperation({ summary: 'Detalhe da posição de carreira' })
+  @AnyAuthenticated()
   position(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOnePosition(id);
   }
 
   @Get('my')
   @ApiOperation({ summary: 'Meu histórico de carreira' })
+  @AnyAuthenticated()
   myHistory(@CurrentUser() user: CurrentUserData) {
     return this.svc.getUserCareerHistory(user.id);
   }

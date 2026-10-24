@@ -1,3 +1,4 @@
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -66,6 +67,7 @@ export class CrmBeneficiariesController {
 
   @Get('follow-ups')
   @ApiOperation({ summary: 'Follow-ups pendentes do utilizador' })
+  @AnyAuthenticated()
   getFollowUps(
     @CurrentUser() user: CurrentUserData,
     @Query('days', new DefaultValuePipe(7), ParseIntPipe) days: number,

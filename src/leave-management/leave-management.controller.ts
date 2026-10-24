@@ -1,4 +1,5 @@
 // ─── src/leave-management/leave-management.controller.ts ─────────────────────
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -73,6 +74,7 @@ export class LeaveManagementController {
   @Get('types')
   @ApiOperation({ summary: 'Listar tipos de licença configurados' })
   @ApiQuery({ name: 'activeOnly', required: false, type: Boolean })
+  @AnyAuthenticated()
   getTypes(@Query('activeOnly') activeOnly?: string) {
     return this.svc.getLeaveTypes(activeOnly !== 'false');
   }
@@ -121,18 +123,21 @@ export class LeaveManagementController {
   @ApiOperation({
     summary: 'Visão Geral — cards e gráficos de férias/ausências, âmbito conforme o perfil',
   })
+  @AnyAuthenticated()
   getOverview(@Query() filters: OverviewFilterDto, @CurrentUser() user: CurrentUserData) {
     return this.overview.getOverview(filters, user);
   }
 
   @Get('vacations')
   @ApiOperation({ summary: 'Aba Férias — saldos e plano anual por colaborador' })
+  @AnyAuthenticated()
   getVacations(@Query() filters: VacationFilterDto, @CurrentUser() user: CurrentUserData) {
     return this.overview.getVacations(filters, user);
   }
 
   @Get('duration-preview')
   @ApiOperation({ summary: 'Duração, feriados, saldo e sobreposição antes de submeter' })
+  @AnyAuthenticated()
   previewDuration(@Query() dto: DurationPreviewDto, @CurrentUser() user: CurrentUserData) {
     return this.overview.previewDuration(dto, user);
   }
@@ -142,12 +147,14 @@ export class LeaveManagementController {
     summary:
       'Aba Licenças — tabela com privacidade por perfil (motivo/comprovativos sensíveis ocultos)',
   })
+  @AnyAuthenticated()
   getLicenses(@Query() filters: LicenseFilterDto, @CurrentUser() user: CurrentUserData) {
     return this.licenses.list(filters, user);
   }
 
   @Get('approval-route')
   @ApiOperation({ summary: 'Encaminhamento de aprovação previsto antes de submeter' })
+  @AnyAuthenticated()
   getApprovalRoute(@Query() dto: ApprovalRouteDto, @CurrentUser() user: CurrentUserData) {
     return this.licenses.approvalRoute(dto, user);
   }
@@ -156,6 +163,7 @@ export class LeaveManagementController {
   @ApiOperation({
     summary: 'Calendário de ausências (dia/semana/mês/ano) com cobertura e sobreposições',
   })
+  @AnyAuthenticated()
   getAbsenceCalendar(
     @Query() filters: AbsenceCalendarFilterDto,
     @CurrentUser() user: CurrentUserData,
@@ -274,6 +282,7 @@ export class LeaveManagementController {
 
   @Get('calendar')
   @ApiOperation({ summary: 'Calendário de ausências com heatmap' })
+  @AnyAuthenticated()
   getCalendar(@Query() filters: CalendarFilterDto) {
     return this.svc.getCalendar(filters);
   }
@@ -283,6 +292,7 @@ export class LeaveManagementController {
   @ApiQuery({ name: 'userId', type: Number })
   @ApiQuery({ name: 'startDate' })
   @ApiQuery({ name: 'endDate' })
+  @AnyAuthenticated()
   checkConflicts(
     @Query('userId') userId: string,
     @Query('startDate') startDate: string,
@@ -310,18 +320,21 @@ export class LeaveManagementController {
 
   @Get('my')
   @ApiOperation({ summary: 'Meus pedidos de licença' })
+  @AnyAuthenticated()
   myRequests(@CurrentUser() user: CurrentUserData, @Query() filters: LeaveFilterDto) {
     return this.svc.findAll({ ...filters, userId: user.id }, user);
   }
 
   @Get('my/balance')
   @ApiOperation({ summary: 'Meu saldo de dias por tipo de licença' })
+  @AnyAuthenticated()
   myBalance(@CurrentUser() user: CurrentUserData) {
     return this.svc.getBalance(user.id);
   }
 
   @Get('my/balance/history')
   @ApiOperation({ summary: 'Histórico de movimentos do meu saldo' })
+  @AnyAuthenticated()
   myBalanceHistory(@CurrentUser() user: CurrentUserData, @Query('leaveTypeCode') code?: string) {
     return this.svc.getBalanceHistory(user.id, code);
   }
@@ -337,12 +350,14 @@ export class LeaveManagementController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe de um pedido' })
+  @AnyAuthenticated()
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(id, user);
   }
 
   @Post()
   @ApiOperation({ summary: 'Submeter pedido de licença (suporta rascunho, meios dias, horas)' })
+  @AnyAuthenticated()
   create(@Body() dto: CreateLeaveManagementRequestDto, @CurrentUser() user: CurrentUserData) {
     // Só o próprio ou ADMIN/RH/GESTOR podem submeter em nome de `dto.userId`.
     assertCanAccess({}, dto.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
@@ -369,6 +384,7 @@ export class LeaveManagementController {
 
   @Patch(':id/cancel')
   @ApiOperation({ summary: 'Cancelar pedido (devolve saldo se aprovado)' })
+  @AnyAuthenticated()
   cancel(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: CurrentUserData,

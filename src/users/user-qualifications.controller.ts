@@ -2,6 +2,7 @@
 // Habilitações, idiomas, certificações externas e experiência anterior do
 // colaborador. Sem @Roles: a autorização é por dono / ADMIN / RH, aplicada no
 // serviço (assertCanAccess).
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Body,
   Controller,
@@ -35,12 +36,14 @@ export class UserQualificationsController {
 
   @Get('qualifications')
   @ApiOperation({ summary: 'Perfil de qualificações (habilitações, idiomas, certificações)' })
+  @AnyAuthenticated()
   getProfile(@Param('userId', ParseIntPipe) userId: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.getProfile(userId, user);
   }
 
   @Post('qualifications')
   @ApiOperation({ summary: 'Adicionar habilitação académica' })
+  @AnyAuthenticated()
   addQualification(
     @Param('userId', ParseIntPipe) userId: number,
     @Body() dto: QualificationDto,
@@ -51,6 +54,7 @@ export class UserQualificationsController {
 
   @Put('qualifications/:id')
   @ApiOperation({ summary: 'Actualizar habilitação académica' })
+  @AnyAuthenticated()
   updateQualification(
     @Param('userId', ParseIntPipe) userId: number,
     @Param('id', ParseIntPipe) id: number,
@@ -62,6 +66,7 @@ export class UserQualificationsController {
 
   @Delete('qualifications/:id')
   @ApiOperation({ summary: 'Apagar habilitação académica' })
+  @AnyAuthenticated()
   removeQualification(
     @Param('userId', ParseIntPipe) userId: number,
     @Param('id', ParseIntPipe) id: number,
@@ -72,6 +77,7 @@ export class UserQualificationsController {
 
   @Post('languages')
   @ApiOperation({ summary: 'Adicionar ou actualizar idioma' })
+  @AnyAuthenticated()
   addLanguage(
     @Param('userId', ParseIntPipe) userId: number,
     @Body() dto: LanguageDto,
@@ -82,6 +88,7 @@ export class UserQualificationsController {
 
   @Delete('languages/:id')
   @ApiOperation({ summary: 'Apagar idioma' })
+  @AnyAuthenticated()
   removeLanguage(
     @Param('userId', ParseIntPipe) userId: number,
     @Param('id', ParseIntPipe) id: number,
@@ -92,6 +99,7 @@ export class UserQualificationsController {
 
   @Post('certifications')
   @ApiOperation({ summary: 'Adicionar certificação ou licença externa' })
+  @AnyAuthenticated()
   addCertification(
     @Param('userId', ParseIntPipe) userId: number,
     @Body() dto: ExternalCertificationDto,
@@ -102,6 +110,7 @@ export class UserQualificationsController {
 
   @Put('certifications/:id')
   @ApiOperation({ summary: 'Actualizar certificação ou licença externa' })
+  @AnyAuthenticated()
   updateCertification(
     @Param('userId', ParseIntPipe) userId: number,
     @Param('id', ParseIntPipe) id: number,
@@ -113,6 +122,7 @@ export class UserQualificationsController {
 
   @Delete('certifications/:id')
   @ApiOperation({ summary: 'Apagar certificação ou licença externa' })
+  @AnyAuthenticated()
   removeCertification(
     @Param('userId', ParseIntPipe) userId: number,
     @Param('id', ParseIntPipe) id: number,
@@ -123,6 +133,7 @@ export class UserQualificationsController {
 
   @Patch('experience')
   @ApiOperation({ summary: 'Definir anos de experiência profissional anterior' })
+  @AnyAuthenticated()
   setExperience(
     @Param('userId', ParseIntPipe) userId: number,
     @Body() dto: ExperienceDto,

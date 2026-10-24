@@ -1,4 +1,5 @@
 // src/trainings/trainings.controller.ts
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -86,12 +87,14 @@ export class TrainingController {
 
   @Get()
   @ApiOperation({ summary: 'Catálogo de treinamentos com filtros' })
+  @AnyAuthenticated()
   findAll(@Query() filters: TrainingFilterDto) {
     return this.svc.findAll(filters);
   }
 
   @Get('my')
   @ApiOperation({ summary: 'Os meus treinamentos (inscrições e histórico)' })
+  @AnyAuthenticated()
   myTrainings(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyTrainings(user.id);
   }
@@ -108,6 +111,7 @@ export class TrainingController {
 
   @Get('calendar')
   @ApiOperation({ summary: 'Calendário de sessões/formações num intervalo de datas' })
+  @AnyAuthenticated()
   calendar(@Query() filters: TrainingCalendarFilterDto) {
     return this.svc.getCalendar(filters);
   }
@@ -138,6 +142,7 @@ export class TrainingController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do treinamento (sessões, rating médio)' })
+  @AnyAuthenticated()
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(id, user);
   }
@@ -349,6 +354,7 @@ export class TrainingController {
 
   @Post('sessions/:sessionId/self-register')
   @ApiOperation({ summary: 'Auto-inscrição numa sessão' })
+  @AnyAuthenticated()
   selfRegister(
     @CurrentUser() user: CurrentUserData,
     @Param('sessionId', ParseIntPipe) sessionId: number,
@@ -359,6 +365,7 @@ export class TrainingController {
   @Delete('participants/:id/cancel')
   @ApiOperation({ summary: 'Cancelar inscrição própria' })
   @ApiQuery({ name: 'reason', required: false })
+  @AnyAuthenticated()
   cancelParticipant(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: CurrentUserData,
@@ -435,6 +442,7 @@ export class TrainingController {
   @Post('rate')
   @ApiOperation({ summary: 'Avaliar treinamento (1-5 estrelas)' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   rate(@CurrentUser() user: CurrentUserData, @Body() dto: RateTrainingDto) {
     return this.svc.rateTraining(user.id, dto);
   }

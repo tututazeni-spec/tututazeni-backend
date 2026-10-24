@@ -1,4 +1,5 @@
 // src/pdf/pdf.controller.ts
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import { Controller, Get, Param, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { PdfService } from './pdf.service';
@@ -21,6 +22,7 @@ export class PdfController {
   // declarations.controller.ts findOneSubmission. Não wire sem esse check.
   @Get('declaration/:id')
   @ApiOperation({ summary: 'Exportar declaração em PDF' })
+  @AnyAuthenticated()
   async downloadDeclaration(@Param('id') id: string, @Res() res: Response) {
     // TODO: buscar dados reais da declaração pelo id — adicionar ownership
     // (assertCanAccess) antes de ligar a dados reais (A10-20).
