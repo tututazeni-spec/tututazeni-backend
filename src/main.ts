@@ -60,7 +60,13 @@ async function bootstrap() {
   app.use(cookieParser());
   // Segunda camada de defesa CSRF, além de SameSite=Lax + CORS restrito
   // (ver csrf-header-guard.ts) — tem de correr depois do cookieParser.
-  app.use(csrfHeaderMiddleware(TOKEN_COOKIE));
+  app.use(
+    csrfHeaderMiddleware(TOKEN_COOKIE, {
+      secret: process.env.JWT_SECRET,
+      strict: process.env.CSRF_TOKEN_STRICT === 'true',
+      isProd,
+    }),
+  );
 
   // Estabelece o contexto de correlação (reqId) para toda a cadeia do pedido —
   // middleware corre depois do pino-http (que já atribuiu req.id) e antes dos

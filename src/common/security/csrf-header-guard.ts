@@ -10,6 +10,13 @@
 // autorizadas. Serve de rede de segurança adicional caso a política de
 // cookies/CORS seja alterada no futuro sem se repensar CSRF.
 import { Request, Response, NextFunction } from 'express';
+import {
+  CSRF_COOKIE,
+  CSRF_TOKEN_HEADER,
+  buildCsrfCookieOptions,
+  csrfTokensMatch,
+  deriveCsrfToken,
+} from './csrf-token';
 
 const STATE_CHANGING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -28,9 +35,39 @@ export function requiresCsrfHeaderCheck(
   return Boolean(cookies?.[tokenCookieName]);
 }
 
-export function csrfHeaderMiddleware(tokenCookieName: string) {
+// Logins nunca ficam presos por um cookie csrf_token desactualizado (login CSRF tem impacto baixo).
+const TOKEN_CHECK_EXEMPT_PATHS = new Set(['/auth/login', '/auth/sso/ldap-login']);
+
+export interface CsrfMiddlewareOptions {
+  /** Segredo para o token double-submit (JWT_SECRET). Sem ele só vale a camada do cabeçalho X-Requested-With. */
+  secret?: string;
+  /**
+   * false (rollout): sessões antigas, sem cookie csrf_token, continuam a passar só com X-Requested-With
+   * até receberem o cookie no primeiro GET. true: o token é sempre obrigatório.
+   */
+  strict?: boolean;
+  isProd?: boolean;
+}
+
+export function csrfHeaderMiddleware(tokenCookieName: string, options: CsrfMiddlewareOptions = {}) {
+  const { secret, strict = false, isProd = false } = options;
   return (req: Request, res: Response, next: NextFunction): void => {
-    if (!requiresCsrfHeaderCheck(req.method, req.cookies, tokenCookieName)) {
+    const cookies = req.cookies as Record<string, unknown> | undefined;
+    const session = cookies?.[tokenCookieName];
+    const expected =
+      secret && typeof session === 'string' ? deriveCsrfToken(session, secret) : undefined;
+
+    // Auto-recuperação: pedido seguro com sessão e cookie csrf_token em falta/desactualizado
+    // (sessões anteriores a esta defesa, token rodado sem passar pelo login). O frontend lê-o a seguir.
+    if (!STATE_CHANGING_METHODS.has(req.method.toUpperCase())) {
+      if (expected && cookies?.[CSRF_COOKIE] !== expected) {
+        res.cookie(CSRF_COOKIE, expected, buildCsrfCookieOptions(isProd));
+      }
+      next();
+      return;
+    }
+
+    if (!requiresCsrfHeaderCheck(req.method, cookies, tokenCookieName)) {
       next();
       return;
     }
@@ -40,6 +77,21 @@ export function csrfHeaderMiddleware(tokenCookieName: string) {
         message: 'Pedido rejeitado: cabeçalho anti-CSRF em falta ou inválido',
       });
       return;
+    }
+    // Token assinado: obrigatório a quem já o tem (um atacante cross-site envia sempre o cookie
+    // mas nunca consegue ler o valor para o pôr no cabeçalho) e a todos em modo strict.
+    if (
+      expected &&
+      !TOKEN_CHECK_EXEMPT_PATHS.has(req.path) &&
+      (strict || cookies?.[CSRF_COOKIE] !== undefined)
+    ) {
+      if (!csrfTokensMatch(req.headers[CSRF_TOKEN_HEADER], expected)) {
+        res.status(403).json({
+          statusCode: 403,
+          message: 'Pedido rejeitado: token anti-CSRF em falta ou inválido',
+        });
+        return;
+      }
     }
     next();
   };

@@ -5,6 +5,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from './enums/role.enum';
 import { AuthService } from './auth.service';
 import { PasswordResetService } from './password-reset.service';
+import { setCsrfCookie, CSRF_COOKIE } from '../common/security/csrf-token';
 import {
   LoginDto,
   RegisterDto,
@@ -64,6 +65,7 @@ export class AuthController {
   ) {
     const result = await this.authService.login(dto, requestContext(req));
     res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
+    setCsrfCookie(res, result.accessToken);
     res.cookie(REFRESH_COOKIE, result.refreshToken, refreshCookieOptions);
     return result;
   }
@@ -91,6 +93,7 @@ export class AuthController {
       req.user.refreshToken,
     );
     res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
+    setCsrfCookie(res, result.accessToken);
     res.cookie(REFRESH_COOKIE, result.refreshToken, refreshCookieOptions);
     return result;
   }
@@ -103,6 +106,7 @@ export class AuthController {
     if (presented) await this.authService.revokeRefreshToken(presented, requestContext(req));
     res.clearCookie(TOKEN_COOKIE, { ...tokenCookieOptions, maxAge: undefined });
     res.clearCookie(REFRESH_COOKIE, { ...refreshCookieOptions, maxAge: undefined });
+    res.clearCookie(CSRF_COOKIE, { path: '/' });
     return { message: 'Sessão terminada' };
   }
 
