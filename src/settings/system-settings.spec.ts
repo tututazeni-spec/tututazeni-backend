@@ -45,7 +45,9 @@ describe('parseSystemSettings', () => {
 
   it('filtra tipos MIME fora da lista estática: a definição nunca alarga o que os DTOs aceitam', () => {
     const s = parseSystemSettings(
-      JSON.stringify({ uploads: { allowedMimeTypes: [PDF, 'text/html', 'application/x-msdownload'] } }),
+      JSON.stringify({
+        uploads: { allowedMimeTypes: [PDF, 'text/html', 'application/x-msdownload'] },
+      }),
     );
     expect(s.uploads.allowedMimeTypes).toEqual([PDF]);
   });
@@ -68,23 +70,33 @@ describe('isMaintenanceExempt', () => {
     expect(isMaintenanceExempt('/courses', true)).toBe(true);
   });
 
-  it.each(['/auth/login', '/auth', '/health', '/health/ready', '/metrics', '/settings/system', '/settings/system/status'])(
-    'rota %s continua acessível a qualquer um',
-    url => {
-      expect(isMaintenanceExempt(url, false)).toBe(true);
-    },
-  );
+  it.each([
+    '/auth/login',
+    '/auth',
+    '/health',
+    '/health/ready',
+    '/metrics',
+    '/settings/system',
+    '/settings/system/status',
+  ])('rota %s continua acessível a qualquer um', url => {
+    expect(isMaintenanceExempt(url, false)).toBe(true);
+  });
 
   it('ignora a query string ao comparar', () => {
     expect(isMaintenanceExempt('/auth/login?next=/courses', false)).toBe(true);
   });
 
-  it.each(['/courses', '/users/me', '/settings', '/settings/security', '/authors', '/healthcheck', '/metrics-export'])(
-    'rota %s é bloqueada (o prefixo tem de ser um segmento inteiro)',
-    url => {
-      expect(isMaintenanceExempt(url, false)).toBe(false);
-    },
-  );
+  it.each([
+    '/courses',
+    '/users/me',
+    '/settings',
+    '/settings/security',
+    '/authors',
+    '/healthcheck',
+    '/metrics-export',
+  ])('rota %s é bloqueada (o prefixo tem de ser um segmento inteiro)', url => {
+    expect(isMaintenanceExempt(url, false)).toBe(false);
+  });
 
   it('uma query string que imita um prefixo isento não dá acesso', () => {
     expect(isMaintenanceExempt('/courses?x=/auth/login', false)).toBe(false);
@@ -158,7 +170,9 @@ describe('checkUploadMetadata', () => {
   });
 
   it('lista vazia de tipos permitidos recusa qualquer tipo declarado', () => {
-    expect(checkUploadMetadata({ mimeType: PDF }, uploads({ allowedMimeTypes: [] }))).not.toBeNull();
+    expect(
+      checkUploadMetadata({ mimeType: PDF }, uploads({ allowedMimeTypes: [] })),
+    ).not.toBeNull();
   });
 
   // LIMITAÇÃO CONHECIDA: só olha para os campos mimeType/fileSize/fileSizeKb.

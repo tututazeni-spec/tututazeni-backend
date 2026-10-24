@@ -18,7 +18,10 @@ describe('integration-settings (helpers puros)', () => {
     it('defaults seguros: WhatsApp desligado, sem SMTP, Ísis ligada a todos os módulos', () => {
       expect(DEFAULT_INTEGRATION_SETTINGS.whatsapp.enabled).toBe(false);
       expect(DEFAULT_INTEGRATION_SETTINGS.smtp.host).toBe('');
-      expect(DEFAULT_INTEGRATION_SETTINGS.isis).toMatchObject({ enabled: true, enabledModules: [] });
+      expect(DEFAULT_INTEGRATION_SETTINGS.isis).toMatchObject({
+        enabled: true,
+        enabledModules: [],
+      });
     });
 
     it('devolve cópia profunda', () => {
