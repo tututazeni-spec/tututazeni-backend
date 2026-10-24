@@ -3,7 +3,8 @@ import { APP_GUARD, APP_FILTER } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { envValidationSchema } from './config/env.validation';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { AppThrottlerGuard } from './common/security/upload-throttle';
 import { buildThrottlerOptions } from './common/config/throttler.config';
 import { LoggerModule } from 'nestjs-pino';
 import { sanitizeLogObject } from './common/logging/sanitize';
@@ -236,7 +237,7 @@ const accessPath = (url = ''): string => url.split('?')[0];
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: AppThrottlerGuard },
   ],
 })
 export class AppModule {}

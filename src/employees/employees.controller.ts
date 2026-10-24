@@ -44,6 +44,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Role } from '../auth/enums/role.enum';
 import { buildXlsxBuffer } from '../common/utils/xlsx-export.util';
 
+import { UploadThrottle } from '../common/security/upload-throttle';
 // ─────────────────────────────────────────────────────────────────────────────
 
 @ApiTags('Employees')
@@ -334,6 +335,7 @@ export class EmployeesController {
     return this.svc.getDocuments(id);
   }
 
+  @UploadThrottle()
   @Post(':id/documents')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Adicionar documento' })

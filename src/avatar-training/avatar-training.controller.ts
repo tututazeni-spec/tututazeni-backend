@@ -74,6 +74,7 @@ import {
 
 import { safeDownloadHeaders } from '../common/files/safe-download';
 
+import { UploadThrottle } from '../common/security/upload-throttle';
 @ApiTags('Avatar Training')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -100,6 +101,7 @@ export class AvatarTrainingController {
     return this.avatars.listAvatars(filters, !isPrivileged(user, AVATAR_AUTHOR_ROLES));
   }
 
+  @UploadThrottle()
   @Post('avatars')
   @Roles(...AVATAR_ADMIN_ROLES)
   @ApiOperation({ summary: 'Criar avatar (nasce em teste)' })
@@ -120,6 +122,7 @@ export class AvatarTrainingController {
     return this.avatars.avatarHistory(id);
   }
 
+  @UploadThrottle()
   @Patch('avatars/:id')
   @Roles(...AVATAR_ADMIN_ROLES)
   updateAvatar(

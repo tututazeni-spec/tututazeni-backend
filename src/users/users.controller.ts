@@ -31,6 +31,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
+import { UploadThrottle } from '../common/security/upload-throttle';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -71,6 +72,7 @@ export class UsersController {
     return this.svc.upsertProfile(user.id, dto);
   }
 
+  @UploadThrottle()
   @Patch('me/avatar')
   @ApiOperation({ summary: 'Definir a foto de perfil do utilizador autenticado' })
   setMyAvatar(@CurrentUser() user: CurrentUserData, @Body() dto: UpdateMyAvatarDto) {

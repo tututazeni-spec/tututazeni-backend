@@ -38,6 +38,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
+import { UploadThrottle } from '../common/security/upload-throttle';
 @ApiTags('Development Plans (PDI)')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -83,6 +84,7 @@ export class DevelopmentPlansController {
 
   // ── Gestão do Plano ───────────────────────────────────────────────────────
 
+  @UploadThrottle()
   @Post()
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar plano de desenvolvimento' })

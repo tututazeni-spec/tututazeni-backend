@@ -53,6 +53,7 @@ import {
 import { Role } from '../auth/enums/role.enum';
 import { parseDateQuery } from '../common/helpers/parse-date-query';
 
+import { UploadThrottle } from '../common/security/upload-throttle';
 @ApiTags('CRM — Parceiros')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -269,6 +270,7 @@ export class CrmPartnersController {
     return this.service.removeAgreement(id, agreementId, user.id);
   }
 
+  @UploadThrottle()
   @Post(':id/agreements/:agreementId/versions')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Anexar nova versão do documento do acordo' })

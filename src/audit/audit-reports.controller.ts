@@ -38,6 +38,7 @@ import { Role } from '../auth/enums/role.enum';
 
 import { safeDownloadHeaders } from '../common/files/safe-download';
 
+import { UploadThrottle } from '../common/security/upload-throttle';
 interface Req_ {
   ip?: string;
 }
@@ -108,6 +109,7 @@ export class AuditReportsController {
     return this.exportsSvc.summary(user.role?.name);
   }
 
+  @UploadThrottle()
   @Post('exports/evidence')
   @ApiOperation({ summary: 'Anexar ficheiro de evidência a um incidente ou auditoria' })
   uploadEvidence(

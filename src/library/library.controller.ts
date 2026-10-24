@@ -26,6 +26,7 @@ import {
 } from './dto';
 import { Role } from '../auth/enums/role.enum';
 
+import { UploadThrottle } from '../common/security/upload-throttle';
 @ApiTags('Biblioteca Digital')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -59,6 +60,7 @@ export class LibraryController {
 
   // ─── ITENS ───────────────────────────────────────────
 
+  @UploadThrottle()
   @Post('items')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Adicionar item à biblioteca' })
