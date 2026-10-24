@@ -17,3 +17,28 @@ export function applySmallBodyLimits(
 ): void {
   for (const prefix of prefixes) app.use(prefix, json({ limit }));
 }
+
+// Corpo JSON por omissão: 1 MB. Só as rotas listadas em LARGE_BODY_PREFIXES (que recebem
+// ficheiros inline em base64/data URL) mantêm 8 MB; o @MaxLength de cada DTO é a fronteira real.
+// Montado antes do parser global pela mesma razão que applySmallBodyLimits (o primeiro limite vale).
+export const DEFAULT_BODY_LIMIT = '1mb';
+export const LARGE_BODY_LIMIT = '8mb';
+export const LARGE_BODY_PREFIXES: readonly string[] = [
+  '/users/me/avatar',
+  '/courses',
+  '/modules',
+  '/lessons',
+  '/certificates/templates',
+  '/certificates/assets',
+  '/avatar-training',
+  '/library',
+  '/crm-funders',
+];
+
+export function applyLargeBodyLimits(
+  app: Pick<NestExpressApplication, 'use'>,
+  prefixes: readonly string[] = LARGE_BODY_PREFIXES,
+  limit: string = LARGE_BODY_LIMIT,
+): void {
+  for (const prefix of prefixes) app.use(prefix, json({ limit }));
+}

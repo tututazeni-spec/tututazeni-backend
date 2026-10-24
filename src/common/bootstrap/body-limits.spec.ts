@@ -1,11 +1,17 @@
 import express from 'express';
 import request from 'supertest';
-import { applySmallBodyLimits, SMALL_BODY_PREFIXES } from './body-limits';
+import {
+  applyLargeBodyLimits,
+  applySmallBodyLimits,
+  DEFAULT_BODY_LIMIT,
+  SMALL_BODY_PREFIXES,
+} from './body-limits';
 
 function makeApp() {
   const app = express();
   applySmallBodyLimits(app);
-  app.use(express.json({ limit: '8mb' }));
+  applyLargeBodyLimits(app);
+  app.use(express.json({ limit: DEFAULT_BODY_LIMIT }));
   app.post('*splat', (req, res) => {
     res.json({ size: JSON.stringify(req.body).length });
   });
@@ -22,11 +28,15 @@ describe('applySmallBodyLimits', () => {
     await request(makeApp()).post('/auth/sso/callback').send(body(200_000)).expect(413);
   });
 
-  it('mantém 8 MB nas restantes rotas (avatar, lições, anexos)', async () => {
-    await request(makeApp()).patch('/users/me/avatar').send(body(200_000)).expect(404);
-    await request(makeApp()).post('/users/me/avatar').send(body(200_000)).expect(200);
-    await request(makeApp()).post('/course-modules').send(body(3_000_000)).expect(200);
-    await request(makeApp()).post('/course-modules').send(body(9_000_000)).expect(413);
+  it('mantém 8 MB só nas rotas de ficheiros inline', async () => {
+    await request(makeApp()).post('/users/me/avatar').send(body(3_000_000)).expect(200);
+    await request(makeApp()).post('/lessons').send(body(3_000_000)).expect(200);
+    await request(makeApp()).post('/lessons').send(body(9_000_000)).expect(413);
+  });
+
+  it('limita as restantes rotas a 1 MB', async () => {
+    await request(makeApp()).post('/users').send(body(500_000)).expect(200);
+    await request(makeApp()).post('/users').send(body(2_000_000)).expect(413);
   });
 
   it('não confunde prefixos parecidos (/authors)', async () => {
