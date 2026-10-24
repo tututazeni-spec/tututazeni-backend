@@ -1,18 +1,26 @@
-# Handlers marcados `@AnyAuthenticated()` que precisam de revisão de âmbito (T3.2 → T8/T9)
+# Revisão dos handlers `@AnyAuthenticated()` (resultado)
 
-A T3 marcou 349 handlers sem política com `@AnyAuthenticated()` — **sem mudar comportamento**.
-A maioria é self-service (`my*`, `me`, `changePassword`). Os abaixo NÃO são obviamente self-service:
-confirmar no serviço que filtram por dono/âmbito (`assertCanAccess`) ou restringir com `@Roles`.
+A T3 marcou 349 handlers sem política com `@AnyAuthenticated()` sem mudar comportamento. Esta revisão
+olhou para os que **não são obviamente self-service**.
 
-- `knowledge`: `create`, `update` (quem pode publicar conhecimento?), `createQuestion`, `answerQuestion`
-- `work-declaration`: `findAll`, `findOne`, `exportPdf`, `exportDocx` (listagem global?)
-- `declarations`: `findOne` (×2), `getPending` (fila de aprovação?)
-- `departments`: `findAll`, `findOne`, `ladder`, `positions`, `position`
-- `users`: `findOne`, `directory`; `user-qualifications`: escrita sobre `:userId`
-- `process-standard`: `findAll`, `findOne`, `getInstance`, `completeStep`, `rejectStep`, `qrCode`
-- `development-plans`: `findOne`, `addAction`, `submit`; `career-plans`: `findOne`, `getProgress`, `addGoal`
-- `live-classes`: `listAllSessions`, `listParticipants`, `listRecordings`, `listMaterials`, `messages`
-- `evaluation360`: `listCycles`, `getCycleDetail`, `getResult`, `getProgress`
-- `onboarding`: `findOne`; `events`: `findAll`, `findOne`; `library`/`document-repository`: `findOne`, `download`
-- `pdf.downloadDeclaration`, `crm-beneficiaries.getFollowUps`, `scalability-infra.recordFrontendPerf`
-- `ai-tutor`: todos (custo de IA + dados) — avaliar quota/papel
+## Corrigidos (furo real)
+| Handler | Problema | Correção |
+|---|---|---|
+| `knowledge` `create`/`update` | qualquer autenticado publicava, arquivava, tornava obrigatório e editava artigos alheios | só ADMIN/RH publicam/obrigatório; autor edita só os seus |
+| `work-declaration` `exportPdf`/`exportDocx` | exportava a declaração de outro colaborador pelo id (IDOR) | `assertCanAccess` (dono, ADMIN, RH) |
+| `users` `GET /:id` | devolvia NIF, NIB, BI, morada, contactos a qualquer autenticado | `redactUserProfile` salvo próprio/ADMIN/RH/AUDITOR/DIRECTOR/chefe direto |
+
+## Verificados, sem alteração
+- `declarations` `findOne` (×2) e `my/*`: passam o utilizador ao serviço, que verifica o dono.
+- `process-standard` `completeStep`/`rejectStep`/`getInstance`: verificam responsável (A10-7).
+- `pdf.downloadDeclaration`: devolve dados fictícios (sem fuga); TODO de ownership mantido no código.
+- `users` `directory`: campos públicos de propósito.
+- Catálogos de referência (`departments`, `competencies`, `competency-map` matriz, `career-plans` papéis, `evaluation360` catálogos, `process-standard` modelos): legíveis por todos por desenho.
+
+## Aceites abertos (decisão a confirmar com produto)
+- `live-classes` listagens globais (participantes, gravações, materiais, mensagens do chat): expõem só nomes/ids e o frontend mostra-as a todos. Restringir quebra essas páginas.
+- `ai-tutor` `knowledgeSources`/`knowledgeSearch`: conhecimento corporativo para qualquer utilizador.
+
+## Não analisados em profundidade
+`evaluation360` `getProgress`/`listFeedback`/`getCycleDetail`, `library` `findItemById`, `events` `findOne`,
+`onboarding` `findOne`, `development-plans`/`career-plans` `findOne` (recebem o utilizador; confirmar `assertCanAccess` método a método, regra 14).
