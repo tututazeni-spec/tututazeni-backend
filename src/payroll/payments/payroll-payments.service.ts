@@ -12,6 +12,8 @@ import { AuditService } from '../../common/services/audit.service';
 import { money } from '../taxes/money.util';
 import { CreatePayrollPaymentDto, UpdatePaymentStatusDto } from '../payroll.dto';
 
+import { csvCell } from '../../common/utils/csv-safe.util';
+
 type PaymentStatus = UpdatePaymentStatusDto['status'];
 
 const TRANSITIONS: Record<PaymentStatus, PaymentStatus[]> = {
@@ -39,11 +41,6 @@ function hasBlockingException(p: { exceptions: unknown }): boolean {
     Array.isArray(p.exceptions) &&
     p.exceptions.some(e => (e as { severity?: string } | null)?.severity === 'ERROR')
   );
-}
-
-function csvCell(v: string | number): string {
-  const s = String(v);
-  return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 @Injectable()
