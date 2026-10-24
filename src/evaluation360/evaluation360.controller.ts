@@ -397,8 +397,12 @@ export class Evaluation360Controller {
   @Get('cycles/:cycleId/participants/:userId/progress')
   @ApiOperation({ summary: 'Progresso do participante no ciclo' })
   @AnyAuthenticated()
-  async getProgress(@Param('cycleId') cycleId: string, @Param('userId') userId: string) {
-    return this.service.getParticipantProgress(cycleId, userId);
+  async getProgress(
+    @Param('cycleId') cycleId: string,
+    @Param('userId') userId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.getParticipantProgress(cycleId, userId, user);
   }
 
   @Get('cycles/:cycleId/participants')
@@ -677,8 +681,12 @@ export class Evaluation360Controller {
   @Get('feedback/continuous/:userId')
   @ApiOperation({ summary: 'Listar feedbacks recebidos por utilizador' })
   @AnyAuthenticated()
-  async listFeedback(@Param('userId') userId: string, @Query() query: Evaluation360PaginationDto) {
-    return this.service.listFeedbackForUser(userId, query);
+  async listFeedback(
+    @Param('userId') userId: string,
+    @Query() query: Evaluation360PaginationDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.listFeedbackForUser(userId, query, user);
   }
 
   // ============================================================
