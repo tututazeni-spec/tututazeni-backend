@@ -36,10 +36,7 @@ export default tseslint.config(
       sourceType: 'commonjs',
       parserOptions: {
         projectService: {
-          allowDefaultProject: [
-            'src/prisma.service.spec.ts',
-            'src/prisma/prisma.service.spec.ts',
-          ],
+          allowDefaultProject: ['src/prisma.service.spec.ts', 'src/prisma/prisma.service.spec.ts'],
         },
         tsconfigRootDir: import.meta.dirname,
       },
@@ -99,6 +96,16 @@ export default tseslint.config(
       'no-new-func': 'error',
       'no-script-url': 'error',
       'no-proto': 'error',
+      // SQL cru só parametrizado (tagged template $queryRaw`...`); as variantes Unsafe
+      // concatenam strings e abrem SQL injection.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'CallExpression[callee.property.name=/^[$](query|execute)RawUnsafe$/]',
+          message:
+            'Use $queryRaw`...` / $executeRaw`...` (parametrizado); nunca as variantes Unsafe.',
+        },
+      ],
 
       // Boas práticas
       'no-console': 'warn',
@@ -107,5 +114,10 @@ export default tseslint.config(
       // Prettier
       'prettier/prettier': ['error', { endOfLine: 'auto' }],
     },
+  },
+  {
+    // Única excepção: query constante (sem input) que verifica a role do RLS no arranque.
+    files: ['src/prisma/prisma.service.ts'],
+    rules: { 'no-restricted-syntax': 'off' },
   },
 );
