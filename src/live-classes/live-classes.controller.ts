@@ -162,6 +162,12 @@ export class LiveClassesController {
     return this.svc.getSettings();
   }
 
+  @Get(':id/room')
+  @ApiOperation({ summary: 'Nome (não adivinhável) da sala Jitsi da aula' })
+  room(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getRoomName(id);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe da aula' })
   @AnyAuthenticated()

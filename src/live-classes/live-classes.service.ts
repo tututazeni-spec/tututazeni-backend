@@ -1,3 +1,4 @@
+import { createHmac } from 'crypto';
 import {
   Injectable,
   Logger,
@@ -114,6 +115,23 @@ export class LiveClassesService {
     });
     if (!lc) throw new NotFoundException('Aula ao vivo não encontrada');
     return lc;
+  }
+
+  /**
+   * Nome da sala Jitsi. O servidor público meet.jit.si não tem autenticação,
+   * por isso o nome tem de ser impossível de adivinhar: HMAC do id com o
+   * JWT_SECRET. Só quem passa o JwtAuthGuard consegue obtê-lo.
+   */
+  async getRoomName(id: number): Promise<{ roomName: string }> {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) throw new Error('JWT_SECRET em falta — impossível gerar a sala');
+    const exists = await this.prisma.read.liveClass.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!exists) throw new NotFoundException('Aula ao vivo não encontrada');
+    const digest = createHmac('sha256', secret).update(`jitsi-room:${id}`).digest('hex');
+    return { roomName: `innova-live-${id}-${digest.slice(0, 24)}` };
   }
 
   private generateCode(type: string): string {
