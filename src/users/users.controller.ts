@@ -15,6 +15,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { canSeeFullProfile, redactUserProfile } from './user-profile-redaction';
 import { UsersService } from './users.service';
 import {
   CreateUserDto,
@@ -147,8 +148,11 @@ export class UsersController {
   @Get(':id')
   @ApiOperation({ summary: 'Perfil completo de um utilizador' })
   @AnyAuthenticated()
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.findOne(id);
+  async findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    const profile = await this.svc.findOne(id);
+    // Dados pessoais/financeiros (NIF, NIB, BI, morada…) só para o próprio, RH/ADMIN/AUDITOR/DIRECTOR
+    // e chefe direto; os restantes recebem o "cartão" profissional (mesmo formato, campos limpos).
+    return canSeeFullProfile(user, profile) ? profile : redactUserProfile(profile);
   }
 
   @Get(':id/stats')
