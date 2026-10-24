@@ -8,6 +8,7 @@ olhou para os que **não são obviamente self-service**.
 |---|---|---|
 | `knowledge` `create`/`update` | qualquer autenticado publicava, arquivava, tornava obrigatório e editava artigos alheios | só ADMIN/RH publicam/obrigatório; autor edita só os seus |
 | `work-declaration` `exportPdf`/`exportDocx` | exportava a declaração de outro colaborador pelo id (IDOR) | `assertCanAccess` (dono, ADMIN, RH) |
+| `evaluation360` `feedback/continuous/:userId`, `participants/:userId/progress` | qualquer autenticado lia o feedback recebido (com nomes de autores) e o progresso de qualquer pessoa | só a pessoa, ADMIN/RH/AUDITOR/DIRECTOR e chefe direto (`person-access.ts`); outros recebem 404 |
 | `users` `GET /:id` | devolvia NIF, NIB, BI, morada, contactos a qualquer autenticado | `redactUserProfile` salvo próprio/ADMIN/RH/AUDITOR/DIRECTOR/chefe direto |
 
 ## Verificados, sem alteração
@@ -21,6 +22,9 @@ olhou para os que **não são obviamente self-service**.
 - `live-classes` listagens globais (participantes, gravações, materiais, mensagens do chat): expõem só nomes/ids e o frontend mostra-as a todos. Restringir quebra essas páginas.
 - `ai-tutor` `knowledgeSources`/`knowledgeSearch`: conhecimento corporativo para qualquer utilizador.
 
+- `competencies` `userEndorsements`: reconhecimentos entre colegas (funcionalidade social), baixo risco.
+- `library` `findItemById`, `events` `findOne`: conteúdo corporativo partilhado.
+
 ## Não analisados em profundidade
-`evaluation360` `getProgress`/`listFeedback`/`getCycleDetail`, `library` `findItemById`, `events` `findOne`,
-`onboarding` `findOne`, `development-plans`/`career-plans` `findOne` (recebem o utilizador; confirmar `assertCanAccess` método a método, regra 14).
+`development-plans`/`career-plans`/`onboarding` `findOne` recebem o utilizador; confirmar `assertCanAccess` método a método (regra 14).
+Varredura feita: nenhum outro handler aberto recebe `userId`/`employeeId` pelo URL sem receber o chamador.
