@@ -61,6 +61,8 @@ import { AUTHENTICATED_ROLES, Role } from '../auth/enums/role.enum';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CurrentUserData } from '../common/types/current-user';
 
+import { safeDownloadHeaders } from '../common/files/safe-download';
+
 @ApiTags('Escalabilidade')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -382,10 +384,7 @@ export class ScalabilityInfraController {
       q.format as ReportFormat,
       Number(user.id),
     );
-    res.set({
-      'Content-Type': out.mimeType,
-      'Content-Disposition': `attachment; filename="${out.fileName}"`,
-    });
+    res.set(safeDownloadHeaders({ filename: out.fileName, mime: out.mimeType }));
     return new StreamableFile(out.buffer);
   }
 

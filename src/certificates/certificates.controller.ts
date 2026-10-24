@@ -45,6 +45,8 @@ import {
 } from './certificates-admin.dto';
 import { describeMissing } from './certificate-rules';
 
+import { safeDownloadHeaders } from '../common/files/safe-download';
+
 // Quem pode abrir o centro de certificados; o âmbito (tudo/equipa) é resolvido no serviço.
 const MANAGEMENT_ROLES = [
   Role.ADMIN,
@@ -114,11 +116,13 @@ export class CertificatesController {
     @Res() res: Response,
   ) {
     const file = await this.exports.exportCertificates(q, user);
-    res.set({
-      'Content-Type': file.contentType,
-      'Content-Disposition': `attachment; filename="${file.filename}"`,
-      'Content-Length': file.buffer.length,
-    });
+    res.set(
+      safeDownloadHeaders({
+        filename: file.filename,
+        mime: file.contentType,
+        extra: { 'Content-Length': String(file.buffer.length) },
+      }),
+    );
     res.end(file.buffer);
   }
 

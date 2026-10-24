@@ -176,7 +176,7 @@ T1 e T5 não dependem de nada e podem arrancar já. T3 depende de T2 e T4.
 | T3 Aplicar nos fluxos | feita | Avatar, `imageUrl`, capas (`IsOptionalImageRef`), PDFs/imagens de licença/formação/onboarding, biblioteca, certificado externo, avatar-training, lições PDF e evidência de auditoria validam pelos bytes. |
 | T4 Limites | feita | `FILE_POLICIES` (bytes, sem alargar limites), `fileSize` por MIME, `/auth` com corpo máx. 100 KB. |
 | T5 Nomes | feita | `IsSafeFileName`/`sanitizeFileName`. |
-| T6 Downloads seguros | pendente | `Content-Disposition` e `nosniff` ao servir ficheiros. |
+| T6 Downloads seguros | feita | `safe-download.ts` (`Content-Disposition` RFC 6266, MIME só da lista segura, `nosniff`, CSP `sandbox`) aplicado a 9 controllers com nome/tipo dinâmico. `helmet` já emite `nosniff` globalmente e as rotas só sobrepõem os headers que definem. |
 | T7 Complementares | pendente | CSV injection, rate limit nas rotas de upload, auditoria de rejeições, ClamAV (decisão de produto). |
 | T8 Rollout | parcial | Script `npm run audit:uploads` (só leitura) feito. Falta modo `warn`→`enforce` e correr o script em produção. |
 

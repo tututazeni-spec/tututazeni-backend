@@ -29,6 +29,8 @@ import { HistoryHubService } from './history-hub.service';
 import { HistoryReportsService } from './history-reports.service';
 import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 
+import { safeDownloadHeaders } from '../common/files/safe-download';
+
 // Tiers indexados pelo enum Role — nunca literais soltos (ver memory
 // role-array-drift: arrays locais já esqueceram GESTOR 5x nesta sessão).
 const ALL_ROLES = AUTHENTICATED_ROLES;
@@ -104,10 +106,7 @@ export class HistoryController {
   @ApiOperation({ summary: 'Exportar relatório do History (csv | xlsx | pdf)' })
   async exportReport(@Query() dto: HistoryExportDto, @Res({ passthrough: true }) res: Response) {
     const { buffer, contentType, filename } = await this.reports.export(dto, dto.format);
-    res.set({
-      'Content-Type': contentType,
-      'Content-Disposition': `attachment; filename="${filename}"`,
-    });
+    res.set(safeDownloadHeaders({ filename, mime: contentType }));
     return new StreamableFile(buffer);
   }
 

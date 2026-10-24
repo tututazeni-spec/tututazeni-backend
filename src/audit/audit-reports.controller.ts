@@ -36,6 +36,8 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, CurrentUserData, Roles } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
+import { safeDownloadHeaders } from '../common/files/safe-download';
+
 interface Req_ {
   ip?: string;
 }
@@ -82,11 +84,13 @@ export class AuditReportsController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const out = await this.reports.export(dto, this.actor(user, req), user.role?.name);
-    res.set({
-      'Content-Type': out.mimeType,
-      'Content-Disposition': `attachment; filename="${out.fileName}"`,
-      'X-Audit-Export-Code': out.exportCode,
-    });
+    res.set(
+      safeDownloadHeaders({
+        filename: out.fileName,
+        mime: out.mimeType,
+        extra: { 'X-Audit-Export-Code': out.exportCode },
+      }),
+    );
     return new StreamableFile(out.buffer);
   }
 
@@ -163,11 +167,14 @@ export class AuditReportsController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const out = await this.exportsSvc.download(id, this.actor(user, req), user.role?.name);
-    res.set({
-      'Content-Type': out.mimeType,
-      'Content-Disposition': `attachment; filename="${encodeURIComponent(out.fileName)}"`,
-      'Cache-Control': 'no-store',
-    });
+    // O tipo vem do que foi gravado (evidências antigas podem trazer qualquer MIME): lista segura.
+    res.set(
+      safeDownloadHeaders({
+        filename: out.fileName,
+        mime: out.mimeType,
+        extra: { 'Cache-Control': 'no-store' },
+      }),
+    );
     return new StreamableFile(out.buffer);
   }
 
