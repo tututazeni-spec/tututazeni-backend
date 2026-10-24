@@ -1,4 +1,5 @@
 // src/roles-permissions/roles-permissions.controller.ts
+import { RoleGovernanceGuard } from '../common/guards/role-governance.guard';
 import {
   Controller,
   Get,
@@ -32,7 +33,7 @@ const ADMIN = ['ADMIN', 'RH'] as const;
 
 @ApiTags('Roles & Permissions')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, RoleGovernanceGuard)
 @Roles(...ADMIN)
 @Controller('roles-permissions')
 export class RolesPermissionsController {

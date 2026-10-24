@@ -506,12 +506,16 @@ export class WorkDeclarationService {
 
   async exportDeclaration(
     tenantId: string,
-    userId: number,
+    user: CurrentUserData,
     declarationId: string,
     dto: ExportDeclarationDto,
   ) {
+    const userId = user.id;
     tenantId = await this.resolveTenantId(tenantId);
     const declaration = await this.findDeclarationOrThrow(tenantId, declarationId);
+    // Ownership (como getDeclaration): dono OU ADMIN/RH; senão 404. Sem isto qualquer
+    // utilizador autenticado exportava a declaração de outro colaborador pelo id.
+    assertCanAccess(declaration, declaration.employeeId, user, [Role.ADMIN, Role.RH]);
 
     if (declaration.status === DeclarationStatus.DRAFT) {
       throw new BadRequestException('Não é possível exportar uma declaração em rascunho.');

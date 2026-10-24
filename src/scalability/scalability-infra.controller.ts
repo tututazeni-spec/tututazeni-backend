@@ -1,5 +1,6 @@
 // modulo_scalability.md §7-9 — rotas das abas API & Backend e Base de Dados.
 
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Body,
   Controller,
@@ -106,6 +107,7 @@ export class ScalabilityInfraController {
   // Qualquer utilizador autenticado reporta a sua própria navegação (RUM).
   @Post('frontend-perf')
   @ApiOperation({ summary: 'Recebe uma amostra de performance de página do browser' })
+  @AnyAuthenticated()
   recordFrontendPerf(@Body() dto: FrontendPerfSampleDto) {
     return this.infra.recordFrontendSample(dto);
   }

@@ -19,6 +19,7 @@ import { ApiIntegrationService } from './api-integration.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 import {
   CreateIntegrationDto,
   UpdateIntegrationDto,
@@ -122,18 +123,21 @@ export class ApiIntegrationController {
 
   @Post('api-keys')
   @ApiOperation({ summary: 'Criar nova API Key (retorna o valor RAW uma única vez)' })
+  @Roles(Role.ADMIN)
   createApiKey(@Body() dto: CreateApiKeyDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.createApiKey(dto, user.id);
   }
 
   @Post('api-keys/:id/revoke')
   @ApiOperation({ summary: 'Revogar API Key imediatamente' })
+  @Roles(Role.ADMIN)
   revokeApiKey(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.revokeApiKey(id, user.id);
   }
 
   @Post('api-keys/:id/rotate')
   @ApiOperation({ summary: 'Rotacionar API Key (gera nova, invalida antiga)' })
+  @Roles(Role.ADMIN)
   rotateApiKey(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.rotateApiKey(id, user.id);
   }
@@ -154,12 +158,14 @@ export class ApiIntegrationController {
 
   @Post('webhooks')
   @ApiOperation({ summary: 'Registar webhook externo (URL + eventos subscritos)' })
+  @Roles(Role.ADMIN)
   createWebhook(@Body() dto: CreateWebhookDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.createWebhook(dto, user.id);
   }
 
   @Patch('webhooks/:id/toggle')
   @ApiOperation({ summary: 'Activar/desactivar webhook' })
+  @Roles(Role.ADMIN)
   toggleWebhook(@Param('id', ParseIntPipe) id: number) {
     return this.svc.toggleWebhook(id);
   }
@@ -167,12 +173,14 @@ export class ApiIntegrationController {
   @Delete('webhooks/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remover webhook' })
+  @Roles(Role.ADMIN)
   deleteWebhook(@Param('id', ParseIntPipe) id: number) {
     return this.svc.deleteWebhook(id);
   }
 
   @Post('webhooks/trigger')
   @ApiOperation({ summary: 'Disparar evento para todos os webhooks subscritos' })
+  @Roles(Role.ADMIN)
   triggerWebhook(@Body() dto: TriggerWebhookDto) {
     return this.svc.triggerWebhook(dto);
   }

@@ -1,3 +1,4 @@
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import { Controller, Post, Get, Body, Patch, UseGuards, Req, Res, HttpCode } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '../common/decorators/public.decorator';
@@ -12,7 +13,6 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
 } from './auth.dto';
-import { JwtAuthGuard } from './jwt-auth.guard';
 import { RefreshTokenGuard } from './refresh-token.guard';
 import { Request, Response } from 'express';
 import {
@@ -20,6 +20,7 @@ import {
   buildTokenCookieOptions,
   REFRESH_COOKIE,
   buildRefreshCookieOptions,
+  LEGACY_REFRESH_COOKIE_PATH,
 } from './token-cookie';
 
 // JwtStrategy.validate() devolve a entidade User (tem `id`, não `sub`).
@@ -101,13 +102,24 @@ export class AuthController {
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const presented = (req.cookies ?? {}).refresh_token;
     if (presented) await this.authService.revokeRefreshToken(presented, requestContext(req));
+    // O access token (JWT stateless) continuaria válido até expirar: denylista-o já.
+    const bearer = req.headers?.authorization;
+    const access =
+      (req.cookies ?? {}).token ??
+      (typeof bearer === 'string' && bearer.startsWith('Bearer ') ? bearer.slice(7) : undefined);
+    if (access) await this.authService.revokeAccessToken(access);
     res.clearCookie(TOKEN_COOKIE, { ...tokenCookieOptions, maxAge: undefined });
     res.clearCookie(REFRESH_COOKIE, { ...refreshCookieOptions, maxAge: undefined });
+    res.clearCookie(REFRESH_COOKIE, {
+      ...refreshCookieOptions,
+      path: LEGACY_REFRESH_COOKIE_PATH,
+      maxAge: undefined,
+    });
     return { message: 'Sessão terminada' };
   }
 
   @Patch('change-password')
-  @UseGuards(JwtAuthGuard)
+  @AnyAuthenticated()
   changePassword(@Req() req: AuthenticatedRequest, @Body() dto: ChangePasswordDto) {
     return this.authService.changePassword(req.user.id, dto);
   }
@@ -128,7 +140,7 @@ export class AuthController {
   }
 
   @Get('me')
-  @UseGuards(JwtAuthGuard)
+  @AnyAuthenticated()
   me(@Req() req: AuthenticatedRequest) {
     return this.authService.me(req.user.id);
   }

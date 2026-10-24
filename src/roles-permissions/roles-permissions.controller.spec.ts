@@ -1,3 +1,4 @@
+import { RoleGovernanceGuard } from '../common/guards/role-governance.guard';
 import { Test, TestingModule } from '@nestjs/testing';
 import { RolesPermissionsController } from './roles-permissions.controller';
 import { RolesPermissionsService } from './roles-permissions.service';
@@ -39,6 +40,8 @@ describe('RolesPermissionsController', () => {
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RoleGovernanceGuard)
       .useValue({ canActivate: () => true })
       .compile();
     controller = module.get<RolesPermissionsController>(RolesPermissionsController);

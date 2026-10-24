@@ -1,4 +1,5 @@
 // ─── src/career-plans/career-plans.controller.ts ─────────────────────────────
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -73,12 +74,14 @@ export class CareerPlansController {
   @Get('roles')
   @ApiOperation({ summary: 'Listar cargos com skill requirements' })
   @ApiQuery({ name: 'department', required: false })
+  @AnyAuthenticated()
   getRoles(@Query('department') department?: string) {
     return this.svc.getRoles(department);
   }
 
   @Get('roles/:id')
   @ApiOperation({ summary: 'Detalhe do cargo (skills, regras de progressão)' })
+  @AnyAuthenticated()
   getRole(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getRole(id);
   }
@@ -102,6 +105,7 @@ export class CareerPlansController {
   @Get('skills')
   @ApiOperation({ summary: 'Catálogo de skills/competências' })
   @ApiQuery({ name: 'type', required: false })
+  @AnyAuthenticated()
   getSkills(@Query('type') type?: string) {
     return this.svc.getSkills(type);
   }
@@ -118,6 +122,7 @@ export class CareerPlansController {
   @Get('paths')
   @ApiOperation({ summary: 'Listar trilhas de carreira' })
   @ApiQuery({ name: 'department', required: false })
+  @AnyAuthenticated()
   getCareerPaths(@Query('department') department?: string) {
     return this.svc.getCareerPaths(department);
   }
@@ -153,6 +158,7 @@ export class CareerPlansController {
 
   @Get('readiness/:userId/:targetRoleId')
   @ApiOperation({ summary: 'Calcular prontidão de um colaborador para um cargo' })
+  @AnyAuthenticated()
   getReadiness(
     @Param('userId', ParseIntPipe) userId: number,
     @Param('targetRoleId', ParseIntPipe) targetRoleId: number,
@@ -166,6 +172,7 @@ export class CareerPlansController {
 
   @Post('simulate')
   @ApiOperation({ summary: 'Simular carreira (what-if) — readiness + estimativa + paths' })
+  @AnyAuthenticated()
   simulate(@Body() dto: SimulateCareerDto, @CurrentUser() user: CurrentUserData) {
     assertCanAccess({}, dto.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     return this.svc.simulateCareer(dto);
@@ -175,6 +182,7 @@ export class CareerPlansController {
 
   @Get('my')
   @ApiOperation({ summary: 'Meu plano de carreira activo com readiness e metas' })
+  @AnyAuthenticated()
   myPlan(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyPlan(user.id);
   }
@@ -193,6 +201,7 @@ export class CareerPlansController {
 
   @Post('promotions')
   @ApiOperation({ summary: 'Solicitar promoção (valida regras + calcula readiness)' })
+  @AnyAuthenticated()
   requestPromotion(@Body() dto: CreatePromotionRequestDto, @CurrentUser() user: CurrentUserData) {
     // A10-14: dto.userId não era verificado — qualquer autenticado podia
     // solicitar promoção "em nome" de qualquer colega.
@@ -222,12 +231,14 @@ export class CareerPlansController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do plano (roles, path, goals, readiness)' })
+  @AnyAuthenticated()
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(id, user);
   }
 
   @Get(':id/progress')
   @ApiOperation({ summary: 'Progresso do plano (goals + readiness)' })
+  @AnyAuthenticated()
   getProgress(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.getProgress(id, user);
   }
@@ -268,12 +279,14 @@ export class CareerPlansController {
 
   @Post('goals')
   @ApiOperation({ summary: 'Adicionar meta ao plano (curso, projecto, mentoria, etc.)' })
+  @AnyAuthenticated()
   addGoal(@Body() dto: CareerPlansAddCareerGoalDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.addGoal(dto, user);
   }
 
   @Patch('goals/:goalId/progress')
   @ApiOperation({ summary: 'Actualizar progresso de uma meta' })
+  @AnyAuthenticated()
   updateGoalProgress(
     @Param('goalId', ParseIntPipe) goalId: number,
     @Body() dto: UpdateGoalProgressDto,

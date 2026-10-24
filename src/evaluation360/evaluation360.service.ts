@@ -17,6 +17,7 @@ import { AuditService } from '../common/services/audit.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CurrentUserData } from '../common/decorators';
 import { isPrivileged } from '../common/authz/ownership';
+import { assertCanViewPerson } from './person-access';
 import { Role } from '../auth/enums/role.enum';
 import { CompetenciesService } from '../competencies/competencies.service';
 import { CreateCompetencyDto, UpdateCompetencyDto } from '../competencies/competencies.dto';
@@ -1095,7 +1096,20 @@ export class Evaluation360Service {
     }));
   }
 
-  async getParticipantProgress(cycleId: string, userId: string) {
+  /** `caller` indefinido = chamada interna de confiança; a rota HTTP passa sempre o utilizador. */
+  private async assertCallerCanViewPerson(personId: string, caller?: CurrentUserData) {
+    if (!caller) return;
+    await assertCanViewPerson(personId, caller, async id => {
+      const u = await this.prisma.user.findUnique({
+        where: { id: Number(id) },
+        select: { managerId: true },
+      });
+      return u?.managerId;
+    });
+  }
+
+  async getParticipantProgress(cycleId: string, userId: string, caller?: CurrentUserData) {
+    await this.assertCallerCanViewPerson(userId, caller);
     const assignments = await this.prisma.evaluatorAssignment.findMany({
       where: { cycleId, evaluateeId: userId },
     });
@@ -2943,7 +2957,12 @@ export class Evaluation360Service {
     return feedback;
   }
 
-  async listFeedbackForUser(userId: string, query: Evaluation360PaginationDto) {
+  async listFeedbackForUser(
+    userId: string,
+    query: Evaluation360PaginationDto,
+    caller?: CurrentUserData,
+  ) {
+    await this.assertCallerCanViewPerson(userId, caller);
     const [data, total] = await Promise.all([
       this.prisma.eval360Feedback.findMany({
         where: { toUserId: userId, isPrivate: false },

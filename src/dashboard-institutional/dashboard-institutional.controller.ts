@@ -1,3 +1,4 @@
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -122,18 +123,21 @@ export class DashboardInstitutionalController {
 
   @Post('widgets')
   @ApiOperation({ summary: 'Criar widget personalizado' })
+  @AnyAuthenticated()
   createWidget(@Body() dto: CreateWidgetDto, @CurrentUser() user: CurrentUserData) {
     return this.service.createWidget(dto, user.id);
   }
 
   @Get('widgets')
   @ApiOperation({ summary: 'Meus widgets' })
+  @AnyAuthenticated()
   getMyWidgets(@CurrentUser() user: CurrentUserData) {
     return this.service.getMyWidgets(user.id);
   }
 
   @Put('widgets/:id')
   @ApiOperation({ summary: 'Actualizar widget' })
+  @AnyAuthenticated()
   updateWidget(
     @Param('id') id: string,
     @Body() dto: UpdateWidgetDto,
@@ -145,6 +149,7 @@ export class DashboardInstitutionalController {
   @Delete('widgets/:id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remover widget' })
+  @AnyAuthenticated()
   deleteWidget(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.service.deleteWidget(id, user.id);
   }

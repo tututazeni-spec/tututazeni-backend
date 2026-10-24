@@ -53,6 +53,38 @@ describe('UsersController', () => {
     expect(mockSvc.findOne).toHaveBeenCalledWith(1);
   });
 
+  describe('GET /users/:id — dados pessoais só para quem tem direito', () => {
+    const full = {
+      id: 9,
+      fullName: 'Ana',
+      email: 'a@x.com',
+      managerId: 4,
+      nif: '1',
+      nib: 'AO06',
+      enrollments: [{ id: 1 }],
+    };
+    beforeEach(() => mockSvc.findOne.mockResolvedValue(full));
+
+    it('colaborador a ver um colega: sem NIF/NIB nem formações', async () => {
+      const r: any = await controller.findOne(9, { id: 1, role: { name: 'COLABORADOR' } } as any);
+      expect(r.nif).toBeUndefined();
+      expect(r.nib).toBeUndefined();
+      expect(r.enrollments).toEqual([]);
+      expect(r.fullName).toBe('Ana');
+    });
+
+    it('RH, o próprio e o chefe direto veem tudo', async () => {
+      for (const viewer of [
+        { id: 1, role: { name: 'RH' } },
+        { id: 9, role: { name: 'COLABORADOR' } },
+        { id: 4, role: { name: 'GESTOR' } },
+      ]) {
+        const r: any = await controller.findOne(9, viewer as any);
+        expect(r.nib).toBe('AO06');
+      }
+    });
+  });
+
   it('myStats → getUserStats(user.id)', async () => {
     await controller.myStats(mockUser as any);
     expect(mockSvc.getUserStats).toHaveBeenCalledWith(1);
@@ -118,7 +150,7 @@ describe('UsersController', () => {
   });
 
   it('findOne → findOne(id)', async () => {
-    const result = await controller.findOne(1);
+    const result = await controller.findOne(1, mockUser as any);
     expect(mockSvc.findOne).toHaveBeenCalledWith(1);
     expect(result).toHaveProperty('fullName');
   });
@@ -146,7 +178,9 @@ describe('UsersController', () => {
   it('create → create(dto, admin.id)', async () => {
     const dto = {} as any;
     await controller.create(mockUser as any, dto);
-    expect(mockSvc.create).toHaveBeenCalledWith(dto, mockUser.id);
+    expect(mockSvc.create).toHaveBeenCalledWith(dto, mockUser.id, {
+      actorRole: (mockUser as any).role?.name,
+    });
   });
 
   it('invite → invite(dto)', async () => {
@@ -181,7 +215,7 @@ describe('UsersController', () => {
   it('update → update(id, dto, adminId)', async () => {
     const dto = {} as any;
     await controller.update(1, mockUser as any, dto);
-    expect(mockSvc.update).toHaveBeenCalledWith(1, dto, 1);
+    expect(mockSvc.update).toHaveBeenCalledWith(1, dto, 1, (mockUser as any).role?.name);
   });
 
   it('activate → activate(id)', async () => {

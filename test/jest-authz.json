@@ -1,0 +1,11 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "..",
+  "testEnvironment": "node",
+  "testRegex": "test/authz/.*[.]spec[.]ts$",
+  "transform": {
+    "^.+[.](t|j)s$": ["ts-jest", { "diagnostics": false, "isolatedModules": true }]
+  },
+  "testTimeout": 120000,
+  "forceExit": true
+}

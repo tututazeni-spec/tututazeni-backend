@@ -1,3 +1,4 @@
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -46,24 +47,28 @@ export class LiveClassesController {
 
   @Get()
   @ApiOperation({ summary: 'Listar aulas ao vivo' })
+  @AnyAuthenticated()
   findAll(@Query() filters: LiveClassFilterDto) {
     return this.svc.findAll(filters);
   }
 
   @Get('upcoming')
   @ApiOperation({ summary: 'Próximas aulas agendadas' })
+  @AnyAuthenticated()
   upcoming() {
     return this.svc.getUpcoming();
   }
 
   @Get('dashboard')
   @ApiOperation({ summary: 'Visão geral — cards e contadores' })
+  @AnyAuthenticated()
   dashboard() {
     return this.svc.getDashboard();
   }
 
   @Get('calendar')
   @ApiOperation({ summary: 'Aulas e sessões num intervalo de datas' })
+  @AnyAuthenticated()
   calendar(@Query('from') from: string, @Query('to') to: string) {
     parseDateQuery(from, 'from');
     parseDateQuery(to, 'to');
@@ -72,30 +77,35 @@ export class LiveClassesController {
 
   @Get('sessions')
   @ApiOperation({ summary: 'Todas as sessões de todas as aulas (secção 5)' })
+  @AnyAuthenticated()
   listAllSessions(@Query() filters: LiveClassFilterDto) {
     return this.svc.listAllSessions(filters);
   }
 
   @Get('participants')
   @ApiOperation({ summary: 'Participantes de todas as aulas (secção 6)' })
+  @AnyAuthenticated()
   listParticipants(@Query() filters: ParticipantsFilterDto) {
     return this.svc.listParticipants(filters);
   }
 
   @Get('instructors')
   @ApiOperation({ summary: 'Formadores com aulas ao vivo atribuídas (secção 7)' })
+  @AnyAuthenticated()
   listInstructors() {
     return this.svc.listInstructors();
   }
 
   @Get('virtual-rooms')
   @ApiOperation({ summary: 'Salas virtuais (Zoom/link de reunião) das aulas (secção 8)' })
+  @AnyAuthenticated()
   listVirtualRooms(@Query() filters: LiveClassFilterDto) {
     return this.svc.listVirtualRooms(filters);
   }
 
   @Get('recordings')
   @ApiOperation({ summary: 'Gravações de todas as aulas e sessões (secção 9)' })
+  @AnyAuthenticated()
   listRecordings(@Query() filters: LiveClassFilterDto) {
     return this.svc.listRecordings(filters);
   }
@@ -104,6 +114,7 @@ export class LiveClassesController {
   @ApiOperation({
     summary: 'Materiais de todas as aulas e sessões, ligados à Biblioteca (secção 11)',
   })
+  @AnyAuthenticated()
   listMaterials(@Query() filters: MaterialsFilterDto) {
     return this.svc.listMaterials(filters);
   }
@@ -153,12 +164,14 @@ export class LiveClassesController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe da aula' })
+  @AnyAuthenticated()
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOne(id);
   }
 
   @Get(':id/messages')
   @ApiOperation({ summary: 'Mensagens do chat ao vivo' })
+  @AnyAuthenticated()
   messages(
     @Param('id', ParseIntPipe) id: number,
     @Query('page') page?: number,
@@ -176,6 +189,7 @@ export class LiveClassesController {
 
   @Get(':id/sessions')
   @ApiOperation({ summary: 'Listar sessões da aula (aulas recorrentes)' })
+  @AnyAuthenticated()
   listSessions(@Param('id', ParseIntPipe) id: number) {
     return this.svc.listSessions(id);
   }
@@ -189,18 +203,21 @@ export class LiveClassesController {
 
   @Post(':id/join')
   @ApiOperation({ summary: 'Entrar na aula' })
+  @AnyAuthenticated()
   join(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.joinClass(id, user.id);
   }
 
   @Post(':id/leave')
   @ApiOperation({ summary: 'Sair da aula' })
+  @AnyAuthenticated()
   leave(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.leaveClass(id, user.id);
   }
 
   @Post(':id/message')
   @ApiOperation({ summary: 'Enviar mensagem no chat' })
+  @AnyAuthenticated()
   sendMessage(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: CurrentUserData,
@@ -218,6 +235,7 @@ export class LiveClassesController {
 
   @Post('post-evaluation/respond')
   @ApiOperation({ summary: 'Submeter resposta à avaliação pós-aula' })
+  @AnyAuthenticated()
   postResponse(@CurrentUser() user: CurrentUserData, @Body() dto: PostClassResponseDto) {
     return this.svc.submitPostResponse(user.id, dto);
   }

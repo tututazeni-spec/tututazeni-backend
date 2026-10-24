@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { KnowledgeService } from './knowledge.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -26,7 +26,10 @@ const mockPrisma = {
     findFirst: jest.fn(),
     create: jest.fn(),
   },
-  knowledgeInteraction: { create: jest.fn().mockResolvedValue({}) },
+  knowledgeInteraction: {
+    create: jest.fn().mockResolvedValue({}),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   knowledgeSearchLog: { create: jest.fn().mockResolvedValue({}) },
   articleAcknowledgement: {
     findFirst: jest.fn(),
@@ -52,6 +55,7 @@ const mockPrisma = {
     update: jest.fn(),
   },
   articleVersion: { create: jest.fn().mockResolvedValue({}) },
+  userPoints: { upsert: jest.fn().mockResolvedValue({}) },
   user: { findUnique: jest.fn() },
 };
 
@@ -80,6 +84,47 @@ describe('KnowledgeService', () => {
       providers: [KnowledgeService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<KnowledgeService>(KnowledgeService);
+  });
+
+  describe('menor privilégio em artigos (autor sem perfil ADMIN/RH)', () => {
+    const dto = { title: 'T', content: 'a b c', categoryId: 1 } as any;
+    const own = { id: 9, authorId: 5, content: 'x', _count: { versions: 0 } };
+
+    it('colaborador não publica nem torna obrigatório ao criar', async () => {
+      await expect(
+        service.create(5, { ...dto, status: 'PUBLISHED' }, 'COLABORADOR'),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(service.create(5, { ...dto, mandatory: true }, 'COLABORADOR')).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(mockPrisma.knowledgeArticle.create).not.toHaveBeenCalled();
+    });
+
+    it('colaborador cria rascunho normalmente; RH pode publicar', async () => {
+      mockPrisma.knowledgeArticle.create.mockResolvedValue({ id: 1, tags: [], content: 'x' });
+      await expect(service.create(5, dto, 'COLABORADOR')).resolves.toBeDefined();
+      await expect(service.create(6, { ...dto, status: 'PUBLISHED' }, 'RH')).resolves.toBeDefined();
+    });
+
+    it('colaborador não edita artigo de outro autor', async () => {
+      mockPrisma.knowledgeArticle.findUnique.mockResolvedValue({ ...own, authorId: 77 });
+      await expect(service.update(9, { title: 'hack' } as any, 5, 'COLABORADOR')).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(mockPrisma.knowledgeArticle.update).not.toHaveBeenCalled();
+    });
+
+    it('autor edita o seu mas não se auto-publica; RH edita qualquer um', async () => {
+      mockPrisma.knowledgeArticle.findUnique.mockResolvedValue(own);
+      mockPrisma.knowledgeArticle.update.mockResolvedValue({ id: 9, title: 'ok' });
+      await expect(
+        service.update(9, { title: 'ok' } as any, 5, 'COLABORADOR'),
+      ).resolves.toBeDefined();
+      await expect(
+        service.update(9, { status: 'PUBLISHED' } as any, 5, 'COLABORADOR'),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(service.update(9, { title: 'rh' } as any, 6, 'RH')).resolves.toBeDefined();
+    });
   });
 
   describe('findAllCategories', () => {

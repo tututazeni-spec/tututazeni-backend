@@ -1,4 +1,5 @@
 // src/competencies/competencies.controller.ts
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -55,6 +56,7 @@ export class CompetenciesController {
 
   @Get()
   @ApiOperation({ summary: 'Catálogo de competências com filtros' })
+  @AnyAuthenticated()
   findAll(@Query() filters: CompetencyFilterDto) {
     return this.svc.findAll(filters);
   }
@@ -149,6 +151,7 @@ export class CompetenciesController {
   @ApiOperation({ summary: 'Listar níveis de proficiência (aba Níveis de Proficiência)' })
   @ApiQuery({ name: 'competencyId', required: false })
   @ApiQuery({ name: 'search', required: false })
+  @AnyAuthenticated()
   findAllProficiencyLevels(
     @Query('competencyId') competencyId?: string,
     @Query('search') search?: string,
@@ -163,6 +166,7 @@ export class CompetenciesController {
 
   @Get('models')
   @ApiOperation({ summary: 'Listar modelos de competências' })
+  @AnyAuthenticated()
   findAllModels(@Query() filters: CompetencyModelFilterDto) {
     return this.svc.findAllModels(filters);
   }
@@ -176,6 +180,7 @@ export class CompetenciesController {
 
   @Get('models/:id')
   @ApiOperation({ summary: 'Detalhe de um modelo de competências' })
+  @AnyAuthenticated()
   findOneModel(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOneModel(id);
   }
@@ -216,6 +221,7 @@ export class CompetenciesController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe da competência (cursos, cargos, níveis)' })
+  @AnyAuthenticated()
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOne(id);
   }
@@ -307,12 +313,14 @@ export class CompetenciesController {
 
   @Get('my/profile')
   @ApiOperation({ summary: 'O meu perfil de competências' })
+  @AnyAuthenticated()
   myCompetencies(@CurrentUser() user: CurrentUserData) {
     return this.svc.getUserCompetencies(user.id);
   }
 
   @Get('my/gap/:positionId')
   @ApiOperation({ summary: 'O meu gap para um cargo' })
+  @AnyAuthenticated()
   myGap(
     @CurrentUser() user: CurrentUserData,
     @Param('positionId', ParseIntPipe) positionId: number,
@@ -322,12 +330,14 @@ export class CompetenciesController {
 
   @Get('my/gap')
   @ApiOperation({ summary: 'O meu gap para o meu cargo actual (resolvido automaticamente)' })
+  @AnyAuthenticated()
   myGapAuto(@CurrentUser() user: CurrentUserData) {
     return this.svc.getCompetencyGapForUser(user.id);
   }
 
   @Get('my/recommendations')
   @ApiOperation({ summary: 'Recomendações baseadas nos meus gaps' })
+  @AnyAuthenticated()
   myRecommendations(@CurrentUser() user: CurrentUserData) {
     return this.svc.getRecommendations(user.id);
   }
@@ -335,6 +345,7 @@ export class CompetenciesController {
   @Get('my/evolution')
   @ApiOperation({ summary: 'Histórico de evolução das minhas competências' })
   @ApiQuery({ name: 'competencyId', required: false })
+  @AnyAuthenticated()
   myEvolution(@CurrentUser() user: CurrentUserData, @Query('competencyId') competencyId?: string) {
     return this.svc.getCompetencyEvolution(
       user.id,
@@ -345,12 +356,14 @@ export class CompetenciesController {
   @Post('my/self-assess')
   @ApiOperation({ summary: 'Autoavaliação de competência' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   selfAssess(@CurrentUser() user: CurrentUserData, @Body() dto: SelfAssessmentDto) {
     return this.svc.selfAssess(user.id, dto);
   }
 
   @Get('my/endorsements')
   @ApiOperation({ summary: 'Os meus endorsements recebidos' })
+  @AnyAuthenticated()
   myEndorsements(@CurrentUser() user: CurrentUserData) {
     return this.svc.getEndorsements(user.id);
   }
@@ -400,6 +413,7 @@ export class CompetenciesController {
 
   @Get('user/:userId/endorsements')
   @ApiOperation({ summary: 'Endorsements de um utilizador' })
+  @AnyAuthenticated()
   userEndorsements(@Param('userId', ParseIntPipe) userId: number) {
     return this.svc.getEndorsements(userId);
   }
@@ -422,6 +436,7 @@ export class CompetenciesController {
 
   @Post('endorse')
   @ApiOperation({ summary: 'Endorsar competência de um colega' })
+  @AnyAuthenticated()
   endorse(@CurrentUser() user: CurrentUserData, @Body() dto: CreateEndorsementDto) {
     return this.svc.addEndorsement(user.id, dto);
   }
