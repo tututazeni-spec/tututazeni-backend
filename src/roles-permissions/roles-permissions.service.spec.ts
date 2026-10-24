@@ -118,7 +118,10 @@ describe('RolesPermissionsService', () => {
   describe('assignToUser', () => {
     it('invalida a cache de sessão do utilizador (novo papel vale já, em todas as instâncias)', async () => {
       mockPrisma.role.findUnique.mockResolvedValue(baseRole);
-      mockPrisma.user.update.mockResolvedValue({ id: 5, role: { ...baseRole, rolePermissions: [] } });
+      mockPrisma.user.update.mockResolvedValue({
+        id: 5,
+        role: { ...baseRole, rolePermissions: [] },
+      });
       await service.assignToUser(5, 1);
       expect(mockRevocation.invalidateUserCache).toHaveBeenCalledWith(5);
     });
