@@ -1,3 +1,4 @@
+/* eslint-disable no-script-url -- os "javascript:" são entradas maliciosas propositadas */
 import { validate } from 'class-validator';
 import { CreateCourseDto, UpdateCourseDto } from './courses.dto';
 

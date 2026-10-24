@@ -1,3 +1,4 @@
+/* eslint-disable no-script-url -- os "javascript:" são entradas maliciosas propositadas */
 // Garante que os DTOs que recebem ficheiros inline rejeitam disfarces (conteúdo ≠ tipo declarado),
 // em vez de confiarem só no prefixo do data URL.
 import { validate } from 'class-validator';
