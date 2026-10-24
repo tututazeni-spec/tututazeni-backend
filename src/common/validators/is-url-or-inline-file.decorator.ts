@@ -4,7 +4,8 @@
 // mesmo padrão dos PDFs de lição/documentos e do avatar (não há multipart
 // neste backend). O data URL é validado: MIME na allowlist e tamanho decodificado
 // até `maxBytes`. O tamanho em base64 também tem de caber no parser JSON (8 MB).
-import { registerDecorator, ValidationOptions } from 'class-validator';
+import { registerDecorator, ValidationArguments, ValidationOptions } from 'class-validator';
+import { inlineVerdict, recallReason } from './inline-verdict';
 import { ALLOWED_MIME_TYPES } from './allowed-mime-types';
 import { base64PayloadLength, formatLimit, maxDecodedBytes } from '../files/data-url';
 import { FILE_POLICIES, FilePolicy } from '../files/file-policies';
@@ -60,9 +61,10 @@ export function IsUrlOrInlineFile(
       propertyName,
       options,
       validator: {
-        validate(value: unknown): boolean {
+        validate(value: unknown, args: ValidationArguments): boolean | Promise<boolean> {
           if (typeof value !== 'string' || !value.trim()) return false;
           if (!value.startsWith('data:')) return safeFileUrlProblem(value) === null;
+          if (policy) return inlineVerdict(value, policy, args.object, propertyName);
           return inlineProblemOf(value) === null;
         },
         defaultMessage(args): string {
@@ -70,7 +72,7 @@ export function IsUrlOrInlineFile(
           const problem =
             typeof v === 'string'
               ? v.startsWith('data:')
-                ? inlineProblemOf(v, false)
+                ? (recallReason(args?.object, propertyName) ?? inlineProblemOf(v, false))
                 : safeFileUrlProblem(v)
               : null;
           return `${propertyName}: ${problem ?? `deve ser uma ligação ou um ficheiro (máx. ${formatLimit(maxBytes)})`}`;

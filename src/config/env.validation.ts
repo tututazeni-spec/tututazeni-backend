@@ -21,6 +21,13 @@ export const envValidationSchema = Joi.object({
   UPLOAD_VALIDATION_MODE: Joi.string().valid('enforce', 'warn').default('enforce'),
   // Pedidos de upload por utilizador e por minuto (omissão: 20).
   UPLOAD_THROTTLE_LIMIT: Joi.number().integer().min(1).optional(),
+  // Antivírus (ClamAV/clamd) sobre os ficheiros enviados. Desligado por omissão.
+  CLAMAV_ENABLED: Joi.boolean().default(false),
+  CLAMAV_HOST: Joi.string().optional(),
+  CLAMAV_PORT: Joi.number().port().optional(),
+  CLAMAV_TIMEOUT_MS: Joi.number().integer().min(1000).optional(),
+  // open: clamd em baixo => o ficheiro passa (e fica registado); closed: o upload é recusado.
+  CLAMAV_FAIL_MODE: Joi.string().valid('open', 'closed').default('open'),
   ALLOWED_ORIGINS: Joi.string().required(),
 
   // URLs de infra

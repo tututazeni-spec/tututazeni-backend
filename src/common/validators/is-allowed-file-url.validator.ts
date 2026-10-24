@@ -1,6 +1,7 @@
 import { registerDecorator, ValidationArguments, ValidationOptions } from 'class-validator';
 import { FilePolicy } from '../files/file-policies';
 import { inspectInlineFile } from '../files/inspect-inline-file';
+import { inlineVerdict, recallReason } from './inline-verdict';
 import { safeFileUrlProblem } from './safe-file-url';
 
 export interface AllowedFileUrlExtras {
@@ -32,17 +33,18 @@ export function IsAllowedFileUrl(options?: ValidationOptions, extras?: AllowedFi
       propertyName,
       options,
       validator: {
-        validate(value: unknown, _args: ValidationArguments): boolean {
+        validate(value: unknown, args: ValidationArguments): boolean | Promise<boolean> {
           if (typeof value !== 'string' || !value) return false;
           if (extras?.inline && value.startsWith('data:')) {
-            return inlineProblem(value, extras.inline) === null;
+            return inlineVerdict(value, extras.inline, args.object, args.property);
           }
           return safeFileUrlProblem(value, { allowedHosts: allowedHosts() }) === null;
         },
         defaultMessage(args: ValidationArguments): string {
           const v = args.value as string;
           if (extras?.inline && v?.startsWith?.('data:')) {
-            return `${args.property}: ${inlineProblem(v, extras.inline, false)} Em alternativa, use uma URL HTTPS.`;
+            const reason = recallReason(args.object, args.property);
+            return `${args.property}: ${reason ?? inlineProblem(v, extras.inline, false)} Em alternativa, use uma URL HTTPS.`;
           }
           const problem = safeFileUrlProblem(v, { allowedHosts: allowedHosts() });
           return `${args.property} ${problem ?? 'é inválido'}`;

@@ -177,7 +177,7 @@ T1 e T5 não dependem de nada e podem arrancar já. T3 depende de T2 e T4.
 | T4 Limites | feita | `FILE_POLICIES` (bytes, sem alargar limites), `fileSize` por MIME, `/auth` com corpo máx. 100 KB. |
 | T5 Nomes | feita | `IsSafeFileName`/`sanitizeFileName`. |
 | T6 Downloads seguros | feita | `safe-download.ts` (`Content-Disposition` RFC 6266, MIME só da lista segura, `nosniff`, CSP `sandbox`) aplicado a 9 controllers com nome/tipo dinâmico. `helmet` já emite `nosniff` globalmente e as rotas só sobrepõem os headers que definem. |
-| T7 Complementares | feita (excepto ClamAV) | CSV: `csv-safe.util.ts` aplicado aos 4 geradores que não neutralizavam fórmulas (os outros 13 já o faziam). Rate limit: `@UploadThrottle()` em 22 handlers, 20/min por utilizador. Auditoria: `UploadRejectionAuditor` grava `UPLOAD_REJECTED`/`UPLOAD_FLAGGED` no AuditLog canónico. ClamAV: ver decisão abaixo. |
+| T7 Complementares | feita | CSV: `csv-safe.util.ts` aplicado aos 4 geradores que não neutralizavam fórmulas (os outros 13 já o faziam). Rate limit: `@UploadThrottle()` em 22 handlers, 20/min por utilizador. Auditoria: `UploadRejectionAuditor` grava `UPLOAD_REJECTED`/`UPLOAD_FLAGGED` no AuditLog canónico. ClamAV: cliente `clamd` opcional (`CLAMAV_ENABLED`), ver §9. |
 | T8 Rollout | feita (falta executar em produção) | Modo `UPLOAD_VALIDATION_MODE=warn\|enforce`; `npm run audit:uploads` verifica URLs, nomes **e** ficheiros inline existentes; runbook em §9. |
 
 ### Limites conhecidos
@@ -214,10 +214,36 @@ Rollback: voltar a `warn` e reiniciar. Não há migrações de dados.
 Outras variáveis: `UPLOAD_THROTTLE_LIMIT` (uploads por utilizador/min, omissão 20) e
 `ALLOWED_FILE_HOST` (obrigatório).
 
-### Decisão em aberto: antivírus (ClamAV)
-Não implementado. Valor: apanhar malware conhecido em PDF/Office que as verificações estruturais
-não vêem (e JavaScript em object streams comprimidos). Custo: um daemon `clamd` com actualização de
-assinaturas, ~1 GB de RAM, latência por upload e um modo de falha (fail-open ou fail-closed) a
-decidir. Recomendação: só vale a pena se os ficheiros enviados forem abertos por **outros**
-utilizadores no browser/Office (biblioteca, documentos, evidências). Se for decidido avançar,
-o ponto de integração é `inspectBuffer`, que já tem o buffer descodificado e relata rejeições.
+### Antivírus (ClamAV) — implementado, desligado por omissão
+Camada opcional a seguir às verificações estruturais; apanha malware conhecido que a estrutura
+não vê (ex.: JavaScript em object streams comprimidos de PDF, exploits em documentos Office).
+
+- **Activar:** `CLAMAV_ENABLED=true` + um `clamd` acessível (`CLAMAV_HOST`/`CLAMAV_PORT`, omissão
+  127.0.0.1:3310). Local: `docker compose --profile av up -d clamav` (1.º arranque demora minutos a
+  descarregar assinaturas; ~1-2 GB de RAM). Em produção: correr o clamd junto da aplicação e manter
+  `freshclam` activo (a imagem oficial já o faz).
+- **Como funciona:** cliente `INSTREAM` sobre TCP (`src/common/files/antivirus.ts`, sem dependências).
+  Corre depois da inspecção estrutural, só em ficheiros que já passaram. Cobre todos os fluxos
+  inline (validadores dos DTOs), as lições PDF e as evidências de auditoria.
+- **Infectado:** recusado **sempre**, mesmo com `UPLOAD_VALIDATION_MODE=warn` (uma assinatura
+  positiva não tem o problema de falsos positivos que o modo warn existe para medir). Regista
+  `UPLOAD_REJECTED` com severidade HIGH e a assinatura (ex.: `Win.Test.EICAR_HDB-1`).
+- **clamd em baixo ou lento** (`CLAMAV_TIMEOUT_MS`, omissão 15 s): decide `CLAMAV_FAIL_MODE`.
+  - `open` (omissão): o ficheiro passa e a falha fica registada (`stage: scan`, `enforced: false`).
+    Escolhido por omissão porque um clamd parado não deve impedir 6000 utilizadores de enviar
+    ficheiros; a regra estrutural continua a proteger.
+  - `closed`: o upload é recusado com "Não foi possível verificar o ficheiro…". Para quem prefere
+    segurança a disponibilidade.
+- **Limites:** o clamd recusa fluxos acima de `StreamMaxLength` (omissão 25 MB; os nossos tetos
+  são ≤ 10 MB). Ficheiros em URL externa (HTTPS) nunca passam pelo backend, logo não são
+  verificados aqui.
+- **Testar sem instalar o ClamAV:** `antivirus.spec.ts` sobe um servidor TCP que fala o protocolo
+  INSTREAM e reconhece a string de teste EICAR.
+
+### Limite de uploads por utilizador (`UPLOAD_THROTTLE_LIMIT`)
+Mantido em **20 pedidos/min por utilizador**. Verificação feita no frontend: todos os uploads são
+de um ficheiro de cada vez, accionados por uma pessoa (não há selecção múltipla, fila de envio nem
+autosave; o `debounce` existente é só de pesquisa), portanto 20/min é muito acima de qualquer uso
+humano. Só convém subir se houver importações em lote por API ou scripts; nesse caso aumentar a
+variável em vez de remover o decorator. Quem excede recebe 429 e o contador é do utilizador, não do
+IP, por isso colegas no mesmo escritório não se bloqueiam uns aos outros.

@@ -11,5 +11,19 @@ services:
     volumes:
       - redis-data:/data
 
+  # Antivírus para os uploads (opcional): docker compose --profile av up -d clamav
+  # Primeiro arranque demora alguns minutos a descarregar as assinaturas; precisa de ~1-2 GB de RAM.
+  # Activar na aplicação com CLAMAV_ENABLED=true (ver .env.example).
+  clamav:
+    image: clamav/clamav:stable
+    container_name: innova-clamav
+    profiles: ["av"]
+    ports:
+      - "3310:3310"
+    restart: unless-stopped
+    volumes:
+      - clamav-db:/var/lib/clamav
+
 volumes:
   redis-data:
+  clamav-db:

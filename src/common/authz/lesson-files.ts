@@ -7,6 +7,8 @@ import { BadRequestException } from '@nestjs/common';
 import { Role } from '../../auth/enums/role.enum';
 import { formatLimit } from '../files/data-url';
 import { inspectInlineFile } from '../files/inspect-inline-file';
+import { antivirusConfig } from '../files/antivirus';
+import { inspectInlineFileScanned } from '../files/inspect-scanned';
 import { FILE_POLICIES } from '../files/file-policies';
 import { isPrivileged } from './ownership';
 
@@ -52,6 +54,21 @@ export function assertValidLessonFile(
         : `Ficheiro inválido: só são aceites PDFs (${result.error})`,
     );
   }
+}
+
+/**
+ * `assertValidLessonFile` (estrutura do PDF) e, com CLAMAV_ENABLED=true, antivírus sobre o ficheiro.
+ * É o que os serviços devem chamar ao gravar uma lição; sem antivírus equivale à versão síncrona.
+ */
+export async function assertLessonFileClean(
+  type: string | undefined,
+  contentUrl: string | null | undefined,
+): Promise<void> {
+  assertValidLessonFile(type, contentUrl);
+  if (!contentUrl || (type !== 'PDF' && type !== 'TEXT') || !contentUrl.startsWith('data:')) return;
+  if (!antivirusConfig().enabled) return; // evita descodificar duas vezes sem necessidade
+  const result = await inspectInlineFileScanned(contentUrl, FILE_POLICIES.PDF, { report: false });
+  if (result.ok === false) throw new BadRequestException(result.error);
 }
 
 interface LessonWithFile {

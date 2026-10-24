@@ -119,3 +119,36 @@ describe('envValidationSchema — validação de uploads', () => {
     }
   });
 });
+
+describe('envValidationSchema — antivírus', () => {
+  it('desligado por omissão e fail-mode open', () => {
+    const v = validate(VALID_ENV).value;
+    expect(v.CLAMAV_ENABLED).toBe(false);
+    expect(v.CLAMAV_FAIL_MODE).toBe('open');
+  });
+
+  it('aceita uma configuração completa', () => {
+    expect(
+      validate({
+        ...VALID_ENV,
+        CLAMAV_ENABLED: 'true',
+        CLAMAV_HOST: 'clamav',
+        CLAMAV_PORT: '3310',
+        CLAMAV_TIMEOUT_MS: '5000',
+        CLAMAV_FAIL_MODE: 'closed',
+      }).error,
+    ).toBeUndefined();
+  });
+
+  it('rejeita fail-mode desconhecido, porta inválida e timeout demasiado baixo', () => {
+    for (const bad of [
+      { CLAMAV_FAIL_MODE: 'talvez' },
+      { CLAMAV_PORT: '70000' },
+      { CLAMAV_TIMEOUT_MS: '10' },
+      { CLAMAV_ENABLED: 'sim' },
+    ]) {
+      const keys = validate({ ...VALID_ENV, ...bad }).error?.details.map(d => d.context?.key);
+      expect(keys).toContain(Object.keys(bad)[0]);
+    }
+  });
+});

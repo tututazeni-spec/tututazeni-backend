@@ -15,7 +15,7 @@ import { createHash, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { detectFileType } from '../common/files/detect-file-type';
 import { FILE_POLICIES } from '../common/files/file-policies';
-import { inspectBuffer } from '../common/files/inspect-inline-file';
+import { inspectBufferScanned } from '../common/files/inspect-scanned';
 import { sanitizeFileName } from '../common/files/sanitize-file-name';
 import { AuditService } from './audit.service';
 import type { AuditActor } from './audit-incidents.service';
@@ -324,7 +324,7 @@ export class AuditExportsService {
     const buffer = Buffer.from(dto.contentBase64, 'base64');
     if (!buffer.length) throw new BadRequestException('Ficheiro vazio');
     // O tipo vem dos bytes: o mimeType do cliente só é aceite se bater com eles.
-    const inspected = inspectBuffer(
+    const inspected = await inspectBufferScanned(
       buffer,
       dto.mimeType ?? detectFileType(buffer).mimes[0] ?? 'application/octet-stream',
       FILE_POLICIES.EVIDENCE,
