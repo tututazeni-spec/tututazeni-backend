@@ -116,13 +116,13 @@ describe('KnowledgeController', () => {
   it('create → create(userId, dto)', async () => {
     const dto = {} as any;
     await controller.create(mockUser as any, dto);
-    expect(mockSvc.create).toHaveBeenCalledWith(1, dto);
+    expect(mockSvc.create).toHaveBeenCalledWith(1, dto, 'ADMIN');
   });
 
   it('update → update(id, userId, dto)', async () => {
     const dto = {} as any;
     await controller.update(1, mockUser as any, dto);
-    expect(mockSvc.update).toHaveBeenCalledWith(1, dto, 1);
+    expect(mockSvc.update).toHaveBeenCalledWith(1, dto, 1, 'ADMIN');
   });
 
   it('publish → publish(id)', async () => {

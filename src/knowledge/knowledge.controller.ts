@@ -132,7 +132,7 @@ export class KnowledgeController {
   @ApiOperation({ summary: 'Criar artigo (inicia como DRAFT)' })
   @AnyAuthenticated()
   create(@CurrentUser() user: CurrentUserData, @Body() dto: CreateKnowledgeArticleDto) {
-    return this.svc.create(user.id, dto);
+    return this.svc.create(user.id, dto, user.role?.name);
   }
 
   @Put(':id')
@@ -143,7 +143,7 @@ export class KnowledgeController {
     @CurrentUser() user: CurrentUserData,
     @Body() dto: UpdateKnowledgeArticleDto,
   ) {
-    return this.svc.update(id, dto, user.id);
+    return this.svc.update(id, dto, user.id, user.role?.name);
   }
 
   @Patch(':id/publish')

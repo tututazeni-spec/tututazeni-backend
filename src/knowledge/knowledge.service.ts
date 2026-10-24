@@ -201,7 +201,27 @@ export class KnowledgeService {
     return article;
   }
 
-  async create(authorId: number, dto: CreateKnowledgeArticleDto) {
+  /**
+   * Só ADMIN/RH publicam, arquivam ou tornam artigos obrigatórios; um autor comum só mexe nos seus
+   * rascunhos. `actorRole` indefinido = chamada interna de confiança; a rota HTTP passa sempre o papel.
+   */
+  private assertCanPublish(
+    actorRole: string | undefined,
+    dto: { status?: string; mandatory?: boolean },
+  ): void {
+    if (!actorRole || actorRole === 'ADMIN' || actorRole === 'RH') return;
+    const elevated =
+      (dto.status !== undefined && dto.status !== 'DRAFT' && dto.status !== 'IN_REVIEW') ||
+      dto.mandatory === true;
+    if (elevated) {
+      throw new ForbiddenException(
+        'Só ADMIN/RH publicam, arquivam ou tornam um artigo obrigatório',
+      );
+    }
+  }
+
+  async create(authorId: number, dto: CreateKnowledgeArticleDto, actorRole?: string) {
+    this.assertCanPublish(actorRole, dto);
     const { tags, ...data } = dto;
 
     // Calcular tempo de leitura (aprox. 200 palavras/min)
@@ -261,12 +281,26 @@ export class KnowledgeService {
     return article;
   }
 
-  async update(id: number, dto: UpdateKnowledgeArticleDto, updatedById?: number) {
+  async update(
+    id: number,
+    dto: UpdateKnowledgeArticleDto,
+    updatedById?: number,
+    actorRole?: string,
+  ) {
     const existing = await this.prisma.knowledgeArticle.findUnique({
       where: { id },
       include: { _count: { select: { versions: true } } },
     });
     if (!existing) throw new NotFoundException('Artigo não encontrado');
+    if (
+      actorRole &&
+      actorRole !== 'ADMIN' &&
+      actorRole !== 'RH' &&
+      existing.authorId !== updatedById
+    ) {
+      throw new ForbiddenException('Só o autor, ADMIN ou RH podem editar este artigo');
+    }
+    this.assertCanPublish(actorRole, dto);
 
     const { tags, changeReason, ...data } = dto;
 
