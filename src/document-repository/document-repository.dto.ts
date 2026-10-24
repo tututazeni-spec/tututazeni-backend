@@ -1,6 +1,5 @@
 // ─── src/document-repository/document-repository.dto.ts ──────────────────────
 import {
-  Max,
   Min,
   IsIn,
   IsString,
@@ -24,11 +23,8 @@ import {
   ShareLinkAccess,
 } from '@prisma/client';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
-import {
-  ALLOWED_MIME_TYPES,
-  MAX_FILE_SIZE_BYTES,
-  MAX_FILE_NAME_LENGTH,
-} from '../common/validators/allowed-mime-types';
+import { ALLOWED_MIME_TYPES, MAX_FILE_NAME_LENGTH } from '../common/validators/allowed-mime-types';
+import { IsFileSizeWithinLimit } from '../common/files/is-file-size-within-limit.decorator';
 import { IsSafeFileName } from '../common/files/sanitize-file-name';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
@@ -55,7 +51,7 @@ export class CreateDocumentDto {
   @ApiProperty() @IsEnum(DocSensitivity) sensitivity!: DocSensitivity;
   @ApiProperty() @IsAllowedFileUrl() fileUrl!: string; // URL no storage (S3/Azure)
   @ApiProperty({ enum: ALLOWED_MIME_TYPES }) @IsIn(ALLOWED_MIME_TYPES) mimeType!: string;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(MAX_FILE_SIZE_BYTES) fileSize?: number; // bytes
+  @ApiPropertyOptional() @IsOptional() @IsInt() @IsFileSizeWithinLimit() fileSize?: number; // bytes
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -117,7 +113,7 @@ export class SubmitForApprovalDto {
 export class NewVersionDto {
   @ApiProperty() @IsAllowedFileUrl() fileUrl!: string;
   @ApiProperty({ enum: ALLOWED_MIME_TYPES }) @IsIn(ALLOWED_MIME_TYPES) mimeType!: string;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(MAX_FILE_SIZE_BYTES) fileSize?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @IsFileSizeWithinLimit() fileSize?: number;
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

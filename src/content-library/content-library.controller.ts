@@ -28,6 +28,7 @@ import {
   SaveNoteDto,
 } from './content-library.dto';
 
+import { UploadThrottle } from '../common/security/upload-throttle';
 const AUTHOR_ROLES = [Role.ADMIN, Role.RH, Role.INSTRUCTOR] as const;
 const ADMIN_ROLES = [Role.ADMIN, Role.RH] as const;
 
@@ -115,6 +116,7 @@ export class ContentLibraryController {
     return this.svc.findOne(id, user.id);
   }
 
+  @UploadThrottle()
   @Post()
   @Roles(...AUTHOR_ROLES)
   @ApiOperation({ summary: 'Criar novo conteúdo (vai para DRAFT, precisa de publicação)' })
@@ -122,6 +124,7 @@ export class ContentLibraryController {
     return this.svc.create(user.id, dto);
   }
 
+  @UploadThrottle()
   @Put(':id')
   @Roles(...AUTHOR_ROLES)
   @ApiOperation({ summary: 'Actualizar conteúdo completo' })

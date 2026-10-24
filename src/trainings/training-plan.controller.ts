@@ -30,6 +30,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
+import { UploadThrottle } from '../common/security/upload-throttle';
 // Mesmos papéis que podem criar/gerir formações (TrainingController) —
 // quem não for ADMIN/RH só gere os planos que criou (assertCanManage).
 const CAN_MANAGE_PLANS = [
@@ -83,6 +84,7 @@ export class TrainingPlanController {
     return this.svc.exportCsv(id);
   }
 
+  @UploadThrottle()
   @Post()
   @Roles(...CAN_MANAGE_PLANS)
   @ApiOperation({ summary: 'Novo plano de formação' })

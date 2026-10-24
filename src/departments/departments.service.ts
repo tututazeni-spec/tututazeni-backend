@@ -27,6 +27,7 @@ import {
   ReportsFilterDto,
 } from './departments.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { csvCell } from '../common/utils/csv-safe.util';
 
 // ─── DEPARTMENTS ──────────────────────────────────────────────────────────────
 
@@ -166,8 +167,6 @@ export class DepartmentsService {
       'Data de criação',
       'Última atualização',
     ];
-    const escape = (v: string) =>
-      v.includes(',') || v.includes('"') ? `"${v.replace(/"/g, '""')}"` : v;
     const lines = rows.map(d =>
       [
         d.name,
@@ -183,7 +182,7 @@ export class DepartmentsService {
         d.createdAt.toISOString().slice(0, 10),
         d.updatedAt.toISOString().slice(0, 10),
       ]
-        .map(escape)
+        .map(csvCell)
         .join(','),
     );
     return [headers.join(','), ...lines].join('\n');

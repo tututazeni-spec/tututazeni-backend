@@ -14,6 +14,7 @@ import { createSwaggerAuthMiddleware } from './common/security/swagger-auth.midd
 import { csrfHeaderMiddleware } from './common/security/csrf-header-guard';
 import { TOKEN_COOKIE } from './auth/token-cookie';
 import { validateEnv } from './common/bootstrap/validate-env';
+import { applySmallBodyLimits } from './common/bootstrap/body-limits';
 import { runWithRequestContext } from './common/logging/request-context';
 import { logIdentityMiddleware } from './common/logging/identity.middleware';
 import { runWithRls } from './common/rls/rls-context';
@@ -65,6 +66,9 @@ async function bootstrap() {
   });
   // userId para correlação desde o início do pedido (logs pré-guard e rotas @Public com sessão).
   app.use(logIdentityMiddleware(process.env.JWT_SECRET));
+
+  // Rotas públicas de autenticação nunca recebem ficheiros: corpo máx. 100 KB (antes do parser global).
+  applySmallBodyLimits(app);
 
   // O avatar de perfil e a thumbnail do curso chegam como data URL base64 no
   // corpo JSON (PATCH /users/me/avatar, POST/PUT /courses). Além disso, uma

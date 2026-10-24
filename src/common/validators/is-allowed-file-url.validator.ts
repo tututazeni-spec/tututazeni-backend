@@ -1,35 +1,21 @@
 import { registerDecorator, ValidationArguments, ValidationOptions } from 'class-validator';
+import { FilePolicy } from '../files/file-policies';
+import { inspectInlineFile } from '../files/inspect-inline-file';
+import { inlineVerdict, recallReason, remoteFileVerdict } from './inline-verdict';
 import { safeFileUrlProblem } from './safe-file-url';
-
-const PDF_DATA_URL_PREFIX = 'data:application/pdf;base64,';
-const IMAGE_DATA_URL_PREFIXES = [
-  'data:image/jpeg;base64,',
-  'data:image/png;base64,',
-  'data:image/webp;base64,',
-];
-const BASE64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
 
 export interface AllowedFileUrlExtras {
   /**
-   * Aceita também um PDF inline (`data:application/pdf;base64,…`) — mesmo
-   * padrão das lições PDF/avatar. Valor = comprimento máximo da string
-   * completa (o limite de tamanho do ficheiro, em base64).
+   * Aceita também um ficheiro inline (data URL base64): MIME na política, tamanho em bytes e
+   * conteúdo real validado pelos bytes (`inspectInlineFile`): tipo, estrutura, conteúdo activo.
    */
-  allowPdfDataUrl?: number;
-  /** Aceita também imagens inline (JPEG/PNG/WebP) em data URL, com o mesmo
-   *  limite de comprimento de `allowPdfDataUrl` (ou próprio se definido). */
-  allowImageDataUrl?: number;
+  inline?: FilePolicy;
 }
 
-function isPdfDataUrl(value: string, maxLength: number): boolean {
-  if (value.length > maxLength || !value.startsWith(PDF_DATA_URL_PREFIX)) return false;
-  return BASE64_RE.test(value.slice(PDF_DATA_URL_PREFIX.length));
-}
-
-function isImageDataUrl(value: string, maxLength: number): boolean {
-  if (value.length > maxLength) return false;
-  const prefix = IMAGE_DATA_URL_PREFIXES.find(p => value.startsWith(p));
-  return !!prefix && BASE64_RE.test(value.slice(prefix.length));
+/** Motivo da rejeição de um data URL pela política, ou `null`. */
+function inlineProblem(value: string, policy: FilePolicy, report = true): string | null {
+  const r = inspectInlineFile(value, policy, { report });
+  return r.ok === false ? r.error : null;
 }
 
 function allowedHosts(): string[] {
@@ -47,19 +33,31 @@ export function IsAllowedFileUrl(options?: ValidationOptions, extras?: AllowedFi
       propertyName,
       options,
       validator: {
-        validate(value: unknown, _args: ValidationArguments): boolean {
+        validate(value: unknown, args: ValidationArguments): boolean | Promise<boolean> {
           if (typeof value !== 'string' || !value) return false;
-          if (extras?.allowPdfDataUrl && isPdfDataUrl(value, extras.allowPdfDataUrl)) return true;
-          if (extras?.allowImageDataUrl && isImageDataUrl(value, extras.allowImageDataUrl))
-            return true;
-          return safeFileUrlProblem(value, { allowedHosts: allowedHosts() }) === null;
+          if (extras?.inline && value.startsWith('data:')) {
+            return inlineVerdict(value, extras.inline, args.object, args.property);
+          }
+          if (safeFileUrlProblem(value, { allowedHosts: allowedHosts() }) !== null) return false;
+          // Ficheiro no storage: com REMOTE_FILE_VERIFY=true é descarregado e verificado.
+          return remoteFileVerdict(
+            value,
+            (args.object as { mimeType?: unknown }).mimeType,
+            args.object,
+            args.property,
+          );
         },
         defaultMessage(args: ValidationArguments): string {
           const v = args.value as string;
-          if ((extras?.allowPdfDataUrl || extras?.allowImageDataUrl) && v?.startsWith?.('data:')) {
-            return `${args.property} deve ser um PDF ou imagem válidos dentro do tamanho máximo, ou uma URL HTTPS`;
+          if (extras?.inline && v?.startsWith?.('data:')) {
+            const reason = recallReason(args.object, args.property);
+            return `${args.property}: ${reason ?? inlineProblem(v, extras.inline, false)} Em alternativa, use uma URL HTTPS.`;
           }
           const problem = safeFileUrlProblem(v, { allowedHosts: allowedHosts() });
+          if (!problem) {
+            const reason = recallReason(args.object, args.property);
+            if (reason) return `${args.property}: ${reason}`;
+          }
           return `${args.property} ${problem ?? 'é inválido'}`;
         },
       },

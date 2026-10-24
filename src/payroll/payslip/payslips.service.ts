@@ -19,7 +19,7 @@ import {
   ResolveDisputeDto,
 } from './payslips.dto';
 import { randomBytes } from 'crypto';
-import { assertCanAccess } from '../../common/authz/ownership';
+import { assertCanAccess, isPrivileged } from '../../common/authz/ownership';
 import { Role } from '../../auth/enums/role.enum';
 import { CurrentUserData } from '../../common/types/current-user';
 import {
@@ -260,8 +260,14 @@ export class PayslipsService {
 
     // Ownership ao nível do dado (A3-1): dono OU ADMIN/RH; senão 404.
     // Quando chamado sem user (contexto interno de confiança), não filtra.
-    if (user) assertCanAccess(p, p?.userId, user, [Role.ADMIN, Role.RH]);
-    else if (!p) throw new NotFoundException('Recibo não encontrado');
+    if (user) {
+      assertCanAccess(p, p?.userId, user, [Role.ADMIN, Role.RH]);
+      // Rascunho ainda não foi aprovado/emitido: só ADMIN/RH o vêem (mesmo critério
+      // de getMyPayslips). 404 em vez de 403 para não revelar que existe.
+      if (p.status === 'DRAFT' && !isPrivileged(user, [Role.ADMIN, Role.RH])) {
+        throw new NotFoundException('Recurso não encontrado');
+      }
+    } else if (!p) throw new NotFoundException('Recibo não encontrado');
 
     return p;
   }

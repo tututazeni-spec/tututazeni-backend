@@ -3,7 +3,8 @@
 // só é aceite se bater com eles e com a política da categoria.
 import { detectFileType, FileKind } from './detect-file-type';
 import { FilePolicy } from './file-policies';
-import { parseDataUrl } from './data-url';
+import { formatLimit, parseDataUrl } from './data-url';
+import { reportUploadRejection, uploadValidationMode } from './upload-validation';
 import {
   gifInfo,
   imageProblem,
@@ -38,66 +39,105 @@ const EXT: Partial<Record<FileKind, string>> = {
 
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error });
 
+export interface InspectOptions {
+  /** false: não regista a rejeição (usado ao recalcular só a mensagem de erro de um validador). */
+  report?: boolean;
+}
+
 /** Valida bytes já descodificados contra o MIME declarado e a política. */
 export function inspectBuffer(
   bytes: Buffer,
   declaredMime: string,
   policy: FilePolicy,
+  options: InspectOptions = {},
 ): InspectResult {
+  const report = options.report !== false;
   const declared = declaredMime.toLowerCase();
-  if (bytes.length === 0) return fail('O ficheiro está vazio.');
+  const base = { policy: policy.name, declaredMime: declared, bytes: bytes.length };
+
+  // Formato, tamanho e tipos fora da política recusam sempre, em qualquer modo.
+  const hard = (stage: 'format' | 'size' | 'type', error: string) => {
+    if (report) reportUploadRejection({ ...base, stage, reason: error, enforced: true });
+    return fail(error);
+  };
+  if (bytes.length === 0) return hard('format', 'O ficheiro está vazio.');
   if (bytes.length > policy.maxBytes) {
-    return fail(`O ficheiro excede ${Math.round((policy.maxBytes / (1024 * 1024)) * 10) / 10} MB.`);
+    return hard('size', `O ficheiro excede ${formatLimit(policy.maxBytes)}.`);
   }
   if (!policy.mimes.includes(declared)) {
-    return fail(`Tipo de ficheiro não permitido (${declared}).`);
+    return hard('type', `Tipo de ficheiro não permitido (${declared}).`);
   }
 
   const detected = detectFileType(bytes);
+  let problem: string | null = null;
   if (detected.dangerous) {
-    return fail(`Ficheiro rejeitado: contém ${detected.dangerous}.`);
-  }
-  if (detected.kind === 'unknown') {
-    return fail('Não foi possível identificar o tipo do ficheiro.');
-  }
-  if (!detected.mimes.includes(declared)) {
-    return fail('O conteúdo do ficheiro não corresponde ao tipo declarado.');
+    problem = `Ficheiro rejeitado: contém ${detected.dangerous}.`;
+  } else if (detected.kind === 'unknown') {
+    problem = 'Não foi possível identificar o tipo do ficheiro.';
+  } else if (!detected.mimes.includes(declared)) {
+    problem = 'O conteúdo do ficheiro não corresponde ao tipo declarado.';
+  } else {
+    problem = structuralProblem(detected.kind, bytes, policy);
   }
 
-  let problem: string | null = null;
-  switch (detected.kind) {
-    case 'pdf':
-      problem = pdfProblem(bytes);
-      break;
-    case 'docx':
-    case 'xlsx':
-    case 'pptx':
-      problem = ooxmlProblem(bytes);
-      break;
-    case 'png':
-      problem = imageProblem(pngInfo(bytes), policy.maxDimension ?? 4000);
-      break;
-    case 'jpeg':
-      problem = imageProblem(jpegInfo(bytes), policy.maxDimension ?? 4000);
-      break;
-    case 'webp':
-      problem = imageProblem(webpInfo(bytes), policy.maxDimension ?? 4000);
-      break;
-    case 'gif':
-      problem = imageProblem(gifInfo(bytes), policy.maxDimension ?? 4000);
-      break;
-    default:
-      break;
+  if (problem) {
+    // Falhas de CONTEÚDO: em modo warn só se regista (rollout); em enforce recusam.
+    const enforced = uploadValidationMode() === 'enforce';
+    if (report) {
+      reportUploadRejection({
+        ...base,
+        stage: 'content',
+        reason: problem,
+        detectedKind: detected.kind,
+        enforced,
+      });
+    }
+    if (enforced) return fail(problem);
   }
-  if (problem) return fail(problem);
 
   const ext = declared === 'text/csv' ? 'csv' : (EXT[detected.kind] ?? 'bin');
   return { ok: true, mime: declared, kind: detected.kind, ext, bytes };
 }
 
+function structuralProblem(kind: FileKind, bytes: Buffer, policy: FilePolicy): string | null {
+  const maxDimension = policy.maxDimension ?? 4000;
+  switch (kind) {
+    case 'pdf':
+      return pdfProblem(bytes);
+    case 'docx':
+    case 'xlsx':
+    case 'pptx':
+      return ooxmlProblem(bytes);
+    case 'png':
+      return imageProblem(pngInfo(bytes), maxDimension);
+    case 'jpeg':
+      return imageProblem(jpegInfo(bytes), maxDimension);
+    case 'webp':
+      return imageProblem(webpInfo(bytes), maxDimension);
+    case 'gif':
+      return imageProblem(gifInfo(bytes), maxDimension);
+    default:
+      return null;
+  }
+}
+
 /** Valida um data URL base64: formato, tamanho, tipo real e estrutura. */
-export function inspectInlineFile(dataUrl: unknown, policy: FilePolicy): InspectResult {
+export function inspectInlineFile(
+  dataUrl: unknown,
+  policy: FilePolicy,
+  options: InspectOptions = {},
+): InspectResult {
   const parsed = parseDataUrl(dataUrl, policy.maxBytes);
-  if (parsed.ok === false) return parsed;
-  return inspectBuffer(parsed.bytes, parsed.declaredMime, policy);
+  if (parsed.ok === false) {
+    if (options.report !== false) {
+      reportUploadRejection({
+        policy: policy.name,
+        stage: parsed.error.includes('excede') ? 'size' : 'format',
+        reason: parsed.error,
+        enforced: true,
+      });
+    }
+    return parsed;
+  }
+  return inspectBuffer(parsed.bytes, parsed.declaredMime, policy, options);
 }

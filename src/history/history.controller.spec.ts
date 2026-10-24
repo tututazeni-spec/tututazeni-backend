@@ -160,7 +160,12 @@ describe('HistoryController', () => {
     const file = await controller.exportReport(dto, res);
     expect(mockReports.export).toHaveBeenCalledWith(dto, 'csv');
     expect(res.set).toHaveBeenCalledWith(
-      expect.objectContaining({ 'Content-Disposition': 'attachment; filename="f.csv"' }),
+      expect.objectContaining({
+        'Content-Disposition': expect.stringMatching(
+          /^attachment; filename="f\.csv"; filename\*=UTF-8''f\.csv$/,
+        ),
+        'X-Content-Type-Options': 'nosniff',
+      }),
     );
     expect(file).toBeDefined();
   });

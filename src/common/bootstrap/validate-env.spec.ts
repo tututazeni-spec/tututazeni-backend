@@ -53,4 +53,28 @@ describe('validateEnv', () => {
       expect(() => validateEnv({ ...BASE, APP_URL: 'http://localhost:3000' })).not.toThrow();
     });
   });
+  describe('UPLOAD_VALIDATION_MODE', () => {
+    const captured = (env: NodeJS.ProcessEnv): string => {
+      const write = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      try {
+        validateEnv(env);
+        return write.mock.calls.map(c => String(c[0])).join('');
+      } finally {
+        write.mockRestore();
+      }
+    };
+
+    it('em modo warn avisa no arranque que há ficheiros suspeitos a ser aceites', () => {
+      expect(captured({ ...BASE, UPLOAD_VALIDATION_MODE: 'warn' })).toContain(
+        'UPLOAD_VALIDATION_MODE=warn',
+      );
+    });
+
+    it('em enforce (ou sem definir) não avisa', () => {
+      expect(captured({ ...BASE, UPLOAD_VALIDATION_MODE: 'enforce' })).not.toContain(
+        'UPLOAD_VALIDATION_MODE',
+      );
+      expect(captured(BASE)).not.toContain('UPLOAD_VALIDATION_MODE');
+    });
+  });
 });

@@ -45,6 +45,9 @@ import {
 } from './certificates-admin.dto';
 import { describeMissing } from './certificate-rules';
 
+import { safeDownloadHeaders } from '../common/files/safe-download';
+
+import { UploadThrottle } from '../common/security/upload-throttle';
 // Quem pode abrir o centro de certificados; o âmbito (tudo/equipa) é resolvido no serviço.
 const MANAGEMENT_ROLES = [
   Role.ADMIN,
@@ -114,11 +117,13 @@ export class CertificatesController {
     @Res() res: Response,
   ) {
     const file = await this.exports.exportCertificates(q, user);
-    res.set({
-      'Content-Type': file.contentType,
-      'Content-Disposition': `attachment; filename="${file.filename}"`,
-      'Content-Length': file.buffer.length,
-    });
+    res.set(
+      safeDownloadHeaders({
+        filename: file.filename,
+        mime: file.contentType,
+        extra: { 'Content-Length': String(file.buffer.length) },
+      }),
+    );
     res.end(file.buffer);
   }
 
@@ -225,6 +230,7 @@ export class CertificatesController {
     return this.templateService.restoreVersion(id, version, user.id);
   }
 
+  @UploadThrottle()
   @Post('assets')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Carregar uma imagem (logótipo, fundo ou assinatura) para os modelos' })
@@ -247,6 +253,7 @@ export class CertificatesController {
   }
 
   // Ciclo de vida: só ADMIN/RH (AUDITOR lê mas nunca altera certificados).
+  @UploadThrottle()
   @Post('external')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Importar um certificado obtido fora da plataforma' })

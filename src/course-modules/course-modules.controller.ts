@@ -34,6 +34,7 @@ import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 import { canManageLessonContent, redactModuleFiles } from '../common/authz/lesson-files';
 
+import { UploadThrottle } from '../common/security/upload-throttle';
 @ApiTags('Course Modules & Lessons')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -124,6 +125,7 @@ export class CourseModulesController {
 
   // ── Aulas ──────────────────────────────────────────────────────────────────
 
+  @UploadThrottle()
   @Post('lessons')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar aula num módulo' })
@@ -131,6 +133,7 @@ export class CourseModulesController {
     return this.svc.createLesson(dto);
   }
 
+  @UploadThrottle()
   @Put('lessons/:id')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar aula' })

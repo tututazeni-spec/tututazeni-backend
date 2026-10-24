@@ -1,4 +1,5 @@
 ﻿// ─── src/leave-management/leave-management.service.ts ────────────────────────
+import { mimeOfInlineFile } from '../common/files/data-url';
 import {
   Injectable,
   Logger,
@@ -405,7 +406,7 @@ export class LeaveManagementService {
                 create: documents.map(d => ({
                   name: d.name,
                   fileUrl: d.fileUrl,
-                  mimeType: d.mimeType,
+                  mimeType: mimeOfInlineFile(d.fileUrl, d.mimeType),
                   uploadedById: createdById,
                   isSensitive: leaveType.isSensitive,
                 })),

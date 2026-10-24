@@ -37,6 +37,18 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
     bootWarn('APP_URL não definido — links em documentos e declarações usarão o valor hardcoded.');
   }
 
+  if (
+    String(env.UPLOAD_VALIDATION_MODE ?? '')
+      .trim()
+      .toLowerCase() === 'warn'
+  ) {
+    bootWarn(
+      'UPLOAD_VALIDATION_MODE=warn: ficheiros com conteúdo suspeito (executáveis, HTML/SVG, ' +
+        'PDF com JavaScript, macros) estão a ser ACEITES e apenas registados. ' +
+        'Passar a enforce no fim do rollout.',
+    );
+  }
+
   if (!env.METRICS_TOKEN) {
     bootWarn('METRICS_TOKEN não definido — endpoint /metrics pode estar desprotegido.');
   }

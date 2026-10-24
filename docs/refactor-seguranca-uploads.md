@@ -166,3 +166,148 @@ T1 e T5 não dependem de nada e podem arrancar já. T3 depende de T2 e T4.
 3. Ficheiros Office: manter permitidos ou passar a só-PDF?
 4. Quer ClamAV (T7.1), ou fica fora de âmbito?
 5. Vídeos/áudio: confirmo que ficam apenas por URL externa e nunca inline?
+
+## 8. Estado de execução (2026-10-23)
+
+| Tarefa | Estado | Notas |
+|---|---|---|
+| T1 URLs | feita | `safe-file-url.ts`; `IsUrlOrInlineFile`/`IsAllowedFileUrl` já não aceitam `javascript:`, `http:`, credenciais nem hosts internos. T1.3 já estava coberta por `validate-env.ts`/Joi. |
+| T2 Deteção por bytes | feita | `src/common/files/`: `detect-file-type`, `zip-directory`, `inspect-content`, `data-url`, `inspect-inline-file`. Sem dependências novas. |
+| T3 Aplicar nos fluxos | feita | Avatar, `imageUrl`, capas (`IsOptionalImageRef`), PDFs/imagens de licença/formação/onboarding, biblioteca, certificado externo, avatar-training, lições PDF e evidência de auditoria validam pelos bytes. |
+| T4 Limites | feita | `FILE_POLICIES` (bytes, sem alargar limites), `fileSize` por MIME, `/auth` com corpo máx. 100 KB. |
+| T5 Nomes | feita | `IsSafeFileName`/`sanitizeFileName`. |
+| T6 Downloads seguros | feita | `safe-download.ts` (`Content-Disposition` RFC 6266, MIME só da lista segura, `nosniff`, CSP `sandbox`) aplicado a 9 controllers com nome/tipo dinâmico. `helmet` já emite `nosniff` globalmente e as rotas só sobrepõem os headers que definem. |
+| T7 Complementares | feita | CSV: `csv-safe.util.ts` aplicado aos 4 geradores que não neutralizavam fórmulas (os outros 13 já o faziam). Rate limit: `@UploadThrottle()` em 22 handlers, 20/min por utilizador. Auditoria: `UploadRejectionAuditor` grava `UPLOAD_REJECTED`/`UPLOAD_FLAGGED` no AuditLog canónico. ClamAV: cliente `clamd` opcional (`CLAMAV_ENABLED`), ver §9. |
+| T8 Rollout | feita (falta executar em produção) | Modo `UPLOAD_VALIDATION_MODE=warn\|enforce`; `npm run audit:uploads` verifica URLs, nomes **e** ficheiros inline existentes; runbook em §9. |
+
+### Limites conhecidos
+- JavaScript dentro de object streams comprimidos de PDF (≥ 1.5) não é visível sem descomprimir.
+- OOXML: tamanhos validados são os declarados no directório ZIP; só quem descomprime apanha uma mentira nesses campos.
+- Ficheiros Office legados (`.doc/.xls/.ppt`) deixaram de ser aceites em fluxos com política.
+- URLs externas: a validação síncrona (`safe-file-url`) só vê o hostname literal. A resolução de DNS e a verificação do conteúdo só existem com `REMOTE_FILE_VERIFY=true` (ver §9); ligações livres (`IsUrlOrInlineFile`) nunca são descarregadas.
+- Um ficheiro do storage substituído depois de registado só é re-verificado pelo varrimento diário (ver §9), não no momento da troca.
+- Antivírus e verificação remota estão desligados por omissão: sem infra (clamd) e sem decisão de custo, o comportamento é o da T3.
+
+## 9. Rollout em produção (runbook)
+
+A T3 recusa ficheiros que antes passavam (executáveis ou HTML com prefixo de imagem, PDF com
+JavaScript ou sem `%%EOF`, Office com macros, Office legado, JPEG com bytes depois do marcador final).
+Para não surpreender utilizadores reais, o rollout faz-se em três passos.
+
+1. **Medir o que já existe** (só leitura, pode correr em produção ou numa cópia):
+   `npm run audit:uploads -- --csv uploads.csv --limit 50`.
+   Mostra, por coluna, quantos URLs, nomes **e ficheiros inline** existentes falhariam hoje.
+   O conteúdo nunca é impresso (só tipo declarado, tamanho e motivo). Registos que falhem só
+   deixam de passar quando alguém os reenviar ou editar; os dados guardados não são tocados.
+2. **Modo `warn`** (1 a 2 semanas): `UPLOAD_VALIDATION_MODE=warn`.
+   - Falhas de **conteúdo** são aceites e registadas como `UPLOAD_FLAGGED` (AuditLog) e em log
+     (`event: upload_validation`, `enforced: false`).
+   - Formato inválido, tamanho e tipos fora da política **recusam sempre** (já recusavam).
+   - O arranque emite um aviso enquanto o modo for `warn`.
+   - Rever no AuditLog (`action = 'UPLOAD_FLAGGED'`, entidade `UploadValidation`) quem e o quê.
+     Severidade HIGH = executável/HTML/SVG disfarçado (investigar); MEDIUM = estrutura inválida
+     (muitas vezes só um PDF ou JPEG fora do padrão: ajustar a regra se for legítimo).
+3. **Modo `enforce`** (omissão): remover `UPLOAD_VALIDATION_MODE` ou pô-lo a `enforce`.
+   As recusas passam a `UPLOAD_REJECTED` (status DENIED). Um valor inválido na variável falha o
+   arranque (Joi), para que um typo nunca desligue a protecção sem ninguém reparar.
+
+Rollback: voltar a `warn` e reiniciar. Não há migrações de dados.
+
+Outras variáveis: `UPLOAD_THROTTLE_LIMIT` (uploads por utilizador/min, omissão 20) e
+`ALLOWED_FILE_HOST` (obrigatório).
+
+### Antivírus (ClamAV) — implementado, desligado por omissão
+Camada opcional a seguir às verificações estruturais; apanha malware conhecido que a estrutura
+não vê (ex.: JavaScript em object streams comprimidos de PDF, exploits em documentos Office).
+
+- **Activar:** `CLAMAV_ENABLED=true` + um `clamd` acessível (`CLAMAV_HOST`/`CLAMAV_PORT`, omissão
+  127.0.0.1:3310). Local: `docker compose --profile av up -d clamav` (1.º arranque demora minutos a
+  descarregar assinaturas; ~1-2 GB de RAM). Em produção: correr o clamd junto da aplicação e manter
+  `freshclam` activo (a imagem oficial já o faz).
+- **Como funciona:** cliente `INSTREAM` sobre TCP (`src/common/files/antivirus.ts`, sem dependências).
+  Corre depois da inspecção estrutural, só em ficheiros que já passaram. Cobre todos os fluxos
+  inline (validadores dos DTOs), as lições PDF e as evidências de auditoria.
+- **Infectado:** recusado **sempre**, mesmo com `UPLOAD_VALIDATION_MODE=warn` (uma assinatura
+  positiva não tem o problema de falsos positivos que o modo warn existe para medir). Regista
+  `UPLOAD_REJECTED` com severidade HIGH e a assinatura (ex.: `Win.Test.EICAR_HDB-1`).
+- **clamd em baixo ou lento** (`CLAMAV_TIMEOUT_MS`, omissão 15 s): decide `CLAMAV_FAIL_MODE`.
+  - `open` (omissão): o ficheiro passa e a falha fica registada (`stage: scan`, `enforced: false`).
+    Escolhido por omissão porque um clamd parado não deve impedir 6000 utilizadores de enviar
+    ficheiros; a regra estrutural continua a proteger.
+  - `closed`: o upload é recusado com "Não foi possível verificar o ficheiro…". Para quem prefere
+    segurança a disponibilidade.
+- **Ficheiros grandes (já não há limite de 25 MB):** o clamd recusa fluxos acima do seu
+  `StreamMaxLength` (25 MB por omissão). O cliente envia o ficheiro em sessões sequenciais de, no
+  máximo, `CLAMAV_MAX_BYTES`, e cada uma começa com os últimos 1 MiB da anterior, para que uma
+  assinatura que atravesse a fronteira fique inteira num dos segmentos (testado com a assinatura em
+  vários desfasamentos à volta da fronteira). Um segmento infectado pára o scan. O serviço do
+  docker-compose sobe o limite do clamd para 200 MB; com ele use `CLAMAV_MAX_BYTES=209715200` e
+  não há segmentação. Limite que se mantém: o clamd só abre arquivos (zip/OOXML) que veja inteiros;
+  as políticas inline limitam-nos a ≤ 10 MB, por isso nunca são segmentados.
+- **Testar sem instalar o ClamAV:** `antivirus.spec.ts` e `antivirus-segments.spec.ts` sobem um
+  servidor TCP que fala o protocolo INSTREAM, impõe um `StreamMaxLength` e reconhece a string EICAR.
+
+### Limite de uploads por utilizador (`UPLOAD_THROTTLE_LIMIT`)
+Mantido em **20 pedidos/min por utilizador**. Verificação feita no frontend: todos os uploads são
+de um ficheiro de cada vez, accionados por uma pessoa (não há selecção múltipla, fila de envio nem
+autosave; o `debounce` existente é só de pesquisa), portanto 20/min é muito acima de qualquer uso
+humano. Só convém subir se houver importações em lote por API ou scripts; nesse caso aumentar a
+variável em vez de remover o decorator. Quem excede recebe 429 e o contador é do utilizador, não do
+IP, por isso colegas no mesmo escritório não se bloqueiam uns aos outros.
+
+### Ficheiros no storage (`fileUrl` HTTPS) — verificação opcional
+Os campos `fileUrl`/`logoUrl`/`signatureUrl` (validador `@IsAllowedFileUrl`) apontam para ficheiros
+que o utilizador enviou directamente para o storage: o backend nunca os recebia, logo nada os
+inspeccionava. Com `REMOTE_FILE_VERIFY=true` o backend descarrega-os ao validar o pedido e aplica o
+mesmo que aos uploads inline.
+
+- **O que verifica:** tipo real pelos bytes e MIME declarado (campo `mimeType` do DTO, senão o
+  `Content-Type`), executáveis/HTML/SVG, estrutura (PDF, Office, imagens) até 10 MB em memória;
+  acima disso, a cabeça do ficheiro (64 KB) e o antivírus em **streaming** (sem pôr 150 MB em
+  memória). Recusa também ficheiros que o storage **serve** como `text/html`, `image/svg+xml`,
+  XML ou JavaScript, porque o browser os executaria mesmo com bytes inofensivos.
+- **Só o que é nosso:** apenas URLs do `ALLOWED_FILE_HOST`; ligações livres (YouTube, páginas
+  externas em `IsUrlOrInlineFile`) nunca são descarregadas.
+- **O descarregamento é seguro (SSRF):** URL https sem credenciais; o DNS é resolvido pelo backend
+  e rejeitado se **algum** endereço for interno (isto resolve a limitação antiga de um domínio
+  público poder apontar para um IP privado); a ligação usa o endereço já validado (anti-DNS
+  rebinding, sem segunda resolução); no máximo 3 redirecionamentos, cada um revalidado (host,
+  https, DNS); sem cookies nem `Authorization`; limite de bytes (`REMOTE_FILE_MAX_BYTES`, 200 MiB)
+  e de tempo (`REMOTE_FILE_TIMEOUT_MS`, 30 s).
+- **Falhas:** ficheiro perigoso, infectado ou servido como tipo activo é sempre recusado.
+  Se o ficheiro **não puder ser obtido** (storage lento, 404, timeout, DNS), decide
+  `REMOTE_FILE_FAIL_MODE`: `open` (omissão) deixa passar e regista (`stage: remote`,
+  `enforced: false`); `closed` recusa o registo.
+- **Custo (cache + pedido condicional):** o veredicto definitivo (limpo ou recusado) fica em cache
+  no Redis (`REMOTE_FILE_CACHE_TTL_S`, 24 h) com o ETag/Last-Modified do ficheiro. Voltar a
+  referir o mesmo `fileUrl` (editar o registo, repetir o pedido) é um **GET condicional**
+  (`If-None-Match` / `If-Modified-Since`): se o ficheiro não mudou o storage responde `304` sem
+  corpo, e não há download nem scan. Uma troca de ficheiro muda o ETag e é revista. A chave é
+  host+caminho, sem a query (URLs assinados mudam a cada pedido). Não se guarda em cache: falhas
+  de obtenção, erros do antivírus, nem um "limpo" obtido sem antivírus quando este foi ligado
+  depois. Sem ETag nem Last-Modified não há como revalidar e descarrega-se sempre. Se o Redis
+  estiver em baixo, degrada para "sem cache" (nunca falha um pedido).
+- **Custo (ficheiros grandes):** acima de `REMOTE_FILE_SYNC_MAX_BYTES` (25 MiB) o ficheiro **não é
+  descarregado durante o pedido**: o registo é aceite e o ficheiro é verificado em segundo plano,
+  em série, com o utilizador e o pedido de origem. O resultado vai para o AuditLog
+  (`UPLOAD_REJECTED`) e para o log de erros. Como os registos não têm estado de quarentena, um
+  ficheiro grande recusado depois **fica registado até alguém o retirar**; para verificar tudo no
+  pedido, ponha `REMOTE_FILE_SYNC_MAX_BYTES` igual a `REMOTE_FILE_MAX_BYTES`. A fila (500) vive em
+  memória; o que se perder num reinício é apanhado pelo varrimento.
+- **Ficheiros trocados depois do registo (varrimento periódico):** `RemoteFileSweeper` percorre,
+  de madrugada (`REMOTE_FILE_SWEEP_CRON`, 03:00), as 23 colunas `fileUrl` do catálogo
+  (`stored-file-catalog.ts`) e re-verifica cada ficheiro. Como usa o cache, quase tudo responde
+  `304`; só o que mudou, ou expirou o TTL (e portanto volta a passar o antivírus com as assinaturas
+  actualizadas), é descarregado. Detalhes: no máximo `REMOTE_FILE_SWEEP_MAX_PER_RUN` (2000) ficheiros por
+  execução, repartidos pelas colunas, com um cursor que retoma onde ficou (ids inteiros e de texto) e
+  recomeça no fim da tabela; uma trava no Redis garante uma só instância a correr; pausa de 100 ms
+  entre ficheiros; falhas de obtenção nunca contam como ficheiro suspeito. Um ficheiro recusado é
+  assinalado no AuditLog como `STORED_FILE_FLAGGED` (actor SYSTEM, HIGH para malware/executável,
+  só com modelo, coluna e id, **sem o URL**) e no log de erros, no máximo uma vez por semana.
+  Acompanha `REMOTE_FILE_VERIFY` (ou `REMOTE_FILE_SWEEP=true|false`).
+- **Medir o que já está registado:** `npm run audit:uploads -- --remote [--remote-limit 200]`
+  descarrega e verifica os ficheiros existentes (por coluna) e diz quantos seriam recusados e
+  quantos não puderam ser verificados. Continua só de leitura: cache em memória, nada gravado na BD
+  nem no Redis. Faz pedidos ao storage: correr fora de horas.
+- **Limite conhecido:** sem quarentena nos registos, a deteção (no pedido, em segundo plano ou no
+  varrimento) assinala mas não bloqueia o acesso ao ficheiro já registado; quem opera tem de o retirar.

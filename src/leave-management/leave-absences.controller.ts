@@ -32,6 +32,7 @@ import {
   ValidateAbsenceDto,
 } from './leave-management.dto';
 
+import { UploadThrottle } from '../common/security/upload-throttle';
 const REVIEWER_ROLES = [Role.ADMIN, Role.RH, Role.GESTOR, Role.DIRECTOR, Role.LIDER];
 
 @ApiTags('Leave Management — Ausências')
@@ -62,6 +63,7 @@ export class LeaveAbsencesController {
     return this.svc.history(userId, user);
   }
 
+  @UploadThrottle()
   @Post()
   @ApiOperation({ summary: 'Registar ausência (associa o registo de assiduidade existente)' })
   @AnyAuthenticated()
@@ -83,6 +85,7 @@ export class LeaveAbsencesController {
     return this.svc.findOne(id, user);
   }
 
+  @UploadThrottle()
   @Post(':id/justification')
   @ApiOperation({ summary: 'Submeter justificação' })
   @AnyAuthenticated()
@@ -105,6 +108,7 @@ export class LeaveAbsencesController {
     return this.svc.validate(id, dto, user);
   }
 
+  @UploadThrottle()
   @Post(':id/attachments')
   @ApiOperation({ summary: 'Anexar comprovativo' })
   @AnyAuthenticated()

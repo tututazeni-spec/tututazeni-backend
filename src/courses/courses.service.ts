@@ -7,7 +7,7 @@
   Logger,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { assertValidLessonFile } from '../common/authz/lesson-files';
+import { assertLessonFileClean } from '../common/authz/lesson-files';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CertificatesService } from '../certificates/certificates.service';
@@ -620,7 +620,7 @@ export class CoursesService {
   async createLesson(moduleId: number, dto: CreateLessonDto) {
     const mod = await this.prisma.courseModule.findUnique({ where: { id: moduleId } });
     if (!mod) throw new NotFoundException('Módulo não encontrado');
-    assertValidLessonFile(dto.type, dto.contentUrl);
+    await assertLessonFileClean(dto.type, dto.contentUrl);
     return this.prisma.lesson.create({
       data: {
         moduleId,
@@ -635,7 +635,7 @@ export class CoursesService {
   async updateLesson(lessonId: number, dto: UpdateLessonDto) {
     const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
     if (!lesson) throw new NotFoundException('Aula não encontrada');
-    assertValidLessonFile(dto.type ?? lesson.type, dto.contentUrl);
+    await assertLessonFileClean(dto.type ?? lesson.type, dto.contentUrl);
     return this.prisma.lesson.update({
       where: { id: lessonId },
       data: {

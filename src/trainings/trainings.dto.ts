@@ -33,8 +33,10 @@ import {
   TrainingResourceStatus,
 } from '@prisma/client';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
+import { FILE_POLICIES, maxDataUrlChars } from '../common/files/file-policies';
 import { IsBase64ImageDataUrl } from '../common/validators/is-base64-image-data-url.decorator';
 
+import { IsOptionalImageRef } from '../common/validators/optional-image-ref.decorator';
 // ─── Enums ────────────────────────────────────────────────────────────────────
 // NOTA: ParticipantStatus aqui é o `TrainingParticipantStatus` do Prisma —
 // nome local mantido por compatibilidade, distinto do `ParticipantStatus`
@@ -123,6 +125,7 @@ export class CreateTrainingDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @IsOptionalImageRef()
   thumbnailUrl?: string;
 
   @ApiPropertyOptional({ description: 'Índice da cor da formação (0-7)' })
@@ -542,10 +545,6 @@ export class NotifyTrainingDto {
 
 // ─── Documentos administrativos ────────────────────────────────────────────────
 
-// 4 MB de ficheiro em base64 (×4/3) + prefixo `data:<mime>;base64,` — cabe no
-// parser JSON (8 MB). O frontend recusa acima de 4 MB antes de enviar.
-const TRAINING_DOCUMENT_MAX_DATA_URL_LENGTH = Math.ceil((4 * 1024 * 1024 * 4) / 3) + 64;
-
 export class CreateTrainingDocumentDto {
   @ApiProperty()
   @IsString()
@@ -557,10 +556,7 @@ export class CreateTrainingDocumentDto {
       'URL do ficheiro (HTTPS, domínio autorizado) ou ficheiro inline (PDF/PNG/JPG/WebP em data URL base64, máx. 4 MB)',
   })
   @IsString()
-  @IsAllowedFileUrl(undefined, {
-    allowPdfDataUrl: TRAINING_DOCUMENT_MAX_DATA_URL_LENGTH,
-    allowImageDataUrl: TRAINING_DOCUMENT_MAX_DATA_URL_LENGTH,
-  })
+  @IsAllowedFileUrl(undefined, { inline: FILE_POLICIES.ATTACHMENT })
   fileUrl!: string;
 
   @ApiPropertyOptional()
@@ -753,7 +749,7 @@ export class CreateTrainingPlanDto {
   })
   @IsOptional()
   @IsString()
-  @MaxLength(700_000)
+  @MaxLength(maxDataUrlChars(FILE_POLICIES.CARD_IMAGE))
   @IsBase64ImageDataUrl()
   imageUrl?: string | null;
 
@@ -1030,10 +1026,7 @@ export class CreateTrainingInstructorDto {
       'Documentação: URL (HTTPS, domínio autorizado) ou ficheiro inline (PDF/PNG/JPG/WebP em data URL base64, máx. 4 MB)',
   })
   @IsOptional()
-  @IsAllowedFileUrl(undefined, {
-    allowPdfDataUrl: TRAINING_DOCUMENT_MAX_DATA_URL_LENGTH,
-    allowImageDataUrl: TRAINING_DOCUMENT_MAX_DATA_URL_LENGTH,
-  })
+  @IsAllowedFileUrl(undefined, { inline: FILE_POLICIES.ATTACHMENT })
   documentUrl?: string;
 
   @ApiPropertyOptional({ enum: TrainingInstructorStatus, default: TrainingInstructorStatus.ACTIVE })

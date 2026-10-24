@@ -103,3 +103,103 @@ describe('envValidationSchema', () => {
     expect(error?.details.length ?? 0).toBeGreaterThanOrEqual(3);
   });
 });
+
+describe('envValidationSchema — validação de uploads', () => {
+  it('UPLOAD_VALIDATION_MODE é enforce por omissão e aceita enforce/warn', () => {
+    expect(validate(VALID_ENV).value.UPLOAD_VALIDATION_MODE).toBe('enforce');
+    expect(validate({ ...VALID_ENV, UPLOAD_VALIDATION_MODE: 'warn' }).error).toBeUndefined();
+  });
+
+  it('um typo em UPLOAD_VALIDATION_MODE falha o arranque em vez de passar despercebido', () => {
+    const keys = validate({ ...VALID_ENV, UPLOAD_VALIDATION_MODE: 'wran' }).error?.details.map(
+      d => d.context?.key,
+    );
+    expect(keys).toContain('UPLOAD_VALIDATION_MODE');
+  });
+
+  it('UPLOAD_THROTTLE_LIMIT tem de ser inteiro positivo', () => {
+    expect(validate({ ...VALID_ENV, UPLOAD_THROTTLE_LIMIT: '30' }).error).toBeUndefined();
+    for (const bad of ['0', '-3', '1.5', 'abc']) {
+      const keys = validate({ ...VALID_ENV, UPLOAD_THROTTLE_LIMIT: bad }).error?.details.map(
+        d => d.context?.key,
+      );
+      expect(keys).toContain('UPLOAD_THROTTLE_LIMIT');
+    }
+  });
+});
+
+describe('envValidationSchema — antivírus', () => {
+  it('desligado por omissão e fail-mode open', () => {
+    const v = validate(VALID_ENV).value;
+    expect(v.CLAMAV_ENABLED).toBe(false);
+    expect(v.CLAMAV_FAIL_MODE).toBe('open');
+  });
+
+  it('aceita uma configuração completa', () => {
+    expect(
+      validate({
+        ...VALID_ENV,
+        CLAMAV_ENABLED: 'true',
+        CLAMAV_HOST: 'clamav',
+        CLAMAV_PORT: '3310',
+        CLAMAV_TIMEOUT_MS: '5000',
+        CLAMAV_FAIL_MODE: 'closed',
+      }).error,
+    ).toBeUndefined();
+  });
+
+  it('rejeita fail-mode desconhecido, porta inválida e timeout demasiado baixo', () => {
+    for (const bad of [
+      { CLAMAV_FAIL_MODE: 'talvez' },
+      { CLAMAV_PORT: '70000' },
+      { CLAMAV_TIMEOUT_MS: '10' },
+      { CLAMAV_ENABLED: 'sim' },
+    ]) {
+      const keys = validate({ ...VALID_ENV, ...bad }).error?.details.map(d => d.context?.key);
+      expect(keys).toContain(Object.keys(bad)[0]);
+    }
+  });
+});
+
+describe('envValidationSchema — ficheiros grandes e remotos', () => {
+  it('omissões: remote desligado e fail-mode open', () => {
+    const v = validate(VALID_ENV).value;
+    expect(v.REMOTE_FILE_VERIFY).toBe(false);
+    expect(v.REMOTE_FILE_FAIL_MODE).toBe('open');
+  });
+
+  it('aceita uma configuração completa', () => {
+    expect(
+      validate({
+        ...VALID_ENV,
+        CLAMAV_MAX_BYTES: '209715200',
+        REMOTE_FILE_VERIFY: 'true',
+        REMOTE_FILE_MAX_BYTES: '209715200',
+        REMOTE_FILE_TIMEOUT_MS: '30000',
+        REMOTE_FILE_FAIL_MODE: 'closed',
+        REMOTE_FILE_SYNC_MAX_BYTES: '26214400',
+        REMOTE_FILE_CACHE_TTL_S: '86400',
+        REMOTE_FILE_SWEEP: 'true',
+        REMOTE_FILE_SWEEP_CRON: '0 3 * * *',
+        REMOTE_FILE_SWEEP_MAX_PER_RUN: '2000',
+      }).error,
+    ).toBeUndefined();
+  });
+
+  it('rejeita valores inválidos (falha o arranque em vez de ficar desligado em silêncio)', () => {
+    for (const bad of [
+      { CLAMAV_MAX_BYTES: '100' },
+      { REMOTE_FILE_VERIFY: 'sim' },
+      { REMOTE_FILE_MAX_BYTES: '5' },
+      { REMOTE_FILE_TIMEOUT_MS: '10' },
+      { REMOTE_FILE_FAIL_MODE: 'talvez' },
+      { REMOTE_FILE_SYNC_MAX_BYTES: '100' },
+      { REMOTE_FILE_CACHE_TTL_S: '5' },
+      { REMOTE_FILE_SWEEP: 'sim' },
+      { REMOTE_FILE_SWEEP_MAX_PER_RUN: '0' },
+    ]) {
+      const keys = validate({ ...VALID_ENV, ...bad }).error?.details.map(d => d.context?.key);
+      expect(keys).toContain(Object.keys(bad)[0]);
+    }
+  });
+});

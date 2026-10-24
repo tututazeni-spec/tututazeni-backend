@@ -42,6 +42,7 @@ import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Public } from '../common/decorators/public.decorator';
 import { Role } from '../auth/enums/role.enum';
 
+import { UploadThrottle } from '../common/security/upload-throttle';
 function clientMeta(req: Request) {
   return { ipAddress: req.ip, userAgent: req.headers['user-agent'] };
 }
@@ -190,6 +191,7 @@ export class DocumentRepositoryController {
     return this.svc.getAccessLog(id);
   }
 
+  @UploadThrottle()
   @Post()
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Publicar documento (cria v1.0, calcula retenção legal automática)' })
@@ -210,6 +212,7 @@ export class DocumentRepositoryController {
 
   // ── Versioning ────────────────────────────────────────────────────
 
+  @UploadThrottle()
   @Post(':id/versions')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Carregar nova versão do documento' })

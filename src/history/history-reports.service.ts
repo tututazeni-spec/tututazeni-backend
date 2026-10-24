@@ -12,6 +12,8 @@ import { HistoryEventType, HistoryReportDto, HistoryReportType, MovementType } f
 import { HistoryHubService, MOVEMENT_LABEL } from './history-hub.service';
 import { deriveModule } from './history.service';
 
+import { csvCell } from '../common/utils/csv-safe.util';
+
 export type ReportRow = Record<string, string | number>;
 
 export interface ReportResult {
@@ -230,10 +232,8 @@ export class HistoryReportsService {
     }
 
     if (format === 'csv') {
-      const esc = (v: unknown) => {
-        const s = cell(v);
-        return /[",\n\r;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-      };
+      // Texto de utilizador (nomes, títulos) é neutralizado contra injecção de fórmulas.
+      const esc = (v: unknown) => csvCell(typeof v === 'string' ? v : cell(v));
       const lines = [
         report.columns.map(esc).join(','),
         ...report.rows.map(r => report.columns.map(c => esc(r[c])).join(',')),

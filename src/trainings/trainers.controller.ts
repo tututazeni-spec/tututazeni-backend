@@ -24,6 +24,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
+import { UploadThrottle } from '../common/security/upload-throttle';
 // Mesmos papéis que podem gerir formações — a gestão do registo de
 // formadores é uma extensão da gestão de Trainings, não um domínio à parte.
 const CAN_MANAGE_TRAINERS = [
@@ -56,6 +57,7 @@ export class TrainerController {
     return this.svc.findOne(id);
   }
 
+  @UploadThrottle()
   @Post()
   @Roles(...CAN_MANAGE_TRAINERS)
   @ApiOperation({ summary: 'Novo formador' })

@@ -3,6 +3,7 @@
 // pontuais, separadas dos pedidos (LeaveRequest). Cada registo associa-se ao
 // registo de assiduidade existente (AttendanceRecord) em vez de criar uma
 // segunda ocorrência independente.
+import { mimeOfInlineFile } from '../common/files/data-url';
 import {
   BadRequestException,
   ConflictException,
@@ -461,7 +462,7 @@ export class LeaveAbsencesService {
     return (attachments ?? []).map(a => ({
       name: a.name,
       fileUrl: a.fileUrl,
-      mimeType: a.mimeType,
+      mimeType: mimeOfInlineFile(a.fileUrl, a.mimeType),
       isSensitive,
       uploadedById,
     }));
@@ -683,7 +684,7 @@ export class LeaveAbsencesService {
         absenceId: id,
         name: dto.name,
         fileUrl: dto.fileUrl,
-        mimeType: dto.mimeType,
+        mimeType: mimeOfInlineFile(dto.fileUrl, dto.mimeType),
         isSensitive: a.occurrenceType === AbsenceOccurrenceType.HEALTH_ABSENCE,
         uploadedById: viewer.id,
       },

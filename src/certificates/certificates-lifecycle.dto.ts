@@ -19,6 +19,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { IsUrlOrInlineFile } from '../common/validators/is-url-or-inline-file.decorator';
+import { FILE_POLICIES } from '../common/files/file-policies';
 
 export class ReasonDto {
   @ApiProperty({ minLength: 3, maxLength: 500 })
@@ -27,9 +28,6 @@ export class ReasonDto {
   @MaxLength(500)
   reason!: string;
 }
-
-/** O documento importado é sempre um PDF carregado (data URL) de até 5 MB. */
-const MAX_EXTERNAL_BYTES = 5 * 1024 * 1024;
 
 export class ImportExternalCertificateDto {
   @ApiProperty()
@@ -73,7 +71,7 @@ export class ImportExternalCertificateDto {
 
   @ApiProperty({ description: 'PDF carregado como data URL base64 (até 5 MB)' })
   @Matches(/^data:application\/pdf;base64,/, { message: 'o documento tem de ser um PDF carregado' })
-  @IsUrlOrInlineFile({ maxBytes: MAX_EXTERNAL_BYTES })
+  @IsUrlOrInlineFile({ policy: FILE_POLICIES.PDF })
   document!: string;
 
   @ApiPropertyOptional({ description: 'Já validado por quem importa; senão aguarda validação' })
