@@ -119,5 +119,6 @@ export function renderLdapFilter(template: string, email: string): string {
     /[\\*()\0]/g,
     c => `\\${c.charCodeAt(0).toString(16).padStart(2, '0')}`,
   );
-  return template.replace(/\{\{email\}\}/g, escaped);
+  // Função em vez de string: "$&", "$'" e "$`" num email válido são padrões especiais de replace.
+  return template.replace(/\{\{email\}\}/g, () => escaped);
 }

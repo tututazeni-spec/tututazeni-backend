@@ -165,6 +165,23 @@ describe('Payslips Integration', () => {
   });
 
   describe('Emissão e transições de estado', () => {
+    it('dono não vê o recibo enquanto está em DRAFT (detalhe, PDF e disputa) → 404', async () => {
+      const auth = `Bearer ${employeeToken}`;
+      await request(app.getHttpServer())
+        .get(`/payslips/my/${payslipId}`)
+        .set('Authorization', auth)
+        .expect(404);
+      await request(app.getHttpServer())
+        .get(`/payslips/my/${payslipId}/pdf`)
+        .set('Authorization', auth)
+        .expect(404);
+      await request(app.getHttpServer())
+        .post(`/payslips/my/${payslipId}/dispute`)
+        .set('Authorization', auth)
+        .send({ reason: 'ainda é rascunho' })
+        .expect(404);
+    });
+
     it('RH emite o recibo → 200 (ISSUED)', async () => {
       const res = await request(app.getHttpServer())
         .patch(`/payslips/${payslipId}/issue`)

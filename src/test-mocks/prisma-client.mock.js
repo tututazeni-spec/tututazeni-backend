@@ -3359,3 +3359,26 @@ module.exports = {
   AvatarTrainingSourceType,
   AvatarTrainingProviderService,
 };
+
+// ─── Enums do schema.prisma ────────────────────────────────────────────────
+// Os enums escritos à mão acima ficam para trás sempre que o schema cresce (na
+// altura da escrita faltavam 19 enums e vários valores). Completa-se a partir
+// do próprio schema; o que já está definido acima tem prioridade.
+(function mergeSchemaEnums() {
+  const fs = require('fs');
+  const path = require('path');
+  let schema;
+  try {
+    schema = fs.readFileSync(path.join(__dirname, '..', '..', 'prisma', 'schema.prisma'), 'utf8');
+  } catch {
+    return;
+  }
+  for (const m of schema.matchAll(/^enum (\w+) \{([^}]*)\}/gm)) {
+    const values = {};
+    for (const line of m[2].split('\n')) {
+      const name = line.trim().split(/\s/)[0];
+      if (name && !name.startsWith('//') && !name.startsWith('@@')) values[name] = name;
+    }
+    module.exports[m[1]] = { ...values, ...(module.exports[m[1]] || {}) };
+  }
+})();
