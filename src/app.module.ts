@@ -42,6 +42,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { ExecutiveReportsModule } from './executive-reports/executive-reports.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AuditModule } from './audit/audit.module';
+import { FilesModule } from './common/files/files.module';
 import { AiTutorModule } from './ai-tutor/ai-tutor.module';
 import { AvatarTrainingModule } from './avatar-training/avatar-training.module';
 import { EventsModule } from './events/events.module';
@@ -201,6 +202,7 @@ const accessPath = (url = ''): string => url.split('?')[0];
     ExecutiveReportsModule,
     NotificationsModule,
     AuditModule,
+    FilesModule,
     AiTutorModule,
     AvatarTrainingModule,
     EventsModule,

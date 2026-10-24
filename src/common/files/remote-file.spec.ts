@@ -22,6 +22,8 @@ const cfg = (over: Partial<RemoteFileConfig> = {}): RemoteFileConfig => ({
   maxBytes: 200 * 1024 * 1024,
   timeoutMs: 5000,
   failMode: 'open',
+  syncMaxBytes: 25 * 1024 * 1024,
+  cacheTtlSeconds: 3600,
   ...over,
 });
 const avOff: AntivirusConfig = {
@@ -113,6 +115,8 @@ describe('verifyRemoteFile', () => {
         maxBytes: 200 * 1024 * 1024,
         timeoutMs: 30_000,
         failMode: 'open',
+        syncMaxBytes: 25 * 1024 * 1024,
+        cacheTtlSeconds: 86_400,
       });
     });
     it('lê o ambiente e ignora valores inválidos', () => {
@@ -123,7 +127,14 @@ describe('verifyRemoteFile', () => {
           REMOTE_FILE_TIMEOUT_MS: '8000',
           REMOTE_FILE_FAIL_MODE: 'closed',
         }),
-      ).toEqual({ enabled: true, maxBytes: 5242880, timeoutMs: 8000, failMode: 'closed' });
+      ).toEqual({
+        enabled: true,
+        maxBytes: 5242880,
+        timeoutMs: 8000,
+        failMode: 'closed',
+        syncMaxBytes: 25 * 1024 * 1024,
+        cacheTtlSeconds: 86_400,
+      });
       expect(
         remoteFileConfig({ REMOTE_FILE_MAX_BYTES: '5', REMOTE_FILE_TIMEOUT_MS: 'x' }),
       ).toMatchObject({ maxBytes: 200 * 1024 * 1024, timeoutMs: 30_000 });
@@ -253,7 +264,7 @@ describe('verifyRemoteFile', () => {
       const open = jest.fn(reply());
       await verify(open, { d: { resolve } });
       expect(resolve).toHaveBeenCalledTimes(1);
-      expect(open).toHaveBeenCalledWith(expect.any(URL), PUBLIC_IP, 5000);
+      expect(open).toHaveBeenCalledWith(expect.any(URL), PUBLIC_IP, 5000, {});
     });
   });
 

@@ -185,7 +185,7 @@ T1 e T5 não dependem de nada e podem arrancar já. T3 depende de T2 e T4.
 - OOXML: tamanhos validados são os declarados no directório ZIP; só quem descomprime apanha uma mentira nesses campos.
 - Ficheiros Office legados (`.doc/.xls/.ppt`) deixaram de ser aceites em fluxos com política.
 - URLs externas: a validação síncrona (`safe-file-url`) só vê o hostname literal. A resolução de DNS e a verificação do conteúdo só existem com `REMOTE_FILE_VERIFY=true` (ver §9); ligações livres (`IsUrlOrInlineFile`) nunca são descarregadas.
-- Um ficheiro do storage substituído depois de registado não é re-verificado.
+- Um ficheiro do storage substituído depois de registado só é re-verificado pelo varrimento diário (ver §9), não no momento da troca.
 - Antivírus e verificação remota estão desligados por omissão: sem infra (clamd) e sem decisão de custo, o comportamento é o da T3.
 
 ## 9. Rollout em produção (runbook)
@@ -278,8 +278,36 @@ mesmo que aos uploads inline.
   Se o ficheiro **não puder ser obtido** (storage lento, 404, timeout, DNS), decide
   `REMOTE_FILE_FAIL_MODE`: `open` (omissão) deixa passar e regista (`stage: remote`,
   `enforced: false`); `closed` recusa o registo.
-- **Custo:** cada criação ou edição com `fileUrl` passa a fazer um pedido ao storage (e ao clamd).
-  Está desligado por omissão por isso. Ligar primeiro em `open`, ver os registos `stage: remote` no
-  AuditLog e só depois decidir `closed`.
-- **Limite conhecido:** só se verifica o que existe **no momento** do pedido. Um ficheiro
-  substituído no storage depois de registado não é re-verificado (exigiria um job periódico).
+- **Custo (cache + pedido condicional):** o veredicto definitivo (limpo ou recusado) fica em cache
+  no Redis (`REMOTE_FILE_CACHE_TTL_S`, 24 h) com o ETag/Last-Modified do ficheiro. Voltar a
+  referir o mesmo `fileUrl` (editar o registo, repetir o pedido) é um **GET condicional**
+  (`If-None-Match` / `If-Modified-Since`): se o ficheiro não mudou o storage responde `304` sem
+  corpo, e não há download nem scan. Uma troca de ficheiro muda o ETag e é revista. A chave é
+  host+caminho, sem a query (URLs assinados mudam a cada pedido). Não se guarda em cache: falhas
+  de obtenção, erros do antivírus, nem um "limpo" obtido sem antivírus quando este foi ligado
+  depois. Sem ETag nem Last-Modified não há como revalidar e descarrega-se sempre. Se o Redis
+  estiver em baixo, degrada para "sem cache" (nunca falha um pedido).
+- **Custo (ficheiros grandes):** acima de `REMOTE_FILE_SYNC_MAX_BYTES` (25 MiB) o ficheiro **não é
+  descarregado durante o pedido**: o registo é aceite e o ficheiro é verificado em segundo plano,
+  em série, com o utilizador e o pedido de origem. O resultado vai para o AuditLog
+  (`UPLOAD_REJECTED`) e para o log de erros. Como os registos não têm estado de quarentena, um
+  ficheiro grande recusado depois **fica registado até alguém o retirar**; para verificar tudo no
+  pedido, ponha `REMOTE_FILE_SYNC_MAX_BYTES` igual a `REMOTE_FILE_MAX_BYTES`. A fila (500) vive em
+  memória; o que se perder num reinício é apanhado pelo varrimento.
+- **Ficheiros trocados depois do registo (varrimento periódico):** `RemoteFileSweeper` percorre,
+  de madrugada (`REMOTE_FILE_SWEEP_CRON`, 03:00), as 23 colunas `fileUrl` do catálogo
+  (`stored-file-catalog.ts`) e re-verifica cada ficheiro. Como usa o cache, quase tudo responde
+  `304`; só o que mudou, ou expirou o TTL (e portanto volta a passar o antivírus com as assinaturas
+  actualizadas), é descarregado. Detalhes: no máximo `REMOTE_FILE_SWEEP_MAX_PER_RUN` (2000) ficheiros por
+  execução, repartidos pelas colunas, com um cursor que retoma onde ficou (ids inteiros e de texto) e
+  recomeça no fim da tabela; uma trava no Redis garante uma só instância a correr; pausa de 100 ms
+  entre ficheiros; falhas de obtenção nunca contam como ficheiro suspeito. Um ficheiro recusado é
+  assinalado no AuditLog como `STORED_FILE_FLAGGED` (actor SYSTEM, HIGH para malware/executável,
+  só com modelo, coluna e id, **sem o URL**) e no log de erros, no máximo uma vez por semana.
+  Acompanha `REMOTE_FILE_VERIFY` (ou `REMOTE_FILE_SWEEP=true|false`).
+- **Medir o que já está registado:** `npm run audit:uploads -- --remote [--remote-limit 200]`
+  descarrega e verifica os ficheiros existentes (por coluna) e diz quantos seriam recusados e
+  quantos não puderam ser verificados. Continua só de leitura: cache em memória, nada gravado na BD
+  nem no Redis. Faz pedidos ao storage: correr fora de horas.
+- **Limite conhecido:** sem quarentena nos registos, a deteção (no pedido, em segundo plano ou no
+  varrimento) assinala mas não bloqueia o acesso ao ficheiro já registado; quem opera tem de o retirar.

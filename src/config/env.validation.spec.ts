@@ -169,6 +169,11 @@ describe('envValidationSchema — ficheiros grandes e remotos', () => {
         REMOTE_FILE_MAX_BYTES: '209715200',
         REMOTE_FILE_TIMEOUT_MS: '30000',
         REMOTE_FILE_FAIL_MODE: 'closed',
+        REMOTE_FILE_SYNC_MAX_BYTES: '26214400',
+        REMOTE_FILE_CACHE_TTL_S: '86400',
+        REMOTE_FILE_SWEEP: 'true',
+        REMOTE_FILE_SWEEP_CRON: '0 3 * * *',
+        REMOTE_FILE_SWEEP_MAX_PER_RUN: '2000',
       }).error,
     ).toBeUndefined();
   });
@@ -180,6 +185,10 @@ describe('envValidationSchema — ficheiros grandes e remotos', () => {
       { REMOTE_FILE_MAX_BYTES: '5' },
       { REMOTE_FILE_TIMEOUT_MS: '10' },
       { REMOTE_FILE_FAIL_MODE: 'talvez' },
+      { REMOTE_FILE_SYNC_MAX_BYTES: '100' },
+      { REMOTE_FILE_CACHE_TTL_S: '5' },
+      { REMOTE_FILE_SWEEP: 'sim' },
+      { REMOTE_FILE_SWEEP_MAX_PER_RUN: '0' },
     ]) {
       const keys = validate({ ...VALID_ENV, ...bad }).error?.details.map(d => d.context?.key);
       expect(keys).toContain(Object.keys(bad)[0]);

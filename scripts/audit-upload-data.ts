@@ -12,6 +12,11 @@
  *     DTO aplicaria (inspectInlineFile, modo enforce). Diz quantos registos existentes seriam
  *     recusados ao serem reenviados/editados: correr isto em produção ANTES de passar de
  *     UPLOAD_VALIDATION_MODE=warn para enforce.
+ *  3. Com --remote: os ficheiros guardados no storage (`fileUrl` HTTPS). Cada um é descarregado e
+ *     verificado como o seria num pedido (tipo real, estrutura, antivírus se CLAMAV_ENABLED=true).
+ *     Mede o que a verificação remota (REMOTE_FILE_VERIFY) recusaria nos registos que já existem.
+ *     Faz pedidos ao storage: usar --remote-limit N (por coluna, por omissão 200) e correr fora
+ *     de horas. Continua só de leitura: o cache fica em memória e nada é gravado na BD nem no Redis.
  * O conteúdo dos ficheiros nunca é impresso (só tipo declarado, tamanho e motivo). Credenciais
  * embutidas em URLs são mascaradas na saída; o CSV é escrito com csvCell (sem injecção de fórmulas).
  */
@@ -25,6 +30,11 @@ import { fileNameProblem } from '../src/common/files/sanitize-file-name';
 import { FILE_POLICIES, FilePolicy } from '../src/common/files/file-policies';
 import { inspectInlineFile } from '../src/common/files/inspect-inline-file';
 import { csvCell } from '../src/common/utils/csv-safe.util';
+import { antivirusConfig } from '../src/common/files/antivirus';
+import { remoteFileConfig, verifyRemoteFile } from '../src/common/files/remote-file';
+import { STORED_FILE_TARGETS, StoredFileTarget } from '../src/common/files/stored-file-catalog';
+import { addUploadRejectionSink } from '../src/common/files/upload-validation';
+import { MemoryVerdictCache, setVerdictCache } from '../src/common/files/verdict-cache';
 
 dotenv.config();
 // A auditoria mede o que o modo enforce recusaria, seja qual for o modo configurado no ambiente.
@@ -161,6 +171,81 @@ async function scan(prisma: PrismaClient, t: Target, allowedHosts: string[]) {
   return { scanned, findings };
 }
 
+const REMOTE_BATCH = 50;
+
+/** Só o id e o motivo: o URL pode levar uma assinatura temporária. */
+async function scanRemote(
+  prisma: PrismaClient,
+  t: StoredFileTarget,
+  limit: number,
+  hosts: string[],
+) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const delegate = (prisma as any)[t.model];
+  if (!delegate) throw new Error('modelo inexistente no cliente Prisma');
+  const cfg = { ...remoteFileConfig(), enabled: true, failMode: 'open' as const };
+  const av = antivirusConfig();
+  const findings: Finding[] = [];
+  let scanned = 0;
+  let unverified = 0;
+  let outsideAllowlist = 0;
+  let cursor: string | number | null = null;
+  let softFailure = false;
+  const off = addUploadRejectionSink(e => {
+    if (e.stage === 'remote' && !e.enforced) softFailure = true;
+  });
+  try {
+    while (scanned + outsideAllowlist < limit) {
+      const rows: Array<Record<string, unknown>> = await delegate.findMany({
+        where: {
+          ...(cursor === null ? {} : { id: { gt: cursor } }),
+          [t.field]: { startsWith: 'https://' },
+        },
+        select: { id: true, [t.field]: true, ...(t.mimeField ? { [t.mimeField]: true } : {}) },
+        orderBy: { id: 'asc' },
+        take: Math.min(REMOTE_BATCH, limit - scanned - outsideAllowlist),
+      });
+      if (rows.length === 0) break;
+      for (const row of rows) {
+        cursor = row.id as string | number;
+        const value = String(row[t.field] ?? '');
+        let host = '';
+        try {
+          host = new URL(value).hostname.toLowerCase();
+        } catch {
+          /* URL inválido: conta como fora da allowlist */
+        }
+        if (hosts.length > 0 && !hosts.includes(host)) {
+          outsideAllowlist++;
+          continue;
+        }
+        scanned++;
+        softFailure = false;
+        const mime = t.mimeField ? (row[t.mimeField] as string | undefined) : undefined;
+        const message = await verifyRemoteFile(
+          value,
+          { declaredMime: mime, background: true },
+          cfg,
+          av,
+        );
+        if (message) {
+          findings.push({
+            target: `${t.model}.${t.field} [remoto]`,
+            id: row.id,
+            problem: message,
+            value: host,
+          });
+        } else if (softFailure) {
+          unverified++;
+        }
+      }
+    }
+  } finally {
+    off();
+  }
+  return { scanned, unverified, outsideAllowlist, findings };
+}
+
 /** Só o cabeçalho (tipo declarado) e o tamanho: nunca o conteúdo. */
 const describeInline = (v: string): string => {
   const head = v.slice(0, 60);
@@ -256,6 +341,41 @@ async function main() {
           analisados: 'n/d',
           problemas: `erro: ${(err as Error).message.trim().split('\n').pop()}`,
         });
+      }
+    }
+
+    if (process.argv.includes('--remote')) {
+      const remoteLimit = Number(argValue('--remote-limit') ?? 200);
+      // Sem efeitos laterais: cache em memória, nada de Redis.
+      setVerdictCache(new MemoryVerdictCache());
+      console.log(
+        `\n--- Ficheiros no storage (https), até ${remoteLimit} por coluna${antivirusConfig().enabled ? ', com antivírus' : ', sem antivírus (CLAMAV_ENABLED=false)'} ---`,
+      );
+      for (const t of STORED_FILE_TARGETS) {
+        const label = `${t.model}.${t.field} [remoto]`;
+        try {
+          const { scanned, unverified, outsideAllowlist, findings } = await scanRemote(
+            prisma,
+            t,
+            remoteLimit,
+            allowedHosts,
+          );
+          all.push(...findings);
+          summary.push({
+            alvo: label,
+            analisados: scanned,
+            problemas: `${findings.length}${unverified ? ` (+${unverified} não verificados)` : ''}${outsideAllowlist ? ` (${outsideAllowlist} fora da allowlist)` : ''}`,
+          });
+          findings.slice(0, limit).forEach(f => {
+            console.log(`[${f.target}] id=${String(f.id)} -> ${f.problem} :: host=${f.value}`);
+          });
+        } catch (err) {
+          summary.push({
+            alvo: label,
+            analisados: 'n/d',
+            problemas: `erro: ${(err as Error).message.trim().split('\n').pop()}`,
+          });
+        }
       }
     }
   } finally {

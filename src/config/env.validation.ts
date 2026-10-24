@@ -44,6 +44,17 @@ export const envValidationSchema = Joi.object({
   REMOTE_FILE_TIMEOUT_MS: Joi.number().integer().min(1000).optional(),
   // open: ficheiro inacessível/lento => passa e fica registado; closed: o registo é recusado.
   REMOTE_FILE_FAIL_MODE: Joi.string().valid('open', 'closed').default('open'),
+  // Acima deste tamanho o ficheiro não é descarregado no pedido: é verificado em segundo plano.
+  REMOTE_FILE_SYNC_MAX_BYTES: Joi.number()
+    .integer()
+    .min(1024 * 1024)
+    .optional(),
+  // Quanto tempo um veredicto fica em cache (a revalidação é um GET condicional / 304).
+  REMOTE_FILE_CACHE_TTL_S: Joi.number().integer().min(60).optional(),
+  // Varrimento periódico dos ficheiros já registados. Sem valor, acompanha REMOTE_FILE_VERIFY.
+  REMOTE_FILE_SWEEP: Joi.boolean().optional(),
+  REMOTE_FILE_SWEEP_CRON: Joi.string().optional(),
+  REMOTE_FILE_SWEEP_MAX_PER_RUN: Joi.number().integer().min(1).optional(),
   ALLOWED_ORIGINS: Joi.string().required(),
 
   // URLs de infra
