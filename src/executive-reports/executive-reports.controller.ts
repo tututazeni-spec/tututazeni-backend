@@ -55,6 +55,8 @@ import {
   UpdateAlertRuleDto,
 } from './dto/executive-alerts.dto';
 
+import { safeDownloadHeaders } from '../common/files/safe-download';
+
 const EXEC_FULL = [Role.ADMIN, Role.RH, Role.DIRECTOR] as const;
 const EXEC_MGMT = [...EXEC_FULL, Role.GESTOR, Role.LIDER] as const;
 
@@ -493,10 +495,7 @@ export class ExecutiveReportsController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const file = await this.generation.exportReport(id, user, query.format ?? 'PDF');
-    res.set({
-      'Content-Type': file.contentType,
-      'Content-Disposition': `attachment; filename="${encodeURIComponent(file.filename)}"`,
-    });
+    res.set(safeDownloadHeaders({ filename: file.filename, mime: file.contentType }));
     return new StreamableFile(file.buffer);
   }
 

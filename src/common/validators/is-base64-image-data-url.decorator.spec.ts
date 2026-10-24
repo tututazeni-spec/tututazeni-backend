@@ -1,6 +1,7 @@
 // src/common/validators/is-base64-image-data-url.decorator.spec.ts
 import { validate } from 'class-validator';
 import { IsBase64ImageDataUrl } from './is-base64-image-data-url.decorator';
+import { dataUrl, jpeg, png, webp } from '../files/file-fixtures';
 
 class Dto {
   @IsBase64ImageDataUrl()
@@ -16,16 +17,25 @@ async function errorCount(value: unknown): Promise<number> {
 
 describe('IsBase64ImageDataUrl', () => {
   it('aceita data URL png base64', async () => {
-    expect(await errorCount('data:image/png;base64,iVBORw0KGgo=')).toBe(0);
+    expect(await errorCount(dataUrl('image/png', png()))).toBe(0);
   });
   it('aceita data URL jpeg base64', async () => {
-    expect(await errorCount('data:image/jpeg;base64,/9j/4AAQSkZJRg==')).toBe(0);
+    expect(await errorCount(dataUrl('image/jpeg', jpeg()))).toBe(0);
   });
   it('aceita data URL jpg base64', async () => {
-    expect(await errorCount('data:image/jpg;base64,/9j/4AAQ')).toBe(0);
+    expect(await errorCount(dataUrl('image/jpg', jpeg()))).toBe(0);
   });
   it('aceita data URL webp base64', async () => {
-    expect(await errorCount('data:image/webp;base64,UklGRi4AAABXRUJQ')).toBe(0);
+    expect(await errorCount(dataUrl('image/webp', webp()))).toBe(0);
+  });
+  it('recusa EXE/HTML/SVG disfarçados de imagem e imagens truncadas', async () => {
+    const exe = Buffer.from([0x4d, 0x5a, 0x90, 0x00, 0x61]);
+    expect(await errorCount(dataUrl('image/png', exe))).toBeGreaterThan(0);
+    expect(await errorCount(dataUrl('image/png', Buffer.from('<svg onload=x()>')))).toBeGreaterThan(
+      0,
+    );
+    expect(await errorCount(dataUrl('image/jpeg', png()))).toBeGreaterThan(0);
+    expect(await errorCount(dataUrl('image/png', png().subarray(0, 30)))).toBeGreaterThan(0);
   });
   it('recusa https URL', async () => {
     expect(await errorCount('https://storage.innova.ao/x.png')).toBeGreaterThan(0);

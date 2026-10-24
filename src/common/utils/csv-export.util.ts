@@ -3,6 +3,8 @@
 // pelos módulos reports e evaluation (e por qualquer módulo futuro que
 // precise de exportação CSV). Espelha buildXlsxBuffer em xlsx-export.util.ts.
 
+import { csvCell } from './csv-safe.util';
+
 export function buildCsvString<T extends Record<string, unknown>>(
   data: T[],
   headers: (keyof T & string)[],
@@ -10,9 +12,7 @@ export function buildCsvString<T extends Record<string, unknown>>(
   const rows = data.map(row =>
     headers
       .map(h => {
-        const v = row[h];
-        if (typeof v === 'string' && v.includes(',')) return `"${v}"`;
-        return v ?? '';
+        return csvCell(row[h]);
       })
       .join(','),
   );

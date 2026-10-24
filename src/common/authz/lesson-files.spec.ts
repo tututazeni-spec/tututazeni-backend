@@ -7,8 +7,10 @@ import {
   redactModuleFiles,
   withoutInlinePdf,
 } from './lesson-files';
+import { dataUrl, pdf } from '../files/file-fixtures';
 
 const pdfUrl = `data:application/pdf;base64,${Buffer.from('%PDF-1.7 corpo').toString('base64')}`;
+const realPdfUrl = dataUrl('application/pdf', pdf());
 const user = (name: string) => ({ id: 1, role: { name } });
 
 describe('lesson-files', () => {
@@ -23,8 +25,8 @@ describe('lesson-files', () => {
 
   describe('assertValidLessonFile', () => {
     it('aceita PDF verdadeiro em lições PDF e TEXT', () => {
-      expect(() => assertValidLessonFile('PDF', pdfUrl)).not.toThrow();
-      expect(() => assertValidLessonFile('TEXT', pdfUrl)).not.toThrow();
+      expect(() => assertValidLessonFile('PDF', realPdfUrl)).not.toThrow();
+      expect(() => assertValidLessonFile('TEXT', realPdfUrl)).not.toThrow();
     });
     it('aceita URLs http(s) e ausência de ficheiro', () => {
       expect(() => assertValidLessonFile('PDF', 'https://x.test/a.pdf')).not.toThrow();
@@ -41,6 +43,12 @@ describe('lesson-files', () => {
     it('rejeita conteúdo sem assinatura %PDF- mesmo com mime de PDF', () => {
       const fake = `data:application/pdf;base64,${Buffer.from('<script>x</script>').toString('base64')}`;
       expect(() => assertValidLessonFile('PDF', fake)).toThrow(/só são aceites PDFs/);
+    });
+    it('rejeita PDFs com JavaScript ou truncados, mesmo com assinatura %PDF-', () => {
+      expect(() =>
+        assertValidLessonFile('PDF', dataUrl('application/pdf', pdf('/JS (x)'))),
+      ).toThrow(/só são aceites PDFs/);
+      expect(() => assertValidLessonFile('PDF', pdfUrl)).toThrow(/só são aceites PDFs/);
     });
     it('rejeita ficheiros acima do limite', () => {
       const big = `data:application/pdf;base64,${'A'.repeat(7_000_001)}`;

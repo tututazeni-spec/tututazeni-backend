@@ -14,6 +14,7 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { MAX_FILE_SIZE_KB } from '../common/validators/allowed-mime-types';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
+import { FILE_POLICIES, maxDataUrlChars } from '../common/files/file-policies';
 import {
   ModuleStatus,
   ModuleType,
@@ -148,7 +149,7 @@ export class CreateModuleLessonDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @MaxLength(7_000_000)
+  @MaxLength(maxDataUrlChars(FILE_POLICIES.PDF))
   contentUrl?: string;
 
   @ApiPropertyOptional()

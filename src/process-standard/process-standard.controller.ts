@@ -87,6 +87,8 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 
+import { safeDownloadHeaders } from '../common/files/safe-download';
+
 @ApiTags('Process Standard')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -300,10 +302,7 @@ export class ProcessStandardController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const { buffer, filename } = await this.documents.generatedPdf(id, user);
-    res.set({
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-    });
+    res.set(safeDownloadHeaders({ filename, mime: 'application/pdf' }));
     return new StreamableFile(buffer);
   }
 
@@ -431,10 +430,7 @@ export class ProcessStandardController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const { buffer, contentType, filename } = await this.reports.export(filters, user);
-    res.set({
-      'Content-Type': contentType,
-      'Content-Disposition': `attachment; filename="${filename}"`,
-    });
+    res.set(safeDownloadHeaders({ filename, mime: contentType }));
     return new StreamableFile(buffer);
   }
 
@@ -471,10 +467,7 @@ export class ProcessStandardController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const { buffer, contentType, filename } = await this.auditTrail.export(filters, user);
-    res.set({
-      'Content-Type': contentType,
-      'Content-Disposition': `attachment; filename="${filename}"`,
-    });
+    res.set(safeDownloadHeaders({ filename, mime: contentType }));
     return new StreamableFile(buffer);
   }
 

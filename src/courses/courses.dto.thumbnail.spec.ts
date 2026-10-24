@@ -1,6 +1,8 @@
+/* eslint-disable no-script-url -- os "javascript:" são entradas maliciosas propositadas */
 import { validate } from 'class-validator';
 import { CreateCourseDto, UpdateCourseDto } from './courses.dto';
 
+import { dataUrl, jpeg } from '../common/files/file-fixtures';
 // A imagem do curso (opcional) chega como data URL base64 ou como URL normal
 // e é guardada tal e qual em Course.thumbnailUrl. O único limite no backend é
 // o comprimento — este @MaxLength é a fronteira real (o body parser em main.ts
@@ -25,8 +27,19 @@ describe('CreateCourseDto.thumbnailUrl', () => {
   });
 
   it('aceita uma data URL base64 dentro do limite', async () => {
-    const dataUrl = `data:image/jpeg;base64,${'A'.repeat(400_000)}`;
-    expect(await thumbErrors(dataUrl)).toHaveLength(0);
+    const url = dataUrl('image/jpeg', jpeg(100, 100, 300_000));
+    expect(await thumbErrors(url)).toHaveLength(0);
+  });
+
+  it('recusa uma data URL que não é uma imagem verdadeira', async () => {
+    const fake = `data:image/jpeg;base64,${'A'.repeat(400_000)}`;
+    expect((await thumbErrors(fake)).length).toBeGreaterThan(0);
+    const html = dataUrl('image/png', Buffer.from('<html><script>'));
+    expect((await thumbErrors(html)).length).toBeGreaterThan(0);
+  });
+
+  it('recusa javascript: como imagem', async () => {
+    expect((await thumbErrors('javascript:alert(1)')).length).toBeGreaterThan(0);
   });
 
   it('recusa uma string acima do limite de comprimento', async () => {

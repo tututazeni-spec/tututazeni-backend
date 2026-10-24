@@ -3,7 +3,8 @@ import { APP_GUARD, APP_FILTER } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { envValidationSchema } from './config/env.validation';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { AppThrottlerGuard } from './common/security/upload-throttle';
 import { buildThrottlerOptions } from './common/config/throttler.config';
 import { LoggerModule } from 'nestjs-pino';
 import { sanitizeLogObject } from './common/logging/sanitize';
@@ -41,6 +42,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { ExecutiveReportsModule } from './executive-reports/executive-reports.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AuditModule } from './audit/audit.module';
+import { FilesModule } from './common/files/files.module';
 import { AiTutorModule } from './ai-tutor/ai-tutor.module';
 import { AvatarTrainingModule } from './avatar-training/avatar-training.module';
 import { EventsModule } from './events/events.module';
@@ -200,6 +202,7 @@ const accessPath = (url = ''): string => url.split('?')[0];
     ExecutiveReportsModule,
     NotificationsModule,
     AuditModule,
+    FilesModule,
     AiTutorModule,
     AvatarTrainingModule,
     EventsModule,
@@ -236,7 +239,7 @@ const accessPath = (url = ''): string => url.split('?')[0];
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: AppThrottlerGuard },
   ],
 })
 export class AppModule {}

@@ -52,6 +52,7 @@ import { Role } from '../auth/enums/role.enum';
 import { assertCanAccess } from '../common/authz/ownership';
 import { parseDateQuery } from '../common/helpers/parse-date-query';
 
+import { UploadThrottle } from '../common/security/upload-throttle';
 @ApiTags('Leave Management')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -341,6 +342,7 @@ export class LeaveManagementController {
     return this.svc.findOne(id, user);
   }
 
+  @UploadThrottle()
   @Post()
   @ApiOperation({ summary: 'Submeter pedido de licença (suporta rascunho, meios dias, horas)' })
   create(@Body() dto: CreateLeaveManagementRequestDto, @CurrentUser() user: CurrentUserData) {

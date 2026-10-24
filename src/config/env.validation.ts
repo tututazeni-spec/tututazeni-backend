@@ -15,6 +15,46 @@ export const envValidationSchema = Joi.object({
 
   // Upload e CORS
   ALLOWED_FILE_HOST: Joi.string().required(),
+  // enforce (omissão): recusa ficheiros cujo conteúdo real não bate com o tipo/estrutura esperados.
+  // warn: só regista (rollout). Um valor inválido (ex.: "wran") falha o arranque em vez de passar
+  // despercebido.
+  UPLOAD_VALIDATION_MODE: Joi.string().valid('enforce', 'warn').default('enforce'),
+  // Pedidos de upload por utilizador e por minuto (omissão: 20).
+  UPLOAD_THROTTLE_LIMIT: Joi.number().integer().min(1).optional(),
+  // Antivírus (ClamAV/clamd) sobre os ficheiros enviados. Desligado por omissão.
+  CLAMAV_ENABLED: Joi.boolean().default(false),
+  CLAMAV_HOST: Joi.string().optional(),
+  CLAMAV_PORT: Joi.number().port().optional(),
+  CLAMAV_TIMEOUT_MS: Joi.number().integer().min(1000).optional(),
+  // open: clamd em baixo => o ficheiro passa (e fica registado); closed: o upload é recusado.
+  CLAMAV_FAIL_MODE: Joi.string().valid('open', 'closed').default('open'),
+  // Tamanho máximo de UMA sessão INSTREAM (≥ 1 MiB; tem de ser ≤ StreamMaxLength do clamd). Ficheiros
+  // maiores são verificados em segmentos com sobreposição.
+  CLAMAV_MAX_BYTES: Joi.number()
+    .integer()
+    .min(1024 * 1024)
+    .optional(),
+  // Verificação dos ficheiros guardados fora (fileUrl no storage): o backend descarrega-os (só do
+  // host autorizado) e aplica tipo real, estrutura, conteúdo activo e antivírus. Desligado por omissão.
+  REMOTE_FILE_VERIFY: Joi.boolean().default(false),
+  REMOTE_FILE_MAX_BYTES: Joi.number()
+    .integer()
+    .min(1024 * 1024)
+    .optional(),
+  REMOTE_FILE_TIMEOUT_MS: Joi.number().integer().min(1000).optional(),
+  // open: ficheiro inacessível/lento => passa e fica registado; closed: o registo é recusado.
+  REMOTE_FILE_FAIL_MODE: Joi.string().valid('open', 'closed').default('open'),
+  // Acima deste tamanho o ficheiro não é descarregado no pedido: é verificado em segundo plano.
+  REMOTE_FILE_SYNC_MAX_BYTES: Joi.number()
+    .integer()
+    .min(1024 * 1024)
+    .optional(),
+  // Quanto tempo um veredicto fica em cache (a revalidação é um GET condicional / 304).
+  REMOTE_FILE_CACHE_TTL_S: Joi.number().integer().min(60).optional(),
+  // Varrimento periódico dos ficheiros já registados. Sem valor, acompanha REMOTE_FILE_VERIFY.
+  REMOTE_FILE_SWEEP: Joi.boolean().optional(),
+  REMOTE_FILE_SWEEP_CRON: Joi.string().optional(),
+  REMOTE_FILE_SWEEP_MAX_PER_RUN: Joi.number().integer().min(1).optional(),
   ALLOWED_ORIGINS: Joi.string().required(),
 
   // URLs de infra

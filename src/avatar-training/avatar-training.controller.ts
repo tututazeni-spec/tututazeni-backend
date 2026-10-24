@@ -72,6 +72,9 @@ import {
   AVATAR_PROGRESS_ROLES,
 } from './avatar-training.helpers';
 
+import { safeDownloadHeaders } from '../common/files/safe-download';
+
+import { UploadThrottle } from '../common/security/upload-throttle';
 @ApiTags('Avatar Training')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -98,6 +101,7 @@ export class AvatarTrainingController {
     return this.avatars.listAvatars(filters, !isPrivileged(user, AVATAR_AUTHOR_ROLES));
   }
 
+  @UploadThrottle()
   @Post('avatars')
   @Roles(...AVATAR_ADMIN_ROLES)
   @ApiOperation({ summary: 'Criar avatar (nasce em teste)' })
@@ -118,6 +122,7 @@ export class AvatarTrainingController {
     return this.avatars.avatarHistory(id);
   }
 
+  @UploadThrottle()
   @Patch('avatars/:id')
   @Roles(...AVATAR_ADMIN_ROLES)
   updateAvatar(
@@ -598,14 +603,12 @@ export class AvatarTrainingController {
     if (!query.type) throw new BadRequestException('Indique o tipo de relatório');
     if (query.format === 'pdf') {
       const pdf = await this.reports.exportPdf(user, query.type, query);
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${pdf.filename}"`);
+      res.set(safeDownloadHeaders({ filename: pdf.filename, mime: 'application/pdf' }));
       res.send(pdf.content);
       return;
     }
     const file = await this.reports.exportCsv(user, query.type, query);
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    res.set(safeDownloadHeaders({ filename: file.filename, mime: 'text/csv' }));
     res.send(file.content);
   }
 

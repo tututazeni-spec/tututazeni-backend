@@ -8,7 +8,7 @@ import { AppModule } from '../../../src/app.module';
 import { getToken } from '../helpers/auth.helper';
 
 const TEST_DB_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/innova_test';
-const PDF_BYTES = Buffer.from('%PDF-1.4\n% integração\n');
+const PDF_BYTES = Buffer.from('%PDF-1.4\n% integração\n%%EOF\n');
 const PDF = `data:application/pdf;base64,${PDF_BYTES.toString('base64')}`;
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 

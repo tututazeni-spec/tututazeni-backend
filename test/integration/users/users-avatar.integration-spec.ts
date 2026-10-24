@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ValidationPipe } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
+import { dataUrl, png } from '../../../src/common/files/file-fixtures';
 import { AppModule } from '../../../src/app.module';
 import { getToken } from '../helpers/auth.helper';
 
@@ -93,7 +94,7 @@ describe('Users Avatar Integration', () => {
   });
 
   it('aceita um payload grande (~120 KB) válido → 200 (body parser não dá 413)', async () => {
-    const big = 'data:image/png;base64,' + 'A'.repeat(120_000);
+    const big = dataUrl('image/png', png(10, 10, 90_000));
     await request(app.getHttpServer())
       .patch('/users/me/avatar')
       .set('Authorization', `Bearer ${token}`)
@@ -101,8 +102,8 @@ describe('Users Avatar Integration', () => {
       .expect(200);
   });
 
-  it('recusa um payload acima de 200 000 caracteres → 400 (MaxLength)', async () => {
-    const tooBig = 'data:image/png;base64,' + 'A'.repeat(210_000);
+  it('recusa um payload acima de 150 KB → 400', async () => {
+    const tooBig = dataUrl('image/png', png(10, 10, 160_000));
     await request(app.getHttpServer())
       .patch('/users/me/avatar')
       .set('Authorization', `Bearer ${token}`)

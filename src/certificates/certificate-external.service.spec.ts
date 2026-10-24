@@ -6,7 +6,8 @@ import { Prisma } from '@prisma/client';
 import { CertificateExternalService } from './certificate-external.service';
 import { ImportExternalCertificateDto } from './certificates-lifecycle.dto';
 
-const PDF = `data:application/pdf;base64,${Buffer.from('%PDF-1.4 teste').toString('base64')}`;
+import { dataUrl, pdf } from '../common/files/file-fixtures';
+const PDF = dataUrl('application/pdf', pdf());
 
 const dtoOf = (over: Record<string, unknown> = {}) =>
   plainToInstance(ImportExternalCertificateDto, {

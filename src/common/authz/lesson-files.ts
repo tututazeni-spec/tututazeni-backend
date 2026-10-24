@@ -5,13 +5,15 @@
 // por inteiro — o aluno obtém-no por GET /lessons/:id/file, que valida o acesso.
 import { BadRequestException } from '@nestjs/common';
 import { Role } from '../../auth/enums/role.enum';
+import { formatLimit } from '../files/data-url';
+import { inspectInlineFile } from '../files/inspect-inline-file';
+import { antivirusConfig } from '../files/antivirus';
+import { inspectInlineFileScanned } from '../files/inspect-scanned';
+import { FILE_POLICIES } from '../files/file-policies';
 import { isPrivileged } from './ownership';
 
 /** Papéis que criam/editam lições e por isso podem sempre ver os ficheiros. */
 export const CONTENT_MANAGER_ROLES: Role[] = [Role.ADMIN, Role.RH, Role.INSTRUCTOR];
-
-/** ~5 MB de PDF em base64 (mesmo limite do formulário). */
-export const MAX_PDF_DATA_URL_LENGTH = 7_000_000;
 
 const PDF_DATA_URL = /^data:application\/pdf;base64,/i;
 
@@ -35,8 +37,8 @@ export function decodePdfDataUrl(contentUrl: string | null | undefined): Buffer 
 }
 
 /**
- * Rejeita ficheiros inline em lições PDF/TEXT que não sejam PDFs verdadeiros
- * (tipo declarado, assinatura `%PDF-` e tamanho). URLs http(s) passam.
+ * Rejeita ficheiros inline em lições PDF/TEXT que não sejam PDFs verdadeiros: tipo pelos bytes,
+ * estrutura, conteúdo activo (JS/Launch) e tamanho. URLs http(s) passam.
  */
 export function assertValidLessonFile(
   type: string | undefined,
@@ -44,13 +46,29 @@ export function assertValidLessonFile(
 ) {
   if (!contentUrl || (type !== 'PDF' && type !== 'TEXT')) return;
   if (!contentUrl.startsWith('data:')) return;
-  if (contentUrl.length > MAX_PDF_DATA_URL_LENGTH) {
-    throw new BadRequestException('O PDF excede o tamanho máximo de 5 MB');
+  const result = inspectInlineFile(contentUrl, FILE_POLICIES.PDF);
+  if (result.ok === false) {
+    throw new BadRequestException(
+      result.error.includes('excede')
+        ? `O PDF excede o tamanho máximo de ${formatLimit(FILE_POLICIES.PDF.maxBytes)}`
+        : `Ficheiro inválido: só são aceites PDFs (${result.error})`,
+    );
   }
-  const bytes = decodePdfDataUrl(contentUrl);
-  if (!bytes || bytes.subarray(0, 5).toString('latin1') !== '%PDF-') {
-    throw new BadRequestException('Ficheiro inválido: só são aceites PDFs');
-  }
+}
+
+/**
+ * `assertValidLessonFile` (estrutura do PDF) e, com CLAMAV_ENABLED=true, antivírus sobre o ficheiro.
+ * É o que os serviços devem chamar ao gravar uma lição; sem antivírus equivale à versão síncrona.
+ */
+export async function assertLessonFileClean(
+  type: string | undefined,
+  contentUrl: string | null | undefined,
+): Promise<void> {
+  assertValidLessonFile(type, contentUrl);
+  if (!contentUrl || (type !== 'PDF' && type !== 'TEXT') || !contentUrl.startsWith('data:')) return;
+  if (!antivirusConfig().enabled) return; // evita descodificar duas vezes sem necessidade
+  const result = await inspectInlineFileScanned(contentUrl, FILE_POLICIES.PDF, { report: false });
+  if (result.ok === false) throw new BadRequestException(result.error);
 }
 
 interface LessonWithFile {

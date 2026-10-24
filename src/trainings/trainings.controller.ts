@@ -44,6 +44,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
+import { UploadThrottle } from '../common/security/upload-throttle';
 // Papéis que podem CRIAR formações. Quem não for ADMIN/RH só gere as que
 // criou — aplicado ao nível do serviço (assertCanManage), não aqui.
 const CAN_CREATE_TRAININGS = [
@@ -180,6 +181,7 @@ export class TrainingController {
 
   // ── Gestão da formação (Admin/RH/Gestor/Instrutor/Director/Líder) ─────────
 
+  @UploadThrottle()
   @Post()
   @Roles(...CAN_CREATE_TRAININGS)
   @ApiOperation({ summary: 'Criar treinamento' })
@@ -257,6 +259,7 @@ export class TrainingController {
 
   // ── Documentos administrativos ────────────────────────────────────────────
 
+  @UploadThrottle()
   @Post(':id/documents')
   @Roles(...CAN_CREATE_TRAININGS)
   @ApiOperation({ summary: 'Adicionar documento administrativo' })

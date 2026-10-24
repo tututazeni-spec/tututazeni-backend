@@ -11,5 +11,25 @@ services:
     volumes:
       - redis-data:/data
 
+  # Antivírus para os uploads (opcional): docker compose --profile av up -d clamav
+  # Primeiro arranque demora alguns minutos a descarregar as assinaturas; precisa de ~1-2 GB de RAM.
+  # Activar na aplicação com CLAMAV_ENABLED=true (ver .env.example).
+  clamav:
+    image: clamav/clamav:stable
+    container_name: innova-clamav
+    profiles: ["av"]
+    environment:
+      # Sobe os limites do clamd (omissão 25 MB) até ao maior ficheiro que aceitamos (200 MB).
+      # Com isto pode usar CLAMAV_MAX_BYTES=209715200 e evitar a segmentação.
+      CLAMD_CONF_StreamMaxLength: 200M
+      CLAMD_CONF_MaxFileSize: 200M
+      CLAMD_CONF_MaxScanSize: 400M
+    ports:
+      - "3310:3310"
+    restart: unless-stopped
+    volumes:
+      - clamav-db:/var/lib/clamav
+
 volumes:
   redis-data:
+  clamav-db:

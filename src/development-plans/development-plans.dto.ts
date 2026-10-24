@@ -15,6 +15,7 @@ import {
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 import { IsBase64ImageDataUrl } from '../common/validators/is-base64-image-data-url.decorator';
+import { FILE_POLICIES, maxDataUrlChars } from '../common/files/file-policies';
 import {
   PlanStatus,
   ActionType,
@@ -159,7 +160,7 @@ export class CreateDevelopmentPlanDto {
   })
   @IsOptional()
   @IsString()
-  @MaxLength(700_000)
+  @MaxLength(maxDataUrlChars(FILE_POLICIES.CARD_IMAGE))
   @IsBase64ImageDataUrl()
   imageUrl?: string | null;
 

@@ -19,7 +19,7 @@ import {
   CreateModuleMaterialDto,
   CloneModuleDto,
 } from './course-modules.dto';
-import { assertValidLessonFile, decodePdfDataUrl, isInlinePdf } from '../common/authz/lesson-files';
+import { assertLessonFileClean, decodePdfDataUrl, isInlinePdf } from '../common/authz/lesson-files';
 
 // NOTA — dois sistemas paralelos de Módulos/Lições: ver comentário equivalente
 // no topo de courses/courses.service.ts. Este service é a rota usada por
@@ -268,7 +268,7 @@ export class CourseModulesService {
   async createLesson(dto: CreateModuleLessonDto) {
     const mod = await this.prisma.read.courseModule.findUnique({ where: { id: dto.moduleId } });
     if (!mod) throw new NotFoundException('Módulo não encontrado');
-    assertValidLessonFile(dto.contentType, dto.contentUrl);
+    await assertLessonFileClean(dto.contentType, dto.contentUrl);
 
     return this.prisma.lesson.create({
       data: {
@@ -289,7 +289,7 @@ export class CourseModulesService {
   async updateLesson(id: number, dto: UpdateModuleLessonDto) {
     const lesson = await this.prisma.read.lesson.findUnique({ where: { id } });
     if (!lesson) throw new NotFoundException('Aula não encontrada');
-    assertValidLessonFile(dto.contentType ?? lesson.type, dto.contentUrl);
+    await assertLessonFileClean(dto.contentType ?? lesson.type, dto.contentUrl);
     return this.prisma.lesson.update({ where: { id }, data: dto });
   }
 
