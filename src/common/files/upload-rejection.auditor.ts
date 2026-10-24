@@ -11,7 +11,7 @@ type Severity = 'LOW' | 'MEDIUM' | 'HIGH';
 export function severityOf(e: UploadRejectionEvent): Severity {
   // Executável, HTML/SVG disfarçado ou malware detectado: o que interessa à segurança.
   if (e.reason.startsWith('Ficheiro rejeitado')) return 'HIGH';
-  return e.stage === 'content' || e.stage === 'scan' ? 'MEDIUM' : 'LOW';
+  return e.stage === 'content' || e.stage === 'scan' || e.stage === 'remote' ? 'MEDIUM' : 'LOW';
 }
 
 @Injectable()

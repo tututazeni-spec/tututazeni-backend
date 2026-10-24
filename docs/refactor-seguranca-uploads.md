@@ -184,7 +184,9 @@ T1 e T5 não dependem de nada e podem arrancar já. T3 depende de T2 e T4.
 - JavaScript dentro de object streams comprimidos de PDF (≥ 1.5) não é visível sem descomprimir.
 - OOXML: tamanhos validados são os declarados no directório ZIP; só quem descomprime apanha uma mentira nesses campos.
 - Ficheiros Office legados (`.doc/.xls/.ppt`) deixaram de ser aceites em fluxos com política.
-- DNS: URLs externas validam o hostname literal, não a resolução (um domínio público que aponte para IP interno passa).
+- URLs externas: a validação síncrona (`safe-file-url`) só vê o hostname literal. A resolução de DNS e a verificação do conteúdo só existem com `REMOTE_FILE_VERIFY=true` (ver §9); ligações livres (`IsUrlOrInlineFile`) nunca são descarregadas.
+- Um ficheiro do storage substituído depois de registado não é re-verificado.
+- Antivírus e verificação remota estão desligados por omissão: sem infra (clamd) e sem decisão de custo, o comportamento é o da T3.
 
 ## 9. Rollout em produção (runbook)
 
@@ -234,11 +236,16 @@ não vê (ex.: JavaScript em object streams comprimidos de PDF, exploits em docu
     ficheiros; a regra estrutural continua a proteger.
   - `closed`: o upload é recusado com "Não foi possível verificar o ficheiro…". Para quem prefere
     segurança a disponibilidade.
-- **Limites:** o clamd recusa fluxos acima de `StreamMaxLength` (omissão 25 MB; os nossos tetos
-  são ≤ 10 MB). Ficheiros em URL externa (HTTPS) nunca passam pelo backend, logo não são
-  verificados aqui.
-- **Testar sem instalar o ClamAV:** `antivirus.spec.ts` sobe um servidor TCP que fala o protocolo
-  INSTREAM e reconhece a string de teste EICAR.
+- **Ficheiros grandes (já não há limite de 25 MB):** o clamd recusa fluxos acima do seu
+  `StreamMaxLength` (25 MB por omissão). O cliente envia o ficheiro em sessões sequenciais de, no
+  máximo, `CLAMAV_MAX_BYTES`, e cada uma começa com os últimos 1 MiB da anterior, para que uma
+  assinatura que atravesse a fronteira fique inteira num dos segmentos (testado com a assinatura em
+  vários desfasamentos à volta da fronteira). Um segmento infectado pára o scan. O serviço do
+  docker-compose sobe o limite do clamd para 200 MB; com ele use `CLAMAV_MAX_BYTES=209715200` e
+  não há segmentação. Limite que se mantém: o clamd só abre arquivos (zip/OOXML) que veja inteiros;
+  as políticas inline limitam-nos a ≤ 10 MB, por isso nunca são segmentados.
+- **Testar sem instalar o ClamAV:** `antivirus.spec.ts` e `antivirus-segments.spec.ts` sobem um
+  servidor TCP que fala o protocolo INSTREAM, impõe um `StreamMaxLength` e reconhece a string EICAR.
 
 ### Limite de uploads por utilizador (`UPLOAD_THROTTLE_LIMIT`)
 Mantido em **20 pedidos/min por utilizador**. Verificação feita no frontend: todos os uploads são
@@ -247,3 +254,32 @@ autosave; o `debounce` existente é só de pesquisa), portanto 20/min é muito a
 humano. Só convém subir se houver importações em lote por API ou scripts; nesse caso aumentar a
 variável em vez de remover o decorator. Quem excede recebe 429 e o contador é do utilizador, não do
 IP, por isso colegas no mesmo escritório não se bloqueiam uns aos outros.
+
+### Ficheiros no storage (`fileUrl` HTTPS) — verificação opcional
+Os campos `fileUrl`/`logoUrl`/`signatureUrl` (validador `@IsAllowedFileUrl`) apontam para ficheiros
+que o utilizador enviou directamente para o storage: o backend nunca os recebia, logo nada os
+inspeccionava. Com `REMOTE_FILE_VERIFY=true` o backend descarrega-os ao validar o pedido e aplica o
+mesmo que aos uploads inline.
+
+- **O que verifica:** tipo real pelos bytes e MIME declarado (campo `mimeType` do DTO, senão o
+  `Content-Type`), executáveis/HTML/SVG, estrutura (PDF, Office, imagens) até 10 MB em memória;
+  acima disso, a cabeça do ficheiro (64 KB) e o antivírus em **streaming** (sem pôr 150 MB em
+  memória). Recusa também ficheiros que o storage **serve** como `text/html`, `image/svg+xml`,
+  XML ou JavaScript, porque o browser os executaria mesmo com bytes inofensivos.
+- **Só o que é nosso:** apenas URLs do `ALLOWED_FILE_HOST`; ligações livres (YouTube, páginas
+  externas em `IsUrlOrInlineFile`) nunca são descarregadas.
+- **O descarregamento é seguro (SSRF):** URL https sem credenciais; o DNS é resolvido pelo backend
+  e rejeitado se **algum** endereço for interno (isto resolve a limitação antiga de um domínio
+  público poder apontar para um IP privado); a ligação usa o endereço já validado (anti-DNS
+  rebinding, sem segunda resolução); no máximo 3 redirecionamentos, cada um revalidado (host,
+  https, DNS); sem cookies nem `Authorization`; limite de bytes (`REMOTE_FILE_MAX_BYTES`, 200 MiB)
+  e de tempo (`REMOTE_FILE_TIMEOUT_MS`, 30 s).
+- **Falhas:** ficheiro perigoso, infectado ou servido como tipo activo é sempre recusado.
+  Se o ficheiro **não puder ser obtido** (storage lento, 404, timeout, DNS), decide
+  `REMOTE_FILE_FAIL_MODE`: `open` (omissão) deixa passar e regista (`stage: remote`,
+  `enforced: false`); `closed` recusa o registo.
+- **Custo:** cada criação ou edição com `fileUrl` passa a fazer um pedido ao storage (e ao clamd).
+  Está desligado por omissão por isso. Ligar primeiro em `open`, ver os registos `stage: remote` no
+  AuditLog e só depois decidir `closed`.
+- **Limite conhecido:** só se verifica o que existe **no momento** do pedido. Um ficheiro
+  substituído no storage depois de registado não é re-verificado (exigiria um job periódico).

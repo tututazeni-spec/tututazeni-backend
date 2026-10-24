@@ -13,7 +13,7 @@ import { Logger } from '@nestjs/common';
 import { getRequestContext } from '../logging/request-context';
 
 export type UploadValidationMode = 'enforce' | 'warn';
-export type UploadRejectionStage = 'format' | 'size' | 'type' | 'content' | 'scan';
+export type UploadRejectionStage = 'format' | 'size' | 'type' | 'content' | 'scan' | 'remote';
 
 export interface UploadRejection {
   policy: string;

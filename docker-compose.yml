@@ -18,6 +18,12 @@ services:
     image: clamav/clamav:stable
     container_name: innova-clamav
     profiles: ["av"]
+    environment:
+      # Sobe os limites do clamd (omissão 25 MB) até ao maior ficheiro que aceitamos (200 MB).
+      # Com isto pode usar CLAMAV_MAX_BYTES=209715200 e evitar a segmentação.
+      CLAMD_CONF_StreamMaxLength: 200M
+      CLAMD_CONF_MaxFileSize: 200M
+      CLAMD_CONF_MaxScanSize: 400M
     ports:
       - "3310:3310"
     restart: unless-stopped

@@ -9,6 +9,7 @@
 import { antivirusConfig, scanForUpload } from '../files/antivirus';
 import { FilePolicy } from '../files/file-policies';
 import { inspectInlineFile } from '../files/inspect-inline-file';
+import { remoteFileConfig, verifyRemoteFile } from '../files/remote-file';
 
 const reasons = new WeakMap<object, Map<string, string>>();
 
@@ -23,6 +24,25 @@ function remember(obj: object | undefined, prop: string, reason: string | null):
 /** Motivo da última recusa deste campo, se o veredicto já correu. */
 export function recallReason(obj: object | undefined, prop: string): string | undefined {
   return obj ? reasons.get(obj)?.get(prop) : undefined;
+}
+
+/**
+ * Veredicto de um `fileUrl` HTTPS (ficheiro no storage): com REMOTE_FILE_VERIFY=true o backend
+ * descarrega-o e verifica-o (ver remote-file.ts). Desligado, devolve `true` sem tocar na rede.
+ */
+export function remoteFileVerdict(
+  url: string,
+  declaredMime: unknown,
+  obj: object | undefined,
+  prop: string,
+): boolean | Promise<boolean> {
+  const cfg = remoteFileConfig();
+  if (!cfg.enabled) return true;
+  const mime = typeof declaredMime === 'string' ? declaredMime : undefined;
+  return verifyRemoteFile(url, { declaredMime: mime }, cfg).then(rejection => {
+    remember(obj, prop, rejection);
+    return rejection === null;
+  });
 }
 
 export function inlineVerdict(

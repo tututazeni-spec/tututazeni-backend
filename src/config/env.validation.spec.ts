@@ -152,3 +152,37 @@ describe('envValidationSchema — antivírus', () => {
     }
   });
 });
+
+describe('envValidationSchema — ficheiros grandes e remotos', () => {
+  it('omissões: remote desligado e fail-mode open', () => {
+    const v = validate(VALID_ENV).value;
+    expect(v.REMOTE_FILE_VERIFY).toBe(false);
+    expect(v.REMOTE_FILE_FAIL_MODE).toBe('open');
+  });
+
+  it('aceita uma configuração completa', () => {
+    expect(
+      validate({
+        ...VALID_ENV,
+        CLAMAV_MAX_BYTES: '209715200',
+        REMOTE_FILE_VERIFY: 'true',
+        REMOTE_FILE_MAX_BYTES: '209715200',
+        REMOTE_FILE_TIMEOUT_MS: '30000',
+        REMOTE_FILE_FAIL_MODE: 'closed',
+      }).error,
+    ).toBeUndefined();
+  });
+
+  it('rejeita valores inválidos (falha o arranque em vez de ficar desligado em silêncio)', () => {
+    for (const bad of [
+      { CLAMAV_MAX_BYTES: '100' },
+      { REMOTE_FILE_VERIFY: 'sim' },
+      { REMOTE_FILE_MAX_BYTES: '5' },
+      { REMOTE_FILE_TIMEOUT_MS: '10' },
+      { REMOTE_FILE_FAIL_MODE: 'talvez' },
+    ]) {
+      const keys = validate({ ...VALID_ENV, ...bad }).error?.details.map(d => d.context?.key);
+      expect(keys).toContain(Object.keys(bad)[0]);
+    }
+  });
+});

@@ -82,6 +82,7 @@ const cfg = (port: number, over: Partial<AntivirusConfig> = {}): AntivirusConfig
   port,
   timeoutMs: 1500,
   failMode: 'open',
+  maxBytes: 25 * 1024 * 1024,
   ...over,
 });
 
@@ -113,6 +114,7 @@ describe('antivirusConfig', () => {
       port: 3310,
       timeoutMs: 15_000,
       failMode: 'open',
+      maxBytes: 25 * 1024 * 1024,
     });
   });
   it('lê o ambiente e ignora valores inválidos', () => {
@@ -129,6 +131,7 @@ describe('antivirusConfig', () => {
       port: 3311,
       timeoutMs: 5000,
       failMode: 'closed',
+      maxBytes: 25 * 1024 * 1024,
     });
     const bad = antivirusConfig({
       CLAMAV_PORT: 'x',

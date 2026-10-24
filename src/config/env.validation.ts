@@ -28,6 +28,22 @@ export const envValidationSchema = Joi.object({
   CLAMAV_TIMEOUT_MS: Joi.number().integer().min(1000).optional(),
   // open: clamd em baixo => o ficheiro passa (e fica registado); closed: o upload é recusado.
   CLAMAV_FAIL_MODE: Joi.string().valid('open', 'closed').default('open'),
+  // Tamanho máximo de UMA sessão INSTREAM (≥ 1 MiB; tem de ser ≤ StreamMaxLength do clamd). Ficheiros
+  // maiores são verificados em segmentos com sobreposição.
+  CLAMAV_MAX_BYTES: Joi.number()
+    .integer()
+    .min(1024 * 1024)
+    .optional(),
+  // Verificação dos ficheiros guardados fora (fileUrl no storage): o backend descarrega-os (só do
+  // host autorizado) e aplica tipo real, estrutura, conteúdo activo e antivírus. Desligado por omissão.
+  REMOTE_FILE_VERIFY: Joi.boolean().default(false),
+  REMOTE_FILE_MAX_BYTES: Joi.number()
+    .integer()
+    .min(1024 * 1024)
+    .optional(),
+  REMOTE_FILE_TIMEOUT_MS: Joi.number().integer().min(1000).optional(),
+  // open: ficheiro inacessível/lento => passa e fica registado; closed: o registo é recusado.
+  REMOTE_FILE_FAIL_MODE: Joi.string().valid('open', 'closed').default('open'),
   ALLOWED_ORIGINS: Joi.string().required(),
 
   // URLs de infra
