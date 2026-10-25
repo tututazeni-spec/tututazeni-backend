@@ -10,6 +10,7 @@ import { SsoAuthService } from './sso-auth.service';
 import { AuthSettingsService } from '../settings/auth-settings.service';
 import { LdapLoginDto } from '../settings/settings.dto';
 import { authThrottleLimit } from './auth.controller';
+import { setCsrfCookie } from '../common/security/csrf-token';
 import {
   TOKEN_COOKIE,
   buildTokenCookieOptions,
@@ -69,6 +70,7 @@ export class SsoController {
     try {
       const result = await this.sso.handleCallback(code, state, requestContext(req));
       res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
+      setCsrfCookie(res, result.accessToken);
       res.cookie(REFRESH_COOKIE, result.refreshToken, refreshCookieOptions);
       res.redirect(frontendUrl('/dashboard'));
     } catch (err: unknown) {
@@ -87,6 +89,7 @@ export class SsoController {
   ) {
     const result = await this.sso.ldapLogin(dto.email, dto.password, requestContext(req));
     res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
+    setCsrfCookie(res, result.accessToken);
     res.cookie(REFRESH_COOKIE, result.refreshToken, refreshCookieOptions);
     return result;
   }

@@ -5,6 +5,7 @@ import {
   CSRF_HEADER,
   CSRF_HEADER_VALUE,
 } from './csrf-header-guard';
+import { CSRF_COOKIE, CSRF_TOKEN_HEADER, deriveCsrfToken } from './csrf-token';
 
 describe('requiresCsrfHeaderCheck', () => {
   it('exige verificação em POST com cookie de sessão presente', () => {
@@ -74,5 +75,94 @@ describe('csrfHeaderMiddleware', () => {
     const { next, status } = run('POST', { token: 'x' }, { [CSRF_HEADER]: CSRF_HEADER_VALUE });
     expect(next).toHaveBeenCalled();
     expect(status).not.toHaveBeenCalled();
+  });
+});
+
+describe('csrfHeaderMiddleware — token double-submit assinado', () => {
+  const secret = 'segredo-de-teste';
+  const session = 'jwt-da-sessao';
+  const good = deriveCsrfToken(session, secret);
+  const legacy = { [CSRF_HEADER]: CSRF_HEADER_VALUE };
+
+  function run(
+    method: string,
+    cookies: Record<string, unknown>,
+    headers: Record<string, string>,
+    opts: { strict?: boolean; path?: string } = {},
+  ) {
+    const req = { method, cookies, headers, path: opts.path ?? '/courses' } as never;
+    const json = jest.fn();
+    const status = jest.fn().mockReturnValue({ json });
+    const cookie = jest.fn();
+    const next = jest.fn();
+    csrfHeaderMiddleware('token', { secret, strict: opts.strict })(
+      req,
+      { status, cookie } as never,
+      next,
+    );
+    return { status, cookie, next };
+  }
+
+  it('aceita escrita com cookie csrf e cabeçalho X-CSRF-Token correctos', () => {
+    const r = run(
+      'POST',
+      { token: session, [CSRF_COOKIE]: good },
+      { ...legacy, [CSRF_TOKEN_HEADER]: good },
+    );
+    expect(r.next).toHaveBeenCalled();
+  });
+
+  it('rejeita escrita com cookie csrf mas sem X-CSRF-Token', () => {
+    const r = run('POST', { token: session, [CSRF_COOKIE]: good }, legacy);
+    expect(r.status).toHaveBeenCalledWith(403);
+    expect(r.next).not.toHaveBeenCalled();
+  });
+
+  it('rejeita token forjado (cookie e cabeçalho iguais mas não assinados)', () => {
+    const fake = 'a'.repeat(64);
+    const r = run(
+      'POST',
+      { token: session, [CSRF_COOKIE]: fake },
+      { ...legacy, [CSRF_TOKEN_HEADER]: fake },
+    );
+    expect(r.status).toHaveBeenCalledWith(403);
+  });
+
+  it('rollout: sessão antiga sem cookie csrf continua a passar só com X-Requested-With', () => {
+    const r = run('POST', { token: session }, legacy);
+    expect(r.next).toHaveBeenCalled();
+  });
+
+  it('strict: sessão sem cookie csrf deixa de passar', () => {
+    const r = run('POST', { token: session }, legacy, { strict: true });
+    expect(r.status).toHaveBeenCalledWith(403);
+  });
+
+  it('o login nunca é bloqueado por um cookie csrf desactualizado', () => {
+    const r = run('POST', { token: session, [CSRF_COOKIE]: 'velho' }, legacy, {
+      strict: true,
+      path: '/auth/login',
+    });
+    expect(r.next).toHaveBeenCalled();
+  });
+
+  it('GET com sessão sem cookie csrf emite-o (auto-recuperação)', () => {
+    const r = run('GET', { token: session }, {});
+    expect(r.cookie).toHaveBeenCalledWith(
+      CSRF_COOKIE,
+      good,
+      expect.objectContaining({ httpOnly: false }),
+    );
+    expect(r.next).toHaveBeenCalled();
+  });
+
+  it('GET com cookie csrf já correcto não o volta a emitir', () => {
+    const r = run('GET', { token: session, [CSRF_COOKIE]: good }, {});
+    expect(r.cookie).not.toHaveBeenCalled();
+  });
+
+  it('GET sem sessão não emite cookie', () => {
+    const r = run('GET', {}, {});
+    expect(r.cookie).not.toHaveBeenCalled();
   });
 });

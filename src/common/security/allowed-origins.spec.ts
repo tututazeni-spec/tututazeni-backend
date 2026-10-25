@@ -29,4 +29,10 @@ describe('parseAllowedOrigins', () => {
       'https://innova.example.com',
     ]);
   });
+
+  it('rejeita wildcards em qualquer ambiente', () => {
+    expect(() => parseAllowedOrigins('*', true)).toThrow(/wildcard/);
+    expect(() => parseAllowedOrigins('*', false)).toThrow(/wildcard/);
+    expect(() => parseAllowedOrigins('https://*.example.com', true)).toThrow(/wildcard/);
+  });
 });

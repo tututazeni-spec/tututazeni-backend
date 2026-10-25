@@ -7,6 +7,11 @@ export function parseAllowedOrigins(raw: string | undefined, isProd: boolean): s
     .map(o => o.trim())
     .filter(Boolean);
 
+  // '*' é incompatível com credentials:true (cookie de sessão) e anula a allowlist.
+  if (origins.some(o => o.includes('*'))) {
+    throw new Error('ALLOWED_ORIGINS não aceita wildcards (*): liste cada origem explicitamente');
+  }
+
   if (!isProd) {
     return origins.length ? origins : ['http://localhost:3000'];
   }
