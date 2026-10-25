@@ -35,3 +35,27 @@ export function csvCell(value: unknown): string {
   const text = typeof value === 'string' ? neutralizeFormula(raw) : raw;
   return NEEDS_QUOTES.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
+
+const BOM = String.fromCharCode(0xfeff);
+
+export interface BuildCsvOptions {
+  /** Separador de colunas. Por omissão `,`. */
+  delimiter?: ',' | ';';
+  /** Fim de linha. Por omissão `\r\n`. */
+  eol?: '\n' | '\r\n';
+  /** Prefixa o BOM UTF-8 (o Excel só abre os acentos correctamente com ele). Por omissão `true`. */
+  bom?: boolean;
+  /** Termina o ficheiro com um fim de linha. Por omissão `false`. */
+  trailingEol?: boolean;
+}
+
+/** CSV completo (cabeçalho + linhas) com todas as células escapadas por {@link csvCell}. */
+export function buildCsv(
+  header: readonly unknown[],
+  rows: readonly (readonly unknown[])[],
+  opts: BuildCsvOptions = {},
+): string {
+  const { delimiter = ',', eol = '\r\n', bom = true, trailingEol = false } = opts;
+  const body = [header, ...rows].map(r => r.map(csvCell).join(delimiter)).join(eol);
+  return (bom ? BOM : '') + body + (trailingEol ? eol : '');
+}

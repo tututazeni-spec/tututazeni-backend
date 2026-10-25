@@ -29,6 +29,7 @@ import {
   ProcessInstanceFilterDto,
   UpdateInstanceDto,
 } from './process-standard.dto';
+import { csvCell } from '../common/utils/csv-safe.util';
 
 const MANAGE_ROLES = [Role.ADMIN, Role.RH, Role.GESTOR];
 const ACTIVE_TASK_STATUSES = ['PENDING', 'IN_PROGRESS', 'BLOCKED', 'ESCALATED'] as const;
@@ -367,12 +368,6 @@ export class ProcessInstancesService {
       'Tempo restante (h)',
       'Situação do prazo',
     ];
-    const esc = (v: unknown) => {
-      let t = v == null ? '' : v instanceof Date ? v.toISOString() : String(v);
-      // Evita injecção de fórmulas ao abrir no Excel.
-      if (/^[=+\-@]/.test(t)) t = `'${t}`;
-      return /[",;\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
-    };
     const lines = rows.map(r => {
       const x = this.toRow(r, now);
       return [
@@ -396,10 +391,13 @@ export class ProcessInstancesService {
         x.remainingHours,
         x.deadlineSituation,
       ]
-        .map(esc)
+        .map(csvCell)
         .join(',');
     });
-    return { csv: '﻿' + [header.map(esc).join(','), ...lines].join('\r\n'), count: rows.length };
+    return {
+      csv: '﻿' + [header.map(csvCell).join(','), ...lines].join('\r\n'),
+      count: rows.length,
+    };
   }
 
   // ─── Criar (Novo Processo) ────────────────────────────────────────────────

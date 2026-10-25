@@ -24,6 +24,7 @@ import {
   ProcessReportFilterDto,
   ProcessReportRecordsDto,
 } from './process-standard.dto';
+import { buildCsv } from '../common/utils/csv-safe.util';
 
 const COHORT_LIMIT = 10_000;
 const EXPORT_LIMIT = 5_000;
@@ -557,13 +558,7 @@ export class ProcessReportsService {
     });
 
     if (f.format === 'csv') {
-      const esc = (v: unknown) => {
-        let t = v == null ? '' : v instanceof Date ? v.toISOString() : String(v);
-        // Evita injecção de fórmulas ao abrir no Excel.
-        if (/^[=+\-@]/.test(t)) t = `'${t}`;
-        return /[",;\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
-      };
-      const csv = '﻿' + [recordHeader, ...recordRows].map(r => r.map(esc).join(',')).join('\r\n');
+      const csv = buildCsv(recordHeader, recordRows);
       return {
         buffer: Buffer.from(csv, 'utf8'),
         contentType: 'text/csv; charset=utf-8',

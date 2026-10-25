@@ -22,6 +22,7 @@ import { VACATION_CODE } from './leave-overview.service';
 import { LeavePlanningService } from './leave-planning.service';
 import { leaveUserFilter } from './leave-scope.helper';
 import { LeaveSettingsService } from './leave-settings.service';
+import { csvCell } from '../common/utils/csv-safe.util';
 
 const HOURS_PER_DAY = 8;
 const MAX_ROWS = 1000;
@@ -134,13 +135,6 @@ export const REPORT_CATALOG: Array<{
     indicators: 'Alterações, decisões, cancelamentos e responsáveis',
   },
 ];
-
-function csvCell(v: unknown): string {
-  let t = v === null || v === undefined ? '' : String(v);
-  // Neutraliza fórmulas (CSV injection) em células de texto.
-  if (/^[=+\-@\t\r]/.test(t) && Number.isNaN(Number(t))) t = `'${t}`;
-  return /[",\n;]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
-}
 
 @Injectable()
 export class LeaveReportsService {

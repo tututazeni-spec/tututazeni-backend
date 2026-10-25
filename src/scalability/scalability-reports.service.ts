@@ -18,6 +18,7 @@ import { ScalabilityInfraService } from './scalability-infra.service';
 import { ScalabilityIntegrationsPerfService } from './scalability-integrations-perf.service';
 import { ScalabilityLoadTestsService } from './scalability-loadtests.service';
 import { ScalabilityStorageService } from './scalability-storage.service';
+import { csvCell } from '../common/utils/csv-safe.util';
 
 export const REPORT_TYPES = [
   'capacity-monthly',
@@ -643,23 +644,17 @@ export class ScalabilityReportsService {
     const cell = (v: unknown) => (v === null || v === undefined ? '' : String(v));
 
     if (format === 'csv') {
-      const esc = (v: unknown) => {
-        let s = cell(v);
-        // Neutraliza injecção de fórmulas em Excel/LibreOffice.
-        if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
-        return /[",\n\r;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-      };
       const lines: string[] = [
-        esc(report.title),
-        `${esc('Gerado em')},${esc(fmtDt(new Date(report.generatedAt)))}`,
+        csvCell(report.title),
+        `${csvCell('Gerado em')},${csvCell(fmtDt(new Date(report.generatedAt)))}`,
         '',
-        ...report.summary.map(s => `${esc(s.label)},${esc(s.value)}`),
+        ...report.summary.map(s => `${csvCell(s.label)},${csvCell(s.value)}`),
       ];
       for (const t of report.tables) {
-        lines.push('', esc(t.title), t.columns.map(esc).join(','));
-        for (const r of t.rows) lines.push(t.columns.map(c => esc(r[c])).join(','));
+        lines.push('', csvCell(t.title), t.columns.map(csvCell).join(','));
+        for (const r of t.rows) lines.push(t.columns.map(c => csvCell(r[c])).join(','));
       }
-      if (report.notes.length) lines.push('', ...report.notes.map(n => esc(`Nota: ${n}`)));
+      if (report.notes.length) lines.push('', ...report.notes.map(n => csvCell(`Nota: ${n}`)));
       return {
         buffer: Buffer.from('﻿' + lines.join('\r\n'), 'utf8'),
         mimeType: 'text/csv; charset=utf-8',
