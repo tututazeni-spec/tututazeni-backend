@@ -14,7 +14,11 @@ import { createSwaggerAuthMiddleware } from './common/security/swagger-auth.midd
 import { csrfHeaderMiddleware } from './common/security/csrf-header-guard';
 import { TOKEN_COOKIE } from './auth/token-cookie';
 import { validateEnv } from './common/bootstrap/validate-env';
-import { applySmallBodyLimits } from './common/bootstrap/body-limits';
+import {
+  applyLargeBodyLimits,
+  applySmallBodyLimits,
+  DEFAULT_BODY_LIMIT,
+} from './common/bootstrap/body-limits';
 import { runWithRequestContext } from './common/logging/request-context';
 import { logIdentityMiddleware } from './common/logging/identity.middleware';
 import { runWithRls } from './common/rls/rls-context';
@@ -56,7 +60,13 @@ async function bootstrap() {
   app.use(cookieParser());
   // Segunda camada de defesa CSRF, além de SameSite=Lax + CORS restrito
   // (ver csrf-header-guard.ts) — tem de correr depois do cookieParser.
-  app.use(csrfHeaderMiddleware(TOKEN_COOKIE));
+  app.use(
+    csrfHeaderMiddleware(TOKEN_COOKIE, {
+      secret: process.env.JWT_SECRET,
+      strict: process.env.CSRF_TOKEN_STRICT === 'true',
+      isProd,
+    }),
+  );
 
   // Estabelece o contexto de correlação (reqId) para toda a cadeia do pedido —
   // middleware corre depois do pino-http (que já atribuiu req.id) e antes dos
@@ -70,14 +80,10 @@ async function bootstrap() {
   // Rotas públicas de autenticação nunca recebem ficheiros: corpo máx. 100 KB (antes do parser global).
   applySmallBodyLimits(app);
 
-  // O avatar de perfil e a thumbnail do curso chegam como data URL base64 no
-  // corpo JSON (PATCH /users/me/avatar, POST/PUT /courses). Além disso, uma
-  // lição do tipo PDF pode trazer o ficheiro inline em contentUrl
-  // (@MaxLength(7_000_000) no CreateModuleLessonDto). Subir o limite do parser
-  // para 8 MB deixa o @MaxLength de cada DTO ser a fronteira real (400 limpo,
-  // não 413). Nota: o limite é global — aumenta a superfície de payload em
-  // todas as rotas, o mesmo trade-off já aceite quando passou de 100 KB p/ 1 MB.
-  app.useBodyParser('json', { limit: '8mb' });
+  // Avatar, thumbnail de curso, PDFs de lição e templates de certificado chegam como data URL
+  // base64 no JSON: só essas rotas (ver LARGE_BODY_PREFIXES) aceitam até 8 MB; o resto fica em 1 MB.
+  applyLargeBodyLimits(app);
+  app.useBodyParser('json', { limit: DEFAULT_BODY_LIMIT });
 
   // ─── CORS ────────────────────────────────────────────────────────────────
   app.enableCors({
