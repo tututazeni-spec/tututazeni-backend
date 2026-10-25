@@ -71,11 +71,14 @@ export class SystemSettingsService {
   async update(dto: UpdateSystemSettingsDto, actorId?: number) {
     const id = await resolveDefaultTenantId(this.prisma);
     const cur = await this.load();
+    // Um campo `undefined` no DTO não pode apagar o valor guardado (o spread copia-o).
+    const defined = <T extends object>(o?: T) =>
+      Object.fromEntries(Object.entries(o ?? {}).filter(([, v]) => v !== undefined));
     const next: SystemSettings = {
-      maintenance: { ...cur.maintenance, ...dto.maintenance },
-      pagination: { ...cur.pagination, ...dto.pagination },
-      uploads: { ...cur.uploads, ...dto.uploads },
-      jobs: { ...cur.jobs, ...dto.jobs },
+      maintenance: { ...cur.maintenance, ...defined(dto.maintenance) },
+      pagination: { ...cur.pagination, ...defined(dto.pagination) },
+      uploads: { ...cur.uploads, ...defined(dto.uploads) },
+      jobs: { ...cur.jobs, ...defined(dto.jobs) },
     };
     await this.prisma.tenantConfig.update({
       where: { id },
@@ -175,9 +178,11 @@ export class SystemSettingsService {
   }
 
   private queue(name: string): Queue {
-    const q = this.queues[name as SystemQueueName];
-    if (!q) throw new BadRequestException('Fila desconhecida');
-    return q;
+    // `name` vem do URL: indexar o objecto directamente aceitaria "constructor"/"__proto__".
+    if (!(SYSTEM_QUEUE_NAMES as readonly string[]).includes(name)) {
+      throw new BadRequestException('Fila desconhecida');
+    }
+    return this.queues[name as SystemQueueName];
   }
 
   async setQueuePaused(name: string, paused: boolean, actorId: number) {
