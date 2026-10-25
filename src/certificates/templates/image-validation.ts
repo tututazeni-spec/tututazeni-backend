@@ -11,7 +11,8 @@ export type InspectedImage =
   | { ok: true; mime: 'image/png' | 'image/jpeg'; bytes: Buffer; width: number; height: number }
   | { ok: false; error: string };
 
-const DATA_URL = /^data:([\w.+/-]+);base64,([A-Za-z0-9+/]+={0,2})$/;
+const DATA_URL_PREFIX = /^data:([\w.+/-]+);base64,/;
+const BASE64_BODY = /^[A-Za-z0-9+/]+={0,2}$/;
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const PNG_IEND = Buffer.from([0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]);
 // 2 MB em base64 ocupa ~2,8 M caracteres: recusar antes de descodificar.
@@ -50,16 +51,20 @@ function jpegSize(b: Buffer): { width: number; height: number } | string {
 
 /** `maxDimension`: lado máximo em píxeis (logótipo/assinatura 4000, fundo 6000). */
 export function inspectImage(dataUrl: string, maxDimension = 4000): InspectedImage {
-  const m = typeof dataUrl === 'string' ? DATA_URL.exec(dataUrl) : null;
-  if (!m) return fail('A imagem tem de ser um ficheiro PNG ou JPEG carregado.');
-  const mime = m[1];
+  const p = typeof dataUrl === 'string' ? DATA_URL_PREFIX.exec(dataUrl.slice(0, 128)) : null;
+  if (!p) return fail('A imagem tem de ser um ficheiro PNG ou JPEG carregado.');
+  const mime = p[1];
   if (mime !== 'image/png' && mime !== 'image/jpeg') {
     return fail(
       'Só são aceites imagens PNG ou JPEG (SVG, GIF e outros formatos não são permitidos).',
     );
   }
-  if (m[2].length > MAX_BASE64_CHARS) return fail('A imagem excede 2 MB.');
-  const bytes = Buffer.from(m[2], 'base64');
+  const body = dataUrl.slice(p[0].length);
+  // Tamanho antes da regex: correr a regex sobre vários MB rebenta a stack do V8.
+  if (body.length > MAX_BASE64_CHARS) return fail('A imagem excede 2 MB.');
+  if (!BASE64_BODY.test(body))
+    return fail('A imagem tem de ser um ficheiro PNG ou JPEG carregado.');
+  const bytes = Buffer.from(body, 'base64');
   if (bytes.length > MAX_IMAGE_BYTES) return fail('A imagem excede 2 MB.');
 
   const size = mime === 'image/png' ? pngSize(bytes) : jpegSize(bytes);
