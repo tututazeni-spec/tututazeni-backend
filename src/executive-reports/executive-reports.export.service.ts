@@ -6,7 +6,6 @@ import { Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import type { ReportSection } from './executive-reports.builder.service';
-import { csvCell } from '../common/utils/csv-safe.util';
 
 export type ExportFormat = 'PDF' | 'XLSX' | 'CSV';
 
