@@ -31,3 +31,43 @@ export function avatarRef(userId: number, avatarUrl: string | null | undefined):
   // O `v` muda com o conteúdo, por isso a resposta pode ser `immutable`.
   return `/api/users/${userId}/avatar?v=${avatarVersion(avatarUrl)}`;
 }
+
+/** Referência gerada por `avatarRef` — nunca deve voltar a ser gravada como avatar. */
+export const AVATAR_REF_RE = /^\/api\/users\/\d+\/avatar(\?|$)/;
+
+const MAX_DEPTH = 12;
+
+/**
+ * Troca, em qualquer resposta, o base64 do avatar de um utilizador pela referência
+ * cacheável. Só mexe em objetos com a forma de `User` (`fullName` + `avatarUrl`
+ * data-URL): `fullName` só existe em `User` (o `Employee` usa `name`), por isso o dono é
+ * `userId` (se existir) ou `id`. Sem dono numérico, deixa como está. Não muta o
+ * original: devolve cópias só dos ramos alterados (a resposta pode vir de cache).
+ */
+export function refUserAvatars<T>(value: T, depth = 0): T {
+  if (value === null || typeof value !== 'object' || depth > MAX_DEPTH) return value;
+  if (Array.isArray(value)) {
+    let out: unknown[] | null = null;
+    value.forEach((item, i) => {
+      const next = refUserAvatars(item, depth + 1);
+      if (next !== item) (out ??= value.slice())[i] = next;
+    });
+    return (out ?? value) as T;
+  }
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return value; // Date, Buffer, Decimal, streams…
+  const obj = value as Record<string, unknown>;
+  let out: Record<string, unknown> | null = null;
+  for (const key of Object.keys(obj)) {
+    const next = refUserAvatars(obj[key], depth + 1);
+    if (next !== obj[key]) (out ??= { ...obj })[key] = next;
+  }
+  const cur = out ?? obj;
+  if (isDataUrl(cur.avatarUrl as string) && typeof cur.fullName === 'string') {
+    const owner = typeof cur.userId === 'number' ? cur.userId : cur.id;
+    if (typeof owner === 'number') {
+      out = { ...cur, avatarUrl: avatarRef(owner, cur.avatarUrl as string) };
+    }
+  }
+  return (out ?? obj) as T;
+}
