@@ -588,7 +588,9 @@ export class KnowledgeService {
     });
     if (!article) throw new NotFoundException('Artigo não encontrado');
 
-    const [acknowledged, allUsers] = await Promise.all([
+    // Pendentes e total calculados na BD (active + notIn dos que já leram) em vez de
+    // carregar todos os colaboradores activos e filtrar em memória — mesmo resultado.
+    const [acknowledged, pendingUsers, activeTotal] = await Promise.all([
       this.prisma.read.articleAcknowledgement.findMany({
         where: { articleId },
         include: {
@@ -603,23 +605,21 @@ export class KnowledgeService {
         },
       }),
       this.prisma.read.user.findMany({
-        where: { active: true },
+        where: { active: true, articleAcknowledgements: { none: { articleId } } },
         select: { id: true, fullName: true, department: { select: { name: true } } },
       }),
+      this.prisma.read.user.count({ where: { active: true } }),
     ]);
-
-    const acknowledgedIds = new Set(acknowledged.map(a => a.userId));
-    const notRead = allUsers.filter(u => !acknowledgedIds.has(u.id));
 
     return {
       articleId,
       title: article.title,
-      total: allUsers.length,
+      total: activeTotal,
       read: acknowledged.length,
-      notRead: notRead.length,
-      readPct: allUsers.length > 0 ? Math.round((acknowledged.length / allUsers.length) * 100) : 0,
+      notRead: pendingUsers.length,
+      readPct: activeTotal > 0 ? Math.round((acknowledged.length / activeTotal) * 100) : 0,
       acknowledgedUsers: acknowledged.map(a => a.user),
-      pendingUsers: notRead,
+      pendingUsers,
     };
   }
 
