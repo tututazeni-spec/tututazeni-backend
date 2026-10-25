@@ -37,6 +37,7 @@ import {
 } from './leave-management.dto';
 import { canSeeSensitive, leaveUserFilter, ORG_WIDE_ROLES, TEAM_ROLES } from './leave-scope.helper';
 import { LeaveSettingsService } from './leave-settings.service';
+import { csvCell } from '../common/utils/csv-safe.util';
 
 const HOURS_PER_DAY = 8;
 /** Ocorrências que só fazem sentido com hora de início e de fim. */
@@ -83,13 +84,6 @@ function windowsOverlap(a: TimeWindow, b: TimeWindow): boolean {
   return (
     toMinutes(a.startTime) < toMinutes(b.endTime) && toMinutes(b.startTime) < toMinutes(a.endTime)
   );
-}
-
-function csvCell(value: unknown): string {
-  let text = value === null || value === undefined ? '' : String(value);
-  // Neutraliza fórmulas (CSV injection) em folhas de cálculo.
-  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
-  return /[",\n;]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 const ABSENCE_INCLUDE = {

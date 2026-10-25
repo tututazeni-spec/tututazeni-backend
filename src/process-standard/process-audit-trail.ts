@@ -2,6 +2,8 @@
 // Lógica pura da aba "Histórico e Auditoria" (docs/Modulo_Processes.md §13):
 // rótulos dos eventos, leitura segura do `meta` e CSV de exportação.
 
+import { buildCsv, csvCell } from '../common/utils/csv-safe.util';
+
 export const AUDIT_ACTION_LABELS: Record<string, string> = {
   CREATED: 'Modelo criado',
   UPDATED: 'Modelo actualizado',
@@ -107,18 +109,8 @@ export function auditRefs(meta: Record<string, unknown> | null) {
   };
 }
 
-export function csvCell(v: unknown): string {
-  let t = '';
-  if (v instanceof Date) t = v.toISOString();
-  else if (v !== null && v !== undefined) {
-    t = typeof v === 'object' ? JSON.stringify(v) : String(v as string | number | boolean);
-  }
-  // Evita injecção de fórmulas ao abrir no Excel.
-  if (/^[=+\-@]/.test(t)) t = `'${t}`;
-  return /[",;\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
-}
+export { csvCell };
 
 export function toCsv(header: string[], rows: unknown[][]): Buffer {
-  const body = [header, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
-  return Buffer.from('﻿' + body, 'utf8');
+  return Buffer.from(buildCsv(header, rows), 'utf8');
 }

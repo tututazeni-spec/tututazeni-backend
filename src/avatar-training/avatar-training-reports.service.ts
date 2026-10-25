@@ -20,6 +20,7 @@ import {
   parseJson,
   parseSteps,
 } from './avatar-training.helpers';
+import { csvCell } from '../common/utils/csv-safe.util';
 
 const MAX_ROWS = 20_000;
 const DEFAULT_PERIOD_DAYS = 30;
@@ -613,17 +614,9 @@ export class AvatarTrainingReportsService {
     const report = await this.report(user, type, f);
     const rows = report.rows as Record<string, unknown>[];
     const columns = [...new Set(rows.flatMap(r => Object.keys(r)))];
-    const esc = (v: unknown) => {
-      if (v === null || v === undefined) return '';
-      let s =
-        v instanceof Date ? v.toISOString() : typeof v === 'object' ? JSON.stringify(v) : String(v);
-      // Evita injecção de fórmulas em folhas de cálculo.
-      if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
-      return /[",\n\r;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
     const lines = [
-      columns.map(esc).join(','),
-      ...rows.map(r => columns.map(c => esc(r[c])).join(',')),
+      columns.map(csvCell).join(','),
+      ...rows.map(r => columns.map(c => csvCell(r[c])).join(',')),
     ];
     const day = (d: string) => d.slice(0, 10);
     return {

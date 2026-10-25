@@ -64,6 +64,7 @@ import { AutomationConnectionsService } from './automation-connections.service';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 import { writeChainedAuditLog } from '../common/helpers/audit-chain';
+import { csvCell } from '../common/utils/csv-safe.util';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -627,13 +628,6 @@ export class AutomationService {
   /** Exportação CSV da listagem filtrada (mesmos filtros de getRules). */
   async exportRulesCsv(filters: RuleFilterDto = {}, scopeRuleIds?: number[] | null) {
     const rules = await this.getRules(filters, scopeRuleIds);
-    const esc = (v: unknown) => {
-      const t =
-        v === null || v === undefined ? '' : v instanceof Date ? v.toISOString() : String(v);
-      // Neutraliza injecção de fórmulas em Excel/Sheets.
-      const safe = /^[=+\-@]/.test(t) ? `'${t}` : t;
-      return /[",\n;]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
-    };
     const header = [
       'Código',
       'Nome',
@@ -666,7 +660,7 @@ export class AutomationService {
       r.createdAt,
       r.updatedAt,
     ]);
-    return '﻿' + [header, ...rows].map(row => row.map(esc).join(';')).join('\r\n');
+    return '﻿' + [header, ...rows].map(row => row.map(csvCell).join(';')).join('\r\n');
   }
 
   // ══════════════════════════════════════════════════════

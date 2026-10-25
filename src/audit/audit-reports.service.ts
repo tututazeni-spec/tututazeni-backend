@@ -19,6 +19,7 @@ import {
 } from './audit-reports.dto';
 import type { AuditFilterDto } from './audit.dto';
 import { buildXlsxBuffer } from '../common/utils/xlsx-export.util';
+import { buildCsv } from '../common/utils/csv-safe.util';
 
 export type ReportRow = Record<string, string | number>;
 
@@ -657,18 +658,14 @@ export class AuditReportsService {
       };
     }
     if (format === 'csv') {
-      const esc = (v: unknown) => {
-        let s = cell(v);
-        // Neutraliza injeção de fórmulas em Excel/LibreOffice.
-        if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
-        return /[",\n\r;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-      };
-      const lines = [
-        report.columns.map(esc).join(','),
-        ...report.rows.map(r => report.columns.map(c => esc(r[c])).join(',')),
-      ];
       return {
-        buffer: Buffer.from('﻿' + lines.join('\r\n'), 'utf8'),
+        buffer: Buffer.from(
+          buildCsv(
+            report.columns,
+            report.rows.map(r => report.columns.map(c => r[c])),
+          ),
+          'utf8',
+        ),
         mimeType: 'text/csv; charset=utf-8',
       };
     }

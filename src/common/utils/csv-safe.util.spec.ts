@@ -1,5 +1,5 @@
 import { buildCsvString } from './csv-export.util';
-import { csvCell, neutralizeFormula } from './csv-safe.util';
+import { buildCsv, csvCell, neutralizeFormula } from './csv-safe.util';
 
 describe('neutralizeFormula', () => {
   it.each(['=1+1', '+cmd|calc', '-2+3', '@SUM(A1)', '\t=1', '\r=1', '=HYPERLINK("http://x","y")'])(
@@ -48,5 +48,23 @@ describe('buildCsvString (partilhado por reports, evaluation, events, competenci
   });
   it('valores em falta ficam vazios', () => {
     expect(buildCsvString([{ a: 1 } as Record<string, unknown>], ['a', 'b'])).toBe('a,b\n1,');
+  });
+});
+
+describe('buildCsv', () => {
+  it('por omissão: vírgula, CRLF, BOM e sem fim de linha final', () => {
+    expect(buildCsv(['a', 'b'], [[1, 'x']])).toBe('\uFEFFa,b\r\n1,x');
+  });
+  it('respeita delimitador, eol, bom e trailingEol', () => {
+    const csv = buildCsv(['a', 'b'], [['x;y', 2]], {
+      delimiter: ';',
+      eol: '\n',
+      bom: false,
+      trailingEol: true,
+    });
+    expect(csv).toBe('a;b\n"x;y";2\n');
+  });
+  it('neutraliza fórmulas em texto mas não em números', () => {
+    expect(buildCsv(['h'], [['=1+1'], [-5]], { bom: false })).toBe("h\r\n'=1+1\r\n-5");
   });
 });

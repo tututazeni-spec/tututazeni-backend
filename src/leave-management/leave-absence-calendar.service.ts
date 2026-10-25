@@ -25,6 +25,7 @@ import {
   ORG_WIDE_ROLES,
   TEAM_ROLES,
 } from './leave-scope.helper';
+import { csvCell } from '../common/utils/csv-safe.util';
 
 const DAY_MS = 24 * 3600 * 1000;
 const MAX_LISTED = 200;
@@ -316,11 +317,6 @@ export class LeaveAbsenceCalendarService {
     if (!isPrivileged(viewer, [...ORG_WIDE_ROLES, ...TEAM_ROLES]))
       throw new ForbiddenException('Sem permissão para exportar');
     const cal = await this.getCalendar(filters, viewer);
-    const cell = (v: unknown) => {
-      let t = v === null || v === undefined ? '' : String(v);
-      if (/^[=+\-@\t\r]/.test(t)) t = `'${t}`;
-      return /[",\n;]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
-    };
     const header = [
       'Colaborador',
       'Departamento',
@@ -332,7 +328,7 @@ export class LeaveAbsenceCalendarService {
     ];
     const lines = cal.entries.map(e =>
       [e.userName, e.department, e.typeName, e.startDate, e.endDate, e.startTime, e.endTime]
-        .map(cell)
+        .map(csvCell)
         .join(';'),
     );
     return {
