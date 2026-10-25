@@ -1,3 +1,4 @@
+import { toJson } from '../common/helpers/prisma-json';
 // src/roi-impact/roi-evaluation-model.service.ts
 // "Modelos de Avaliação" (docs/roi-impact.md §4) — CRUD da biblioteca de
 // metodologias (Kirkpatrick/Phillips/personalizado) usadas para medir
@@ -5,7 +6,6 @@
 // prisma/seed.ts (não aqui) — mesmo padrão de leaveTypeConfig — para nunca
 // ser recriado silenciosamente por um pedido de leitura.
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateRoiEvaluationModelDto,
@@ -35,10 +35,8 @@ export class RoiEvaluationModelService {
       data: {
         name: dto.name,
         description: dto.description ?? null,
-        levels: dto.levels as unknown as Prisma.InputJsonValue,
-        applicability: dto.applicability
-          ? (dto.applicability as unknown as Prisma.InputJsonValue)
-          : undefined,
+        levels: toJson(dto.levels),
+        applicability: dto.applicability ? toJson(dto.applicability) : undefined,
         createdById,
       },
     });
@@ -51,12 +49,8 @@ export class RoiEvaluationModelService {
       data: {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
         ...(dto.description !== undefined ? { description: dto.description } : {}),
-        ...(dto.levels !== undefined
-          ? { levels: dto.levels as unknown as Prisma.InputJsonValue }
-          : {}),
-        ...(dto.applicability !== undefined
-          ? { applicability: dto.applicability as unknown as Prisma.InputJsonValue }
-          : {}),
+        ...(dto.levels !== undefined ? { levels: toJson(dto.levels) } : {}),
+        ...(dto.applicability !== undefined ? { applicability: toJson(dto.applicability) } : {}),
         ...(dto.status !== undefined ? { status: dto.status } : {}),
       },
     });

@@ -1,3 +1,4 @@
+import { fromJson, toJsonObject } from '../common/helpers/prisma-json';
 // ============================================================
 // src/modules/work-declaration/work-declaration.service.ts
 // ============================================================
@@ -218,7 +219,7 @@ export class WorkDeclarationService {
         purpose: dto.purpose,
         showSalary: dto.showSalary && (config?.allowSalaryExposure ?? false),
         watermark: dto.watermark ?? false,
-        employeeSnapshot: employeeSnapshot as unknown as Prisma.InputJsonObject,
+        employeeSnapshot: toJsonObject(employeeSnapshot),
         requestNotes: dto.requestNotes,
         expiresAt: config?.defaultValidity
           ? new Date(Date.now() + config.defaultValidity * 86400 * 1000)
@@ -274,7 +275,7 @@ export class WorkDeclarationService {
         purpose: dto.purpose,
         showSalary: dto.showSalary && (config?.allowSalaryExposure ?? false),
         watermark: dto.watermark ?? false,
-        employeeSnapshot: employeeSnapshot as unknown as Prisma.InputJsonObject,
+        employeeSnapshot: toJsonObject(employeeSnapshot),
         renderedContent,
         internalNotes: dto.internalNotes,
         expiresAt: config?.defaultValidity
@@ -311,7 +312,7 @@ export class WorkDeclarationService {
       const template = await this.findTemplateOrThrow(tenantId, declaration.templateId);
       const config = await this.getTenantConfig(tenantId);
       const variables = this.buildVariableMap(
-        declaration.employeeSnapshot as unknown as EmployeeSnapshot,
+        fromJson<EmployeeSnapshot>(declaration.employeeSnapshot),
         tenantId,
         config,
         dto.customFields,
@@ -611,7 +612,7 @@ export class WorkDeclarationService {
 
     const isExpired = !!declaration.expiresAt && new Date() > declaration.expiresAt;
     const isRevoked = declaration.status === DeclarationStatus.REVOKED;
-    const snapshot = declaration.employeeSnapshot as unknown as EmployeeSnapshot;
+    const snapshot = fromJson<EmployeeSnapshot>(declaration.employeeSnapshot);
 
     return {
       valid: !isExpired && !isRevoked && declaration.status === DeclarationStatus.ISSUED,

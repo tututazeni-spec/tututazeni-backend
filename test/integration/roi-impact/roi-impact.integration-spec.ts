@@ -81,10 +81,10 @@ describe('Roi Impact Integration', () => {
   afterAll(async () => {
     await prisma.enrollment
       .deleteMany({ where: { courseId: { in: [courseAId, courseBId] } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.course
       .deleteMany({ where: { id: { in: [courseAId, courseBId] } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.$disconnect();
     await pool.end();
     await app.close();

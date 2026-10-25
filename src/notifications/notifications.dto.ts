@@ -17,6 +17,7 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 import { NotificationPriority, NotificationCategory, DigestFrequency } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
+import { IsWebLink } from '../common/validators/is-web-link.decorator';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -57,7 +58,7 @@ export class CreateNotificationDto {
 
   @ApiPropertyOptional({ description: 'URL de acção directa (deep link)' })
   @IsOptional()
-  @IsString()
+  @IsWebLink({ allowRelative: true })
   actionUrl?: string;
 
   @ApiPropertyOptional({ description: 'Texto do botão de acção' })
@@ -111,7 +112,7 @@ export class BulkNotificationDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsWebLink({ allowRelative: true })
   actionUrl?: string;
 
   @ApiPropertyOptional()

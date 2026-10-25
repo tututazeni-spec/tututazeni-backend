@@ -188,7 +188,7 @@ export class Evaluation360Service {
   }
 
   async updateCompetency(id: string, dto: Evaluation360UpdateCompetencyDto, actorId: string) {
-    const updated = await this.competencies.update(+id, dto as unknown as UpdateCompetencyDto);
+    const updated = await this.competencies.update(+id, dto as UpdateCompetencyDto);
     await this.audit.log({
       entity: 'Competency',
       entityId: id,
@@ -2486,7 +2486,7 @@ export class Evaluation360Service {
       strengths: result.strengths ? JSON.parse(result.strengths) : [],
       // Nunca dados individuais por avaliador, nem para o próprio dono do
       // resultado — manteria a identidade do avaliador rastreável.
-      rawByEvaluator: null,
+      rawByEvaluator: null as unknown,
     };
   }
 

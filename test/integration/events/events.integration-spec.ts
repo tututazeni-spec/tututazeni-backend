@@ -61,14 +61,16 @@ describe('Events Integration', () => {
     if (ids.length) {
       await prisma.certificate
         .deleteMany({ where: { eventId: { in: ids } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.eventFeedback
         .deleteMany({ where: { eventId: { in: ids } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.eventParticipant
         .deleteMany({ where: { eventId: { in: ids } } })
-        .catch(() => undefined);
-      await prisma.event.deleteMany({ where: { id: { in: ids } } }).catch(() => undefined);
+        .catch((): undefined => undefined);
+      await prisma.event
+        .deleteMany({ where: { id: { in: ids } } })
+        .catch((): undefined => undefined);
     }
 
     await prisma.$disconnect();

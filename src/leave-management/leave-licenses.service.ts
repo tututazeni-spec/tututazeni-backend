@@ -165,7 +165,7 @@ export class LeaveLicensesService {
               isSensitive: sensitive,
               requiresDocument: type.requiresDocument,
             }
-          : { code: r.leaveTypeCode, name: r.leaveTypeCode, color: null },
+          : { code: r.leaveTypeCode, name: r.leaveTypeCode, color: null as string },
         startDate: r.startDate,
         endDate: r.endDate,
         startTime: r.startTime,
@@ -235,7 +235,7 @@ export class LeaveLicensesService {
       type.autoApprove &&
       dto.workDays !== undefined &&
       dto.workDays <= (type.autoApproveUnderDays ?? 1);
-    if (autoApprove) return { autoApprove: true, steps: [] };
+    if (autoApprove) return { autoApprove: true, steps: [] as never[] };
 
     const { steps: resolved, slaDays } = await this.leave.resolveApprovalSteps(
       targetId,

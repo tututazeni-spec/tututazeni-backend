@@ -46,10 +46,10 @@ describe('API Integration (integrations/api-keys/webhooks) — Integration', () 
     if (integrationId) {
       await prisma.apiIntegrationLog
         .deleteMany({ where: { integrationId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.integrationConfig
         .deleteMany({ where: { id: integrationId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
     await prisma.$disconnect();
     await pool.end();

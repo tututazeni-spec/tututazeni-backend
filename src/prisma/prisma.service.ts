@@ -138,12 +138,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       this.warmPools.map(async pool => {
         const n = Math.min(size, pool.options.max ?? size);
         const clients = await Promise.all(
-          Array.from({ length: n }, () => pool.connect().catch(() => null)),
+          Array.from({ length: n }, () => pool.connect().catch((): null => null)),
         );
-        await Promise.all(clients.map(c => c?.query('SELECT 1').catch(() => undefined)));
+        await Promise.all(clients.map(c => c?.query('SELECT 1').catch((): undefined => undefined)));
         clients.forEach(c => c?.release());
       }),
-    ).catch(() => undefined);
+    ).catch((): undefined => undefined);
   }
 
   // $extends()/readReplicas() devolvem um tipo de client estendido que não é

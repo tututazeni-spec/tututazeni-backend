@@ -93,7 +93,7 @@ export class CertificateTemplatesService {
         layoutKey: t.config.layoutKey,
         config: JSON.stringify(t.config),
         currentVersion: 1,
-        createdById: null,
+        createdById: null as number,
       })),
       skipDuplicates: true,
     });

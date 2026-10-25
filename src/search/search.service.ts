@@ -85,7 +85,7 @@ export class SearchService {
   // ══════════════════════════════════════════════════════
 
   async globalSearch(q: string, userId: number, dto: Partial<GlobalSearchDto> = {}) {
-    if (!q || q.length < 2) return { query: q, results: [], counts: {}, total: 0 };
+    if (!q || q.length < 2) return { query: q, results: [] as never[], counts: {}, total: 0 };
 
     const limit = dto.limit ?? 5;
     const types = dto.types ?? Object.values(SearchEntityType);
@@ -499,7 +499,7 @@ export class SearchService {
   // ══════════════════════════════════════════════════════
 
   async autocomplete(q: string, userId: number, limit = 5) {
-    if (q.length < 1) return { suggestions: [] };
+    if (q.length < 1) return { suggestions: [] as never[] };
 
     const [users, courses, content] = await Promise.all([
       this.prisma.read.user.findMany({

@@ -86,7 +86,7 @@ export class ScalabilityInfraService {
     const metric = register.getSingleMetric(name);
     if (!metric) return [];
     const data = await (
-      metric as unknown as {
+      metric as {
         get: () => Promise<{ values: HistogramValue[] }>;
       }
     ).get();

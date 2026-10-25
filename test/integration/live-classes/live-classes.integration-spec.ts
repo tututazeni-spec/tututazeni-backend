@@ -69,26 +69,34 @@ describe('Live Classes Integration', () => {
     if (extraLiveClassIds.length) {
       await prisma.liveClassSession
         .deleteMany({ where: { liveClassId: { in: extraLiveClassIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.liveAttendance
         .deleteMany({ where: { liveClassId: { in: extraLiveClassIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.liveClass
         .deleteMany({ where: { id: { in: extraLiveClassIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
     if (liveClassId) {
       await prisma.postClassResponse
         .deleteMany({ where: { evaluation: { liveClassId } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.postClassEvaluation
         .deleteMany({ where: { liveClassId } })
-        .catch(() => undefined);
-      await prisma.liveChatMessage.deleteMany({ where: { liveClassId } }).catch(() => undefined);
-      await prisma.liveAttendance.deleteMany({ where: { liveClassId } }).catch(() => undefined);
-      await prisma.liveClass.deleteMany({ where: { id: liveClassId } }).catch(() => undefined);
+        .catch((): undefined => undefined);
+      await prisma.liveChatMessage
+        .deleteMany({ where: { liveClassId } })
+        .catch((): undefined => undefined);
+      await prisma.liveAttendance
+        .deleteMany({ where: { liveClassId } })
+        .catch((): undefined => undefined);
+      await prisma.liveClass
+        .deleteMany({ where: { id: liveClassId } })
+        .catch((): undefined => undefined);
     }
-    await prisma.course.deleteMany({ where: { internalCode: COURSE_CODE } }).catch(() => undefined);
+    await prisma.course
+      .deleteMany({ where: { internalCode: COURSE_CODE } })
+      .catch((): undefined => undefined);
 
     await prisma.$disconnect();
     await pool.end();
@@ -480,7 +488,7 @@ describe('Live Classes Integration', () => {
     afterAll(async () => {
       await prisma.trainingInstructorProfile
         .delete({ where: { id: instructorProfileId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     });
 
     it('RH adiciona um participante manualmente (secção 6 — "Adicionar")', async () => {
@@ -642,7 +650,9 @@ describe('Live Classes Integration', () => {
     });
 
     afterAll(async () => {
-      await prisma.document.deleteMany({ where: { id: documentId } }).catch(() => undefined);
+      await prisma.document
+        .deleteMany({ where: { id: documentId } })
+        .catch((): undefined => undefined);
     });
 
     it('RH associa um material da Biblioteca à aula (secção 11)', async () => {

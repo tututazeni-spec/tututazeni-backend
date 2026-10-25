@@ -67,24 +67,28 @@ describe('Work Declaration Integration', () => {
     ].filter(Boolean);
     await prisma.declarationSignature
       .deleteMany({ where: { declarationId: { in: allDeclIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.declarationAuditLog
       .deleteMany({ where: { declarationId: { in: allDeclIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.declarationAccessLog
       .deleteMany({ where: { declarationId: { in: allDeclIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.declaration
       .deleteMany({ where: { id: { in: allDeclIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     if (templateId) {
-      await prisma.declaration.deleteMany({ where: { templateId } }).catch(() => undefined);
-      await prisma.declarationTemplate.delete({ where: { id: templateId } }).catch(() => undefined);
+      await prisma.declaration
+        .deleteMany({ where: { templateId } })
+        .catch((): undefined => undefined);
+      await prisma.declarationTemplate
+        .delete({ where: { id: templateId } })
+        .catch((): undefined => undefined);
     }
     if (unusedTemplateId) {
       await prisma.declarationTemplate
         .delete({ where: { id: unusedTemplateId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
 
     await prisma.$disconnect();

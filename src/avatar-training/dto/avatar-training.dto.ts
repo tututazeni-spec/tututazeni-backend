@@ -33,6 +33,7 @@ import {
   AvatarTrainingProviderService,
   Difficulty,
 } from '@prisma/client';
+import { IsWebLink } from '../../common/validators/is-web-link.decorator';
 
 export {
   AvatarTrainingProviderService,
@@ -410,7 +411,7 @@ export class StepReinforcementDto {
 
   @ApiPropertyOptional({ description: 'Conteúdo complementar (documento, vídeo, página)' })
   @IsOptional()
-  @IsString()
+  @IsWebLink()
   @MaxLength(2048)
   resourceUrl?: string;
 
@@ -436,7 +437,7 @@ export class SessionFailRuleDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsWebLink()
   @MaxLength(2048)
   resourceUrl?: string;
 
@@ -477,7 +478,7 @@ export class SessionStepDto {
 
   @ApiPropertyOptional({ description: 'Slide, imagem, vídeo ou documento aprovado' })
   @IsOptional()
-  @IsString()
+  @IsWebLink()
   @MaxLength(2048)
   resourceUrl?: string;
 

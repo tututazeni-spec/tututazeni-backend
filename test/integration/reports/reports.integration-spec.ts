@@ -47,10 +47,10 @@ describe('Reports Integration', () => {
 
   afterAll(async () => {
     for (const id of scheduleIds) {
-      await prisma.reportSchedule.deleteMany({ where: { id } }).catch(() => undefined);
+      await prisma.reportSchedule.deleteMany({ where: { id } }).catch((): undefined => undefined);
     }
     for (const id of savedReportIds) {
-      await prisma.savedReport.deleteMany({ where: { id } }).catch(() => undefined);
+      await prisma.savedReport.deleteMany({ where: { id } }).catch((): undefined => undefined);
     }
     await prisma.$disconnect();
     await pool.end();

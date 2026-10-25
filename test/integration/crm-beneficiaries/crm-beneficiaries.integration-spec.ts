@@ -46,9 +46,13 @@ describe('CRM Beneficiaries Integration', () => {
     if (beneficiaryId) {
       await prisma.beneficiaryInteraction
         .deleteMany({ where: { beneficiaryId } })
-        .catch(() => undefined);
-      await prisma.beneficiaryNeed.deleteMany({ where: { beneficiaryId } }).catch(() => undefined);
-      await prisma.beneficiary.deleteMany({ where: { id: beneficiaryId } }).catch(() => undefined);
+        .catch((): undefined => undefined);
+      await prisma.beneficiaryNeed
+        .deleteMany({ where: { beneficiaryId } })
+        .catch((): undefined => undefined);
+      await prisma.beneficiary
+        .deleteMany({ where: { id: beneficiaryId } })
+        .catch((): undefined => undefined);
     }
 
     await prisma.$disconnect();

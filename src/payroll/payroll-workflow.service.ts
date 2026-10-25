@@ -1,3 +1,4 @@
+import { toJson } from '../common/helpers/prisma-json';
 // src/payslips/payroll-workflow.service.ts
 import {
   Injectable,
@@ -139,8 +140,8 @@ export class PayrollWorkflowService {
     );
 
     const result = await this.prisma.$transaction(async tx => {
-      await (tx as unknown as PrismaService).payslipItem.deleteMany({ where: { payslipId } });
-      const updated = await (tx as unknown as PrismaService).payslip.update({
+      await tx.payslipItem.deleteMany({ where: { payslipId } });
+      const updated = await tx.payslip.update({
         where: { id: payslipId },
         data: {
           ...calc.data,
@@ -149,13 +150,11 @@ export class PayrollWorkflowService {
           // update: Prisma.DbNull limpa activamente a coluna JSON; `undefined`
           // deixá-la-ia com o valor anterior (o processRun usa `undefined` só
           // porque é um create onde o campo omitido já nasce nulo).
-          exceptions: exceptions.length
-            ? (exceptions as unknown as Prisma.InputJsonValue)
-            : Prisma.DbNull,
-        } as unknown as Prisma.PayslipUncheckedUpdateInput,
+          exceptions: exceptions.length ? toJson(exceptions) : Prisma.DbNull,
+        } as Prisma.PayslipUncheckedUpdateInput,
       });
       if (calc.items.length) {
-        await (tx as unknown as PrismaService).payslipItem.createMany({
+        await tx.payslipItem.createMany({
           data: calc.items.map(i => ({ ...i, payslipId })),
         });
       }
@@ -421,7 +420,7 @@ export class PayrollWorkflowService {
     }> = [];
     for (const r of rows) {
       const list = Array.isArray(r.exceptions)
-        ? (r.exceptions as unknown as Array<Record<string, string>>)
+        ? (r.exceptions as Array<Record<string, string>>)
         : [];
       for (const e of list) {
         out.push({
@@ -457,9 +456,7 @@ export class PayrollWorkflowService {
     let totalDeductions = 0;
     let totalEmployerCost = 0;
     for (const p of payslips) {
-      const list = Array.isArray(p.exceptions)
-        ? (p.exceptions as unknown as Array<{ severity: string }>)
-        : [];
+      const list = Array.isArray(p.exceptions) ? (p.exceptions as Array<{ severity: string }>) : [];
       exceptionsCount += list.length;
       if (list.some(e => e.severity === 'ERROR')) errorCount += 1;
       totalGross += p.grossSalary ?? 0;

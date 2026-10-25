@@ -1,3 +1,4 @@
+import { toJson } from '../common/helpers/prisma-json';
 // src/roi-impact/scenario.service.ts
 // "Cenários & Simulações" (docs/roi-impact.md §8) — simula o impacto
 // financeiro de uma iniciativa FUTURA ainda não executada. Ao contrário de
@@ -74,7 +75,7 @@ export class ScenarioService {
         note,
         roiPercent,
         paybackMonths,
-        projections: (projections as unknown as Prisma.InputJsonValue) ?? Prisma.DbNull,
+        projections: toJson(projections) ?? Prisma.DbNull,
         createdById,
       },
     });
@@ -122,7 +123,7 @@ export class ScenarioService {
       note = resolved.note;
 
       const built = this.buildProjections(estimatedCost, expectedBenefit);
-      projections = built.projections as unknown as Prisma.InputJsonValue | null;
+      projections = toJson(built.projections);
       roiPercent = built.roiPercent;
       paybackMonths = built.paybackMonths;
     }

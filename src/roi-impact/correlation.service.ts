@@ -1,3 +1,4 @@
+import { toJson } from '../common/helpers/prisma-json';
 // src/roi-impact/correlation.service.ts
 // "Correlações" (docs/roi-impact.md §7) — as 7 análises predefinidas do
 // spec, cada uma calculada a partir de pares de dados REAIS já existentes
@@ -22,7 +23,6 @@
 //     equipa liderada", em vez do modelo TeamHealth (existe no schema mas
 //     nunca é escrito por nenhum serviço — ficaria sempre vazio).
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RoiAnalysisService } from './roi-analysis.service';
 import {
@@ -195,7 +195,7 @@ export class CorrelationService {
         coefficient: stat?.coefficient ?? null,
         pValue: stat?.pValue ?? null,
         significant: stat?.significant ?? null,
-        dataPoints: pair.points as unknown as Prisma.InputJsonValue,
+        dataPoints: toJson(pair.points),
         note: [pair.note, insufficientNote].filter(Boolean).join(' ') || null,
         createdById,
       },

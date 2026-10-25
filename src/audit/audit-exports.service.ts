@@ -310,7 +310,12 @@ export class AuditExportsService {
     const row = await this.prisma.read.auditExport.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Exportação não encontrada');
     if (!row.content) {
-      return { id, code: row.code, valid: null, reason: 'Conteúdo eliminado (retenção)' };
+      return {
+        id,
+        code: row.code,
+        valid: null as boolean,
+        reason: 'Conteúdo eliminado (retenção)',
+      };
     }
     const actual = this.sha(Buffer.from(row.content));
     return { id, code: row.code, valid: actual === row.sha256, expected: row.sha256, actual };

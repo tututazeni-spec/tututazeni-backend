@@ -44,9 +44,15 @@ describe('CRM Partners Integration', () => {
 
   afterAll(async () => {
     if (partnerId) {
-      await prisma.partnerInteraction.deleteMany({ where: { partnerId } }).catch(() => undefined);
-      await prisma.partnerMilestone.deleteMany({ where: { partnerId } }).catch(() => undefined);
-      await prisma.partner.deleteMany({ where: { id: partnerId } }).catch(() => undefined);
+      await prisma.partnerInteraction
+        .deleteMany({ where: { partnerId } })
+        .catch((): undefined => undefined);
+      await prisma.partnerMilestone
+        .deleteMany({ where: { partnerId } })
+        .catch((): undefined => undefined);
+      await prisma.partner
+        .deleteMany({ where: { id: partnerId } })
+        .catch((): undefined => undefined);
     }
 
     await prisma.$disconnect();

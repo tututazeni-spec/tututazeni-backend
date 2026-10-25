@@ -304,7 +304,7 @@ export class CareerService {
       };
       requirementChecks = evaluateRequirements(requirementItems, profile);
       if (opts.redactActual) {
-        requirementChecks = requirementChecks.map(c => ({ ...c, actual: null }));
+        requirementChecks = requirementChecks.map(c => ({ ...c, actual: null as string }));
       }
     }
     const { readinessScore, optionalMet, optionalTotal, noData } = computeReadiness(

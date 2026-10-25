@@ -4,6 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { fromJson } from '../../common/helpers/prisma-json';
 
 // ─── Internal Types ───────────────────────────────────────────────────────────
 
@@ -359,7 +360,7 @@ export class PayrollEngineService {
 
     return {
       ...config,
-      socialSecurity: config.socialSecurity as unknown as SocialSecurityConfig,
+      socialSecurity: fromJson<SocialSecurityConfig>(config.socialSecurity),
     };
   }
 
@@ -399,7 +400,7 @@ export class PayrollEngineService {
       ],
 
       // INSS Angola: 3% colaborador, 8% empregador (Lei 7/04)
-      socialSecurity: { employeeRate: 0.03, employerRate: 0.08, ceiling: null },
+      socialSecurity: { employeeRate: 0.03, employerRate: 0.08, ceiling: null as number },
 
       healthInsuranceRate: 0.02,
       unionFeeRate: 0.01,

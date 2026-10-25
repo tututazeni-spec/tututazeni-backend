@@ -669,7 +669,7 @@ export class AvatarTrainingReportsService {
         .text(
           `Período ${day(report.period.from)} – ${day(report.period.to)} · Gerado em ${report.generatedAt.slice(0, 19).replace('T', ' ')}`,
         );
-      const meta = report as unknown as { source?: string; formula?: string; truncated?: boolean };
+      const meta = report as { source?: string; formula?: string; truncated?: boolean };
       if (meta.source) doc.text(`Fonte: ${meta.source}`);
       if (meta.formula) doc.text(`Fórmula: ${meta.formula}`);
       doc.fillColor('#000000').moveDown();
@@ -1255,7 +1255,7 @@ export class AvatarTrainingReportsService {
           ? Math.round(tokens.reduce((a, b) => a + b, 0) / tokens.length)
           : null,
         // O AI-Tutor não tem tarifa configurada: o custo não é estimado.
-        estimatedCost: null,
+        estimatedCost: null as number,
         costNote: 'Sem tarifa configurada para o AI-Tutor — apresentado o consumo em tokens.',
       },
       extra: { byStatus: count('status'), byProvider: count('provider'), byModel: count('model') },

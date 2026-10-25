@@ -784,7 +784,7 @@ export class AvatarTrainingProgramsService {
         dueDate,
         status: 'ASSIGNED' as const,
         assignedAt: new Date(),
-        completedAt: null,
+        completedAt: null as Date,
       };
       const row = existing
         ? await this.prisma.avatarTrainingAssignment.update({ where: { id: existing.id }, data })

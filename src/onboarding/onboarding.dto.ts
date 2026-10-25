@@ -28,6 +28,7 @@ import {
   OnboardingCheckinType,
   OnboardingCheckinStatus,
 } from '@prisma/client';
+import { IsWebLink } from '../common/validators/is-web-link.decorator';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -195,7 +196,7 @@ export class CreateOnboardingTemplateDto {
 
   @ApiPropertyOptional({ description: 'URL do vídeo de boas-vindas' })
   @IsOptional()
-  @IsString()
+  @IsWebLink()
   welcomeVideoUrl?: string;
 
   @ApiPropertyOptional({ default: true })
@@ -275,7 +276,7 @@ export class CompleteTaskDto {
 
   @ApiPropertyOptional({ description: 'URL de evidência (ficheiro)' })
   @IsOptional()
-  @IsString()
+  @IsWebLink({ allowRelative: true })
   evidenceUrl?: string;
 }
 

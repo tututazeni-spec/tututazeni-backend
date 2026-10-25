@@ -405,6 +405,25 @@ describe('LiveClassesService (additional)', () => {
       expect((verify(admin.jwt!, 'jitsi-secret') as any).moderator).toBe(true);
     });
 
+    it('JWT expira em 2h por omissão, não inclui email, e respeita JITSI_JWT_TTL_MINUTES com limites', async () => {
+      process.env.JITSI_APP_SECRET = 'jitsi-secret';
+      const ttl = async () => {
+        const c: any = verify((await service.getRoomAccess(5, colab)).jwt!, 'jitsi-secret');
+        return { c, secs: c.exp - c.iat };
+      };
+      const def = await ttl();
+      expect(def.secs).toBe(7200);
+      expect(def.c.context.user.email).toBeUndefined();
+      process.env.JITSI_JWT_TTL_MINUTES = '60';
+      expect((await ttl()).secs).toBe(3600);
+      process.env.JITSI_JWT_TTL_MINUTES = '1';
+      expect((await ttl()).secs).toBe(900);
+      process.env.JITSI_JWT_TTL_MINUTES = '9999';
+      expect((await ttl()).secs).toBe(14400);
+      process.env.JITSI_JWT_TTL_MINUTES = 'abc';
+      expect((await ttl()).secs).toBe(7200);
+    });
+
     it('404 se a aula não existe', async () => {
       mockPrisma.liveClass.findUnique.mockResolvedValue(null);
       await expect(service.getRoomAccess(99, colab)).rejects.toThrow('Aula ao vivo não encontrada');

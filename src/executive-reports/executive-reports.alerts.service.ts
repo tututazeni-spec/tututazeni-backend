@@ -660,7 +660,11 @@ export class ExecutiveReportsAlertsService {
 
       case 'DOCUMENTS_EXPIRING': {
         const horizon = new Date(now.getTime() + thr * DAY_MS);
-        const where = { status: 'ACTIVE' as const, deletedAt: null, expiresAt: { lte: horizon } };
+        const where = {
+          status: 'ACTIVE' as const,
+          deletedAt: null as Date,
+          expiresAt: { lte: horizon },
+        };
         const [total, expired] = await Promise.all([
           this.prisma.read.employeeDocument.count({ where }),
           this.prisma.read.employeeDocument.count({

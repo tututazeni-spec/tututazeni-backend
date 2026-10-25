@@ -1,4 +1,4 @@
-﻿// ─── src/leave-management/leave-management.service.ts ────────────────────────
+import { fromJson, toJson } from '../common/helpers/prisma-json'; // ─── src/leave-management/leave-management.service.ts ────────────────────────
 import { mimeOfInlineFile } from '../common/files/data-url';
 import {
   Injectable,
@@ -155,7 +155,7 @@ export class LeaveManagementService {
     return this.prisma.leavePolicy.create({
       data: {
         ...dto,
-        blackoutPeriods: dto.blackoutPeriods as unknown as Prisma.InputJsonValue,
+        blackoutPeriods: toJson(dto.blackoutPeriods),
       },
     });
   }
@@ -1134,7 +1134,7 @@ export class LeaveManagementService {
     // 4. Blackout periods
     const policy = await this.getApplicablePolicy(userId);
     if (policy?.blackoutPeriods) {
-      for (const bp of policy.blackoutPeriods as unknown as BlackoutPeriodDto[]) {
+      for (const bp of fromJson<BlackoutPeriodDto[]>(policy.blackoutPeriods)) {
         const bpStart = new Date(bp.startDate);
         const bpEnd = new Date(bp.endDate);
         if (start <= bpEnd && end >= bpStart) {

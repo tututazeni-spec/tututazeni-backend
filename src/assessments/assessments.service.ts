@@ -180,8 +180,8 @@ export class AssessmentsService {
         return {
           ...q,
           options: sanitizedOpts ? JSON.stringify(sanitizedOpts) : null,
-          correctAnswer: undefined,
-          explanation: undefined,
+          correctAnswer: undefined as string,
+          explanation: undefined as string,
         };
       });
       return { ...a, questions };

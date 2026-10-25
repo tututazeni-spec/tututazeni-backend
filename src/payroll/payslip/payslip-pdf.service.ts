@@ -110,7 +110,7 @@ export class PayslipPdfService {
     });
     if (!payslip) throw new NotFoundException('Recibo não encontrado');
 
-    const input = buildPdfInput(payslip as unknown as SlipForPdf);
+    const input = buildPdfInput(payslip as SlipForPdf);
 
     if (payslip.receiptCode) {
       input.stampHash = createHash('sha256')

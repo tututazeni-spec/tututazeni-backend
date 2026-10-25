@@ -64,38 +64,40 @@ describe('Knowledge Base Integration', () => {
     if (articleIds.length) {
       await prisma.articleAcknowledgement
         .deleteMany({ where: { articleId: { in: articleIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.articleQuestion
         .deleteMany({ where: { articleId: { in: articleIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.articleComment
         .deleteMany({ where: { articleId: { in: articleIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.articleRating
         .deleteMany({ where: { articleId: { in: articleIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.knowledgeInteraction
         .deleteMany({ where: { articleId: { in: articleIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.articleVersion
         .deleteMany({ where: { articleId: { in: articleIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.knowledgeTag
         .deleteMany({ where: { articleId: { in: articleIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.knowledgeArticle
         .deleteMany({ where: { id: { in: articleIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
     await prisma.knowledgeSearchLog
       .deleteMany({ where: { query: 'zzz-inexistente-integracao' } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     if (categoryId) {
       await prisma.knowledgeCategory
         .deleteMany({ where: { id: categoryId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
-    await prisma.userPoints.deleteMany({ where: { userId: employeeId } }).catch(() => undefined);
+    await prisma.userPoints
+      .deleteMany({ where: { userId: employeeId } })
+      .catch((): undefined => undefined);
 
     await prisma.$disconnect();
     await pool.end();

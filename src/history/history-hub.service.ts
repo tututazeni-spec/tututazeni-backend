@@ -378,14 +378,14 @@ export class HistoryHubService {
     const out: Movement[] = [];
     const r = this.range(ctx);
     const base = {
-      prevPosition: null,
-      newPosition: null,
-      prevDepartment: null,
-      newDepartment: null,
-      prevManager: null,
-      newManager: null,
-      reason: null,
-      notes: null,
+      prevPosition: null as string,
+      newPosition: null as string,
+      prevDepartment: null as string,
+      newDepartment: null as string,
+      prevManager: null as string,
+      newManager: null as string,
+      reason: null as string,
+      notes: null as string,
     } as const;
 
     // 1) OrgChangeLog — movimentos já efectivados
@@ -746,7 +746,7 @@ export class HistoryHubService {
           document: e.name,
           subject: e.employee.name,
           type: e.type,
-          version: null,
+          version: null as string,
           status: String(e.status),
           origin: 'Colaboradores',
         };

@@ -119,7 +119,8 @@ export class AvatarTrainingLinksService {
       },
       select: { id: true },
     });
-    if (alreadyRequested) return { status: 'ALREADY_REQUESTED' as const, certificate: null };
+    if (alreadyRequested)
+      return { status: 'ALREADY_REQUESTED' as const, certificate: null as unknown };
 
     await this.audit.log({
       userId: user.id,
@@ -137,7 +138,7 @@ export class AvatarTrainingLinksService {
         programTitle: program.title,
       });
     }
-    return { status: 'REQUESTED' as const, certificate: null };
+    return { status: 'REQUESTED' as const, certificate: null as unknown };
   }
 
   // ── Conclusão de uma tentativa ─────────────────────────────────────────────

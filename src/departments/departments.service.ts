@@ -456,8 +456,8 @@ export class DepartmentsService {
     // changedById não geram histórico — mantém o comportamento anterior).
     if (changedById !== undefined) {
       const changes: Array<{ field: string; before: unknown; after: unknown }> = [];
-      const existingRecord = existing as unknown as Record<string, unknown>;
-      const updatedRecord = updated as unknown as Record<string, unknown>;
+      const existingRecord = existing as Record<string, unknown>;
+      const updatedRecord = updated as Record<string, unknown>;
       for (const f of this.TRACKED_FIELDS) {
         const before = existingRecord[f.key as string];
         const after = updatedRecord[f.key as string];

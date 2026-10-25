@@ -72,19 +72,25 @@ describe('Course Modules Integration', () => {
 
   afterAll(async () => {
     if (assessmentId) {
-      await prisma.assessment.deleteMany({ where: { id: assessmentId } }).catch(() => undefined);
+      await prisma.assessment
+        .deleteMany({ where: { id: assessmentId } })
+        .catch((): undefined => undefined);
     }
     await prisma.lessonProgress
       .deleteMany({ where: { lesson: { module: { courseId } } } })
-      .catch(() => undefined);
-    await prisma.lesson.deleteMany({ where: { module: { courseId } } }).catch(() => undefined);
+      .catch((): undefined => undefined);
+    await prisma.lesson
+      .deleteMany({ where: { module: { courseId } } })
+      .catch((): undefined => undefined);
     await prisma.moduleMaterial
       .deleteMany({ where: { module: { courseId } } })
-      .catch(() => undefined);
-    await prisma.courseModule.deleteMany({ where: { courseId } }).catch(() => undefined);
-    await prisma.enrollment.deleteMany({ where: { courseId } }).catch(() => undefined);
-    await prisma.courseAnalytics.deleteMany({ where: { courseId } }).catch(() => undefined);
-    await prisma.course.deleteMany({ where: { id: courseId } }).catch(() => undefined);
+      .catch((): undefined => undefined);
+    await prisma.courseModule.deleteMany({ where: { courseId } }).catch((): undefined => undefined);
+    await prisma.enrollment.deleteMany({ where: { courseId } }).catch((): undefined => undefined);
+    await prisma.courseAnalytics
+      .deleteMany({ where: { courseId } })
+      .catch((): undefined => undefined);
+    await prisma.course.deleteMany({ where: { id: courseId } }).catch((): undefined => undefined);
 
     await prisma.$disconnect();
     await pool.end();
@@ -535,28 +541,32 @@ describe('Course Modules Integration', () => {
     });
 
     afterAll(async () => {
-      await prisma.certificate.deleteMany({ where: { enrollmentId } }).catch(() => undefined);
+      await prisma.certificate
+        .deleteMany({ where: { enrollmentId } })
+        .catch((): undefined => undefined);
       await prisma.lessonProgress
         .deleteMany({ where: { lesson: { module: { courseId: faseCourseId } } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.enrollment
         .deleteMany({ where: { courseId: faseCourseId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.courseAnalytics
         .deleteMany({ where: { courseId: faseCourseId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.lesson
         .deleteMany({ where: { module: { courseId: faseCourseId } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.courseModule
         .deleteMany({ where: { courseId: faseCourseId } })
-        .catch(() => undefined);
-      await prisma.course.deleteMany({ where: { id: faseCourseId } }).catch(() => undefined);
+        .catch((): undefined => undefined);
+      await prisma.course
+        .deleteMany({ where: { id: faseCourseId } })
+        .catch((): undefined => undefined);
       await prisma.notificationLog
         .deleteMany({
           where: { userId: employeeId, metadata: { contains: `"courseId":${faseCourseId}` } },
         })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     });
 
     it('completar o módulo mandatory final via /lessons/progress → curso COMPLETED + certificado emitido (antes: só pontos)', async () => {

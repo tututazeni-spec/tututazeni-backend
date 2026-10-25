@@ -372,7 +372,7 @@ export class HistoryService {
       orderBy: { issuedAt: 'desc' },
       take: 20,
     });
-    const certs: Awaited<typeof certsQuery> = await certsQuery.catch((e: unknown) => {
+    const certs: Awaited<typeof certsQuery> = await certsQuery.catch((e: unknown): never[] => {
       this.logger.warn({
         userId,
         action: 'HISTORY_TIMELINE_CERTIFICATES',
@@ -558,7 +558,7 @@ export class HistoryService {
       where: { managerId, active: true },
       select: { id: true, fullName: true, avatarUrl: true },
     });
-    if (!team.length) return { data: [], meta: {} };
+    if (!team.length) return { data: [] as never[], meta: {} };
 
     const teamIds = team.map(u => u.id);
     const where: Prisma.AuditLogWhereInput = { userId: { in: teamIds } };

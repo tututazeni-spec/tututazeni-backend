@@ -190,7 +190,7 @@ export class ScalabilityForecastService {
         this.storage
           .getStorageMetrics()
           .catch(
-            swallow(
+            swallow<null>(
               'scalability-forecast.service',
               'operação auxiliar falhou — a usar valor por omissão',
               null,

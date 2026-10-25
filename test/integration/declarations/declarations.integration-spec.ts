@@ -64,43 +64,43 @@ describe('Declarations Integration', () => {
       .deleteMany({
         where: { submission: { formId: { in: [workFormId, resubmitFormId].filter(Boolean) } } },
       })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.workDeclReview
       .deleteMany({
         where: { submission: { formId: { in: [workFormId, resubmitFormId].filter(Boolean) } } },
       })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.workDeclSubmission
       .deleteMany({ where: { formId: { in: [workFormId, resubmitFormId].filter(Boolean) } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.workDeclQuestion
       .deleteMany({ where: { formId: { in: [workFormId, resubmitFormId].filter(Boolean) } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.workDeclForm
       .deleteMany({ where: { id: { in: [workFormId, resubmitFormId].filter(Boolean) } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
 
     await prisma.declarationApproval
       .deleteMany({ where: { requestId: { in: [requestId, rejectedRequestId].filter(Boolean) } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     // Fase E: /declarations/documents escreve em `declarations` (legacyRequestId).
     await prisma.declaration
       .deleteMany({
         where: { legacyRequestId: { in: [requestId, rejectedRequestId].filter(Boolean) } },
       })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.declarationRequest
       .deleteMany({ where: { id: { in: [requestId, rejectedRequestId].filter(Boolean) } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     if (templateId) {
       await prisma.declarationTemplate
         .deleteMany({ where: { id: templateId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
     if (purposeId) {
       await prisma.declarationPurpose
         .deleteMany({ where: { id: purposeId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
 
     await prisma.$disconnect();

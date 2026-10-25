@@ -1,3 +1,4 @@
+import { toJson } from '../common/helpers/prisma-json';
 // src/executive-reports/executive-reports.scheduler.service.ts
 // Relatórios agendados (docs §8): periodicidade, destinatários, formato, hora e
 // estado. A execução reclama o agendamento de forma atómica (sem duplicados com
@@ -12,7 +13,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import type { CurrentUserData } from '../common/decorators';
@@ -164,7 +164,7 @@ export class ExecutiveReportsSchedulerService {
         templateId: dto.templateId,
         ...timing,
         format: dto.format,
-        filters: (dto.filters ?? null) as unknown as Prisma.InputJsonValue,
+        filters: toJson(dto.filters ?? null),
         recipientIds,
         active: dto.active ?? true,
         nextRunAt: computeNextRun(timing),
@@ -206,9 +206,7 @@ export class ExecutiveReportsSchedulerService {
         format: dto.format,
         recipientIds,
         active: dto.active,
-        ...(dto.filters !== undefined
-          ? { filters: dto.filters as unknown as Prisma.InputJsonValue }
-          : {}),
+        ...(dto.filters !== undefined ? { filters: toJson(dto.filters) } : {}),
         ...(timingChanged || reactivated ? { ...timing, nextRunAt: computeNextRun(timing) } : {}),
       },
     });
@@ -291,7 +289,7 @@ export class ExecutiveReportsSchedulerService {
       const author = {
         id: s.createdBy.id,
         role: { name: s.createdBy.role?.name ?? '' },
-      } as unknown as CurrentUserData;
+      } as CurrentUserData;
 
       const { spec } = await this.generation.resolveSpec({
         templateCode: s.templateCode,

@@ -38,8 +38,8 @@ describe('Courses Integration', () => {
   });
 
   afterAll(async () => {
-    await prisma.$disconnect().catch(() => undefined);
-    await pool.end().catch(() => undefined);
+    await prisma.$disconnect().catch((): undefined => undefined);
+    await pool.end().catch((): undefined => undefined);
     await app.close();
   });
 
@@ -150,28 +150,32 @@ describe('Courses Integration', () => {
     });
 
     afterAll(async () => {
-      await prisma.certificate.deleteMany({ where: { enrollmentId } }).catch(() => undefined);
+      await prisma.certificate
+        .deleteMany({ where: { enrollmentId } })
+        .catch((): undefined => undefined);
       await prisma.lessonProgress
         .deleteMany({ where: { lesson: { module: { courseId: faseCourseId } } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.enrollment
         .deleteMany({ where: { courseId: faseCourseId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.courseAnalytics
         .deleteMany({ where: { courseId: faseCourseId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.lesson
         .deleteMany({ where: { module: { courseId: faseCourseId } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.courseModule
         .deleteMany({ where: { courseId: faseCourseId } })
-        .catch(() => undefined);
-      await prisma.course.deleteMany({ where: { id: faseCourseId } }).catch(() => undefined);
+        .catch((): undefined => undefined);
+      await prisma.course
+        .deleteMany({ where: { id: faseCourseId } })
+        .catch((): undefined => undefined);
       await prisma.notificationLog
         .deleteMany({
           where: { userId: employeeId, metadata: { contains: `"courseId":${faseCourseId}` } },
         })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     });
 
     it('completar a última aula de um curso sem módulos publicados → COMPLETED + certificado + pontos + notificação COURSE_COMPLETED', async () => {

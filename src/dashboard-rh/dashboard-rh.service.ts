@@ -151,7 +151,7 @@ export class DashboardRhService {
               err: { message: e instanceof Error ? e.message : String(e) },
               msg: 'Falha ao obter score médio de performance no dashboard RH completo',
             });
-            return { _avg: { score: null } };
+            return { _avg: { score: null as number } };
           }),
         this.prisma.read.developmentPlan
           .findMany({
@@ -179,7 +179,7 @@ export class DashboardRhService {
         this.prisma.read.avatarSession.count({
           where: { status: 'COMPLETED', startedAt: { gte: mS } },
         }),
-        topBadgeAwardeesPromise.catch((e: unknown) => {
+        topBadgeAwardeesPromise.catch((e: unknown): never[] => {
           this.logger.warn({
             action: 'DASHBOARD_RH_FULL_TOP_BADGES',
             err: { message: e instanceof Error ? e.message : String(e) },
@@ -187,7 +187,7 @@ export class DashboardRhService {
           });
           return [];
         }),
-        recentActivityPromise.catch((e: unknown) => {
+        recentActivityPromise.catch((e: unknown): never[] => {
           this.logger.warn({
             action: 'DASHBOARD_RH_FULL_RECENT_ACTIVITY',
             err: { message: e instanceof Error ? e.message : String(e) },
@@ -360,7 +360,7 @@ export class DashboardRhService {
       take: 10,
     });
     const atRiskUsers: Awaited<typeof atRiskUsersQuery> = await atRiskUsersQuery.catch(
-      (e: unknown) => {
+      (e: unknown): never[] => {
         this.logger.warn({
           months,
           action: 'DASHBOARD_RH_TURNOVER_AT_RISK',
@@ -427,7 +427,7 @@ export class DashboardRhService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao obter score médio de surveys no painel de engagement',
           });
-          return { _avg: { score: null } };
+          return { _avg: { score: null as number } };
         }),
       // FIX: safeM() degradava para um modelo genuinamente inexistente noutros
       // ficheiros (ApiKey/Webhook) — Recognition é um modelo real, o wrapper
@@ -475,7 +475,7 @@ export class DashboardRhService {
           .sort((a, b) => b.responses - a.responses);
       });
     const deptBreakdown: Awaited<typeof deptBreakdownQuery> = await deptBreakdownQuery.catch(
-      (e: unknown) => {
+      (e: unknown): never[] => {
         this.logger.warn({
           departmentId,
           action: 'DASHBOARD_RH_ENGAGEMENT_DEPT_BREAKDOWN',
@@ -871,7 +871,7 @@ export class DashboardRhService {
   // BIRTHDAYS & ANNIVERSARIES
   // ══════════════════════════════════════════════════════
 
-  async getBirthdaysThisMonth() {
+  async getBirthdaysThisMonth(): Promise<never[]> {
     // dateOfBirth not in base schema — returns [] until field is migrated
     // When field exists, filter by month of dateOfBirth
     return [];
@@ -1070,7 +1070,7 @@ export class DashboardRhService {
             reason: 'Baixa performance + histórico de avaliações',
           })),
         )
-        .catch((e: unknown) => {
+        .catch((e: unknown): never[] => {
           this.logger.warn({
             action: 'DASHBOARD_RH_PREDICTIONS_TURNOVER_RISK',
             err: { message: e instanceof Error ? e.message : String(e) },

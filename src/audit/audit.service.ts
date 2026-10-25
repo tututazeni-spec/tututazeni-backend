@@ -1312,14 +1312,14 @@ export class AuditService {
         raw = Object.fromEntries(
           Object.entries(after as Record<string, unknown>).map(([k, v]) => [
             k,
-            { from: null, to: v },
+            { from: null as unknown, to: v },
           ]),
         );
       } else if (before && typeof before === 'object') {
         raw = Object.fromEntries(
           Object.entries(before as Record<string, unknown>).map(([k, v]) => [
             k,
-            { from: v, to: null },
+            { from: v, to: null as unknown },
           ]),
         );
       }

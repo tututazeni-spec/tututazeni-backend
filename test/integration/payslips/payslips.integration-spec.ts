@@ -87,15 +87,17 @@ describe('Payslips Integration', () => {
     if (payslipIds.length) {
       await (prisma as any).payslipDispute
         .deleteMany({ where: { payslipId: { in: payslipIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await (prisma as any).payslipAccessLog
         .deleteMany({ where: { payslipId: { in: payslipIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await (prisma as any).payslip
         .deleteMany({ where: { id: { in: payslipIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
-    await prisma.user.deleteMany({ where: { email: OTHER_EMPLOYEE_EMAIL } }).catch(() => undefined);
+    await prisma.user
+      .deleteMany({ where: { email: OTHER_EMPLOYEE_EMAIL } })
+      .catch((): undefined => undefined);
 
     await prisma.$disconnect();
     await pool.end();

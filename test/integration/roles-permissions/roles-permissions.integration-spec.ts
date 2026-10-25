@@ -53,7 +53,9 @@ describe('Roles Permissions Integration', () => {
 
   afterAll(async () => {
     await prisma.permission.deleteMany({ where: { id: { in: permissionIds } } }).catch(() => {});
-    await prisma.role.deleteMany({ where: { id: { in: roleIds } } }).catch(() => undefined);
+    await prisma.role
+      .deleteMany({ where: { id: { in: roleIds } } })
+      .catch((): undefined => undefined);
     await prisma.$disconnect();
     await pool.end();
     await app.close();

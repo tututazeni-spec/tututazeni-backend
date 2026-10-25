@@ -20,11 +20,13 @@ describe('Certificate templates v2 schema', () => {
     // filhos antes de pais: versões (cascade) → template; assets à parte
     await prisma.certificateTemplateVersion
       .deleteMany({ where: { templateId } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.certificateTemplate
       .deleteMany({ where: { id: templateId } })
-      .catch(() => undefined);
-    await prisma.certificateAsset.deleteMany({ where: { id: assetId } }).catch(() => undefined);
+      .catch((): undefined => undefined);
+    await prisma.certificateAsset
+      .deleteMany({ where: { id: assetId } })
+      .catch((): undefined => undefined);
     await prisma.$disconnect();
     await pool.end();
   });

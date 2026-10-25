@@ -60,22 +60,34 @@ describe('Career Integration', () => {
     if (pathId) {
       await prisma.careerPathStep
         .deleteMany({ where: { careerPathId: pathId } })
-        .catch(() => undefined);
-      await prisma.careerPath.deleteMany({ where: { id: pathId } }).catch(() => undefined);
+        .catch((): undefined => undefined);
+      await prisma.careerPath
+        .deleteMany({ where: { id: pathId } })
+        .catch((): undefined => undefined);
     }
     if (planId) {
       await prisma.careerGoal
         .deleteMany({ where: { careerPlanId: planId } })
-        .catch(() => undefined);
-      await prisma.userCareerPlan.deleteMany({ where: { id: planId } }).catch(() => undefined);
+        .catch((): undefined => undefined);
+      await prisma.userCareerPlan
+        .deleteMany({ where: { id: planId } })
+        .catch((): undefined => undefined);
     }
     if (vacancyId) {
-      await prisma.internalApplication.deleteMany({ where: { vacancyId } }).catch(() => undefined);
-      await prisma.internalVacancy.deleteMany({ where: { id: vacancyId } }).catch(() => undefined);
+      await prisma.internalApplication
+        .deleteMany({ where: { vacancyId } })
+        .catch((): undefined => undefined);
+      await prisma.internalVacancy
+        .deleteMany({ where: { id: vacancyId } })
+        .catch((): undefined => undefined);
     }
-    await prisma.careerRole.deleteMany({ where: { name: POSITION_NAME } }).catch(() => undefined);
+    await prisma.careerRole
+      .deleteMany({ where: { name: POSITION_NAME } })
+      .catch((): undefined => undefined);
     if (positionId) {
-      await prisma.position.deleteMany({ where: { id: positionId } }).catch(() => undefined);
+      await prisma.position
+        .deleteMany({ where: { id: positionId } })
+        .catch((): undefined => undefined);
     }
 
     await prisma.$disconnect();

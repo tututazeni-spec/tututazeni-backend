@@ -155,12 +155,11 @@ export class LiveClassesService {
         sub: process.env.JITSI_SUB || domain,
         room: roomName,
         iat: now,
-        exp: now + 4 * 60 * 60,
+        exp: now + this.jitsiTokenTtlSeconds(),
         context: {
           user: {
             id: String(user.id),
             name: user.fullName || user.email,
-            email: user.email,
             moderator,
           },
         },
@@ -170,6 +169,14 @@ export class LiveClassesService {
       { algorithm: 'HS256' },
     );
     return { roomName, domain, jwt };
+  }
+
+  /** Validade do JWT da sala (omissão 2h; JITSI_JWT_TTL_MINUTES, entre 15 e 240). */
+  private jitsiTokenTtlSeconds(): number {
+    const minutes = Number(process.env.JITSI_JWT_TTL_MINUTES);
+    const clamped =
+      Number.isFinite(minutes) && minutes > 0 ? Math.min(Math.max(minutes, 15), 240) : 120;
+    return Math.round(clamped * 60);
   }
 
   private generateCode(type: string): string {
@@ -970,8 +977,8 @@ export class LiveClassesService {
     const rows = [
       ...classRecordings.map(lc => ({
         liveClassId: lc.id,
-        sessionId: null,
-        sessionSeq: null,
+        sessionId: null as string,
+        sessionSeq: null as number,
         topic: lc.topic,
         course: lc.course,
         instructor: lc.instructor,
@@ -995,7 +1002,7 @@ export class LiveClassesService {
         participants: s._count.attendances,
         recordingUrl: s.recordingUrl,
         publishedAt: s.recordingPublishedAt,
-        expiresAt: null,
+        expiresAt: null as Date,
         allowDownload: null as boolean | null,
       })),
     ].sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -1180,7 +1187,7 @@ export class LiveClassesService {
     const classEvents = classes.map(lc => ({
       id: `class-${lc.id}`,
       liveClassId: lc.id,
-      sessionId: null,
+      sessionId: null as string,
       title: lc.topic,
       start: lc.scheduledAt,
       end: new Date(lc.scheduledAt.getTime() + lc.duration * 60_000),

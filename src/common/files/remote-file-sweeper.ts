@@ -128,7 +128,7 @@ export class RemoteFileSweeper implements OnModuleInit, OnModuleDestroy {
           cfg,
           antivirusConfig(),
         ),
-    ).catch(() => null);
+    ).catch((): null => null);
     if (message) {
       // O registo já foi gravado: só dá para assinalar. O auditor de uploads já registou o motivo
       // com o utilizador (UPLOAD_REJECTED); isto deixa um erro visível para quem opera.
@@ -309,6 +309,6 @@ export class RemoteFileSweeper implements OnModuleInit, OnModuleDestroy {
         // Nunca o URL (pode levar uma assinatura temporária): só onde procurar.
         metadata: { field: target.field, model: target.model, id },
       })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
   }
 }

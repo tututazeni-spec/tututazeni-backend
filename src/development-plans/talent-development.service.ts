@@ -353,7 +353,7 @@ export class TalentDevelopmentService {
     const user = await this.prisma.read.user.findUnique({ where: { id: dto.userId } });
     if (!user) throw new NotFoundException('Colaborador não encontrado');
 
-    const plan = await this.developmentPlans.create(dto as unknown as CreateDevelopmentPlanDto);
+    const plan = await this.developmentPlans.create(dto as CreateDevelopmentPlanDto);
     return this.getPlan(plan.id);
   }
 
@@ -424,7 +424,7 @@ export class TalentDevelopmentService {
   }
 
   async updatePlan(id: number, dto: TalentDevelopmentUpdateDevelopmentPlanDto) {
-    return this.developmentPlans.update(id, dto as unknown as UpdateDevelopmentPlanDto);
+    return this.developmentPlans.update(id, dto as UpdateDevelopmentPlanDto);
   }
 
   /**

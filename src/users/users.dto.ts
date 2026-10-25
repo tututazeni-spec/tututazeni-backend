@@ -18,6 +18,7 @@ import { FILE_POLICIES, maxDataUrlChars } from '../common/files/file-policies';
 import { EmptyStringToUndefined } from '../common/transformers/empty-string-to-undefined';
 import { AccountStatus, HrStatus, ContractType, WorkMode } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
+import { IsWebLink } from '../common/validators/is-web-link.decorator';
 
 export { AccountStatus, HrStatus, ContractType, WorkMode };
 
@@ -377,7 +378,7 @@ export class UpdateProfileDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsWebLink()
   linkedinUrl?: string;
 
   @ApiPropertyOptional()

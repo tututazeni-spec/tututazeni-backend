@@ -292,7 +292,7 @@ export class ScalabilityAlertsService {
       this.capacity
         .getCapacityMetrics()
         .catch(
-          swallow(
+          swallow<null>(
             'scalability-alerts.service',
             'operação auxiliar falhou — a usar valor por omissão',
             null,
@@ -301,7 +301,7 @@ export class ScalabilityAlertsService {
       this.queues
         .getQueueMetrics()
         .catch(
-          swallow(
+          swallow<null>(
             'scalability-alerts.service',
             'operação auxiliar falhou — a usar valor por omissão',
             null,
@@ -310,7 +310,7 @@ export class ScalabilityAlertsService {
       this.infra
         .getApiMetrics()
         .catch(
-          swallow(
+          swallow<null>(
             'scalability-alerts.service',
             'operação auxiliar falhou — a usar valor por omissão',
             null,
@@ -319,7 +319,7 @@ export class ScalabilityAlertsService {
       this.infra
         .getDatabaseMetrics()
         .catch(
-          swallow(
+          swallow<null>(
             'scalability-alerts.service',
             'operação auxiliar falhou — a usar valor por omissão',
             null,
@@ -328,7 +328,7 @@ export class ScalabilityAlertsService {
       this.forecasts
         .getForecasts()
         .catch(
-          swallow(
+          swallow<null>(
             'scalability-alerts.service',
             'operação auxiliar falhou — a usar valor por omissão',
             null,
@@ -337,7 +337,7 @@ export class ScalabilityAlertsService {
       this.capacity
         .getResilienceMetrics()
         .catch(
-          swallow(
+          swallow<null>(
             'scalability-alerts.service',
             'operação auxiliar falhou — a usar valor por omissão',
             null,

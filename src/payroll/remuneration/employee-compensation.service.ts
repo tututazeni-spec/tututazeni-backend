@@ -90,11 +90,11 @@ export class EmployeeCompensationService {
   create(dto: CreateEmployeeCompensationDto) {
     const effectiveFrom = dto.effectiveFrom ? new Date(dto.effectiveFrom) : new Date();
     return this.prisma.$transaction(async tx => {
-      await (tx as unknown as PrismaService).employeeCompensation.updateMany({
+      await tx.employeeCompensation.updateMany({
         where: { userId: dto.userId, effectiveTo: null },
         data: { effectiveTo: new Date(effectiveFrom.getTime() - 1000) },
       });
-      return (tx as unknown as PrismaService).employeeCompensation.create({
+      return tx.employeeCompensation.create({
         data: {
           userId: dto.userId,
           baseSalary: dto.baseSalary,
@@ -130,11 +130,11 @@ export class EmployeeCompensationService {
     if (!existing) throw new NotFoundException('Compensação não encontrada');
     const items = dto.items ?? [];
     return this.prisma.$transaction(async tx => {
-      await (tx as unknown as PrismaService).employeeCompensationComponent.deleteMany({
+      await tx.employeeCompensationComponent.deleteMany({
         where: { compensationId: id },
       });
       if (items.length > 0) {
-        await (tx as unknown as PrismaService).employeeCompensationComponent.createMany({
+        await tx.employeeCompensationComponent.createMany({
           data: items.map(i => ({
             compensationId: id,
             componentCode: i.componentCode,
@@ -143,7 +143,7 @@ export class EmployeeCompensationService {
           })),
         });
       }
-      return (tx as unknown as PrismaService).employeeCompensationComponent.findMany({
+      return tx.employeeCompensationComponent.findMany({
         where: { compensationId: id },
       });
     });

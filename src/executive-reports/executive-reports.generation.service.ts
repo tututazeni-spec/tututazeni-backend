@@ -42,6 +42,7 @@ import type {
   SaveReportTemplateDto,
   UpdateReportTemplateDto,
 } from './dto/executive-generation.dto';
+import { fromJson, toJson } from '../common/helpers/prisma-json';
 
 const FULL_ROLES = ['ADMIN', 'RH', 'DIRECTOR'];
 const MGMT_ROLES = [...FULL_ROLES, 'GESTOR', 'LIDER'];
@@ -140,7 +141,7 @@ export class ExecutiveReportsGenerationService {
         name: dto.name,
         description: dto.description,
         category: CUSTOM_TEMPLATE_CODE,
-        config: dto.config as unknown as Prisma.InputJsonValue,
+        config: toJson(dto.config),
         createdById: user.id,
       },
     });
@@ -156,7 +157,7 @@ export class ExecutiveReportsGenerationService {
         description: dto.description,
         ...(dto.config
           ? {
-              config: dto.config as unknown as Prisma.InputJsonValue,
+              config: toJson(dto.config),
               // Nova versão sempre que a configuração muda: relatórios antigos
               // guardam a versão com que foram gerados (§12.4).
               version: { increment: 1 },
@@ -205,7 +206,7 @@ export class ExecutiveReportsGenerationService {
         `${CUSTOM_TEMPLATE_CODE}:${t.id}`,
         t.name,
         t.version,
-        t.config as unknown as SavedTemplateConfig,
+        fromJson<SavedTemplateConfig>(t.config),
       );
     }
     const def = ref.templateCode ? findTemplate(ref.templateCode) : undefined;
@@ -225,7 +226,7 @@ export class ExecutiveReportsGenerationService {
 
   private specFromConfig(code: string, name: string, version: number, cfg: SavedTemplateConfig) {
     return {
-      def: undefined,
+      def: undefined as TemplateDef,
       spec: {
         code,
         name,
@@ -381,9 +382,9 @@ export class ExecutiveReportsGenerationService {
         formulaVersion: FORMULA_VERSION,
         filters: {
           applied: context,
-          config: (spec.config ?? null) as unknown as Prisma.InputJsonValue,
+          config: toJson(spec.config ?? null),
         } as Prisma.InputJsonValue,
-        content: content as unknown as Prisma.InputJsonValue,
+        content: toJson(content),
         scheduleId: opts.scheduleId ?? null,
       },
       omit: { content: true },
@@ -443,7 +444,7 @@ export class ExecutiveReportsGenerationService {
       throw new ForbiddenException('Relatório de acesso restrito (ADMIN/DIRECTOR)');
     }
 
-    let content = report.content as unknown as ReportContent | null;
+    let content = fromJson<ReportContent | null>(report.content);
     if (!content) {
       // Relatórios anteriores a este módulo: o conteúdo vem das métricas guardadas.
       const rows = report.metrics.map(m => ({

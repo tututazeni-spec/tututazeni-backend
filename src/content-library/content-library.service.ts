@@ -199,7 +199,7 @@ export class ContentLibraryService {
           (r: { contentId: number; _avg: { rating: number | null }; _count: { id: number } }[]) =>
             r[0] ?? null,
         )
-        .catch(e => {
+        .catch((e): null => {
           this.logger.warn({
             contentId: id,
             action: 'findOne.avgRating',
@@ -224,7 +224,7 @@ export class ContentLibraryService {
             .findUnique({
               where: { userId_contentId: { userId, contentId: id } },
             })
-            .catch(e => {
+            .catch((e): null => {
               this.logger.warn({
                 userId,
                 contentId: id,
@@ -430,7 +430,7 @@ export class ContentLibraryService {
           timestamp: { gte: today },
         },
       })
-      .catch(e => {
+      .catch((e): null => {
         this.logger.warn({
           userId,
           contentId: id,
@@ -672,7 +672,7 @@ export class ContentLibraryService {
       .findUnique({
         where: { userId_contentId: { userId, contentId } },
       })
-      .catch(e => {
+      .catch((e): null => {
         this.logger.warn({
           userId,
           contentId,

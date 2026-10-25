@@ -107,14 +107,14 @@ describe('Payroll Catalogue + ESS Compensation Integration', () => {
     if (staleCompIds.length) {
       await (prisma as any).employeeCompensationComponent
         .deleteMany({ where: { compensationId: { in: staleCompIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await (prisma as any).employeeCompensation
         .deleteMany({ where: { id: { in: staleCompIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
     await (prisma as any).salaryComponent
       .deleteMany({ where: { code: COMPONENT_CODE } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
   });
 
   afterAll(async () => {
@@ -126,14 +126,16 @@ describe('Payroll Catalogue + ESS Compensation Integration', () => {
 
     await (prisma as any).employeeCompensationComponent
       .deleteMany({ where: { compensationId: { in: compIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await (prisma as any).employeeCompensation
       .deleteMany({ where: { userId: { in: [catEmpId, catOtherId] } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await (prisma as any).salaryComponent
       .deleteMany({ where: { code: { in: [COMPONENT_CODE] } } })
-      .catch(() => undefined);
-    await prisma.user.deleteMany({ where: { email: { in: CAT_EMAILS } } }).catch(() => undefined);
+      .catch((): undefined => undefined);
+    await prisma.user
+      .deleteMany({ where: { email: { in: CAT_EMAILS } } })
+      .catch((): undefined => undefined);
 
     await prisma.$disconnect();
     await pool.end();

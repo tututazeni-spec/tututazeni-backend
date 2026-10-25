@@ -33,6 +33,7 @@ import {
   EventCheckinMethod,
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
+import { IsWebLink } from '../common/validators/is-web-link.decorator';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 // NOTA: ParticipantStatus aqui é o `EventParticipantStatus` do Prisma — nome
@@ -129,7 +130,7 @@ export class CreateEventDto {
 
   @ApiPropertyOptional({ description: 'Link para evento virtual (Zoom, Teams, Meet)' })
   @IsOptional()
-  @IsString()
+  @IsWebLink()
   meetingUrl?: string;
 
   @ApiPropertyOptional({ description: 'Senha do meeting' })

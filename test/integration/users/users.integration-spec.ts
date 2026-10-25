@@ -46,12 +46,14 @@ describe('Users Integration', () => {
       // activate/deactivate/suspend create rows in both that block deleting the user.
       await prisma.notificationLog
         .deleteMany({ where: { userId: stale.id } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.userAuditLog
         .deleteMany({ where: { OR: [{ userId: stale.id }, { performedById: stale.id }] } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
-    await prisma.user.deleteMany({ where: { email: NEW_USER_EMAIL } }).catch(() => undefined);
+    await prisma.user
+      .deleteMany({ where: { email: NEW_USER_EMAIL } })
+      .catch((): undefined => undefined);
     await prisma.$disconnect();
     await pool.end();
     await app.close();

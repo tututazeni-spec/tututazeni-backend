@@ -52,6 +52,6 @@ export class UploadRejectionAuditor implements OnModuleInit, OnModuleDestroy {
           endpoint: e.action,
         },
       })
-      .catch(() => undefined); // auditar nunca pode fazer falhar o pedido
+      .catch((): undefined => undefined); // auditar nunca pode fazer falhar o pedido
   }
 }

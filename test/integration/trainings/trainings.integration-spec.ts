@@ -60,24 +60,30 @@ describe('Trainings Integration', () => {
 
   afterAll(async () => {
     if (trainingId) {
-      await prisma.trainingRating.deleteMany({ where: { trainingId } }).catch(() => undefined);
-      await prisma.trainingParticipant.deleteMany({ where: { trainingId } }).catch(() => undefined);
+      await prisma.trainingRating
+        .deleteMany({ where: { trainingId } })
+        .catch((): undefined => undefined);
+      await prisma.trainingParticipant
+        .deleteMany({ where: { trainingId } })
+        .catch((): undefined => undefined);
       if (sessionId) {
         await prisma.trainingParticipant
           .deleteMany({ where: { sessionId } })
-          .catch(() => undefined);
+          .catch((): undefined => undefined);
         await prisma.trainingSession
           .deleteMany({ where: { id: sessionId } })
-          .catch(() => undefined);
+          .catch((): undefined => undefined);
       }
-      await prisma.training.deleteMany({ where: { id: trainingId } }).catch(() => undefined);
+      await prisma.training
+        .deleteMany({ where: { id: trainingId } })
+        .catch((): undefined => undefined);
     }
     // O certificado de conclusão é emitido para o gestor (managerId), não
     // para o employeeId — apanhado só depois de uma fuga real ter deixado
     // 6 linhas residuais na BD ao longo de várias execuções de depuração.
     await prisma.certificate
       .deleteMany({ where: { userId: managerId, type: 'TRAINING' } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.$disconnect();
     await pool.end();
     await app.close();

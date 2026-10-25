@@ -50,10 +50,10 @@ describe('Assessments Integration', () => {
     if (assessmentIds.length > 0) {
       await prisma.assessmentAttempt
         .deleteMany({ where: { assessmentId: { in: assessmentIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.assessment
         .deleteMany({ where: { id: { in: assessmentIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
     await prisma.$disconnect();
     await pool.end();

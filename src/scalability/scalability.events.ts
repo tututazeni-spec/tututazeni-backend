@@ -171,7 +171,7 @@ export class ScalabilityEventListeners {
       // cast, mas via `unknown` para não reintroduzir `any`.
       await this.service.processAutomationEvent(
         payload.rule.tenantId,
-        payload.rule.triggerType as unknown as AutomationTrigger,
+        payload.rule.triggerType as AutomationTrigger,
         { userId: payload.targetUserId },
       );
 

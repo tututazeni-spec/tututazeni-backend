@@ -1,3 +1,4 @@
+import { toJson } from '../common/helpers/prisma-json';
 // ─── src/leave-management/leave-settings.service.ts ──────────────────────────
 // Configurações do módulo Leave (docs/Modulo_Leave.md §10): versões imutáveis
 // com data de entrada em vigor e histórico, calendário de feriados por
@@ -11,7 +12,6 @@ import {
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { CurrentUserData } from '../common/types/current-user';
@@ -204,7 +204,7 @@ export class LeaveSettingsService implements OnModuleInit {
     const created = await this.prisma.leaveSettingVersion.create({
       data: {
         effectiveFrom: from,
-        values: next as unknown as Prisma.InputJsonValue,
+        values: toJson(next),
         changeNote: changeNote.trim(),
         createdById: actorId,
       },

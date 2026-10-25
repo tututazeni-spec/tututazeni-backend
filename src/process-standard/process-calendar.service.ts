@@ -363,7 +363,7 @@ export class ProcessCalendarService {
       key: `P${r.id}`,
       kind: 'PROCESS' as const,
       instanceId: r.id,
-      stepId: null,
+      stepId: null as number,
       code: r.code ?? `PROC-${r.id}`,
       title: r.title ?? r.process.title,
       processTitle: r.process.title,
@@ -375,8 +375,8 @@ export class ProcessCalendarService {
       durationHours: plannedDurationHours(null, null, r.startedAt, r.slaDeadline),
       status: r.status,
       priority: r.priority,
-      dependencies: [],
-      approvalDueAt: null,
+      dependencies: [] as CalendarItem['dependencies'],
+      approvalDueAt: null as Date,
       completedAt: r.completedAt,
     }));
   }

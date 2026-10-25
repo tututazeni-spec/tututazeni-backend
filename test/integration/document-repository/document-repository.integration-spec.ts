@@ -67,25 +67,27 @@ describe('Document Repository Integration', () => {
     if (ids.length) {
       await prisma.docDownload
         .deleteMany({ where: { documentId: { in: ids } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.docAuditLog
         .deleteMany({ where: { documentId: { in: ids } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.docShareLink
         .deleteMany({ where: { documentId: { in: ids } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.docPermission
         .deleteMany({ where: { documentId: { in: ids } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.docVersion
         .deleteMany({ where: { documentId: { in: ids } } })
-        .catch(() => undefined);
-      await prisma.document.deleteMany({ where: { id: { in: ids } } }).catch(() => undefined);
+        .catch((): undefined => undefined);
+      await prisma.document
+        .deleteMany({ where: { id: { in: ids } } })
+        .catch((): undefined => undefined);
     }
     if (categoryId) {
       await prisma.docCategoryModel
         .deleteMany({ where: { id: categoryId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
 
     await prisma.$disconnect();

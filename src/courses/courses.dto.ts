@@ -34,6 +34,7 @@ import {
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 import { IsOptionalImageRef } from '../common/validators/optional-image-ref.decorator';
+import { IsWebLink } from '../common/validators/is-web-link.decorator';
 
 export {
   CourseLevel,
@@ -106,7 +107,7 @@ export class CreateCourseDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsWebLink()
   introVideoUrl?: string;
 
   @ApiPropertyOptional()
@@ -408,7 +409,7 @@ export class CreateLessonDto {
 
   @ApiPropertyOptional({ description: 'Legendas (URL)' })
   @IsOptional()
-  @IsString()
+  @IsWebLink()
   captionsUrl?: string;
 
   @ApiPropertyOptional({ description: 'Transcrição do vídeo/áudio' })
@@ -490,7 +491,7 @@ export class CreateLessonDto {
 
   @ApiPropertyOptional({ description: 'Link da sessão ao vivo (type=LIVE)' })
   @IsOptional()
-  @IsString()
+  @IsWebLink()
   liveSessionUrl?: string;
 
   @ApiPropertyOptional({ description: 'Instrutor da aula ao vivo (type=LIVE)' })

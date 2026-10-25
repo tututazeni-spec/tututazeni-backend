@@ -37,6 +37,7 @@ import { FILE_POLICIES, maxDataUrlChars } from '../common/files/file-policies';
 import { IsBase64ImageDataUrl } from '../common/validators/is-base64-image-data-url.decorator';
 
 import { IsOptionalImageRef } from '../common/validators/optional-image-ref.decorator';
+import { IsWebLink } from '../common/validators/is-web-link.decorator';
 // ─── Enums ────────────────────────────────────────────────────────────────────
 // NOTA: ParticipantStatus aqui é o `TrainingParticipantStatus` do Prisma —
 // nome local mantido por compatibilidade, distinto do `ParticipantStatus`
@@ -430,7 +431,7 @@ export class CreateTrainingSessionDto {
 
   @ApiPropertyOptional({ description: 'Link da reunião online' })
   @IsOptional()
-  @IsString()
+  @IsWebLink()
   meetingUrl?: string;
 
   @ApiPropertyOptional({ description: 'Vagas máximas (0 = ilimitado)' })

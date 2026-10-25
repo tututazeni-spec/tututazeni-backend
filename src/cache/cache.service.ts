@@ -112,6 +112,6 @@ export class CacheService implements OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.redis.quit().catch(() => undefined);
+    await this.redis.quit().catch((): undefined => undefined);
   }
 }

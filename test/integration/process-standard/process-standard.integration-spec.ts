@@ -59,14 +59,20 @@ describe('Process Standard Integration', () => {
     for (const id of cleanupProcessIds) {
       await prisma.stepProgress
         .deleteMany({ where: { instance: { processId: id } } })
-        .catch(() => undefined);
-      await prisma.processInstance.deleteMany({ where: { processId: id } }).catch(() => undefined);
-      await prisma.processVersion.deleteMany({ where: { processId: id } }).catch(() => undefined);
+        .catch((): undefined => undefined);
+      await prisma.processInstance
+        .deleteMany({ where: { processId: id } })
+        .catch((): undefined => undefined);
+      await prisma.processVersion
+        .deleteMany({ where: { processId: id } })
+        .catch((): undefined => undefined);
       await prisma.processApprovalLog
         .deleteMany({ where: { processId: id } })
-        .catch(() => undefined);
-      await prisma.processAuditLog.deleteMany({ where: { processId: id } }).catch(() => undefined);
-      await prisma.processStandard.deleteMany({ where: { id } }).catch(() => undefined);
+        .catch((): undefined => undefined);
+      await prisma.processAuditLog
+        .deleteMany({ where: { processId: id } })
+        .catch((): undefined => undefined);
+      await prisma.processStandard.deleteMany({ where: { id } }).catch((): undefined => undefined);
     }
 
     await prisma.$disconnect();

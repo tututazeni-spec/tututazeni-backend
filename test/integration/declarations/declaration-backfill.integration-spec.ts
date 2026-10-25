@@ -99,17 +99,19 @@ describe('Fase E — backfill DeclarationRequest -> Declaration', () => {
   afterAll(async () => {
     await prisma.declaration
       .deleteMany({ where: { legacyRequestId: { in: reqIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.declarationApproval
       .deleteMany({ where: { requestId: { in: reqIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.declarationRequest
       .deleteMany({ where: { id: { in: reqIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.declarationTemplate
       .deleteMany({ where: { id: templateId } })
-      .catch(() => undefined);
-    await prisma.declarationPurpose.deleteMany({ where: { id: purposeId } }).catch(() => undefined);
+      .catch((): undefined => undefined);
+    await prisma.declarationPurpose
+      .deleteMany({ where: { id: purposeId } })
+      .catch((): undefined => undefined);
     await prisma.$disconnect();
     await pool.end();
   });

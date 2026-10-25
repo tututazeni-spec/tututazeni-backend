@@ -128,15 +128,19 @@ describe('Certificates scope, exports and personal area (Postgres real)', () => 
     // filhos antes de pais: certificate → enrollment → course (e repor a hierarquia)
     await prisma.certificate
       .deleteMany({ where: { courseId: { in: ids } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.certificate
       .deleteMany({ where: { title: { in: [titleTeamPending, titleOutPending] } } })
-      .catch(() => undefined);
-    await prisma.enrollment.deleteMany({ where: { courseId: { in: ids } } }).catch(() => undefined);
-    await prisma.course.deleteMany({ where: { id: { in: ids } } }).catch(() => undefined);
+      .catch((): undefined => undefined);
+    await prisma.enrollment
+      .deleteMany({ where: { courseId: { in: ids } } })
+      .catch((): undefined => undefined);
+    await prisma.course
+      .deleteMany({ where: { id: { in: ids } } })
+      .catch((): undefined => undefined);
     await prisma.user
       .update({ where: { id: employeeId }, data: { managerId: null } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.$disconnect();
     await pool.end();
     await app.close();

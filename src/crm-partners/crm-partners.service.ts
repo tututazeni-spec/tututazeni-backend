@@ -1249,7 +1249,7 @@ export class CrmPartnersService {
   async getInteractions(partnerId: string, page = 1, limit = 20) {
     await this.findOne(partnerId);
     const { skip, take } = calculatePagination(page, limit);
-    const where = { partnerId, deletedAt: null };
+    const where = { partnerId, deletedAt: null as Date };
     const [data, total] = await Promise.all([
       this.prisma.read.partnerInteraction.findMany({
         where,
@@ -1604,9 +1604,9 @@ export class CrmPartnersService {
         institutionalComms: false,
         eventInvites: false,
         programComms: false,
-        contactPreferences: null,
-        consentDate: null,
-        notes: null,
+        contactPreferences: null as string,
+        consentDate: null as Date,
+        notes: null as string,
       }
     );
   }

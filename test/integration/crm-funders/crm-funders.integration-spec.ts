@@ -45,17 +45,25 @@ describe('CRM Funders Integration', () => {
 
   afterAll(async () => {
     if (grantId) {
-      await prisma.grantDisbursement.deleteMany({ where: { grantId } }).catch(() => undefined);
+      await prisma.grantDisbursement
+        .deleteMany({ where: { grantId } })
+        .catch((): undefined => undefined);
     }
     if (funderId) {
-      await prisma.funderInteraction.deleteMany({ where: { funderId } }).catch(() => undefined);
-      await prisma.funderReport.deleteMany({ where: { funderId } }).catch(() => undefined);
+      await prisma.funderInteraction
+        .deleteMany({ where: { funderId } })
+        .catch((): undefined => undefined);
+      await prisma.funderReport
+        .deleteMany({ where: { funderId } })
+        .catch((): undefined => undefined);
     }
     if (grantId) {
-      await prisma.fundingGrant.deleteMany({ where: { id: grantId } }).catch(() => undefined);
+      await prisma.fundingGrant
+        .deleteMany({ where: { id: grantId } })
+        .catch((): undefined => undefined);
     }
     if (funderId) {
-      await prisma.funder.deleteMany({ where: { id: funderId } }).catch(() => undefined);
+      await prisma.funder.deleteMany({ where: { id: funderId } }).catch((): undefined => undefined);
     }
 
     await prisma.$disconnect();

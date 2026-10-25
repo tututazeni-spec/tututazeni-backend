@@ -45,6 +45,7 @@ import {
 } from './evaluation.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { writeChainedAuditLog } from '../common/helpers/audit-chain';
+import { toJson } from '../common/helpers/prisma-json';
 
 // EvalModel usa códigos curtos ('90'/'360', contrato da API) — EvalCampaignModel
 // é o enum real do Prisma ('DEG_90'/'DEG_360'). Mapeados nos dois sentidos aqui.
@@ -163,7 +164,7 @@ export class EvaluationService {
         link9Box: dto.link9Box ?? false,
         notes: dto.notes,
         purpose: dto.purpose,
-        blocks: dto.blocks ? (dto.blocks as unknown as Prisma.InputJsonValue) : undefined,
+        blocks: dto.blocks ? toJson(dto.blocks) : undefined,
         populationType: dto.populationType,
         targetUnitIds: dto.targetUnitIds ?? [],
         targetUserIds: dto.targetUserIds ?? [],
@@ -252,7 +253,7 @@ export class EvaluationService {
         ...(endDate ? { endDate: new Date(endDate) } : {}),
         ...(selfEvalDueDate ? { selfEvalDueDate: new Date(selfEvalDueDate) } : {}),
         ...(managerEvalDueDate ? { managerEvalDueDate: new Date(managerEvalDueDate) } : {}),
-        ...(blocks ? { blocks: blocks as unknown as Prisma.InputJsonValue } : {}),
+        ...(blocks ? { blocks: toJson(blocks) } : {}),
       },
     });
     return this.toPublicCampaign(campaign);
@@ -759,7 +760,7 @@ export class EvaluationService {
           ...(dto.cycleId ? { cycleId: dto.cycleId } : {}),
         },
       })
-      .catch((e: unknown) => {
+      .catch((e: unknown): null => {
         this.logger.warn({
           action: 'EVALUATION_REQUEST_CHECK_EXISTING',
           evaluatorId: dto.evaluatorId,
@@ -808,9 +809,7 @@ export class EvaluationService {
             : dto.type === EvalType.MANAGER
               ? EvalStage.MANAGER_EVAL
               : undefined,
-        objectives: dto.objectives
-          ? (dto.objectives as unknown as Prisma.InputJsonValue)
-          : undefined,
+        objectives: dto.objectives ? toJson(dto.objectives) : undefined,
       },
       include: {
         evaluator: { select: { id: true, fullName: true } },
@@ -1038,7 +1037,7 @@ export class EvaluationService {
       data: {
         ...rest,
         ...(dueDate ? { dueDate: new Date(dueDate) } : {}),
-        ...(objectives ? { objectives: objectives as unknown as Prisma.InputJsonValue } : {}),
+        ...(objectives ? { objectives: toJson(objectives) } : {}),
       },
     });
   }
@@ -1138,7 +1137,7 @@ export class EvaluationService {
         where: { id: dto.requestId },
         include: { cycle: true },
       })
-      .catch((e: unknown) => {
+      .catch((e: unknown): null => {
         this.logger.warn({
           action: 'EVALUATION_REQUEST_FETCH',
           requestId: dto.requestId,
@@ -1205,7 +1204,7 @@ export class EvaluationService {
       type: request.type,
       period:
         request.cycle?.startDate?.getFullYear().toString() ?? new Date().getFullYear().toString(),
-      criteria: dto.answers as unknown as Prisma.InputJsonValue,
+      criteria: toJson(dto.answers),
       overallScore: avgScore,
       competencyScores: JSON.stringify(compAvg),
       strengths: dto.strengths,
@@ -1333,7 +1332,7 @@ export class EvaluationService {
         evaluatedId: dto.evaluatedId,
         type: dto.type,
         period: dto.period,
-        criteria: dto.criteria as unknown as Prisma.InputJsonValue,
+        criteria: toJson(dto.criteria),
         generalComment: dto.generalComment,
         overallScore: avgScore,
       },
@@ -1477,7 +1476,7 @@ export class EvaluationService {
     if (cycleId) {
       const campaign = await this.prisma.evaluationCampaign
         .findUnique({ where: { id: cycleId } })
-        .catch((e: unknown) => {
+        .catch((e: unknown): null => {
           this.logger.warn({
             action: 'EVALUATION_CYCLE_FETCH_WEIGHTS',
             cycleId,
@@ -1570,7 +1569,7 @@ export class EvaluationService {
       })
       .catch(() => [] as { objectives: Prisma.JsonValue }[]);
     const objectives = objectiveRequests.flatMap(r =>
-      Array.isArray(r.objectives) ? (r.objectives as unknown as Record<string, unknown>[]) : [],
+      Array.isArray(r.objectives) ? (r.objectives as Record<string, unknown>[]) : [],
     );
     const objectivesWithPct = objectives.filter(o => typeof o.percentage === 'number') as {
       percentage: number;
@@ -2163,7 +2162,7 @@ export class EvaluationService {
         department: { select: { name: true } },
       },
     });
-    if (!team.length) return { team: [], message: 'Sem equipa directa' };
+    if (!team.length) return { team: [] as never[], message: 'Sem equipa directa' };
 
     const teamIds = team.map(u => u.id);
     const where: Prisma.PerformanceEvaluationWhereInput = { evaluatedId: { in: teamIds } };
@@ -2198,7 +2197,7 @@ export class EvaluationService {
         avgScore: avg,
         evals: uEvals.length,
         hasPendingEval: hasPending,
-        trend: null, // TODO: compare with previous cycle
+        trend: null as number, // TODO: compare with previous cycle
       };
     });
 
@@ -2266,7 +2265,7 @@ export class EvaluationService {
         where: { id: evaluatedId },
         select: { id: true, fullName: true, managerId: true },
       })
-      .catch((e: unknown) => {
+      .catch((e: unknown): null => {
         this.logger.warn({
           action: 'EVALUATION_PDI_TRIGGER_USER_FETCH',
           evaluatedId,
@@ -2544,7 +2543,7 @@ export class EvaluationService {
     // Objetivos alcançados (docs pt.11) — % médio de realização das metas
     // definidas na etapa 6, através das EvaluationRequest.objectives.
     const objectives = objectiveRows.flatMap(r =>
-      Array.isArray(r.objectives) ? (r.objectives as unknown as Record<string, unknown>[]) : [],
+      Array.isArray(r.objectives) ? (r.objectives as Record<string, unknown>[]) : [],
     );
     const objectivesWithPct = objectives.filter(o => typeof o.percentage === 'number') as {
       percentage: number;

@@ -299,7 +299,7 @@ export class DashboardInstitutionalService {
 
   async findAllSnapshots(filters: FilterSnapshotDto) {
     const { type, page = 1, limit = 12 } = filters;
-    const where = { deletedAt: null, ...(type && { type }) };
+    const where = { deletedAt: null as Date, ...(type && { type }) };
     const { skip, take } = calculatePagination(page, limit);
     const [data, total] = await this.prisma.$transaction([
       this.prisma.read.institutionalSnapshot.findMany({

@@ -1,6 +1,6 @@
-=========================
-Dependencies
-=========================
+# =========================
+# Dependencies
+# =========================
 node_modules/
 
 # Frontend project
@@ -9,9 +9,9 @@ frontend/
 # Prisma
 prisma/migrations/*.sql
 
-=========================
-Build files
-=========================
+# =========================
+# Build files
+# =========================
 
 # Redis
 dump.rdb
@@ -22,9 +22,9 @@ build/
 out/
 *.tsbuildinfo
 
-=========================
-Environment variables
-=========================
+# =========================
+# Environment variables
+# =========================
 
 .env
 .env.local
@@ -32,9 +32,16 @@ Environment variables
 .env.test.local
 .env.production.local
 
-=========================
-Logs
-=========================
+# Qualquer outra variante (.env.staging, .env.production, ...) fica fora do git;
+# só os ficheiros de exemplo e o .env.test (usado pelo CI) são versionados
+.env.*
+!.env.example
+!.env.test
+!.env.test.example
+
+# =========================
+# Logs
+# =========================
 
 logs/
 *.log
@@ -44,32 +51,32 @@ load-tests/reports/server-*.log
 yarn-debug.log*
 yarn-error.log*
 
-=========================
-Coverage
-=========================
+# =========================
+# Coverage
+# =========================
 
 coverage/
 
-=========================
-Temporary files
-=========================
+# =========================
+# Temporary files
+# =========================
 
 tmp/
 temp/
 *.tmp
 
-=========================
-IDE / Editor files
-=========================
+# =========================
+# IDE / Editor files
+# =========================
 
 .vscode/
 .idea/
 *.swp
 *.swo
 
-=========================
-OS files
-=========================
+# =========================
+# OS files
+# =========================
 
 .DS_Store
 Thumbs.db
