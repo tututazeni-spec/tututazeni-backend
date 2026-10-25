@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bull';
 import { ApiIntegrationService } from './api-integration.service';
@@ -149,6 +150,19 @@ describe('ApiIntegrationService — API Key com modelo presente', () => {
     expect(mockPrisma.apiKey.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 5 } }),
     );
+  });
+
+  it('rotateApiKey: se o update falhar, propaga o erro e não devolve chave nem regista auditoria', async () => {
+    mockPrisma.apiKey.update.mockRejectedValueOnce(new Error('db down'));
+    await expect(service.rotateApiKey(5, 1)).rejects.toThrow('db down');
+    expect(mockPrisma.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('rotateApiKey: id inexistente (P2025) → 404', async () => {
+    mockPrisma.apiKey.update.mockRejectedValueOnce(
+      Object.assign(new Error('not found'), { code: 'P2025' }),
+    );
+    await expect(service.rotateApiKey(999, 1)).rejects.toBeInstanceOf(NotFoundException);
   });
 });
 

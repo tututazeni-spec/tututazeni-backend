@@ -632,20 +632,27 @@ export class ApiIntegrationService {
     const rawKey = generateApiKey();
     const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
 
+    // Só devolvemos a chave nova se o hash ficou gravado: se o update falhar o
+    // erro propaga (500) e a chave antiga continua válida, em vez de o admin
+    // copiar uma chave que não existe na BD.
     await safeM(this.prisma, 'apiKey')
       .update({
         where: { id: keyId },
         data: { keyHash, keyPreview: maskApiKey(rawKey), rotatedAt: new Date() },
       })
-      .catch((err: unknown) =>
+      .catch((err: unknown) => {
         this.logger.error({
           keyId,
           userId,
           action: 'API_KEY_ROTATED',
           err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao gravar rotação de API key — chave devolvida ao cliente pode não corresponder ao hash guardado',
-        }),
-      );
+          msg: 'Falha ao gravar rotação de API key — nenhuma chave foi devolvida',
+        });
+        if ((err as { code?: string })?.code === 'P2025') {
+          throw new NotFoundException('API Key não encontrada');
+        }
+        throw err;
+      });
 
     await writeChainedAuditLog(this.prisma, {
       userId,
