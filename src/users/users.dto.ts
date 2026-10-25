@@ -16,6 +16,7 @@ import { IsStrongPassword } from '../common/validators/strong-password.decorator
 import { IsBase64ImageDataUrl } from '../common/validators/is-base64-image-data-url.decorator';
 import { FILE_POLICIES, maxDataUrlChars } from '../common/files/file-policies';
 import { EmptyStringToUndefined } from '../common/transformers/empty-string-to-undefined';
+import { AVATAR_REF_RE } from './avatar-ref';
 import { AccountStatus, HrStatus, ContractType, WorkMode } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 import { IsWebLink } from '../common/validators/is-web-link.decorator';
@@ -75,6 +76,10 @@ export class CreateUserDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  // O avatar que a API devolve nas listas é uma referência; se o cliente a reenviar, ignora.
+  @Transform(({ value }) =>
+    typeof value === 'string' && AVATAR_REF_RE.test(value) ? undefined : value,
+  )
   @EmptyStringToUndefined()
   @IsString()
   avatarUrl?: string;

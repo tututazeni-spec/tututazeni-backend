@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { BullModule } from '@nestjs/bull';
 import { UsersService } from './users.service';
+import { AvatarRefInterceptor } from './avatar-ref.interceptor';
 import { UsersController } from './users.controller';
 import { UserQualificationsService } from './user-qualifications.service';
 import { UserQualificationsController } from './user-qualifications.controller';
@@ -24,7 +26,13 @@ import { SettingsModule } from '../settings/settings.module';
     RolesPermissionsModule,
     SettingsModule,
   ],
-  providers: [UsersService, UserQualificationsService, EmailProcessor, PasswordResetService],
+  providers: [
+    UsersService,
+    UserQualificationsService,
+    EmailProcessor,
+    PasswordResetService,
+    { provide: APP_INTERCEPTOR, useClass: AvatarRefInterceptor },
+  ],
   controllers: [UsersController, UserQualificationsController],
   exports: [UsersService, EmployeesModule, RolesPermissionsModule],
 })

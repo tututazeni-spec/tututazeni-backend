@@ -55,7 +55,17 @@ describe('Users Avatar Integration', () => {
       .get('/auth/me')
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
-    expect(me.body.avatarUrl).toBe(TINY_PNG);
+    // As respostas JSON trazem uma referência cacheável, não o base64.
+    expect(me.body.avatarUrl).toMatch(/^\/api\/users\/\d+\/avatar\?v=[0-9a-f]{12}$/);
+
+    // A rota do avatar serve a imagem original (a API real corre atrás do /api do proxy).
+    const img = await request(app.getHttpServer())
+      .get(me.body.avatarUrl.replace(/^\/api/, ''))
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(img.headers['content-type']).toMatch(/^image\/png/);
+    expect(img.headers['cache-control']).toContain('immutable');
+    expect(`data:image/png;base64,${img.body.toString('base64')}`).toBe(TINY_PNG);
   });
 
   it('DELETE remove o avatar e GET /auth/me devolve null', async () => {
