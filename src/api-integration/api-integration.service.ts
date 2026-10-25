@@ -1,5 +1,5 @@
 // src/api-integration/api-integration.service.ts
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { Prisma, ApiIntegrationLog } from '@prisma/client';
@@ -47,6 +47,19 @@ function safeM(prisma: PrismaService, name: string): DynamicModelDelegate {
       upsert: async (d: unknown) => (d as { create: unknown }).create,
     }
   );
+}
+
+// Para escritas que devolvem um segredo ao cliente (API key): se o modelo faltar
+// no cliente Prisma gerado, falhar em vez de degradar — o safeM() fingiria que
+// gravou e o admin copiaria uma chave que nunca existiu na BD.
+function requireM(prisma: PrismaService, name: string): DynamicModelDelegate {
+  const m = (prisma as unknown as Record<string, DynamicModelDelegate | undefined>)[name];
+  if (!m) {
+    throw new ServiceUnavailableException(
+      `Modelo ${name} indisponível no cliente Prisma (executar prisma generate e reiniciar o servidor)`,
+    );
+  }
+  return m;
 }
 
 // apiKey não existe em prisma/schema.prisma — sem tipos gerados pelo Prisma.
@@ -519,7 +532,7 @@ export class ApiIntegrationService {
     const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
 
     const apiKey = await (
-      safeM(this.prisma, 'apiKey').create({
+      requireM(this.prisma, 'apiKey').create({
         data: {
           name: dto.name,
           description: dto.description,
@@ -539,13 +552,9 @@ export class ApiIntegrationService {
         keyName: dto.name,
         action: 'API_KEY_CREATED',
         err: { message: err instanceof Error ? err.message : String(err) },
-        msg: 'Falha ao criar API key (modelo apiKey ausente ou erro de BD) — a devolver fallback sem persistência',
+        msg: 'Falha ao criar API key — nenhuma chave foi devolvida',
       });
-      return {
-        name: dto.name,
-        scopes: dto.scopes,
-        message: 'API Key registada (modelo apiKey ausente — execute migration)',
-      };
+      throw err;
     });
 
     await writeChainedAuditLog(this.prisma, {
@@ -635,7 +644,7 @@ export class ApiIntegrationService {
     // Só devolvemos a chave nova se o hash ficou gravado: se o update falhar o
     // erro propaga (500) e a chave antiga continua válida, em vez de o admin
     // copiar uma chave que não existe na BD.
-    await safeM(this.prisma, 'apiKey')
+    await requireM(this.prisma, 'apiKey')
       .update({
         where: { id: keyId },
         data: { keyHash, keyPreview: maskApiKey(rawKey), rotatedAt: new Date() },

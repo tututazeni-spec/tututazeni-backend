@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bull';
 import { ApiIntegrationService } from './api-integration.service';
@@ -45,10 +45,16 @@ describe('ApiIntegrationService — modelo ApiKey/Webhook ausente (fallback segu
     service = module.get<ApiIntegrationService>(ApiIntegrationService);
   });
 
-  it('createApiKey sem modelo persistido: devolve a chave em claro mas sinaliza ausência de persistência', async () => {
-    const result = await service.createApiKey({ name: 'Key sem BD', scopes: ['read'] } as any, 1);
-    expect(result).toHaveProperty('key');
-    expect((result as any).message).toMatch(/Guarda esta chave/);
+  it('createApiKey sem modelo: falha (503) em vez de devolver uma chave que nunca foi gravada', async () => {
+    await expect(
+      service.createApiKey({ name: 'Key sem BD', scopes: ['read'] } as any, 1),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(mockPrisma.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('rotateApiKey sem modelo: falha (503) e não devolve chave', async () => {
+    await expect(service.rotateApiKey(5, 1)).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(mockPrisma.auditLog.create).not.toHaveBeenCalled();
   });
 
   it('getApiKeys sem modelo: devolve lista vazia em vez de rebentar', async () => {
@@ -150,6 +156,14 @@ describe('ApiIntegrationService — API Key com modelo presente', () => {
     expect(mockPrisma.apiKey.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 5 } }),
     );
+  });
+
+  it('createApiKey: se o create falhar, propaga o erro e não devolve chave', async () => {
+    mockPrisma.apiKey.create.mockRejectedValueOnce(new Error('db down'));
+    await expect(service.createApiKey({ name: 'K', scopes: ['read'] } as any, 1)).rejects.toThrow(
+      'db down',
+    );
+    expect(mockPrisma.auditLog.create).not.toHaveBeenCalled();
   });
 
   it('rotateApiKey: se o update falhar, propaga o erro e não devolve chave nem regista auditoria', async () => {
