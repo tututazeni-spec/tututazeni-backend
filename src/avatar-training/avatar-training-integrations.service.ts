@@ -153,7 +153,9 @@ export class AvatarTrainingIntegrationsService {
       orderBy: [{ passed: 'desc' }, { score: 'desc' }],
       select: { id: true, status: true, passed: true, score: true },
     });
-    return best ?? { id: null, status: 'NOT_ATTEMPTED', passed: false, score: null };
+    return (
+      best ?? { id: null as string, status: 'NOT_ATTEMPTED', passed: false, score: null as number }
+    );
   }
 
   // ── Conteúdos / fontes aprovadas ───────────────────────────────────────────

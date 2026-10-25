@@ -355,7 +355,7 @@ export class UsersService {
     // Zero-knowledge: nenhum administrador define ou conhece a senha de outro utilizador.
     // A conta nasce sem senha e o próprio utilizador define-a pelo link de convite.
     if (dto.password) throw new BadRequestException(PASSWORD_BY_ADMIN_MESSAGE);
-    const hashed = null;
+    const hashed: string | null = null;
 
     let user: Prisma.UserGetPayload<{ include: typeof USER_INCLUDE_BASIC }>;
     try {
@@ -638,7 +638,7 @@ export class UsersService {
 
   async clearAvatar(userId: number) {
     await this.prisma.user.update({ where: { id: userId }, data: { avatarUrl: null } });
-    return { avatarUrl: null };
+    return { avatarUrl: null as string };
   }
 
   // ─── ESTADO DA CONTA ──────────────────────────────────────────────────────
@@ -1218,9 +1218,9 @@ export class UsersService {
       // histórico de bloqueios nesta plataforma — ver relatório de research
       // desta funcionalidade. Devolvido explicitamente para o frontend
       // assinalar "não disponível" em vez de omitir a secção.
-      devices: null,
-      loginAttempts: null,
-      blockHistory: null,
+      devices: null as unknown,
+      loginAttempts: null as unknown,
+      blockHistory: null as unknown,
     };
   }
 

@@ -225,12 +225,12 @@ export class CareerPlansService {
         score: 100,
         readinessLevel: ReadinessLevel.READY,
         readinessEmoji: readinessEmoji(ReadinessLevel.READY),
-        skillGaps: [],
-        missingSkills: [],
+        skillGaps: [] as SkillGapEntry[],
+        missingSkills: [] as SkillGapEntry[],
         totalRequirements: 0,
         metRequirements: 0,
         message: 'Sem requisitos de skills configurados',
-        recommendedCourses: [],
+        recommendedCourses: [] as unknown[],
       };
     }
 

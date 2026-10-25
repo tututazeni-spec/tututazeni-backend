@@ -575,7 +575,7 @@ export class ApiIntegrationService {
         where,
         orderBy: { createdAt: 'desc' },
       }) as Promise<ApiKeyRecord[]>
-    ).catch((err: unknown) => {
+    ).catch((err: unknown): never[] => {
       this.logger.warn({
         createdById,
         action: 'API_KEY_LIST',
@@ -673,7 +673,7 @@ export class ApiIntegrationService {
       safeM(this.prisma, 'apiKey').findFirst({
         where: { keyHash, active: true },
       }) as Promise<ApiKeyRecord | null>
-    ).catch((err: unknown) => {
+    ).catch((err: unknown): null => {
       this.logger.error({
         action: 'API_KEY_VALIDATE',
         err: { message: err instanceof Error ? err.message : String(err) },
@@ -743,7 +743,7 @@ export class ApiIntegrationService {
       safeM(this.prisma, 'webhook').findMany({
         orderBy: { createdAt: 'desc' },
       }) as Promise<WebhookRecord[]>
-    ).catch((err: unknown) => {
+    ).catch((err: unknown): never[] => {
       this.logger.warn({
         action: 'WEBHOOK_LIST',
         err: { message: err instanceof Error ? err.message : String(err) },
@@ -832,7 +832,7 @@ export class ApiIntegrationService {
       safeM(this.prisma, 'webhook').findMany({
         where: { active: true },
       }) as Promise<WebhookRecord[]>
-    ).catch((err: unknown) => {
+    ).catch((err: unknown): never[] => {
       this.logger.error({
         event: dto.event,
         action: 'WEBHOOK_TRIGGER',
@@ -889,7 +889,7 @@ export class ApiIntegrationService {
         orderBy: { createdAt: 'desc' },
         take: limit,
       }) as Promise<WebhookDeliveryRecord[]>
-    ).catch((err: unknown) => {
+    ).catch((err: unknown): never[] => {
       this.logger.warn({
         webhookId,
         action: 'WEBHOOK_DELIVERIES_LIST',
@@ -922,7 +922,7 @@ export class ApiIntegrationService {
             err: { message: err instanceof Error ? err.message : String(err) },
             msg: 'Falha ao calcular latência média das integrações — a devolver null',
           });
-          return { _avg: { latencyMs: null } };
+          return { _avg: { latencyMs: null as number } };
         });
 
     const [

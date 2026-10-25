@@ -247,7 +247,7 @@ export class CrmBeneficiariesService {
   async getInteractions(beneficiaryId: string, page = 1, limit = 20) {
     await this.findOne(beneficiaryId);
     const { skip, take } = calculatePagination(page, limit);
-    const where = { beneficiaryId, deletedAt: null };
+    const where = { beneficiaryId, deletedAt: null as Date };
     const [data, total] = await Promise.all([
       this.prisma.read.beneficiaryInteraction.findMany({
         where,

@@ -759,7 +759,7 @@ export class EvaluationService {
           ...(dto.cycleId ? { cycleId: dto.cycleId } : {}),
         },
       })
-      .catch((e: unknown) => {
+      .catch((e: unknown): null => {
         this.logger.warn({
           action: 'EVALUATION_REQUEST_CHECK_EXISTING',
           evaluatorId: dto.evaluatorId,
@@ -1477,7 +1477,7 @@ export class EvaluationService {
     if (cycleId) {
       const campaign = await this.prisma.evaluationCampaign
         .findUnique({ where: { id: cycleId } })
-        .catch((e: unknown) => {
+        .catch((e: unknown): null => {
           this.logger.warn({
             action: 'EVALUATION_CYCLE_FETCH_WEIGHTS',
             cycleId,
@@ -2163,7 +2163,7 @@ export class EvaluationService {
         department: { select: { name: true } },
       },
     });
-    if (!team.length) return { team: [], message: 'Sem equipa directa' };
+    if (!team.length) return { team: [] as unknown[], message: 'Sem equipa directa' };
 
     const teamIds = team.map(u => u.id);
     const where: Prisma.PerformanceEvaluationWhereInput = { evaluatedId: { in: teamIds } };
@@ -2198,7 +2198,7 @@ export class EvaluationService {
         avgScore: avg,
         evals: uEvals.length,
         hasPendingEval: hasPending,
-        trend: null, // TODO: compare with previous cycle
+        trend: null as unknown, // TODO: compare with previous cycle
       };
     });
 
@@ -2266,7 +2266,7 @@ export class EvaluationService {
         where: { id: evaluatedId },
         select: { id: true, fullName: true, managerId: true },
       })
-      .catch((e: unknown) => {
+      .catch((e: unknown): null => {
         this.logger.warn({
           action: 'EVALUATION_PDI_TRIGGER_USER_FETCH',
           evaluatedId,

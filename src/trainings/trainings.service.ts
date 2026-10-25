@@ -1349,7 +1349,7 @@ export class TrainingService {
       },
       orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
     });
-    if (rows.length === 0) return rows.map(p => ({ ...p, certificate: null }));
+    if (rows.length === 0) return rows.map(p => ({ ...p, certificate: null as unknown }));
 
     // Certificado da formação de cada participante (a lista só mostra o mais recente).
     const session = await this.prisma.read.trainingSession.findUnique({
@@ -1588,11 +1588,11 @@ export class TrainingService {
         colorIndex: t.colorIndex,
         start: t.startDate,
         end: t.endDate,
-        modality: null,
+        modality: null as string,
         location: t.roomLocation,
         instructor: t.instructor,
         participants: 0,
-        maxParticipants: null,
+        maxParticipants: null as number,
       })),
     ].sort((a, b) => (a.start?.getTime() ?? 0) - (b.start?.getTime() ?? 0));
 

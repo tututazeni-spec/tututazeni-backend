@@ -523,7 +523,7 @@ export class CrmFundersService {
   async findGrants(funderId: string, filters: PaginationFilterDto) {
     await this.findOne(funderId);
     const { page = 1, limit = 20 } = filters;
-    const where = { funderId, deletedAt: null };
+    const where = { funderId, deletedAt: null as Date };
     const { skip, take } = calculatePagination(page, limit);
     const [data, total] = await Promise.all([
       this.prisma.read.fundingGrant.findMany({
@@ -780,7 +780,7 @@ export class CrmFundersService {
 
   async getDisbursements(grantId: string, filters: PaginationFilterDto) {
     const { page = 1, limit = 20 } = filters;
-    const where = { grantId, deletedAt: null };
+    const where = { grantId, deletedAt: null as Date };
     const { skip, take } = calculatePagination(page, limit);
     const [data, total] = await Promise.all([
       this.prisma.read.grantDisbursement.findMany({
@@ -2230,9 +2230,9 @@ export class CrmFundersService {
         institutionalComms: false,
         eventInvites: false,
         reportComms: false,
-        contactPreferences: null,
-        consentDate: null,
-        notes: null,
+        contactPreferences: null as unknown,
+        consentDate: null as Date,
+        notes: null as string,
       }
     );
   }

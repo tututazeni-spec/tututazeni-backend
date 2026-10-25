@@ -231,7 +231,7 @@ export class AuthSettingsService {
         name: attr(entry[ldap.nameAttribute]) || email,
       };
     } finally {
-      await client.unbind().catch(() => undefined);
+      await client.unbind().catch((): undefined => undefined);
     }
   }
 
@@ -249,7 +249,7 @@ export class AuthSettingsService {
     } catch {
       return false;
     } finally {
-      await client.unbind().catch(() => undefined);
+      await client.unbind().catch((): undefined => undefined);
     }
   }
 
@@ -270,7 +270,7 @@ export class AuthSettingsService {
       });
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
     } finally {
-      await client.unbind().catch(() => undefined);
+      await client.unbind().catch((): undefined => undefined);
     }
   }
 }

@@ -220,7 +220,7 @@ export class SystemSettingsService {
   async retryFailed(name: string, actorId: number) {
     const q = this.queue(name);
     const jobs = await q.getFailed(0, 99);
-    await Promise.all(jobs.map(j => j.retry().catch(() => undefined)));
+    await Promise.all(jobs.map(j => j.retry().catch((): undefined => undefined)));
     await this.audit(actorId, 'SETTINGS_SYSTEM_QUEUE_RETRY', 'MEDIUM', {
       queue: name,
       retried: jobs.length,

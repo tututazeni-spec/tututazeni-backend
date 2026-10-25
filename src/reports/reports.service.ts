@@ -90,7 +90,7 @@ export class ReportsService {
         from: range.gte,
         to: range.lte,
       })
-      .catch((e: unknown) => {
+      .catch((e: unknown): null => {
         this.logger.warn({
           filter,
           action: 'REPORTS_HEADCOUNT',
@@ -163,7 +163,7 @@ export class ReportsService {
         ...(filter.managerId != null ? { managerId: filter.managerId } : {}),
         ...(filter.positionId != null ? { positionId: filter.positionId } : {}),
       })
-      .catch((e: unknown) => {
+      .catch((e: unknown): null => {
         this.logger.warn({
           filter,
           action: 'REPORTS_TURNOVER',
@@ -305,7 +305,7 @@ export class ReportsService {
               err: { message: e instanceof Error ? e.message : String(e) },
               msg: 'Falha ao calcular performance média para relatório de formação',
             });
-            return { _avg: { score: null } };
+            return { _avg: { score: null as number } };
           }),
       ]);
 

@@ -87,7 +87,7 @@ export class ScalabilityIntegrationsPerfService {
       this.queues
         .getQueueMetrics()
         .catch(
-          swallow(
+          swallow<null>(
             'scalability-integrations-perf.service',
             'operação auxiliar falhou — a usar valor por omissão',
             null,
@@ -196,7 +196,7 @@ export class ScalabilityIntegrationsPerfService {
       this.infra
         .getApiMetrics()
         .catch(
-          swallow(
+          swallow<null>(
             'scalability-integrations-perf.service',
             'operação auxiliar falhou — a usar valor por omissão',
             null,
@@ -205,7 +205,7 @@ export class ScalabilityIntegrationsPerfService {
       this.infra
         .getDatabaseMetrics()
         .catch(
-          swallow(
+          swallow<null>(
             'scalability-integrations-perf.service',
             'operação auxiliar falhou — a usar valor por omissão',
             null,
@@ -214,7 +214,7 @@ export class ScalabilityIntegrationsPerfService {
       this.infra
         .getFrontendMetrics()
         .catch(
-          swallow(
+          swallow<null>(
             'scalability-integrations-perf.service',
             'operação auxiliar falhou — a usar valor por omissão',
             null,
@@ -223,7 +223,7 @@ export class ScalabilityIntegrationsPerfService {
       this.queues
         .getQueueMetrics()
         .catch(
-          swallow(
+          swallow<null>(
             'scalability-integrations-perf.service',
             'operação auxiliar falhou — a usar valor por omissão',
             null,

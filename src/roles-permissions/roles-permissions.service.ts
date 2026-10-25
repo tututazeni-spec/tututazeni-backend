@@ -691,7 +691,7 @@ export class RolesPermissionsService {
       orderBy: { positionName: 'asc' },
     });
     type PositionTemplate = Awaited<typeof query>;
-    const result: PositionTemplate = await query.catch((e: unknown) => {
+    const result: PositionTemplate = await query.catch((e: unknown): never[] => {
       this.logger.warn({
         entity: 'roleTemplate',
         err: { message: e instanceof Error ? e.message : String(e) },
@@ -732,7 +732,7 @@ export class RolesPermissionsService {
       .findFirst({
         where: { positionId },
       })
-      .catch(e => {
+      .catch((e): null => {
         this.logger.warn({
           positionId,
           entity: 'roleTemplate',

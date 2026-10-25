@@ -1255,7 +1255,7 @@ export class AvatarTrainingReportsService {
           ? Math.round(tokens.reduce((a, b) => a + b, 0) / tokens.length)
           : null,
         // O AI-Tutor não tem tarifa configurada: o custo não é estimado.
-        estimatedCost: null,
+        estimatedCost: null as number,
         costNote: 'Sem tarifa configurada para o AI-Tutor — apresentado o consumo em tokens.',
       },
       extra: { byStatus: count('status'), byProvider: count('provider'), byModel: count('model') },

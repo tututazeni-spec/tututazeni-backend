@@ -936,7 +936,7 @@ export class EmployeesService {
             ?.create?.({
               data: { userId: empId, courseId, enrolledAt: new Date() },
             })
-            .catch((e: unknown) => {
+            .catch((e: unknown): null => {
               this.logger.warn({
                 userId: assignedById,
                 action: 'EMPLOYEE_BULK_ASSIGN_COURSE',

@@ -197,7 +197,7 @@ export class MonitoringHealthService implements OnModuleInit, OnModuleDestroy {
     const t0 = Date.now();
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
-      await res.body?.cancel().catch(() => undefined);
+      await res.body?.cancel().catch((): undefined => undefined);
       const ms = Date.now() - t0;
       const status =
         res.status >= 500

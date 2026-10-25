@@ -169,7 +169,7 @@ export class RoiImpactService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao calcular média de notas de avaliação para ROI de formação',
           });
-          return { _avg: { score: null } };
+          return { _avg: { score: null as number } };
         }),
       // Performance before training period
       this.prisma.performanceReview
@@ -187,7 +187,7 @@ export class RoiImpactService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao calcular performance média antes do período para ROI',
           });
-          return { _avg: { score: null } };
+          return { _avg: { score: null as number } };
         }),
       // Performance after training period
       this.prisma.performanceReview
@@ -205,7 +205,7 @@ export class RoiImpactService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao calcular performance média depois do período para ROI',
           });
-          return { _avg: { score: null } };
+          return { _avg: { score: null as number } };
         }),
       // Turnover proxy: inactive users created before period
       this.prisma.read.user.count({ where: { active: false, createdAt: { lt: range.gte } } }),
@@ -225,7 +225,7 @@ export class RoiImpactService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao calcular evolução média de competências para ROI',
           });
-          return { _avg: { currentLevel: null } };
+          return { _avg: { currentLevel: null as number } };
         }),
       this.prisma.read.enrollment.findMany({
         where,
@@ -350,7 +350,7 @@ export class RoiImpactService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao calcular média de surveys para métricas de impacto (L1)',
           });
-          return { _avg: { score: null } };
+          return { _avg: { score: null as number } };
         }),
       // L2
       this.prisma.read.enrollment.count({
@@ -376,7 +376,7 @@ export class RoiImpactService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao calcular média de avaliações para métricas de impacto (L2)',
           });
-          return { _avg: { score: null } };
+          return { _avg: { score: null as number } };
         }),
       this.prisma.lessonProgress
         .count({ where: { completed: true, completedAt: { gte: range.gte } } })
@@ -416,7 +416,7 @@ export class RoiImpactService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao calcular média de competências para métricas de impacto (L3)',
           });
-          return { _avg: { currentLevel: null } };
+          return { _avg: { currentLevel: null as number } };
         }),
       // L4
       this.prisma.performanceReview
@@ -428,7 +428,7 @@ export class RoiImpactService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao calcular performance actual para métricas de impacto (L4)',
           });
-          return { _avg: { score: null } };
+          return { _avg: { score: null as number } };
         }),
       this.prisma.performanceReview
         .aggregate({ where: { createdAt: { lt: range.gte }, ...uWhere }, _avg: { score: true } })
@@ -439,7 +439,7 @@ export class RoiImpactService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao calcular performance anterior para métricas de impacto (L4)',
           });
-          return { _avg: { score: null } };
+          return { _avg: { score: null as number } };
         }),
       this.prisma.read.user.count({
         where: {
@@ -606,7 +606,7 @@ export class RoiImpactService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao calcular performance média anterior para impacto de performance',
           });
-          return { _avg: { score: null } };
+          return { _avg: { score: null as number } };
         }),
       this.prisma.performanceReview
         .aggregate({
@@ -620,7 +620,7 @@ export class RoiImpactService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao calcular performance média actual para impacto de performance',
           });
-          return { _avg: { score: null } };
+          return { _avg: { score: null as number } };
         }),
       this.prisma.read.performanceReview.count({ where: { score: { gte: 4 }, ...uWhere } }),
       this.prisma.read.performanceReview.count({ where: { score: { lt: 2.5 }, ...uWhere } }),
@@ -755,7 +755,7 @@ export class RoiImpactService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao calcular nível médio de competência actual para impacto de aprendizagem',
           });
-          return { _avg: { currentLevel: null } };
+          return { _avg: { currentLevel: null as number } };
         }),
       this.prisma.userCompetency
         .aggregate({ where: uWhere, _avg: { targetLevel: true } })
@@ -766,7 +766,7 @@ export class RoiImpactService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao calcular nível médio de competência alvo para impacto de aprendizagem',
           });
-          return { _avg: { targetLevel: null } };
+          return { _avg: { targetLevel: null as number } };
         }),
     ]);
 

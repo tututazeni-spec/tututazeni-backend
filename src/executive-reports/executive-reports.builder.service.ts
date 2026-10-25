@@ -525,7 +525,7 @@ export class ExecutiveReportsBuilderService {
   ): Promise<ReportSection> {
     const now = new Date();
     const in30 = new Date(now.getTime() + 30 * 86_400_000);
-    const docWhere = { status: 'ACTIVE' as const, deletedAt: null };
+    const docWhere = { status: 'ACTIVE' as const, deletedAt: null as Date };
     const [expiring, expired, supp] = await Promise.all([
       this.prisma.read.employeeDocument.count({
         where: { ...docWhere, expiresAt: { gte: now, lte: in30 } },

@@ -601,7 +601,7 @@ export class ProcessStandardService {
         current: true,
         status: p.status,
         createdAt: p.publishedAt ?? p.updatedAt,
-        createdById: null,
+        createdById: null as number,
       },
       ...past.map(v => ({ ...v, current: false, status: null as string | null })),
     ];

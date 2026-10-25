@@ -2486,7 +2486,7 @@ export class Evaluation360Service {
       strengths: result.strengths ? JSON.parse(result.strengths) : [],
       // Nunca dados individuais por avaliador, nem para o próprio dono do
       // resultado — manteria a identidade do avaliador rastreável.
-      rawByEvaluator: null,
+      rawByEvaluator: null as unknown,
     };
   }
 

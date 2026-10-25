@@ -242,7 +242,7 @@ export class CertificatesAdminService {
   ): Promise<Paginated<AdminCertificateRow>> {
     const page = q.page ?? 1;
     const limit = q.limit ?? DEFAULT_LIMIT;
-    const empty = { data: [], total: 0, page, limit, totalPages: 0 };
+    const empty = { data: [] as AdminCertificateRow[], total: 0, page, limit, totalPages: 0 };
 
     const where = this.buildWhere(q, now, scope);
     if (!where) return empty;

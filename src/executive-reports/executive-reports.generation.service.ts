@@ -225,7 +225,7 @@ export class ExecutiveReportsGenerationService {
 
   private specFromConfig(code: string, name: string, version: number, cfg: SavedTemplateConfig) {
     return {
-      def: undefined,
+      def: undefined as TemplateDef,
       spec: {
         code,
         name,

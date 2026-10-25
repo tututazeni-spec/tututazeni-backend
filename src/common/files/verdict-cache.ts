@@ -167,7 +167,7 @@ export class RedisVerdictCache implements VerdictCache {
         const r = await this.client.set(k, '1', 'EX', ttlSeconds, 'NX');
         if (r !== 'OK') return null;
         return async () => {
-          await this.safe(undefined, () => this.client.del(k).then(() => undefined));
+          await this.safe(undefined, () => this.client.del(k).then((): undefined => undefined));
         };
       },
     );
@@ -192,7 +192,7 @@ function createRedisClient(env: NodeJS.ProcessEnv): Redis {
     retryStrategy: times => Math.min(times * 500, 5000),
   });
   client.on('error', () => undefined); // erros chegam a cada comando; não rebentar o processo
-  void client.connect().catch(() => undefined);
+  void client.connect().catch((): undefined => undefined);
   return client;
 }
 

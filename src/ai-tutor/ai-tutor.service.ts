@@ -308,7 +308,7 @@ export class AiTutorService {
       }));
 
     // Base de Conhecimento — pesquisa RAG sobre conteúdos autorizados (docs/ai-tutor.md secção 3)
-    const sources = await this.knowledge.search(dto.message, 3).catch(e => {
+    const sources = await this.knowledge.search(dto.message, 3).catch((e): never[] => {
       this.logger.warn({
         userId,
         sessionId: dto.sessionId,
@@ -715,7 +715,7 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
           competencyGapsJson: JSON.stringify(competencyGaps),
         },
       })
-      .catch(e => {
+      .catch((e): null => {
         this.logger.warn({
           userId,
           action: 'LOG_AI_RECOMMENDATION',

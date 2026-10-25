@@ -977,8 +977,8 @@ export class LiveClassesService {
     const rows = [
       ...classRecordings.map(lc => ({
         liveClassId: lc.id,
-        sessionId: null,
-        sessionSeq: null,
+        sessionId: null as string,
+        sessionSeq: null as number,
         topic: lc.topic,
         course: lc.course,
         instructor: lc.instructor,
@@ -1002,7 +1002,7 @@ export class LiveClassesService {
         participants: s._count.attendances,
         recordingUrl: s.recordingUrl,
         publishedAt: s.recordingPublishedAt,
-        expiresAt: null,
+        expiresAt: null as Date,
         allowDownload: null as boolean | null,
       })),
     ].sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -1187,7 +1187,7 @@ export class LiveClassesService {
     const classEvents = classes.map(lc => ({
       id: `class-${lc.id}`,
       liveClassId: lc.id,
-      sessionId: null,
+      sessionId: null as string,
       title: lc.topic,
       start: lc.scheduledAt,
       end: new Date(lc.scheduledAt.getTime() + lc.duration * 60_000),

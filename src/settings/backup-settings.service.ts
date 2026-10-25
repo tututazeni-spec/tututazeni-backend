@@ -184,7 +184,7 @@ export class BackupSettingsService {
 
   private async releaseLock() {
     this.localLock = false;
-    await this.redis?.del(LOCK_KEY).catch(() => undefined);
+    await this.redis?.del(LOCK_KEY).catch((): undefined => undefined);
   }
 
   /** Corre um backup completo; devolve o registo da execução (SUCCESS ou FAILED). */
@@ -265,7 +265,7 @@ export class BackupSettingsService {
     const expired = new Set(selectExpired(live, s, new Date()));
     let removed = 0;
     for (const r of live.filter(x => expired.has(x.id))) {
-      await fs.rm(r.filePath as string, { force: true }).catch(() => undefined);
+      await fs.rm(r.filePath as string, { force: true }).catch((): undefined => undefined);
       await this.prisma.backupRun.update({ where: { id: r.id }, data: { deletedAt: new Date() } });
       removed++;
     }

@@ -397,7 +397,7 @@ export class DashboardService {
         period: filters.period,
         departmentId: filters.departmentId,
       })
-      .catch((e: unknown) => {
+      .catch((e: unknown): null => {
         this.logger.warn({
           userId,
           departmentId: filters.departmentId,
@@ -410,7 +410,13 @@ export class DashboardService {
       });
 
     if (!r || r.teamSize === 0) {
-      return { teamSize: 0, team: [], kpis: {}, alerts: [], pendingItems: [] };
+      return {
+        teamSize: 0,
+        team: [] as unknown[],
+        kpis: {},
+        alerts: [] as unknown[],
+        pendingItems: [] as unknown[],
+      };
     }
 
     return {
@@ -532,7 +538,7 @@ export class DashboardService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao obter média de performance organizacional',
           });
-          return { _avg: { score: null } };
+          return { _avg: { score: null as number } };
         }),
       this.prisma.read.engagementSurvey.count({ where: { status: 'ACTIVE' } }),
       this.prisma.read.surveyResponse.count({
@@ -762,7 +768,7 @@ export class DashboardService {
               err: { message: e instanceof Error ? e.message : String(e) },
               msg: 'Falha ao obter média de performance actual do departamento',
             });
-            return { _avg: { score: null } };
+            return { _avg: { score: null as number } };
           }),
         this.prisma.performanceReview
           .aggregate({
@@ -777,7 +783,7 @@ export class DashboardService {
               err: { message: e instanceof Error ? e.message : String(e) },
               msg: 'Falha ao obter média de performance do período anterior do departamento',
             });
-            return { _avg: { score: null } };
+            return { _avg: { score: null as number } };
           }),
         this.prisma.read.developmentPlan.count({
           where: { status: 'ACTIVE', isTemplate: false, user: { departmentId } },
@@ -933,7 +939,8 @@ export class DashboardService {
   // ══════════════════════════════════════════════════════
 
   async globalSearch(query: string, limit = 10) {
-    if (!query || query.length < 2) return { users: [], courses: [], skills: [] };
+    if (!query || query.length < 2)
+      return { users: [] as unknown[], courses: [] as unknown[], skills: [] as unknown[] };
 
     // FIX: mesmo padrão de getMyDashboard()/getOrganizationSummary() acima.
     const competenciesQuery = this.prisma.competency.findMany({
@@ -1090,7 +1097,7 @@ export class DashboardService {
         include: { responses: { include: { answers: { include: { question: true } } } } },
         orderBy: { createdAt: 'desc' },
       })
-      .catch((e: unknown) => {
+      .catch((e: unknown): null => {
         this.logger.warn({
           action: 'DASHBOARD_ENPS_SURVEY',
           err: { message: e instanceof Error ? e.message : String(e) },

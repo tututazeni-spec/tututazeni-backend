@@ -2312,7 +2312,7 @@ export class AutomationService {
           },
         })
         .then(e => e.id)
-        .catch(e => {
+        .catch((e): null => {
           this.logger.warn({
             ruleId: rule.id,
             action: 'CREATE_AUTOMATION_EXECUTION_RECORD',
@@ -2624,7 +2624,7 @@ export class AutomationService {
             },
             body: JSON.stringify({ event: rule.trigger, payload, ruleId: rule.id }),
             signal: AbortSignal.timeout(10000),
-          }).catch(e => {
+          }).catch((e): null => {
             this.logger.warn({
               url,
               ruleId: rule.id,
