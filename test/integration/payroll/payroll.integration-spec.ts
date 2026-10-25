@@ -228,7 +228,7 @@ describe('Payroll Workflow Integration', () => {
       .deleteMany({ where: { userId: { in: testUserIds } } })
       .catch((): undefined => undefined);
     await purgeAuditLogs(prisma, { entity: 'PayrollRun', entityId: { in: runIds } }).catch(
-      () => undefined,
+      (): undefined => undefined,
     );
     await prisma.notificationLog
       .deleteMany({ where: { userId: { in: testUserIds }, type: 'PAYSLIP_ISSUED' } })

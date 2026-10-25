@@ -72,7 +72,7 @@ describe('Executive Reports — geração, agendamentos e alertas (integração)
 
   afterAll(async () => {
     // filhos antes dos pais; cada passo tolera falha (convenção do teardown)
-    const ignore = () => undefined;
+    const ignore = (): undefined => undefined;
     const ids = reportIds.filter(Boolean);
     await prisma.executiveReportSchedule
       .deleteMany({ where: { id: { in: scheduleIds } } })

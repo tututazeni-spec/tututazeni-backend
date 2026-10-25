@@ -54,7 +54,7 @@ describe('Content Library Integration', () => {
   afterAll(async () => {
     if (contentId) {
       await purgeAuditLogs(prisma, { entity: 'ContentAsset', entityId: contentId }).catch(
-        () => undefined,
+        (): undefined => undefined,
       );
       await prisma.contentAsset
         .deleteMany({ where: { id: contentId } })
