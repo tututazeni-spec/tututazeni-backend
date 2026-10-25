@@ -2163,7 +2163,7 @@ export class EvaluationService {
         department: { select: { name: true } },
       },
     });
-    if (!team.length) return { team: [] as unknown[], message: 'Sem equipa directa' };
+    if (!team.length) return { team: [] as never[], message: 'Sem equipa directa' };
 
     const teamIds = team.map(u => u.id);
     const where: Prisma.PerformanceEvaluationWhereInput = { evaluatedId: { in: teamIds } };
@@ -2198,7 +2198,7 @@ export class EvaluationService {
         avgScore: avg,
         evals: uEvals.length,
         hasPendingEval: hasPending,
-        trend: null as unknown, // TODO: compare with previous cycle
+        trend: null as number, // TODO: compare with previous cycle
       };
     });
 

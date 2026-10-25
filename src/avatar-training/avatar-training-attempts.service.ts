@@ -686,7 +686,7 @@ export class AvatarTrainingAttemptsService {
         // Gabarito só é revelado depois de a tentativa terminar.
         breakdown: finished
           ? knowledge.breakdown
-          : knowledge.breakdown.map(b => ({ ...b, correct: undefined as unknown })),
+          : knowledge.breakdown.map(b => ({ ...b, correct: undefined as boolean })),
       },
       rubric: parseJson<{ rubric?: unknown } | null>(review?.metadata, null)?.rubric ?? null,
       explanation:

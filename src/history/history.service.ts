@@ -558,7 +558,7 @@ export class HistoryService {
       where: { managerId, active: true },
       select: { id: true, fullName: true, avatarUrl: true },
     });
-    if (!team.length) return { data: [] as unknown[], meta: {} };
+    if (!team.length) return { data: [] as never[], meta: {} };
 
     const teamIds = team.map(u => u.id);
     const where: Prisma.AuditLogWhereInput = { userId: { in: teamIds } };

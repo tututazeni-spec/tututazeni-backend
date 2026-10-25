@@ -1604,7 +1604,7 @@ export class CrmPartnersService {
         institutionalComms: false,
         eventInvites: false,
         programComms: false,
-        contactPreferences: null as unknown,
+        contactPreferences: null as string,
         consentDate: null as Date,
         notes: null as string,
       }

@@ -678,7 +678,7 @@ export class CompetenciesService {
     });
     if (!user?.positionId) {
       return {
-        gaps: [] as unknown[],
+        gaps: [] as never[],
         totalGap: 0,
         mandatoryGaps: 0,
         readinessPercent: 100,
@@ -1436,8 +1436,7 @@ export class CompetenciesService {
       where: { id: userId },
       select: { positionId: true, departmentId: true },
     });
-    if (!user?.positionId)
-      return { recommendations: [] as unknown[], reason: 'Cargo não definido' };
+    if (!user?.positionId) return { recommendations: [] as never[], reason: 'Cargo não definido' };
 
     const gap = await this.getCompetencyGap(userId, user.positionId);
     const gapsWithCourses = gap.gaps.filter(g => !g.met && g.recommendedCourses.length > 0);

@@ -235,7 +235,7 @@ export class LeaveLicensesService {
       type.autoApprove &&
       dto.workDays !== undefined &&
       dto.workDays <= (type.autoApproveUnderDays ?? 1);
-    if (autoApprove) return { autoApprove: true, steps: [] as unknown[] };
+    if (autoApprove) return { autoApprove: true, steps: [] as never[] };
 
     const { steps: resolved, slaDays } = await this.leave.resolveApprovalSteps(
       targetId,

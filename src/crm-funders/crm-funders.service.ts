@@ -2230,7 +2230,7 @@ export class CrmFundersService {
         institutionalComms: false,
         eventInvites: false,
         reportComms: false,
-        contactPreferences: null as unknown,
+        contactPreferences: null as string,
         consentDate: null as Date,
         notes: null as string,
       }

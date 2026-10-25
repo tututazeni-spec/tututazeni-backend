@@ -412,10 +412,10 @@ export class DashboardService {
     if (!r || r.teamSize === 0) {
       return {
         teamSize: 0,
-        team: [] as unknown[],
+        team: [] as never[],
         kpis: {},
-        alerts: [] as unknown[],
-        pendingItems: [] as unknown[],
+        alerts: [] as never[],
+        pendingItems: [] as never[],
       };
     }
 
@@ -940,7 +940,7 @@ export class DashboardService {
 
   async globalSearch(query: string, limit = 10) {
     if (!query || query.length < 2)
-      return { users: [] as unknown[], courses: [] as unknown[], skills: [] as unknown[] };
+      return { users: [] as never[], courses: [] as never[], skills: [] as never[] };
 
     // FIX: mesmo padrão de getMyDashboard()/getOrganizationSummary() acima.
     const competenciesQuery = this.prisma.competency.findMany({

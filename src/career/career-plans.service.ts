@@ -230,7 +230,7 @@ export class CareerPlansService {
         totalRequirements: 0,
         metRequirements: 0,
         message: 'Sem requisitos de skills configurados',
-        recommendedCourses: [] as unknown[],
+        recommendedCourses: [] as never[],
       };
     }
 
