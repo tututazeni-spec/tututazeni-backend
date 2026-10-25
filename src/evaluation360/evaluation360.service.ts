@@ -17,6 +17,7 @@ import { AuditService } from '../common/services/audit.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CurrentUserData } from '../common/decorators';
 import { isPrivileged } from '../common/authz/ownership';
+import { MAX_UNPAGINATED_LIST } from '../common/helpers/pagination.helper';
 import { assertCanViewPerson } from './person-access';
 import { Role } from '../auth/enums/role.enum';
 import { CompetenciesService } from '../competencies/competencies.service';
@@ -616,6 +617,7 @@ export class Evaluation360Service {
     return this.prisma.eval360Cycle.findMany({
       where,
       orderBy: { deletedAt: 'desc' },
+      take: MAX_UNPAGINATED_LIST,
       include: {
         competencies: { include: { competency: true }, orderBy: { order: 'asc' } },
         _count: { select: { participants: true, assignments: true, responses: true } },
