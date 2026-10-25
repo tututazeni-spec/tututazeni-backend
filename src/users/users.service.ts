@@ -1,3 +1,4 @@
+import { avatarRef, avatarVersion, isDataUrl, parseAvatarDataUrl } from './avatar-ref';
 import { runAsSystem } from '../common/rls/rls-context';
 import {
   BadRequestException,
@@ -247,7 +248,26 @@ export class UsersService {
       this.prisma.read.user.count({ where }),
     ]);
 
-    return buildPaginatedResponse(data, total, page, limit);
+    const rows = data.map(u => ({
+      ...u,
+      avatarUrl: avatarRef(u.id, u.avatarUrl),
+      manager: u.manager && {
+        ...u.manager,
+        avatarUrl: avatarRef(u.manager.id, u.manager.avatarUrl),
+      },
+    }));
+    return buildPaginatedResponse(rows, total, page, limit);
+  }
+
+  /** Imagem do avatar para GET /users/:id/avatar; null se não houver ou não for raster. */
+  async getAvatarImage(id: number) {
+    const user = await this.prisma.read.user.findUnique({
+      where: { id },
+      select: { avatarUrl: true },
+    });
+    if (!user?.avatarUrl || !isDataUrl(user.avatarUrl)) return null;
+    const parsed = parseAvatarDataUrl(user.avatarUrl);
+    return parsed && { ...parsed, version: avatarVersion(user.avatarUrl) };
   }
 
   // ─── DETALHE ──────────────────────────────────────────────────────────────
@@ -852,7 +872,7 @@ export class UsersService {
 
     // Diretório da empresa: devolve campos públicos de TODOS os colaboradores, por desenho
     // (o RLS de utilizador só mostraria o próprio e o gestor).
-    return runAsSystem(() =>
+    const rows = await runAsSystem(() =>
       this.prisma.read.user.findMany({
         where,
         select: {
@@ -872,6 +892,7 @@ export class UsersService {
         take: departmentId && !search ? undefined : 100,
       }),
     );
+    return rows.map(u => ({ ...u, avatarUrl: avatarRef(u.id, u.avatarUrl) }));
   }
 
   // ─── BULK ACTIONS ─────────────────────────────────────────────────────────
