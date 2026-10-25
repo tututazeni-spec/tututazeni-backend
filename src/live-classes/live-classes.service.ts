@@ -155,12 +155,11 @@ export class LiveClassesService {
         sub: process.env.JITSI_SUB || domain,
         room: roomName,
         iat: now,
-        exp: now + 4 * 60 * 60,
+        exp: now + this.jitsiTokenTtlSeconds(),
         context: {
           user: {
             id: String(user.id),
             name: user.fullName || user.email,
-            email: user.email,
             moderator,
           },
         },
@@ -170,6 +169,14 @@ export class LiveClassesService {
       { algorithm: 'HS256' },
     );
     return { roomName, domain, jwt };
+  }
+
+  /** Validade do JWT da sala (omissão 2h; JITSI_JWT_TTL_MINUTES, entre 15 e 240). */
+  private jitsiTokenTtlSeconds(): number {
+    const minutes = Number(process.env.JITSI_JWT_TTL_MINUTES);
+    const clamped =
+      Number.isFinite(minutes) && minutes > 0 ? Math.min(Math.max(minutes, 15), 240) : 120;
+    return Math.round(clamped * 60);
   }
 
   private generateCode(type: string): string {

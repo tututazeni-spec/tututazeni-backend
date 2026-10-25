@@ -42,3 +42,15 @@ Auditoria dos 5 pontos (SQL injection, XSS, CSRF, validação, headers). Estado 
   - Campos de URL que podem ser data URL inline ou ficheiro, onde `@IsWebLink` partiria o fluxo: `courses.contentUrl` (2 DTOs), `content-library.url`, `events.bannerUrl/photoUrl`, `crm-beneficiaries.photoUrl`, `users.avatarUrl`, `settings.*Url`, `assessments.mediaUrl`. Cada um precisa de um validador próprio (http(s) OU data URL de imagem/ficheiro com política), como `@IsUrlOrInlineFile`.
   - `href` de `fileUrl` (já validados no backend por `@IsAllowedFileUrl`) e `LessonRow` (`contentUrl` pode ser data URL) não passam por `safeHref`.
   - Dados antigos: o validador só actua em escritas novas; registos já gravados com `javascript:` continuam na BD (o `safeHref` no frontend cobre a renderização). Query de verificação sugerida: procurar `~* '^s*(javascript|data|vbscript):'` nas colunas acima.
+
+### 5. Exposição de chaves/tokens/endpoints no frontend (auditada e tratada 2026-10-25)
+
+**Sem exposição.** Base da API é `/api` (relativo, `frontend/lib/api.ts`); `API_INTERNAL_URL` só existe no servidor (rewrite em `next.config.ts`); sessão por cookie httpOnly sem Bearer nem storage; só `csrf_token` é legível por JS (desenho do double-submit); sem `fetch`/WebSocket para URLs externos nem chaves de Groq/ElevenLabs/Simli no cliente; sem padrões de chave no histórico git; `.env.test` versionado só tem valores de teste. Auditoria por leitura de código; não correu a aplicação.
+
+**Corrigido**
+- `createApiKey`/`rotateApiKey` (`api-integration.service.ts`) devolviam a chave raw mesmo que a gravação do hash falhasse, e com o modelo `apiKey` ausente o `safeM()` fingia gravar. Agora propagam o erro (404 em `P2025` na rotação) e usam `requireM()` (503 se o modelo faltar). Commits `ddf017e`, `d4e99ea` (branch `fix/api-key-rotation-persist`).
+- JWT da sala Jitsi (`live-classes.service.ts#getRoomAccess`): validade de 4h → 2h por omissão (`JITSI_JWT_TTL_MINUTES`, 15–240) e o `email` deixou de ir no token.
+
+**Fica por confirmar em produção**
+- `JITSI_APP_SECRET` definido; sem ele a sala usa `meet.jit.si` público protegida só pelo nome (HMAC).
+- `getApiKeys`/webhooks continuam em `safeM()` (leitura degrada para lista vazia, é inofensivo); se uma chave criada não aparecer, `npx prisma generate` e reiniciar o processo.
