@@ -6,7 +6,6 @@ import { toJson } from '../common/helpers/prisma-json';
 // prisma/seed.ts (não aqui) — mesmo padrão de leaveTypeConfig — para nunca
 // ser recriado silenciosamente por um pedido de leitura.
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateRoiEvaluationModelDto,

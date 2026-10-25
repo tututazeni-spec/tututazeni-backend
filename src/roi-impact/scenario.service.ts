@@ -75,7 +75,7 @@ export class ScenarioService {
         note,
         roiPercent,
         paybackMonths,
-        projections: (toJson(projections)) ?? Prisma.DbNull,
+        projections: toJson(projections) ?? Prisma.DbNull,
         createdById,
       },
     });

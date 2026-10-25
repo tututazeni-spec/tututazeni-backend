@@ -1,3 +1,4 @@
+/* eslint-disable no-script-url -- os URLs "javascript:" são o caso de teste: o filtro tem de os rejeitar */
 import { isWebLink } from './is-web-link.decorator';
 
 describe('isWebLink', () => {

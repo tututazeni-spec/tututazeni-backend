@@ -23,7 +23,6 @@ import { toJson } from '../common/helpers/prisma-json';
 //     equipa liderada", em vez do modelo TeamHealth (existe no schema mas
 //     nunca é escrito por nenhum serviço — ficaria sempre vazio).
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RoiAnalysisService } from './roi-analysis.service';
 import {
