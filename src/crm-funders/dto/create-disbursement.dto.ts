@@ -2,6 +2,7 @@ import { IsNumber, IsOptional, IsString, IsDateString, IsEnum, IsInt, Min } from
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { DisbursementStatus } from '@prisma/client';
+import { IsWebLink } from '../../common/validators/is-web-link.decorator';
 
 export class CreateDisbursementDto {
   @ApiProperty()
@@ -42,7 +43,7 @@ export class CreateDisbursementDto {
 
   @ApiPropertyOptional({ description: 'URL do comprovativo' })
   @IsOptional()
-  @IsString()
+  @IsWebLink()
   proofUrl?: string;
 
   @ApiPropertyOptional()

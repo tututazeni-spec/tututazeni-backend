@@ -26,6 +26,7 @@ import {
   ActionType,
   ActionStatus,
 } from '@prisma/client';
+import { IsWebLink } from '../common/validators/is-web-link.decorator';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -296,7 +297,7 @@ export class UpsertUserCompetencyDto {
 
   @ApiPropertyOptional({ description: 'URL de evidência (certificado, link, etc.)' })
   @IsOptional()
-  @IsString()
+  @IsWebLink({ allowRelative: true })
   evidenceUrl?: string;
 }
 
@@ -320,7 +321,7 @@ export class SelfAssessmentDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsWebLink({ allowRelative: true })
   evidenceUrl?: string;
 }
 

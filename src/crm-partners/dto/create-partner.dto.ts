@@ -28,6 +28,7 @@ import {
 } from '@prisma/client';
 import { IsAllowedFileUrl } from '../../common/validators/is-allowed-file-url.validator';
 import { CreatePartnerContactDto } from './create-partner-contact.dto';
+import { IsWebLink } from '../../common/validators/is-web-link.decorator';
 
 export class CreatePartnerDto {
   @ApiProperty({ enum: PartnerType })
@@ -121,7 +122,7 @@ export class CreatePartnerDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsWebLink()
   contractUrl?: string;
 
   @ApiPropertyOptional()
