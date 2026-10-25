@@ -13,7 +13,10 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  NotFoundException,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { canSeeFullProfile, redactUserProfile } from './user-profile-redaction';
 import { UsersService } from './users.service';
@@ -145,6 +148,27 @@ export class UsersController {
   @ApiQuery({ name: 'email', required: false })
   emailCheck(@Query('fullName') fullName = '', @Query('email') email?: string) {
     return this.svc.checkEmail(fullName, email);
+  }
+
+  // Imagem do avatar (as listagens devolvem esta URL em vez do base64). Visível a qualquer
+  // autenticado, tal como o diretório. `v` muda com a imagem, por isso é cacheável para sempre.
+  @Get(':id/avatar')
+  @ApiOperation({ summary: 'Imagem do avatar de um utilizador' })
+  @AnyAuthenticated()
+  async avatar(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('v') v: string | undefined,
+    @Res() res: Response,
+  ) {
+    const img = await this.svc.getAvatarImage(id);
+    if (!img) throw new NotFoundException('Sem avatar');
+    res.set({
+      'Content-Type': img.mime,
+      'X-Content-Type-Options': 'nosniff',
+      ETag: `"${img.version}"`,
+      'Cache-Control': v ? 'private, max-age=31536000, immutable' : 'private, no-cache',
+    });
+    res.send(img.buffer);
   }
 
   @Get(':id')
