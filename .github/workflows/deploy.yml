@@ -112,7 +112,7 @@ jobs:
           echo "a nova versão não ficou pronta a tempo"; exit 1
 
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [preflight, deploy]
     if: ${{ !cancelled() && needs.deploy.result == 'success' }}
     permissions:
