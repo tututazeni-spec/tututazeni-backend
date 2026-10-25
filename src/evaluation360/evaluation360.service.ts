@@ -992,20 +992,20 @@ export class Evaluation360Service {
   // PARTICIPANTES
   // ============================================================
 
+  // Uma só INSERT em vez de um create por utilizador; o @@unique([cycleId, userId])
+  // + skipDuplicates preserva a semântica antiga (quem já existe conta como skipped).
+  private async insertParticipants(cycleId: string, userIds: string[]) {
+    if (userIds.length === 0) return { added: 0, skipped: 0 };
+    const { count } = await this.prisma.cycleParticipant.createMany({
+      data: userIds.map(userId => ({ cycleId, userId, status: 'PENDING' as const })),
+      skipDuplicates: true,
+    });
+    return { added: count, skipped: userIds.length - count };
+  }
+
   async addParticipants(cycleId: string, dto: AddParticipantsDto, actorId: string) {
     await this.findCycleOrFail(cycleId);
-    const results = { added: 0, skipped: 0 };
-
-    for (const userId of dto.userIds) {
-      try {
-        await this.prisma.cycleParticipant.create({
-          data: { cycleId, userId, status: 'PENDING' },
-        });
-        results.added++;
-      } catch {
-        results.skipped++; // já existia
-      }
-    }
+    const results = await this.insertParticipants(cycleId, dto.userIds);
     await this.audit.log({
       entity: 'CycleParticipant',
       entityId: cycleId,
@@ -1031,17 +1031,10 @@ export class Evaluation360Service {
       select: { id: true },
     });
 
-    const results = { added: 0, skipped: 0 };
-    for (const u of users) {
-      try {
-        await this.prisma.cycleParticipant.create({
-          data: { cycleId, userId: String(u.id), status: 'PENDING' },
-        });
-        results.added++;
-      } catch {
-        results.skipped++; // já existia
-      }
-    }
+    const results = await this.insertParticipants(
+      cycleId,
+      users.map(u => String(u.id)),
+    );
     await this.audit.log({
       entity: 'CycleParticipant',
       entityId: cycleId,
@@ -1868,11 +1861,13 @@ export class Evaluation360Service {
     const pending = await this.prisma.evaluatorAssignment.findMany({
       where: { cycleId, status: 'PENDING' },
     });
-    for (const assign of pending) {
-      await this.prisma.evaluatorAssignment.update({
-        where: { id: assign.id },
+    if (pending.length > 0) {
+      await this.prisma.evaluatorAssignment.updateMany({
+        where: { id: { in: pending.map(a => a.id) } },
         data: { status: 'INVITED', invitedAt: new Date() },
       });
+    }
+    for (const assign of pending) {
       this.events.emit('evaluation.invitation.send', { assignment: assign });
     }
     return { sent: pending.length };
@@ -1904,26 +1899,27 @@ export class Evaluation360Service {
     });
     const existingKeys = new Set(existing.map(a => `${a.evaluateeId}:${a.evaluatorId}:${a.role}`));
 
-    let created = 0;
+    const toCreate: Prisma.EvaluatorAssignmentCreateManyInput[] = [];
     for (const participant of participants) {
       const suggestions = await this.buildEvaluatorSuggestions(participant.userId);
       for (const s of suggestions) {
         const key = `${participant.userId}:${s.userId}:${s.role}`;
         if (existingKeys.has(key)) continue;
         existingKeys.add(key);
-        await this.prisma.evaluatorAssignment.create({
-          data: {
-            cycleId,
-            evaluateeId: participant.userId,
-            evaluatorId: s.userId,
-            role: s.role,
-            status: 'PENDING',
-            suggestedBy: actorId,
-          },
+        toCreate.push({
+          cycleId,
+          evaluateeId: participant.userId,
+          evaluatorId: s.userId,
+          role: s.role,
+          status: 'PENDING',
+          suggestedBy: actorId,
         });
-        created++;
       }
     }
+    if (toCreate.length > 0) {
+      await this.prisma.evaluatorAssignment.createMany({ data: toCreate });
+    }
+    const created = toCreate.length;
 
     if (cycle.status === Eval360CycleStatus.DRAFT) {
       await this.publishCycle(cycleId, { sendInvitesNow: false }, actorId);
@@ -1953,11 +1949,13 @@ export class Evaluation360Service {
     if (dto.assignmentIds?.length) where.id = { in: dto.assignmentIds };
 
     const pending = await this.prisma.evaluatorAssignment.findMany({ where });
-    for (const assign of pending) {
-      await this.prisma.evaluatorAssignment.update({
-        where: { id: assign.id },
+    if (pending.length > 0) {
+      await this.prisma.evaluatorAssignment.updateMany({
+        where: { id: { in: pending.map(a => a.id) } },
         data: { reminderCount: { increment: 1 }, lastReminderAt: new Date() },
       });
+    }
+    for (const assign of pending) {
       this.events.emit('evaluation.reminder.send', {
         assignment: assign,
         channels: dto.channels ?? ['EMAIL'],
