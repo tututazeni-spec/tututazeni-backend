@@ -28,4 +28,4 @@ Auditoria dos 5 pontos (SQL injection, XSS, CSRF, validação, headers). Estado 
 ### 4. Validação no frontend (não auditada)
 - Não há `zod`/`yup`/`react-hook-form` no frontend; não foi verificada formulário a formulário a validação no cliente.
 - Risco de segurança baixo (o backend valida sempre), mas a UX/consistência de erros por campo fica por rever.
-- Também por confirmar: `RichTextEditor.tsx` faz `el.innerHTML = lessonTextToHtml(value)` sem DOMPurify; confirmar que `lessonTextToHtml` escapa o texto.
+- `RichTextEditor.tsx` (`el.innerHTML = lessonTextToHtml(value)`): **verificado, seguro** (2026-10-25). `lessonTextToHtml` sanitiza com DOMPurify o ramo HTML e escapa `& < >` no ramo de texto simples; `emit()` volta a sanitizar à saída e o `LessonReader` renderiza via `SafeHtml`.
