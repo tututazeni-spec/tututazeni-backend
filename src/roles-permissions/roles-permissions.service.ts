@@ -1,8 +1,9 @@
 ﻿// src/roles-permissions/roles-permissions.service.ts
-import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ConflictException, Optional } from '@nestjs/common';
 import { Permission, PermissionAction, PermissionSubject, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
+import { SessionRevocationService } from '../auth/session-revocation.service';
 import { flattenRolePermissions, withFlatPermissions } from '../common/utils/role-permissions';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import {
@@ -58,6 +59,7 @@ export class RolesPermissionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
+    @Optional() private readonly revocation?: SessionRevocationService,
   ) {}
 
   // ══════════════════════════════════════════════════════
@@ -270,6 +272,7 @@ export class RolesPermissionsService {
       include: { role: { include: { rolePermissions: { include: { permission: true } } } } },
     });
     const user = { ...raw, role: withFlatPermissions(raw.role) };
+    await this.revocation?.invalidateUserCache(userId);
 
     await this.prisma.notificationLog
       .create({

@@ -13,6 +13,7 @@ describe('API Integration (integrations/api-keys/webhooks) — Integration', () 
   let app: INestApplication;
   let employeeToken: string;
   let rhToken: string;
+  let adminToken: string;
 
   const pool = new Pool({ connectionString: TEST_DB_URL });
   const adapter = new PrismaPg(pool);
@@ -38,6 +39,7 @@ describe('API Integration (integrations/api-keys/webhooks) — Integration', () 
 
     employeeToken = await getToken(app.getHttpServer(), 'employee');
     rhToken = await getToken(app.getHttpServer(), 'rh');
+    adminToken = await getToken(app.getHttpServer(), 'admin');
   });
 
   afterAll(async () => {
@@ -152,11 +154,28 @@ describe('API Integration (integrations/api-keys/webhooks) — Integration', () 
     });
   });
 
+  describe('Chaves de API e webhooks — só ADMIN (RH recebe 403)', () => {
+    it.each([
+      ['POST', '/api-integrations/api-keys'],
+      ['POST', '/api-integrations/api-keys/1/revoke'],
+      ['POST', '/api-integrations/api-keys/1/rotate'],
+      ['POST', '/api-integrations/webhooks'],
+      ['PATCH', '/api-integrations/webhooks/1/toggle'],
+      ['DELETE', '/api-integrations/webhooks/1'],
+      ['POST', '/api-integrations/webhooks/trigger'],
+    ])('RH não pode %s %s → 403', async (method, path) => {
+      const req = request(app.getHttpServer())[method.toLowerCase() as 'post' | 'patch' | 'delete'](
+        path,
+      );
+      await req.set('Authorization', `Bearer ${rhToken}`).send({}).expect(403);
+    });
+  });
+
   describe('API Keys (modelo apiKey ausente do schema — degrada sem persistência)', () => {
     it('POST /api-integrations/api-keys — devolve a chave em bruto uma única vez → 201', async () => {
       const res = await request(app.getHttpServer())
         .post('/api-integrations/api-keys')
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({ name: 'Chave de teste', scopes: ['read'] })
         .expect(201);
       expect(res.body).toHaveProperty('key');
@@ -174,7 +193,7 @@ describe('API Integration (integrations/api-keys/webhooks) — Integration', () 
     it('POST /api-integrations/api-keys/:id/revoke — degrada sem crashar → 201', async () => {
       const res = await request(app.getHttpServer())
         .post('/api-integrations/api-keys/1/revoke')
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .expect(201);
       expect(res.body).toHaveProperty('message');
     });
@@ -182,7 +201,7 @@ describe('API Integration (integrations/api-keys/webhooks) — Integration', () 
     it('POST /api-integrations/api-keys/:id/rotate — degrada sem crashar → 201', async () => {
       const res = await request(app.getHttpServer())
         .post('/api-integrations/api-keys/1/rotate')
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .expect(201);
       expect(res.body).toHaveProperty('key');
     });
@@ -205,7 +224,7 @@ describe('API Integration (integrations/api-keys/webhooks) — Integration', () 
     it('POST /api-integrations/webhooks — regista sem persistir → 201', async () => {
       const res = await request(app.getHttpServer())
         .post('/api-integrations/webhooks')
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({
           name: 'Webhook de teste',
           url: 'https://hooks.example.test/x',
@@ -227,14 +246,14 @@ describe('API Integration (integrations/api-keys/webhooks) — Integration', () 
     it('PATCH /api-integrations/webhooks/:id/toggle — degrada sem crashar → 200', async () => {
       await request(app.getHttpServer())
         .patch(`/api-integrations/webhooks/${webhookId}/toggle`)
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
     });
 
     it('DELETE /api-integrations/webhooks/:id → 204', async () => {
       await request(app.getHttpServer())
         .delete(`/api-integrations/webhooks/${webhookId}`)
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
     });
 
@@ -244,7 +263,7 @@ describe('API Integration (integrations/api-keys/webhooks) — Integration', () 
       // rejeitado antes de chegar ao controller. Ver ai-tutor para o mesmo bug.
       const res = await request(app.getHttpServer())
         .post('/api-integrations/webhooks/trigger')
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({ event: 'course.completed', payload: { courseId: 1, userId: 1 } })
         .expect(201);
       // O modelo Webhook é real: a BD pode ter subscribers reais criados por esta e outras specs.

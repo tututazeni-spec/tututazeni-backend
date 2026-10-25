@@ -3,6 +3,7 @@
 // src/modules/evaluation360/evaluation360.controller.ts
 // ============================================================
 
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -111,6 +112,7 @@ export class Evaluation360Controller {
     required: false,
     description: 'Filtra pelo array `tags` (ex.: FEEDBACK — banco curado do feedback contínuo)',
   })
+  @AnyAuthenticated()
   async listCompetencies(
     @Query('tenantId') tenantId?: string,
     @Query() query?: Evaluation360PaginationDto,
@@ -164,6 +166,7 @@ export class Evaluation360Controller {
       'nº de avaliados/avaliadores, taxa de participação, criado por)',
   })
   @ApiQuery({ name: 'tenantId', required: true })
+  @AnyAuthenticated()
   async listCycles(@Query('tenantId') tenantId: string, @Query() query: ListEvaluationCyclesDto) {
     return this.service.listCycles(tenantId, query);
   }
@@ -195,6 +198,7 @@ export class Evaluation360Controller {
 
   @Get('cycles/:id')
   @ApiOperation({ summary: 'Detalhe completo do ciclo (competências, questões, stats)' })
+  @AnyAuthenticated()
   async getCycleDetail(@Param('id') id: string) {
     return this.service.getCycleDetail(id);
   }
@@ -241,6 +245,7 @@ export class Evaluation360Controller {
   @ApiOperation({ summary: 'Listar questões' })
   @ApiQuery({ name: 'cycleId', required: false })
   @ApiQuery({ name: 'competencyId', required: false })
+  @AnyAuthenticated()
   async listQuestions(
     @Query('cycleId') cycleId?: string,
     @Query('competencyId') competencyId?: string,
@@ -266,12 +271,14 @@ export class Evaluation360Controller {
 
   @Get('questionnaires')
   @ApiOperation({ summary: 'Listar questionários (aba "Questionários")' })
+  @AnyAuthenticated()
   async listQuestionnaires(@Query() query: ListQuestionnairesDto) {
     return this.service.listQuestionnaires(query);
   }
 
   @Get('questionnaires/:id')
   @ApiOperation({ summary: 'Detalhe do questionário (competências + perguntas)' })
+  @AnyAuthenticated()
   async getQuestionnaireDetail(@Param('id') id: string) {
     return this.service.getQuestionnaireDetail(id);
   }
@@ -364,6 +371,7 @@ export class Evaluation360Controller {
 
   @Post('cycles/:cycleId/participants/:userId/consent')
   @ApiOperation({ summary: 'Registar consentimento LGPD do participante' })
+  @AnyAuthenticated()
   async giveConsent(
     @Param('cycleId') cycleId: string,
     @Param('userId') userId: string,
@@ -381,14 +389,20 @@ export class Evaluation360Controller {
   @ApiOperation({
     summary: 'As minhas atribuições de avaliador neste ciclo (quem tenho de avaliar)',
   })
+  @AnyAuthenticated()
   async getMyAssignments(@Param('cycleId') cycleId: string, @CurrentUser() user: CurrentUserData) {
     return this.service.listMyAssignments(cycleId, String(user.id));
   }
 
   @Get('cycles/:cycleId/participants/:userId/progress')
   @ApiOperation({ summary: 'Progresso do participante no ciclo' })
-  async getProgress(@Param('cycleId') cycleId: string, @Param('userId') userId: string) {
-    return this.service.getParticipantProgress(cycleId, userId);
+  @AnyAuthenticated()
+  async getProgress(
+    @Param('cycleId') cycleId: string,
+    @Param('userId') userId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.getParticipantProgress(cycleId, userId, user);
   }
 
   @Get('cycles/:cycleId/participants')
@@ -500,6 +514,7 @@ export class Evaluation360Controller {
   @Get('cycles/:cycleId/form')
   @ApiOperation({ summary: 'Obter formulário de avaliação para preenchimento' })
   @ApiQuery({ name: 'evaluateeId', required: true })
+  @AnyAuthenticated()
   async getForm(
     @Param('cycleId') cycleId: string,
     @Query('evaluateeId') evaluateeId: string,
@@ -512,6 +527,7 @@ export class Evaluation360Controller {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Submeter ou guardar rascunho de avaliação' })
   @ApiQuery({ name: 'evaluateeId', required: true })
+  @AnyAuthenticated()
   async submitResponse(
     @Param('cycleId') cycleId: string,
     @Query('evaluateeId') evaluateeId: string,
@@ -540,6 +556,7 @@ export class Evaluation360Controller {
 
   @Get('cycles/:cycleId/results/:participantId')
   @ApiOperation({ summary: 'Resultado individual (radar, gaps, forças)' })
+  @AnyAuthenticated()
   async getResult(
     @Param('cycleId') cycleId: string,
     @Param('participantId') participantId: string,
@@ -653,6 +670,7 @@ export class Evaluation360Controller {
 
   @Post('feedback/continuous')
   @ApiOperation({ summary: 'Enviar feedback contínuo (elogio, desenvolvimento, check-in)' })
+  @AnyAuthenticated()
   async createFeedback(
     @Body() dto: CreateContinuousFeedbackDto,
     @CurrentUser() user: CurrentUserData,
@@ -662,8 +680,13 @@ export class Evaluation360Controller {
 
   @Get('feedback/continuous/:userId')
   @ApiOperation({ summary: 'Listar feedbacks recebidos por utilizador' })
-  async listFeedback(@Param('userId') userId: string, @Query() query: Evaluation360PaginationDto) {
-    return this.service.listFeedbackForUser(userId, query);
+  @AnyAuthenticated()
+  async listFeedback(
+    @Param('userId') userId: string,
+    @Query() query: Evaluation360PaginationDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.listFeedbackForUser(userId, query, user);
   }
 
   // ============================================================
@@ -680,6 +703,7 @@ export class Evaluation360Controller {
   @Post('pulse-surveys/:id/responses')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Responder pulse survey' })
+  @AnyAuthenticated()
   async submitPulseResponse(
     @Param('id') surveyId: string,
     @Body() dto: SubmitPulseSurveyDto,

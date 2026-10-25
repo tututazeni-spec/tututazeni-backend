@@ -182,7 +182,7 @@ describe('WorkDeclarationController', () => {
   it('exportPdf → exportDeclaration(tenantId, userId, id, { format: PDF })', async () => {
     const dto = { includeWatermark: true } as any;
     await controller.exportPdf('uuid-1', dto, mockUser as any, mockRes);
-    expect(mockSvc.exportDeclaration).toHaveBeenCalledWith(undefined, 1, 'uuid-1', {
+    expect(mockSvc.exportDeclaration).toHaveBeenCalledWith(undefined, mockUser, 'uuid-1', {
       format: 'PDF',
       includeWatermark: true,
     });
@@ -190,7 +190,7 @@ describe('WorkDeclarationController', () => {
 
   it('exportDocx → exportDeclaration(tenantId, userId, id, { format: DOCX })', async () => {
     await controller.exportDocx('uuid-1', mockUser as any, mockRes);
-    expect(mockSvc.exportDeclaration).toHaveBeenCalledWith(undefined, 1, 'uuid-1', {
+    expect(mockSvc.exportDeclaration).toHaveBeenCalledWith(undefined, mockUser, 'uuid-1', {
       format: 'DOCX',
     });
   });

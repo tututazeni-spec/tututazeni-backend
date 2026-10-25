@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService, sessionIdleTimeoutMs } from './auth.service';
+import { SessionRevocationService } from './session-revocation.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 // A escrita encadeada (SHA-256 + advisory lock) é testada em audit-chain; aqui só
@@ -62,6 +63,12 @@ const mockPrisma = {
 
 const mockJwt = {
   signAsync: jest.fn().mockResolvedValue('mock-token'),
+  verifyAsync: jest.fn(),
+};
+
+const mockRevocation = {
+  revokeAccessToken: jest.fn().mockResolvedValue(undefined),
+  revokeAllUserSessions: jest.fn().mockResolvedValue(undefined),
 };
 
 const baseUser = {
@@ -98,9 +105,40 @@ describe('AuthService', () => {
         AuthService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: JwtService, useValue: mockJwt },
+        { provide: SessionRevocationService, useValue: mockRevocation },
       ],
     }).compile();
     service = module.get<AuthService>(AuthService);
+  });
+
+  describe('revogação do access token', () => {
+    it('revokeAccessToken denylista o jti com o tempo de vida restante', async () => {
+      const exp = Math.floor(Date.now() / 1000) + 600;
+      mockJwt.verifyAsync.mockResolvedValue({ sub: 1, jti: 'j1', exp });
+      await service.revokeAccessToken('tok');
+      expect(mockRevocation.revokeAccessToken).toHaveBeenCalledWith('j1', expect.any(Number));
+      const ttl = mockRevocation.revokeAccessToken.mock.calls[0][1] as number;
+      expect(ttl).toBeGreaterThan(590);
+      expect(ttl).toBeLessThanOrEqual(600);
+    });
+
+    it('token inválido/expirado ou sem jti não lança nem denylista', async () => {
+      mockRevocation.revokeAccessToken.mockClear();
+      mockJwt.verifyAsync.mockRejectedValueOnce(new Error('jwt expired'));
+      await expect(service.revokeAccessToken('bad')).resolves.toBeUndefined();
+      mockJwt.verifyAsync.mockResolvedValueOnce({ sub: 1, exp: 9999999999 });
+      await expect(service.revokeAccessToken('nojti')).resolves.toBeUndefined();
+      expect(mockRevocation.revokeAccessToken).not.toHaveBeenCalled();
+    });
+
+    it('o access token emitido no login leva jti único', async () => {
+      mockJwt.signAsync.mockClear();
+      mockPrisma.user.findUnique.mockResolvedValue({ ...baseUser, password: 'h' });
+      (verifyPassword as jest.Mock).mockResolvedValue({ valid: true, needsRehash: false });
+      await service.login({ email: baseUser.email, password: 'x' } as never).catch(() => undefined);
+      const accessPayload = mockJwt.signAsync.mock.calls[0]?.[0] as { jti?: string } | undefined;
+      expect(accessPayload?.jti).toEqual(expect.any(String));
+    });
   });
 
   // ─── login ────────────────────────────────────────────────────────────────

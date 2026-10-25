@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController, authThrottleLimit, refreshThrottleLimit } from './auth.controller';
 import { AuthService } from './auth.service';
 import { PasswordResetService } from './password-reset.service';
-import { JwtAuthGuard } from './jwt-auth.guard';
 import { RefreshTokenGuard } from './refresh-token.guard';
 
 // C2: verifica comportamento do throttle por ambiente (env-independent)
@@ -43,6 +42,7 @@ const mockSvc = {
   register: jest.fn().mockResolvedValue({ accessToken: 'tok', refreshToken: 'ref', user: {} }),
   rotateRefreshToken: jest.fn().mockResolvedValue({ accessToken: 'tok', refreshToken: 'ref' }),
   revokeRefreshToken: jest.fn().mockResolvedValue(undefined),
+  revokeAccessToken: jest.fn().mockResolvedValue(undefined),
   changePassword: jest.fn().mockResolvedValue({ message: 'ok' }),
   me: jest.fn().mockResolvedValue({ id: 1, email: 'test@innova.com', fullName: 'Test' }),
 };
@@ -64,8 +64,6 @@ describe('AuthController', () => {
         { provide: PasswordResetService, useValue: mockPasswordReset },
       ],
     })
-      .overrideGuard(JwtAuthGuard)
-      .useValue({ canActivate: () => true })
       .overrideGuard(RefreshTokenGuard)
       .useValue({ canActivate: () => true })
       .compile();
@@ -85,6 +83,28 @@ describe('AuthController', () => {
     );
     expect(mockSvc.login).toHaveBeenCalledWith(dto, { ip: '127.0.0.1', userAgent: 'jest' });
     expect(result).toHaveProperty('accessToken');
+  });
+
+  it('logout → revoga refresh E access token (cookie ou Bearer) e limpa também o path legado', async () => {
+    mockSvc.revokeAccessToken.mockClear();
+    mockRes.clearCookie.mockClear();
+    await controller.logout(
+      { cookies: { refresh_token: 'r', token: 'acc' }, headers: {}, ip: '1' } as any,
+      mockRes as any,
+    );
+    expect(mockSvc.revokeRefreshToken).toHaveBeenCalledWith('r', expect.anything());
+    expect(mockSvc.revokeAccessToken).toHaveBeenCalledWith('acc');
+    expect(mockRes.clearCookie).toHaveBeenCalledWith(
+      'refresh_token',
+      expect.objectContaining({ path: '/api/auth/refresh' }),
+    );
+
+    mockSvc.revokeAccessToken.mockClear();
+    await controller.logout(
+      { cookies: {}, headers: { authorization: 'Bearer hdr' }, ip: '1' } as any,
+      mockRes as any,
+    );
+    expect(mockSvc.revokeAccessToken).toHaveBeenCalledWith('hdr');
   });
 
   it('register → chama authService.register', async () => {
