@@ -39,6 +39,7 @@ describe('CreateCourseDto.thumbnailUrl', () => {
   });
 
   it('recusa javascript: como imagem', async () => {
+    // eslint-disable-next-line no-script-url -- payload XSS de propósito
     expect((await thumbErrors('javascript:alert(1)')).length).toBeGreaterThan(0);
   });
 
