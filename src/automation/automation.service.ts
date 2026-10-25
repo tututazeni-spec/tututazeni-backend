@@ -9,13 +9,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import {
-  EnrollmentStatus,
-  EnrollmentOrigin,
-  Prisma,
-  AutomationTrigger,
-  PlanStatus,
-} from '@prisma/client';
+import { EnrollmentOrigin, Prisma, AutomationTrigger, PlanStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EnrollmentsService } from '../enrollments/enrollments.service';
 import { DevelopmentPlansService } from '../development-plans/development-plans.service';
@@ -65,10 +59,18 @@ import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 import { writeChainedAuditLog } from '../common/helpers/audit-chain';
 import { csvCell } from '../common/utils/csv-safe.util';
+import {
+  evaluateRuleConditions,
+  evaluateConditionRow,
+  parseCondition,
+  parseConditionsList,
+  parseJsonArray,
+  parseParams,
+  interpolate,
+} from './automation-conditions';
+import { AutomationBuiltInRules } from './automation-builtin-rules';
 
 // ─── Helpers ─────────────────────────────────────────────────────
-
-const helpersLogger = new Logger('AutomationHelpers');
 
 export type AutomationRuleRecord = Prisma.AutomationRuleGetPayload<object>;
 
@@ -181,114 +183,6 @@ const retryDelayMs = (rule: AutomationRuleRecord, attempt: number): number | nul
 
 const inActiveWindow = (rule: AutomationRuleRecord, now: Date) =>
   (!rule.activeFrom || rule.activeFrom <= now) && (!rule.activeUntil || rule.activeUntil >= now);
-
-// Condição/parâmetros de acção são JSON livre por regra — o shape varia
-// consoante o tipo de trigger/acção, sem um contrato único possível.
-function parseCondition(condition?: string | null): Record<string, unknown> {
-  if (!condition) return {};
-  try {
-    return JSON.parse(condition);
-  } catch (e: unknown) {
-    helpersLogger.warn({
-      condition,
-      action: 'PARSE_AUTOMATION_CONDITION',
-      err: { message: e instanceof Error ? e.message : String(e) },
-      msg: 'Falha ao fazer parse da condição da regra de automação — JSON inválido',
-    });
-    return {};
-  }
-}
-
-// Formato estruturado gravado em AutomationRule.conditionsJson pelo condition
-// builder do form (linhas field/operator/value + lógica E/OU entre elas).
-// Ver ConditionRuleDto/ConditionsLogic em automation.dto.ts.
-interface StructuredConditions {
-  logic: ConditionsLogic;
-  rows: ConditionRuleDto[];
-}
-
-function parseConditionsList(conditionsJson?: string | null): StructuredConditions | null {
-  if (!conditionsJson) return null;
-  try {
-    const parsed = JSON.parse(conditionsJson) as Partial<StructuredConditions>;
-    if (!Array.isArray(parsed.rows) || !parsed.rows.length) return null;
-    return {
-      logic: parsed.logic === ConditionsLogic.OR ? ConditionsLogic.OR : ConditionsLogic.AND,
-      rows: parsed.rows,
-    };
-  } catch (e: unknown) {
-    helpersLogger.warn({
-      conditionsJson,
-      action: 'PARSE_AUTOMATION_CONDITIONS_JSON',
-      err: { message: e instanceof Error ? e.message : String(e) },
-      msg: 'Falha ao fazer parse de conditionsJson — JSON inválido',
-    });
-    return null;
-  }
-}
-
-function evaluateConditionRow(row: ConditionRuleDto, payload: Record<string, unknown>): boolean {
-  const actual = payload[row.field];
-  const expected = row.value;
-  switch (row.operator) {
-    case 'not_equals':
-      return String(actual ?? '') !== String(expected ?? '');
-    case 'greater_than':
-      return Number(actual) > Number(expected);
-    case 'less_than':
-      return Number(actual) < Number(expected);
-    case 'contains':
-      return typeof actual === 'string' && actual.includes(String(expected ?? ''));
-    case 'not_contains':
-      return !(typeof actual === 'string' && actual.includes(String(expected ?? '')));
-    case 'is_empty':
-      return actual === undefined || actual === null || actual === '';
-    case 'is_not_empty':
-      return !(actual === undefined || actual === null || actual === '');
-    case 'equals':
-    default:
-      return String(actual ?? '') === String(expected ?? '');
-  }
-}
-
-// Substitui placeholders {{campo}} pelo valor em dynamicData, com fallback
-// para o payload do evento — usado em messageTemplate/subject.
-function interpolate(
-  template: string | undefined,
-  dynamicData: Record<string, unknown> | undefined,
-  payload: Record<string, unknown>,
-): string | undefined {
-  if (!template) return template;
-  return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => {
-    const value = dynamicData?.[key] ?? payload[key];
-    return value === undefined || value === null ? '' : String(value);
-  });
-}
-
-function parseJsonArray(json?: string | null): string[] {
-  if (!json) return [];
-  try {
-    const parsed = JSON.parse(json) as unknown;
-    return Array.isArray(parsed) ? parsed.map(String) : [];
-  } catch {
-    return [];
-  }
-}
-
-function parseParams(params?: string | null): Record<string, unknown> {
-  if (!params) return {};
-  try {
-    return JSON.parse(params);
-  } catch (e: unknown) {
-    helpersLogger.warn({
-      params,
-      action: 'PARSE_AUTOMATION_ACTION_PARAMS',
-      err: { message: e instanceof Error ? e.message : String(e) },
-      msg: 'Falha ao fazer parse dos actionParams da regra de automação — JSON inválido',
-    });
-    return {};
-  }
-}
 
 // ─── Built-in default rules ──────────────────────────────────────
 
@@ -412,6 +306,8 @@ export { failureCode, classifyFailure } from './automation-failure.util';
 @Injectable()
 export class AutomationService {
   private readonly logger = new Logger(AutomationService.name);
+  // Executores das regras built-in, extraídos para ficheiro próprio (mesmo prisma/logger).
+  private readonly builtIn: AutomationBuiltInRules;
 
   // Acções implementadas por outros módulos (sem dependência circular):
   // o módulo regista aqui o handler no arranque (ver ProcessAutomationActions).
@@ -434,7 +330,9 @@ export class AutomationService {
     @Optional() private readonly audit?: AutomationAuditService,
     @Optional() private readonly failures?: AutomationFailuresService,
     @Optional() private readonly connections?: AutomationConnectionsService,
-  ) {}
+  ) {
+    this.builtIn = new AutomationBuiltInRules(prisma, this.logger);
+  }
 
   private limits(): Promise<AutomationLimits> {
     return this.settings ? this.settings.get() : Promise.resolve({ ...DEFAULT_LIMITS });
@@ -984,7 +882,7 @@ export class AutomationService {
 
   /** Avalia as condições da regra contra um payload (simulação, sem efeitos). */
   matchesConditions(rule: AutomationRuleRecord, payload: Record<string, unknown>) {
-    return this.evaluateRuleConditions(rule, payload);
+    return evaluateRuleConditions(rule, payload);
   }
 
   async updateRule(id: number, dto: UpdateRuleDto, userId?: number) {
@@ -1126,7 +1024,7 @@ export class AutomationService {
         });
         continue;
       }
-      if (!this.evaluateRuleConditions(rule, payload)) {
+      if (!evaluateRuleConditions(rule, payload)) {
         results.push({
           ruleId: rule.id,
           name: rule.name,
@@ -1276,15 +1174,15 @@ export class AutomationService {
     switch (rule.trigger) {
       case TriggerType.BIRTHDAY_TODAY:
       case 'BIRTHDAY_TODAY':
-        return this.processBirthdays();
+        return this.builtIn.processBirthdays();
       case TriggerType.ENROLLMENT_EXPIRING:
       case 'ENROLLMENT_EXPIRING':
-        return this.sendEnrollmentReminders();
+        return this.builtIn.sendEnrollmentReminders();
       case TriggerType.PAYSLIP_DUE:
       case 'PAYSLIP_DUE':
-        return this.checkPayslipDue();
+        return this.builtIn.checkPayslipDue();
       case 'PENDING_LEAVE_3_DAYS':
-        return this.sendLeaveReminders();
+        return this.builtIn.sendLeaveReminders();
       default:
         return { message: `Trigger "${rule.trigger}" executado` };
     }
@@ -1323,7 +1221,7 @@ export class AutomationService {
    */
   async testRule(id: number, payload: Record<string, unknown> = {}) {
     const rule = await this.getRule(id);
-    const conditionsMatched = this.evaluateRuleConditions(rule, payload);
+    const conditionsMatched = evaluateRuleConditions(rule, payload);
     const flow = parseFlow(rule.flowJson);
     const steps: Array<Record<string, unknown>> = [];
 
@@ -2868,192 +2766,6 @@ export class AutomationService {
         }),
       );
     }
-  }
-
-  // ══════════════════════════════════════════════════════
-  // BUILT-IN RULE EXECUTORS
-  // ══════════════════════════════════════════════════════
-
-  private async processBirthdays(): Promise<Record<string, unknown>> {
-    // dateOfBirth not in base schema — if added, filter here
-    this.logger.warn(
-      'processBirthdays: campo dateOfBirth não existe no modelo User — adiciona ao schema para activar',
-    );
-    return { birthdaysNotified: 0, message: 'Requer campo dateOfBirth no modelo User' };
-  }
-
-  private async sendLeaveReminders(): Promise<Record<string, unknown>> {
-    // Aprovações de licenças pendentes há 3+ dias (LeaveApproval é a fonte real;
-    // a leitura anterior de HistoryRecord 'LEAVE_REQUEST' nunca encontrava nada).
-    const cutoff = new Date(Date.now() - 3 * 86400000);
-    const stale = await this.prisma.read.leaveApproval
-      .findMany({
-        where: { decidedAt: null, createdAt: { lte: cutoff }, request: { status: 'PENDING' } },
-        select: { approverId: true, requestId: true },
-        take: 500,
-      })
-      .catch(e => {
-        this.logger.warn({
-          action: 'SEND_LEAVE_REMINDERS_COUNT',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao contar pedidos de ausência pendentes',
-        });
-        return [] as Array<{ approverId: number; requestId: number }>;
-      });
-
-    const perApprover = new Map<number, number>();
-    for (const a of stale) perApprover.set(a.approverId, (perApprover.get(a.approverId) ?? 0) + 1);
-    let notified = 0;
-    for (const [userId, n] of perApprover) {
-      const ok = await this.prisma.notificationLog
-        .create({
-          data: {
-            userId,
-            type: 'LEAVE_PENDING_REMINDER',
-            message: `Tem ${n} pedido(s) de licença à espera de decisão há mais de 3 dias`,
-            metadata: JSON.stringify({ pending: n }),
-          },
-        })
-        .then(() => true)
-        .catch(() => false);
-      if (ok) notified++;
-    }
-    return {
-      pending: stale.length,
-      notified,
-      message: `${stale.length} pedido(s) de ausência pendentes há 3+ dias`,
-    };
-  }
-
-  private async sendEnrollmentReminders(): Promise<Record<string, unknown>> {
-    const cutoff = new Date(Date.now() - 14 * 86400000);
-    const enrollments = await this.prisma.read.enrollment.findMany({
-      where: { status: EnrollmentStatus.IN_PROGRESS, enrolledAt: { lte: cutoff } },
-      include: {
-        user: { select: { id: true, fullName: true } },
-        course: { select: { title: true } },
-      },
-      take: 100,
-    });
-
-    let notified = 0;
-    for (const e of enrollments) {
-      await this.prisma.notificationLog
-        .create({
-          data: {
-            userId: e.userId,
-            type: 'ENROLLMENT_REMINDER',
-            message: `O curso "${e.course.title}" está pendente há mais de 14 dias`,
-            metadata: JSON.stringify({}),
-          },
-        })
-        .catch(err => {
-          this.logger.warn({
-            userId: e.userId,
-            enrollmentId: e.id,
-            action: 'SEND_ENROLLMENT_REMINDER',
-            err: { message: err instanceof Error ? err.message : String(err) },
-            msg: 'Falha ao notificar lembrete de curso pendente',
-          });
-        });
-      notified++;
-    }
-    return { notified };
-  }
-
-  private async checkPayslipDue(): Promise<Record<string, unknown>> {
-    const today = new Date();
-    if (today.getDate() !== 25) return { message: 'Não é dia 25 — verificação ignorada' };
-    const period = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-    const drafted = await this.prisma.payslip
-      .count({ where: { period, status: 'DRAFT' } })
-      .catch(e => {
-        this.logger.warn({
-          period,
-          action: 'CHECK_PAYSLIP_DUE_COUNT',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao contar recibos de vencimento pendentes',
-        });
-        return 0;
-      });
-    if (drafted > 0) {
-      const hrUsers = await this.prisma.read.user.findMany({
-        where: { role: { code: 'RH' } },
-        select: { id: true },
-        take: 10,
-      });
-      for (const u of hrUsers) {
-        await this.prisma.notificationLog
-          .create({
-            data: {
-              userId: u.id,
-              type: 'PAYSLIP_REMINDER',
-              message: `${drafted} recibo(s) por emitir para o período ${period}`,
-              metadata: JSON.stringify({}),
-            },
-          })
-          .catch(e => {
-            this.logger.warn({
-              userId: u.id,
-              period,
-              action: 'NOTIFY_PAYSLIP_DUE',
-              err: { message: e instanceof Error ? e.message : String(e) },
-              msg: 'Falha ao notificar RH sobre recibos de vencimento por emitir',
-            });
-          });
-      }
-    }
-    return { period, drafted, message: `${drafted} recibos por emitir` };
-  }
-
-  // ══════════════════════════════════════════════════════
-  // CONDITION EVALUATOR
-  // ══════════════════════════════════════════════════════
-
-  private evaluateCondition(
-    condition: Record<string, unknown>,
-    payload: Record<string, unknown>,
-  ): boolean {
-    if (!Object.keys(condition).length) return true;
-
-    for (const [key, value] of Object.entries(condition)) {
-      const payloadVal = payload[key];
-      if (
-        key === 'minScore' &&
-        typeof payloadVal === 'number' &&
-        typeof value === 'number' &&
-        payloadVal < value
-      )
-        return false;
-      if (
-        key === 'maxScore' &&
-        typeof payloadVal === 'number' &&
-        typeof value === 'number' &&
-        payloadVal > value
-      )
-        return false;
-      if (key === 'departmentId' && payloadVal !== value) return false;
-      if (key === 'roleCode' && payloadVal !== value) return false;
-      if (key === 'equals' && payloadVal !== value) return false;
-    }
-    return true;
-  }
-
-  // Prefere o condition builder estruturado (conditionsJson, com lógica E/OU
-  // entre linhas field/operator/value); cai para o campo `condition` legado
-  // (JSON simples chave→valor, só AND) quando não há linhas estruturadas.
-  private evaluateRuleConditions(
-    rule: AutomationRuleRecord,
-    payload: Record<string, unknown>,
-  ): boolean {
-    const structured = parseConditionsList(rule.conditionsJson);
-    if (structured) {
-      const results = structured.rows.map(row => evaluateConditionRow(row, payload));
-      return structured.logic === ConditionsLogic.OR
-        ? results.some(Boolean)
-        : results.every(Boolean);
-    }
-    return this.evaluateCondition(parseCondition(rule.condition), payload);
   }
 
   // ══════════════════════════════════════════════════════
