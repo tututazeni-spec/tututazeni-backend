@@ -1,3 +1,4 @@
+import { toJson } from '../common/helpers/prisma-json';
 // ─── src/leave-management/leave-absences.service.ts ───────────────────────────
 // Aba Gestão de Ausências (docs/Modulo_Leave.md §5): faltas e ocorrências
 // pontuais, separadas dos pedidos (LeaveRequest). Cada registo associa-se ao
@@ -754,7 +755,7 @@ export class LeaveAbsencesService {
           absenceId: id,
           changedById: viewer.id,
           reason: dto.reason.trim(),
-          changes: changes as unknown as Prisma.InputJsonValue,
+          changes: toJson(changes),
         },
       }),
     ]);

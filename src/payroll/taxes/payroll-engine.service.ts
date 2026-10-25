@@ -4,6 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { fromJson } from '../../common/helpers/prisma-json';
 
 // ─── Internal Types ───────────────────────────────────────────────────────────
 
@@ -359,7 +360,7 @@ export class PayrollEngineService {
 
     return {
       ...config,
-      socialSecurity: config.socialSecurity as unknown as SocialSecurityConfig,
+      socialSecurity: fromJson<SocialSecurityConfig>(config.socialSecurity),
     };
   }
 

@@ -1,3 +1,4 @@
+import { toJson } from '../common/helpers/prisma-json';
 // src/roi-impact/roi-evaluation-model.service.ts
 // "Modelos de Avaliação" (docs/roi-impact.md §4) — CRUD da biblioteca de
 // metodologias (Kirkpatrick/Phillips/personalizado) usadas para medir
@@ -35,10 +36,8 @@ export class RoiEvaluationModelService {
       data: {
         name: dto.name,
         description: dto.description ?? null,
-        levels: dto.levels as unknown as Prisma.InputJsonValue,
-        applicability: dto.applicability
-          ? (dto.applicability as unknown as Prisma.InputJsonValue)
-          : undefined,
+        levels: toJson(dto.levels),
+        applicability: dto.applicability ? toJson(dto.applicability) : undefined,
         createdById,
       },
     });
@@ -51,12 +50,8 @@ export class RoiEvaluationModelService {
       data: {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
         ...(dto.description !== undefined ? { description: dto.description } : {}),
-        ...(dto.levels !== undefined
-          ? { levels: dto.levels as unknown as Prisma.InputJsonValue }
-          : {}),
-        ...(dto.applicability !== undefined
-          ? { applicability: dto.applicability as unknown as Prisma.InputJsonValue }
-          : {}),
+        ...(dto.levels !== undefined ? { levels: toJson(dto.levels) } : {}),
+        ...(dto.applicability !== undefined ? { applicability: toJson(dto.applicability) } : {}),
         ...(dto.status !== undefined ? { status: dto.status } : {}),
       },
     });

@@ -1,3 +1,4 @@
+import { toJson } from '../common/helpers/prisma-json';
 // src/attendance/attendance.service.ts
 import {
   Injectable,
@@ -431,7 +432,7 @@ export class AttendanceService {
         data: {
           attendanceId: id,
           adjustedById: updatedById,
-          changes: changes as unknown as Prisma.InputJsonValue,
+          changes: toJson(changes),
           reason: 'Actualização manual',
         },
       });

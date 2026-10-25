@@ -677,7 +677,8 @@ export class CourseModulesService {
             allowDownload: l.allowDownload,
             // PDFs inline não vão no JSON (1-5 MB por lição): o leitor pede-os a
             // GET /lessons/:id/file, que volta a validar o acesso.
-            contentUrl: canSeeContent && !isInlinePdf(l.contentUrl) ? l.contentUrl : null,
+            contentUrl:
+              canSeeContent && !isInlinePdf(l.contentUrl) ? l.contentUrl : (null as string),
             hasFile: canSeeContent && !!l.contentUrl,
             // Só disponíveis a quem está inscrito — mesma regra de canSeeContent
             // já aplicada a contentUrl (ver comentário acima).

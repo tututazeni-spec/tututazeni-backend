@@ -188,7 +188,7 @@ export class Evaluation360Service {
   }
 
   async updateCompetency(id: string, dto: Evaluation360UpdateCompetencyDto, actorId: string) {
-    const updated = await this.competencies.update(+id, dto as unknown as UpdateCompetencyDto);
+    const updated = await this.competencies.update(+id, dto as UpdateCompetencyDto);
     await this.audit.log({
       entity: 'Competency',
       entityId: id,

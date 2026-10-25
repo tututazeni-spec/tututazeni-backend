@@ -1,3 +1,4 @@
+import { toJson } from '../common/helpers/prisma-json';
 // src/payslips/payroll-calculation.service.ts
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -298,7 +299,7 @@ export class PayrollCalculationService {
         advanceDeduction: ctx.advanceDeduction ?? null,
         workingDaysInMonth: ctx.workingDaysInMonth,
       },
-      calcSnapshot: result as unknown as Record<string, unknown>,
+      calcSnapshot: toJson(result),
       status: 'DRAFT',
     };
 
@@ -482,10 +483,10 @@ export class PayrollCalculationService {
 
     await this.prisma.$transaction(
       async tx => {
-        await (tx as unknown as PrismaService).payslipItem.deleteMany({
+        await tx.payslipItem.deleteMany({
           where: { payslip: { runId, status: 'DRAFT' } },
         });
-        await (tx as unknown as PrismaService).payslip.deleteMany({
+        await tx.payslip.deleteMany({
           where: { runId, status: 'DRAFT' },
         });
 
@@ -516,18 +517,16 @@ export class PayrollCalculationService {
           if (hasError) errorCount += 1;
 
           try {
-            const created = await (tx as unknown as PrismaService).payslip.create({
+            const created = await tx.payslip.create({
               data: {
                 ...calc.data,
                 runId,
                 hasExceptions: exceptions.length > 0,
-                exceptions: exceptions.length
-                  ? (exceptions as unknown as Prisma.InputJsonValue)
-                  : undefined,
-              } as unknown as Prisma.PayslipUncheckedCreateInput,
+                exceptions: exceptions.length ? toJson(exceptions) : undefined,
+              } as Prisma.PayslipUncheckedCreateInput,
             });
             if (calc.items.length) {
-              await (tx as unknown as PrismaService).payslipItem.createMany({
+              await tx.payslipItem.createMany({
                 data: calc.items.map(i => ({ ...i, payslipId: created.id })),
               });
             }
@@ -546,7 +545,7 @@ export class PayrollCalculationService {
           totalEmployerCost += calc.data.totalEmployerCost as number;
         }
 
-        await (tx as unknown as PrismaService).payrollRun.update({
+        await tx.payrollRun.update({
           where: { id: runId },
           data: {
             employeeCount: targets.length,

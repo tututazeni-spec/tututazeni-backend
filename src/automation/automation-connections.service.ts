@@ -154,8 +154,8 @@ export class AutomationConnectionsService {
       },
     });
     const changed = diffFields(
-      publicView(current) as unknown as Record<string, unknown>,
-      publicView(row) as unknown as Record<string, unknown>,
+      publicView(current) as Record<string, unknown>,
+      publicView(row) as Record<string, unknown>,
     );
     await this.audit.record({
       entity: 'CONNECTION',

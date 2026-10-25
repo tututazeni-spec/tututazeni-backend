@@ -1,3 +1,4 @@
+import { toJson } from '../common/helpers/prisma-json';
 // src/roi-impact/correlation.service.ts
 // "Correlações" (docs/roi-impact.md §7) — as 7 análises predefinidas do
 // spec, cada uma calculada a partir de pares de dados REAIS já existentes
@@ -195,7 +196,7 @@ export class CorrelationService {
         coefficient: stat?.coefficient ?? null,
         pValue: stat?.pValue ?? null,
         significant: stat?.significant ?? null,
-        dataPoints: pair.points as unknown as Prisma.InputJsonValue,
+        dataPoints: toJson(pair.points),
         note: [pair.note, insufficientNote].filter(Boolean).join(' ') || null,
         createdById,
       },

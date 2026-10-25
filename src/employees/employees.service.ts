@@ -32,6 +32,7 @@ import {
   AssignSkillDto,
   UpdateSkillLevelDto,
 } from './employees.dto';
+import { toJson } from '../common/helpers/prisma-json';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -243,10 +244,8 @@ export class EmployeesService {
         joinedAt: new Date(dto.joinedAt),
         birthDate: toDate(dto.birthDate),
         status: dto.status ?? EmployeeStatus.ACTIVE,
-        address: dto.address ? (dto.address as unknown as Prisma.InputJsonValue) : undefined,
-        emergencyContact: dto.emergencyContact
-          ? (dto.emergencyContact as unknown as Prisma.InputJsonValue)
-          : undefined,
+        address: dto.address ? toJson(dto.address) : undefined,
+        emergencyContact: dto.emergencyContact ? toJson(dto.emergencyContact) : undefined,
       },
     });
 
@@ -283,9 +282,8 @@ export class EmployeesService {
     };
     if (dto.joinedAt) data.joinedAt = new Date(dto.joinedAt);
     if (dto.birthDate) data.birthDate = new Date(dto.birthDate);
-    if (dto.address) data.address = dto.address as unknown as Prisma.InputJsonValue;
-    if (dto.emergencyContact)
-      data.emergencyContact = dto.emergencyContact as unknown as Prisma.InputJsonValue;
+    if (dto.address) data.address = toJson(dto.address);
+    if (dto.emergencyContact) data.emergencyContact = toJson(dto.emergencyContact);
 
     const updated = await this.prisma.employee.update({ where: { id }, data });
 
@@ -801,7 +799,7 @@ export class EmployeesService {
         type: dto.type ?? TimelineEventType.NOTE,
         title: dto.title ?? '',
         description: dto.description,
-        metadata: dto.metadata ? (dto.metadata as unknown as Prisma.InputJsonValue) : undefined,
+        metadata: dto.metadata ? toJson(dto.metadata) : undefined,
         isPublic: dto.isPublic ?? true,
         occurredAt: dto.occurredAt ? new Date(dto.occurredAt) : new Date(),
       },
@@ -830,7 +828,7 @@ export class EmployeesService {
       data: {
         ...dto,
         status: 'PENDING',
-        payload: dto.payload ? (dto.payload as unknown as Prisma.InputJsonValue) : undefined,
+        payload: dto.payload ? toJson(dto.payload) : undefined,
         attachments: dto.attachments ?? [],
       },
     });
@@ -864,7 +862,7 @@ export class EmployeesService {
     // submetido pelo colaborador (SelfServiceRequest.payload), não há como
     // confirmar o shape em tempo de compilação.
     if (dto.status === 'APPROVED' && req.type === 'DATA_CHANGE' && req.payload) {
-      const payload = req.payload as unknown as Prisma.EmployeeUpdateInput;
+      const payload = req.payload as Prisma.EmployeeUpdateInput;
       await this.prisma.employee.update({
         where: { id: req.employeeId },
         data: payload,

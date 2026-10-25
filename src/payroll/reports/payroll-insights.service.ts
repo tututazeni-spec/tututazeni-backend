@@ -1,3 +1,4 @@
+import { toJson } from '../../common/helpers/prisma-json';
 // src/payslips/payroll-insights.service.ts
 // Leituras agregadas do Payroll (docs/payroll.md §1, §3, §5, §9): visão geral,
 // colaboradores do processamento, deduções & impostos e relatórios. Só lê —
@@ -431,7 +432,7 @@ export class PayrollInsightsService {
       currency: dto.currency ?? 'AOA',
       locale: dto.locale ?? 'pt-AO',
       minimumWage: dto.minimumWage,
-      socialSecurity: dto.socialSecurity as unknown as Prisma.InputJsonValue,
+      socialSecurity: toJson(dto.socialSecurity),
     };
     return this.prisma.$transaction(async tx => {
       const cfg = await tx.countryConfig.upsert({
