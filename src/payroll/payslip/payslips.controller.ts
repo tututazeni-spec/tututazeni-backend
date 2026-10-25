@@ -1,4 +1,5 @@
 // src/payslips/payslips.controller.ts
+import { AnyAuthenticated } from '../../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -54,6 +55,7 @@ export class PayslipsController {
 
   @Get('my')
   @ApiOperation({ summary: 'Os meus recibos (colaborador autenticado)' })
+  @AnyAuthenticated()
   myPayslips(@CurrentUser() user: CurrentUserData, @Query() filters: PayslipFilterDto) {
     return this.svc.getMyPayslips(user.id, filters);
   }
@@ -61,6 +63,7 @@ export class PayslipsController {
   @Get('my/annual-summary')
   @ApiOperation({ summary: 'Resumo anual dos meus recibos' })
   @ApiQuery({ name: 'year', example: '2026' })
+  @AnyAuthenticated()
   myAnnualSummary(@CurrentUser() user: CurrentUserData, @Query('year') year: string) {
     return this.svc.annualSummary(user.id, year ?? new Date().getFullYear().toString());
   }
@@ -75,6 +78,7 @@ export class PayslipsController {
     description: 'Restringe a um único mês (MM); omitido = ano completo',
   })
   @ApiQuery({ name: 'format', required: false, enum: ['csv', 'pdf'] })
+  @AnyAuthenticated()
   async myAnnualSummaryExport(
     @CurrentUser() user: CurrentUserData,
     @Query('year') year: string | undefined,
@@ -108,6 +112,7 @@ export class PayslipsController {
   @ApiOperation({ summary: 'Comparar dois meses (colaborador)' })
   @ApiQuery({ name: 'periodA', example: '2026-03' })
   @ApiQuery({ name: 'periodB', example: '2026-04' })
+  @AnyAuthenticated()
   myCompare(
     @CurrentUser() user: CurrentUserData,
     @Query('periodA') periodA: string,
@@ -118,12 +123,14 @@ export class PayslipsController {
 
   @Get('my/compensation')
   @ApiOperation({ summary: 'A minha compensação actual (só-leitura)' })
+  @AnyAuthenticated()
   myCompensation(@CurrentUser() user: CurrentUserData) {
     return this.compensation.myCompensation(user.id);
   }
 
   @Get('my/:id')
   @ApiOperation({ summary: 'Detalhe do meu recibo' })
+  @AnyAuthenticated()
   async myPayslip(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: CurrentUserData,
@@ -136,6 +143,7 @@ export class PayslipsController {
 
   @Get('my/:id/pdf')
   @ApiOperation({ summary: 'Descarregar o meu recibo em PDF' })
+  @AnyAuthenticated()
   async myPayslipPdf(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: CurrentUserData,
@@ -160,12 +168,14 @@ export class PayslipsController {
   @Patch('my/:id/acknowledge')
   @ApiOperation({ summary: 'Confirmar recepção do recibo' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   acknowledge(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.acknowledge(id, user);
   }
 
   @Post('my/:id/dispute')
   @ApiOperation({ summary: 'Abrir disputa sobre um recibo' })
+  @AnyAuthenticated()
   createDispute(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: CurrentUserData,
@@ -179,6 +189,7 @@ export class PayslipsController {
   @Post('simulate')
   @ApiOperation({ summary: 'Simular cálculo salarial (IRT, INSS, líquido)' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   simulate(@Body() dto: SimulatePayslipDto) {
     return this.svc.simulate(dto);
   }

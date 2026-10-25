@@ -159,8 +159,8 @@ describe('Evaluation360Controller', () => {
   });
 
   it('getProgress → getParticipantProgress(cycleId, userId)', async () => {
-    await controller.getProgress('cycle-1', 'user-1');
-    expect(mockSvc.getParticipantProgress).toHaveBeenCalledWith('cycle-1', 'user-1');
+    await controller.getProgress('cycle-1', 'user-1', mockUser as any);
+    expect(mockSvc.getParticipantProgress).toHaveBeenCalledWith('cycle-1', 'user-1', mockUser);
   });
 
   it('suggestEvaluators → suggestEvaluators(id, dto)', async () => {
@@ -242,8 +242,8 @@ describe('Evaluation360Controller', () => {
 
   it('listFeedback → listFeedbackForUser(userId, query)', async () => {
     const query = {} as any;
-    await controller.listFeedback('user-1', query);
-    expect(mockSvc.listFeedbackForUser).toHaveBeenCalledWith('user-1', query);
+    await controller.listFeedback('user-1', query, mockUser as any);
+    expect(mockSvc.listFeedbackForUser).toHaveBeenCalledWith('user-1', query, mockUser);
   });
 
   it('createPulseSurvey → createPulseSurvey(dto, userId)', async () => {

@@ -1,3 +1,4 @@
+import { RoleGovernanceGuard } from '../common/guards/role-governance.guard';
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { AclController } from './acl.controller';
@@ -37,6 +38,8 @@ describe('AclController', () => {
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RoleGovernanceGuard)
       .useValue({ canActivate: () => true })
       .compile();
     controller = module.get<AclController>(AclController);

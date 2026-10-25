@@ -137,6 +137,21 @@ describe('WorkDeclarationService ownership (A3-2)', () => {
     await expect(svc.getDeclaration('t1', rh, 'd1')).resolves.toMatchObject({ id: 'd1' });
   });
 
+  it('exportDeclaration: outro colaborador recebe 404 (IDOR) e nada é exportado', async () => {
+    const svc = makeService({ ...declOfA, status: 'ISSUED' });
+    await expect(
+      svc.exportDeclaration('t1', employeeB, 'd1', { format: 'PDF' } as any),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('exportDeclaration: o dono não leva 404 por ownership', async () => {
+    const svc = makeService({ ...declOfA, status: 'DRAFT' });
+    // rascunho => BadRequest (regra de negócio), prova que passou a verificação de ownership
+    await expect(
+      svc.exportDeclaration('t1', employeeA, 'd1', { format: 'PDF' } as any),
+    ).rejects.not.toBeInstanceOf(NotFoundException);
+  });
+
   it('listDeclarations: colaborador força employeeId próprio no where', async () => {
     const svc = makeService(null, []);
     await svc.listDeclarations('t1', employeeA, {} as any);

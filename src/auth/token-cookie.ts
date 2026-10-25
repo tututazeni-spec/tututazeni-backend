@@ -20,6 +20,9 @@ export function buildTokenCookieOptions(isProd: boolean): CookieOptions {
 
 export const REFRESH_COOKIE = 'refresh_token';
 
+// Path usado até esta correcção; o logout continua a limpá-lo em browsers com sessão antiga.
+export const LEGACY_REFRESH_COOKIE_PATH = '/api/auth/refresh';
+
 export function buildRefreshCookieOptions(isProd: boolean): CookieOptions {
   return {
     httpOnly: true,
@@ -33,7 +36,9 @@ export function buildRefreshCookieOptions(isProd: boolean): CookieOptions {
     // isso este cookie nunca era reenviado e POST /auth/refresh falhava
     // sempre com "Refresh token ausente" — motivo pelo qual o frontend nunca
     // chegou a implementar refresh automático.
-    path: '/api/auth/refresh',
+    // '/api/auth' (e não '/api/auth/refresh'): o logout também tem de receber este
+    // cookie para conseguir revogar o refresh token no servidor.
+    path: '/api/auth',
     maxAge: 7 * 24 * 60 * 60 * 1000,
   };
 }

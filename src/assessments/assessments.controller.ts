@@ -1,4 +1,5 @@
 // src/assessments/assessments.controller.ts
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -73,6 +74,7 @@ export class AssessmentsController {
   @Get('my/attempts')
   @ApiOperation({ summary: 'As minhas tentativas' })
   @ApiQuery({ name: 'assessmentId', required: false })
+  @AnyAuthenticated()
   myAttempts(@CurrentUser() user: CurrentUserData, @Query('assessmentId') assessmentId?: string) {
     return this.svc.getUserAttempts(user.id, assessmentId ? parseInt(assessmentId) : undefined);
   }
@@ -81,6 +83,7 @@ export class AssessmentsController {
   @ApiOperation({
     summary: 'Avaliações formais (EXAM) disponíveis para o utilizador actual',
   })
+  @AnyAuthenticated()
   available(@CurrentUser() user: CurrentUserData) {
     return this.svc.getAvailableForUser(user.id);
   }
@@ -191,6 +194,7 @@ export class AssessmentsController {
 
   @Post('attempts/start')
   @ApiOperation({ summary: 'Iniciar ou retomar tentativa' })
+  @AnyAuthenticated()
   startAttempt(@CurrentUser() user: CurrentUserData, @Body() dto: StartAttemptDto) {
     return this.svc.startAttempt(user.id, dto);
   }
@@ -198,6 +202,7 @@ export class AssessmentsController {
   @Post('attempts/save')
   @ApiOperation({ summary: 'Auto-save das respostas (durante tentativa)' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   autoSave(@CurrentUser() user: CurrentUserData, @Body() dto: AutoSaveDto) {
     return this.svc.autoSave(user.id, dto);
   }
@@ -205,6 +210,7 @@ export class AssessmentsController {
   @Post('attempts/submit')
   @ApiOperation({ summary: 'Submeter tentativa e calcular score' })
   @HttpCode(HttpStatus.OK)
+  @AnyAuthenticated()
   submitAttempt(@CurrentUser() user: CurrentUserData, @Body() dto: SubmitAttemptDto) {
     return this.svc.submitAttempt(user.id, dto);
   }
@@ -222,6 +228,7 @@ export class AssessmentsController {
 
   @Get('course/:courseId')
   @ApiOperation({ summary: 'Listar avaliações de um curso' })
+  @AnyAuthenticated()
   findByCourse(@Param('courseId', ParseIntPipe) courseId: number) {
     return this.svc.findAll({ courseId });
   }

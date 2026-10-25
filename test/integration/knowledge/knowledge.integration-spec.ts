@@ -131,8 +131,8 @@ describe('Knowledge Base Integration', () => {
   });
 
   describe('Artigos — CRUD, versões e publicação', () => {
-    it('colaborador cria artigo obrigatório (inicia DRAFT)', async () => {
-      const res = await request(app.getHttpServer())
+    it('colaborador não pode criar artigo obrigatório → 403 (só ADMIN/RH)', async () => {
+      await request(app.getHttpServer())
         .post('/knowledge')
         .set('Authorization', `Bearer ${employeeToken}`)
         .send({
@@ -140,12 +140,31 @@ describe('Knowledge Base Integration', () => {
           content: 'Conteúdo inicial do artigo de teste de integração.',
           categoryId,
           mandatory: true,
+        })
+        .expect(403);
+    });
+
+    it('colaborador cria artigo (inicia DRAFT)', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/knowledge')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({
+          title: 'Política de Férias Integração',
+          content: 'Conteúdo inicial do artigo de teste de integração.',
+          categoryId,
           tags: ['ferias', 'rh'],
         })
         .expect(201);
       mandatoryArticleId = res.body.id;
       expect(res.body.status).toBe('DRAFT');
       expect(res.body.tags.length).toBe(2);
+      // Os testes seguintes precisam de um artigo obrigatório. Pela API só ADMIN/RH o tornam
+      // obrigatório; aqui é preparação do cenário, feita directamente na BD para não criar uma
+      // versão extra (a contagem de versões abaixo depende disso).
+      await prisma.knowledgeArticle.update({
+        where: { id: mandatoryArticleId },
+        data: { mandatory: true },
+      });
     });
 
     it('gamificação: pontos atribuídos ao autor pela criação', async () => {

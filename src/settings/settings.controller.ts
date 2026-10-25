@@ -1,4 +1,5 @@
 // src/settings/settings.controller.ts
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Body,
   Controller,
@@ -83,6 +84,7 @@ export class SettingsController {
   // Qualquer utilizador autenticado: nome da plataforma, logo e formatos.
   @Get('branding')
   @ApiOperation({ summary: 'Branding e formatos da organização (não sensível)' })
+  @AnyAuthenticated()
   branding() {
     return this.svc.getBranding();
   }
@@ -237,42 +239,49 @@ export class SettingsController {
 
   @Get('security/me/2fa')
   @ApiOperation({ summary: 'Estado do meu 2FA e modo exigido pela organização' })
+  @AnyAuthenticated()
   my2fa(@CurrentUser() user: CurrentUserData) {
     return this.security.getTwoFactorStatus(user.id);
   }
 
   @Post('security/me/2fa/setup')
   @ApiOperation({ summary: 'Iniciar configuração do 2FA (devolve segredo e otpauth URL)' })
+  @AnyAuthenticated()
   setup2fa(@CurrentUser() user: CurrentUserData) {
     return this.security.setupTwoFactor(user.id);
   }
 
   @Post('security/me/2fa/enable')
   @ApiOperation({ summary: 'Confirmar e activar o 2FA com um código TOTP' })
+  @AnyAuthenticated()
   enable2fa(@Body() dto: TwoFactorCodeDto, @CurrentUser() user: CurrentUserData) {
     return this.security.enableTwoFactor(user.id, dto.code);
   }
 
   @Post('security/me/2fa/disable')
   @ApiOperation({ summary: 'Desactivar o 2FA (exige código TOTP)' })
+  @AnyAuthenticated()
   disable2fa(@Body() dto: DisableTwoFactorDto, @CurrentUser() user: CurrentUserData) {
     return this.security.disableTwoFactor(user.id, dto.code);
   }
 
   @Get('security/me/sessions')
   @ApiOperation({ summary: 'As minhas sessões activas' })
+  @AnyAuthenticated()
   mySessions(@CurrentUser() user: CurrentUserData) {
     return this.security.listSessions(user.id);
   }
 
   @Delete('security/me/sessions/:id')
   @ApiOperation({ summary: 'Terminar uma das minhas sessões' })
+  @AnyAuthenticated()
   revokeMySession(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.security.revokeSession(id, user.id, true);
   }
 
   @Get('security/me/login-history')
   @ApiOperation({ summary: 'O meu histórico de logins' })
+  @AnyAuthenticated()
   myLoginHistory(@CurrentUser() user: CurrentUserData, @Query('page') page?: string) {
     return this.security.loginHistory({ userId: user.id, page: page ? Number(page) : undefined });
   }

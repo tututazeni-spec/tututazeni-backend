@@ -1,4 +1,5 @@
 // ─── src/attendance/attendance.controller.ts ─────────────────────────────────
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -103,12 +104,14 @@ export class AttendanceController {
 
   @Post('clock-in')
   @ApiOperation({ summary: 'Check-in (entrada) — suporta QR, GPS, selfie, token' })
+  @AnyAuthenticated()
   clockIn(@CurrentUser() user: CurrentUserData, @Body() dto: ClockInDto) {
     return this.svc.clockIn(user.id, dto);
   }
 
   @Post('clock-out')
   @ApiOperation({ summary: 'Check-out (saída) com cálculo automático de horas' })
+  @AnyAuthenticated()
   clockOut(@CurrentUser() user: CurrentUserData, @Body() dto: ClockOutDto) {
     return this.svc.clockOut(user.id, dto);
   }
@@ -121,6 +124,7 @@ export class AttendanceController {
   @ApiOperation({ summary: 'Minhas presenças com resumo' })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
+  @AnyAuthenticated()
   myAttendance(
     @CurrentUser() user: CurrentUserData,
     @Query('from') from?: string,
@@ -131,12 +135,14 @@ export class AttendanceController {
 
   @Get('my/leave-balance')
   @ApiOperation({ summary: 'Saldo de licenças e férias' })
+  @AnyAuthenticated()
   myLeaveBalance(@CurrentUser() user: CurrentUserData) {
     return this.svc.getLeaveBalance(user.id);
   }
 
   @Get('my/overtime')
   @ApiOperation({ summary: 'Banco de horas (saldo de horas extras)' })
+  @AnyAuthenticated()
   myOvertimeBalance(@CurrentUser() user: CurrentUserData) {
     return this.svc.getOvertimeBalance(user.id);
   }
@@ -217,6 +223,7 @@ export class AttendanceController {
 
   @Post('leaves')
   @ApiOperation({ summary: 'Solicitar licença ou férias' })
+  @AnyAuthenticated()
   createLeave(@CurrentUser() user: CurrentUserData, @Body() dto: CreateLeaveRequestDto) {
     return this.svc.createLeaveRequest(user.id, dto);
   }
@@ -270,6 +277,7 @@ export class AttendanceController {
 
   @Post('overtime')
   @ApiOperation({ summary: 'Registar hora extra' })
+  @AnyAuthenticated()
   createOvertime(@CurrentUser() user: CurrentUserData, @Body() dto: CreateOvertimeDto) {
     return this.svc.createOvertime(user.id, dto);
   }
@@ -298,6 +306,7 @@ export class AttendanceController {
 
   @Post('justifications')
   @ApiOperation({ summary: 'Enviar justificativa de ausência' })
+  @AnyAuthenticated()
   createJustification(@CurrentUser() user: CurrentUserData, @Body() dto: CreateJustificationDto) {
     return this.svc.createJustification(user.id, dto);
   }
@@ -326,6 +335,7 @@ export class AttendanceController {
 
   @Post('qr/validate')
   @ApiOperation({ summary: 'Validar QR code e efectuar check-in' })
+  @AnyAuthenticated()
   validateQr(@CurrentUser() user: CurrentUserData, @Body() dto: ValidateQrDto) {
     return this.svc.clockIn(user.id, {
       method: CheckInMethod.QR_DYNAMIC,
@@ -341,6 +351,7 @@ export class AttendanceController {
 
   @Post('events/:eventId/check-in')
   @ApiOperation({ summary: 'Check-in em evento presencial/virtual' })
+  @AnyAuthenticated()
   checkInEvent(
     @CurrentUser() user: CurrentUserData,
     @Param('eventId', ParseIntPipe) eventId: number,
@@ -351,6 +362,7 @@ export class AttendanceController {
 
   @Post('sessions/:sessionId/check-in')
   @ApiOperation({ summary: 'Check-in em sessão de webinar/LMS' })
+  @AnyAuthenticated()
   checkInSession(
     @CurrentUser() user: CurrentUserData,
     @Param('sessionId', ParseIntPipe) sessionId: number,

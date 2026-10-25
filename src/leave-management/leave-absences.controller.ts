@@ -3,6 +3,7 @@
 // LeaveManagementController no módulo: `GET /leave/absences` colidiria com
 // `GET /leave/:id` se este fosse registado primeiro (ver memória "route
 // shadowing").
+import { AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Body,
   Controller,
@@ -43,6 +44,7 @@ export class LeaveAbsencesController {
 
   @Get()
   @ApiOperation({ summary: 'Ocorrências de ausência do âmbito do perfil' })
+  @AnyAuthenticated()
   list(@Query() filters: AbsenceFilterDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.list(filters, user);
   }
@@ -56,6 +58,7 @@ export class LeaveAbsencesController {
 
   @Get('history/:userId')
   @ApiOperation({ summary: 'Histórico de ausências de um colaborador' })
+  @AnyAuthenticated()
   history(@Param('userId', ParseIntPipe) userId: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.history(userId, user);
   }
@@ -63,6 +66,7 @@ export class LeaveAbsencesController {
   @UploadThrottle()
   @Post()
   @ApiOperation({ summary: 'Registar ausência (associa o registo de assiduidade existente)' })
+  @AnyAuthenticated()
   create(@Body() dto: CreateAbsenceDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.create(dto, user);
   }
@@ -76,6 +80,7 @@ export class LeaveAbsencesController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe de uma ocorrência, com histórico de alterações' })
+  @AnyAuthenticated()
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(id, user);
   }
@@ -83,6 +88,7 @@ export class LeaveAbsencesController {
   @UploadThrottle()
   @Post(':id/justification')
   @ApiOperation({ summary: 'Submeter justificação' })
+  @AnyAuthenticated()
   justify(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: SubmitJustificationDto,
@@ -105,6 +111,7 @@ export class LeaveAbsencesController {
   @UploadThrottle()
   @Post(':id/attachments')
   @ApiOperation({ summary: 'Anexar comprovativo' })
+  @AnyAuthenticated()
   attach(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: AddAbsenceAttachmentDto,
