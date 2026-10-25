@@ -25,7 +25,17 @@ Auditoria dos 5 pontos (SQL injection, XSS, CSRF, validação, headers). Estado 
 - Assumido em `frontend/lib/csp.ts` ("apertar com nonces de estilo fica para depois").
 - Apertar exige nonces de estilo e pode afectar Tailwind e `style={}` do React; tratar como trabalho à parte, com teste visual.
 
-### 4. Validação no frontend (não auditada)
-- Não há `zod`/`yup`/`react-hook-form` no frontend; não foi verificada formulário a formulário a validação no cliente.
-- Risco de segurança baixo (o backend valida sempre), mas a UX/consistência de erros por campo fica por rever.
+### 4. Validação de inputs (auditada 2026-10-25, por amostragem/contagem — não formulário a formulário)
+
+**Frontend**
+- Sem `zod`/`yup`/`react-hook-form`. Existe `frontend/lib/validation.ts` (`required`, `email`, `validate`), usado em 19 ficheiros. Os restantes ~26 dos 45 ficheiros com `<form>`/`onSubmit` validam à mão ou só com atributos HTML (`required` em 58 ficheiros, `maxLength` em 41).
+- Uploads (`type="file"`): todos verificam tamanho/tipo ou têm `accept=`, excepto `components/audit/ExportsView.tsx` (sem `accept=`, mas valida `file.size > MAX_EVIDENCE_BYTES`). Aceitável; o backend tem políticas de ficheiro (`FILE_POLICIES`).
+- Não existe helper de URL segura no frontend. `href={...}` com URLs vindas da BD sem filtro de protocolo, p.ex.: `live-classes/[id]/page.tsx:226` (`recordingUrl`), `events/DetailView.tsx:399` (`meetingUrl`), `courses-learn/ContentPlayer.tsx:283` (`liveSessionUrl`), `notifications/InboxView.tsx:85` (`actionUrl`), `executive-reports/AlertsPanel.tsx:172` (`alert.link`), `courses-modulos/LessonRow.tsx`, `crm/partners/*` (`contractUrl`).
+
+**Backend** (lacuna real, severidade média-baixa)
+- Campos de URL em DTOs: 52. Muitos usam o validador próprio `@IsAllowedFileUrl` / `@IsUrlOrInlineFile` (`src/common/validators/is-allowed-file-url.validator.ts`; não revisto a fundo aqui), mas vários são só `@IsString()` sem validar protocolo: `events.meetingUrl`, `courses.liveSessionUrl/contentUrl/introVideoUrl/captionsUrl`, `notifications.actionUrl`, `users.linkedinUrl`, `crm-partners.contractUrl`, `crm-funders.proofUrl`, `competencies.evidenceUrl`, `onboarding.welcomeVideoUrl/evidenceUrl`, `trainings.meetingUrl`, `avatar-training.mediaUrl`, `crm-beneficiaries.photoUrl`, `events.bannerUrl/photoUrl`.
+- Cenário: um utilizador com permissão de escrita grava `javascript:...` (ou `data:text/html,...`) num destes campos; outro utilizador clica no link renderizado. XSS armazenado.
+- Mitigação já existente: a CSP (`script-src` sem `'unsafe-inline'`) faz o browser bloquear navegação `javascript:` — é defesa em profundidade, não validação. Browsers sem CSP efectiva ou uma CSP futura mais frouxa reabrem o problema.
+- Correcção recomendada (por fazer): (a) no backend, trocar `@IsString()` por um validador `@IsHttpUrl()` (só `http:`/`https:`, `@MaxLength(2048)`) nos campos acima que são ligações externas; (b) no frontend, helper `safeHref(url)` que devolve `undefined` se o protocolo não for `http(s)`/`mailto`/rota relativa, usado nos `href` listados. Cobrir com testes unitários (`javascript:`, `data:`, `vbscript:`, maiúsculas/espaços/tabs no esquema).
+- Cuidado ao aplicar: `actionUrl` das notificações é deep link (rota relativa) e `content-library.url`/`contentUrl` podem ser data URL inline por desenho — não aplicar `@IsHttpUrl` cegamente nestes.
 - `RichTextEditor.tsx` (`el.innerHTML = lessonTextToHtml(value)`): **verificado, seguro** (2026-10-25). `lessonTextToHtml` sanitiza com DOMPurify o ramo HTML e escapa `& < >` no ramo de texto simples; `emit()` volta a sanitizar à saída e o `LessonReader` renderiza via `SafeHtml`.
