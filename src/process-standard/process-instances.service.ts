@@ -16,7 +16,6 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { isPrivileged } from '../common/authz/ownership';
-import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { ProcessStandardService } from './process-standard.service';
@@ -31,7 +30,9 @@ import {
 } from './process-standard.dto';
 import { csvCell } from '../common/utils/csv-safe.util';
 
-const MANAGE_ROLES = [Role.ADMIN, Role.RH, Role.GESTOR];
+import { ADMIN_RH_GESTOR_ROLES } from '../auth/enums/role-groups';
+
+const MANAGE_ROLES = ADMIN_RH_GESTOR_ROLES;
 const ACTIVE_TASK_STATUSES = ['PENDING', 'IN_PROGRESS', 'BLOCKED', 'ESCALATED'] as const;
 const DUE_SOON_MS = 48 * 3_600_000;
 const EXPORT_LIMIT = 5000;

@@ -15,7 +15,6 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CurrentUserData } from '../common/decorators';
 import { isPrivileged } from '../common/authz/ownership';
-import { Role } from '../auth/enums/role.enum';
 import { AutomationService, type AutomationRuleRecord } from '../automation/automation.service';
 import {
   ActionType,
@@ -41,8 +40,10 @@ import {
   TestAutomationDto,
 } from './process-standard.dto';
 
+import { ADMIN_RH_ROLES } from '../auth/enums/role-groups';
+
 const PROCESS_MODULE = 'PROCESSES';
-const ADMIN_ROLES = [Role.ADMIN, Role.RH];
+const ADMIN_ROLES = ADMIN_RH_ROLES;
 const EVENT_LABEL = new Map([...PROCESS_EVENTS, ...EXTERNAL_EVENTS].map(e => [e.value, e.label]));
 const ACTION_LABEL = new Map(PROCESS_ACTIONS.map(a => [a.value, a.label]));
 const PROCESS_EVENT_VALUES = PROCESS_EVENTS.map(e => e.value);

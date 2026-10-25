@@ -26,7 +26,9 @@ import {
 } from './leave-management.dto';
 import { canSeeSensitive, ORG_WIDE_ROLES } from './leave-scope.helper';
 
-const APPROVER_ROLE_CODES = [Role.ADMIN, Role.RH, Role.GESTOR];
+import { ADMIN_RH_GESTOR_ROLES } from '../auth/enums/role-groups';
+
+const APPROVER_ROLE_CODES = ADMIN_RH_GESTOR_ROLES;
 
 export type ApprovalState = 'WAITING' | 'PENDING' | 'OVERDUE' | 'APPROVED' | 'REJECTED' | 'OTHER';
 

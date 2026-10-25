@@ -48,7 +48,9 @@ import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 import { AutomationAccessService } from './automation-access.service';
 import { AutomationPerm } from './automation-permission.guard';
 
-const ADMIN = ['ADMIN', 'RH'] as const;
+import { ADMIN_RH_ROLES } from '../auth/enums/role-groups';
+
+const ADMIN = ADMIN_RH_ROLES;
 
 @ApiTags('Automation — Workflow Engine')
 @ApiBearerAuth()

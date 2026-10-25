@@ -57,7 +57,9 @@ import {
 
 import { safeDownloadHeaders } from '../common/files/safe-download';
 
-const EXEC_FULL = [Role.ADMIN, Role.RH, Role.DIRECTOR] as const;
+import { ADMIN_RH_DIRECTOR_ROLES } from '../auth/enums/role-groups';
+
+const EXEC_FULL = ADMIN_RH_DIRECTOR_ROLES;
 const EXEC_MGMT = [...EXEC_FULL, Role.GESTOR, Role.LIDER] as const;
 
 @ApiTags('Executive Reports')

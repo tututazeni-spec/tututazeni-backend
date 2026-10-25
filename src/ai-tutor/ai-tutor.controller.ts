@@ -43,7 +43,9 @@ import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 import { isPrivileged } from '../common/authz/ownership';
 
-const AI_TUTOR_ADMIN_ROLES = [Role.ADMIN, Role.RH];
+import { ADMIN_RH_ROLES } from '../auth/enums/role-groups';
+
+const AI_TUTOR_ADMIN_ROLES = ADMIN_RH_ROLES;
 
 // Credenciais do próprio utilizador (cookie httpOnly ou Bearer) que a Ísis
 // reencaminha ao consultar os módulos — nunca uma conta de serviço.

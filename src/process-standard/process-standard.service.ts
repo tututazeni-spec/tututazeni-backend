@@ -38,7 +38,6 @@ import {
   parseConditionSet,
 } from './process-conditions';
 import { isPrivileged } from '../common/authz/ownership';
-import { Role } from '../auth/enums/role.enum';
 import { inDepartmentScope } from './process-scope';
 import { missingStartData, startRequirements } from './process-start-requirements';
 import { CurrentUserData } from '../common/decorators';
@@ -58,8 +57,10 @@ import {
   SimulateFlowDto,
 } from './process-standard.dto';
 
-const PROCESS_PRIVILEGED_ROLES = [Role.ADMIN, Role.RH, Role.GESTOR];
-const TEMPLATE_ADMIN_ROLES = [Role.ADMIN, Role.RH];
+import { ADMIN_RH_GESTOR_ROLES, ADMIN_RH_ROLES } from '../auth/enums/role-groups';
+
+const PROCESS_PRIVILEGED_ROLES = ADMIN_RH_GESTOR_ROLES;
+const TEMPLATE_ADMIN_ROLES = ADMIN_RH_ROLES;
 const ACTIVE_TASK_STATUSES = ['PENDING', 'IN_PROGRESS', 'BLOCKED', 'ESCALATED'] as const;
 const COMPLETABLE_STATUSES = ['PENDING', 'IN_PROGRESS', 'ESCALATED'];
 

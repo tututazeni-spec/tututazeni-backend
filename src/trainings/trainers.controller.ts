@@ -22,19 +22,13 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators';
-import { Role } from '../auth/enums/role.enum';
 
 import { UploadThrottle } from '../common/security/upload-throttle';
+
+import { ADMIN_RH_LEADERSHIP_INSTRUCTOR_ROLES } from '../auth/enums/role-groups';
 // Mesmos papéis que podem gerir formações — a gestão do registo de
 // formadores é uma extensão da gestão de Trainings, não um domínio à parte.
-const CAN_MANAGE_TRAINERS = [
-  Role.ADMIN,
-  Role.RH,
-  Role.GESTOR,
-  Role.INSTRUCTOR,
-  Role.DIRECTOR,
-  Role.LIDER,
-];
+const CAN_MANAGE_TRAINERS = ADMIN_RH_LEADERSHIP_INSTRUCTOR_ROLES;
 
 @ApiTags('Training Trainers')
 @ApiBearerAuth()

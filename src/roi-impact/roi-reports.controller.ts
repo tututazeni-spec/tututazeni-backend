@@ -13,7 +13,9 @@ import { Roles } from '../common/decorators';
 import { RoiReportFilterDto, TopInitiativesReportFilterDto } from './roi-impact.dto';
 import { buildXlsxBuffer } from '../common/utils/xlsx-export.util';
 
-const ADMIN = ['ADMIN', 'RH', 'DIRECTOR'] as const;
+import { ADMIN_RH_DIRECTOR_ROLES } from '../auth/enums/role-groups';
+
+const ADMIN = ADMIN_RH_DIRECTOR_ROLES;
 
 @ApiTags('ROI & Impact — Relatórios')
 @ApiBearerAuth()

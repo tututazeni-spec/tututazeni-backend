@@ -29,7 +29,9 @@ import {
   UpdateLeaveSettingsDto,
 } from './leave-settings.dto';
 
-const APPROVER_ROLES = [Role.ADMIN, Role.RH, Role.GESTOR, Role.DIRECTOR, Role.LIDER];
+import { ADMIN_RH_LEADERSHIP_ROLES } from '../auth/enums/role-groups';
+
+const APPROVER_ROLES = ADMIN_RH_LEADERSHIP_ROLES;
 
 @ApiTags('Leave Management — Configurações')
 @ApiBearerAuth()

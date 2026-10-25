@@ -30,9 +30,11 @@ import {
 } from './acl.dto';
 import { Role } from '../auth/enums/role.enum';
 
+import { ADMIN_RH_ROLES } from '../auth/enums/role-groups';
+
 // Fase D: rotas /acl/* passam a delegar no serviço canónico RolesPermissionsService.
 // O motor ABAC (policies/check) foi removido — enforcement continua no RolesGuard.
-const ADMIN = [Role.ADMIN, Role.RH] as const;
+const ADMIN = ADMIN_RH_ROLES;
 
 @ApiTags('ACL — Access Control')
 @ApiBearerAuth()

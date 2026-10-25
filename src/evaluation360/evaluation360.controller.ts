@@ -60,17 +60,19 @@ import { assertCanAccess } from '../common/authz/ownership';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CurrentUserData } from '../common/types/current-user';
 
+import { ADMIN_DIRECTOR_ROLES, ADMIN_RH_LEADERSHIP_ROLES } from '../auth/enums/role-groups';
+
 // Quem pode criar/publicar questionários 360º e distribuí-los automaticamente
 // — mesmo grupo de EVAL_CREATOR_ROLES em src/assessments/assessments.controller.ts
 // e frontend/lib/roles.ts. O banco de competências (createCompetency)
 // continua ADMIN/RH só — não é "criar questionário".
-const EVAL_CREATOR_ROLES = [Role.ADMIN, Role.RH, Role.GESTOR, Role.DIRECTOR, Role.LIDER] as const;
+const EVAL_CREATOR_ROLES = ADMIN_RH_LEADERSHIP_ROLES;
 
 // Quem pode eliminar/restaurar um ciclo — mais restrito que EVAL_CREATOR_ROLES:
 // eliminar é uma acção destrutiva (mesmo sendo soft delete e reversível via o
 // separador "Apagados" da auditoria), por isso fica só para ADMIN/DIRECTOR,
 // espelhado em frontend/lib/roles.ts (EVAL_CYCLE_DELETE_ROLES).
-const EVAL_CYCLE_DELETE_ROLES = [Role.ADMIN, Role.DIRECTOR] as const;
+const EVAL_CYCLE_DELETE_ROLES = ADMIN_DIRECTOR_ROLES;
 
 @ApiTags('Avaliação 360°')
 @ApiBearerAuth()

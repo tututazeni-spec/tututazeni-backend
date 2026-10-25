@@ -44,9 +44,15 @@ import {
   SubmitDocumentDto,
 } from './process-standard.dto';
 
-const MANAGE_ROLES = [Role.ADMIN, Role.RH, Role.GESTOR];
-const FULL_VIEW_ROLES = [Role.ADMIN, Role.RH, Role.AUDITOR];
-const DECIDE_ROLES = [Role.ADMIN, Role.RH];
+import {
+  ADMIN_RH_AUDITOR_ROLES,
+  ADMIN_RH_GESTOR_ROLES,
+  ADMIN_RH_ROLES,
+} from '../auth/enums/role-groups';
+
+const MANAGE_ROLES = ADMIN_RH_GESTOR_ROLES;
+const FULL_VIEW_ROLES = ADMIN_RH_AUDITOR_ROLES;
+const DECIDE_ROLES = ADMIN_RH_ROLES;
 const PUBLISHED_DOC_STATUSES = ['ACTIVE', 'APROVADO'] as const;
 const EXPIRING_MS = 30 * 86_400_000;
 const user3 = { select: { id: true, fullName: true } } as const;

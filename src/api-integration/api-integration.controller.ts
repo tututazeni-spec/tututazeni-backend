@@ -31,7 +31,9 @@ import {
   ValidateApiKeyBodyDto,
 } from './api-integration.dto';
 
-const ADMIN = ['ADMIN', 'RH'] as const;
+import { ADMIN_RH_ROLES } from '../auth/enums/role-groups';
+
+const ADMIN = ADMIN_RH_ROLES;
 
 @ApiTags('API Integration')
 @ApiBearerAuth()

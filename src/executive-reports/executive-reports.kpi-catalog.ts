@@ -4,6 +4,7 @@
 // em todos os separadores e relatórios. As metas/limiares aqui são os valores
 // por omissão; um modelo ExecutiveKPIDefinition (§11) poderá sobrepô-los mais
 // tarde sem alterar a fórmula.
+import { ADMIN_RH_DIRECTOR_ROLES } from '../auth/enums/role-groups';
 
 export type KpiCode =
   'HEADCOUNT' | 'PERFORMANCE' | 'TRAINING_COMPLETION' | 'ATTENDANCE' | 'TURNOVER' | 'PDI_OVERDUE';
@@ -168,7 +169,7 @@ export interface ExecutiveTabDef {
   roles: string[];
 }
 
-const FULL = ['ADMIN', 'RH', 'DIRECTOR'];
+const FULL = ADMIN_RH_DIRECTOR_ROLES;
 const MGMT = [...FULL, 'GESTOR', 'LIDER'];
 
 export const EXECUTIVE_TABS: ExecutiveTabDef[] = [

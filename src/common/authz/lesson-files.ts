@@ -4,7 +4,6 @@
 // gravar e (3) a remoção do ficheiro das respostas para quem não deve recebê-lo
 // por inteiro — o aluno obtém-no por GET /lessons/:id/file, que valida o acesso.
 import { BadRequestException } from '@nestjs/common';
-import { Role } from '../../auth/enums/role.enum';
 import { formatLimit } from '../files/data-url';
 import { inspectInlineFile } from '../files/inspect-inline-file';
 import { antivirusConfig } from '../files/antivirus';
@@ -12,8 +11,10 @@ import { inspectInlineFileScanned } from '../files/inspect-scanned';
 import { FILE_POLICIES } from '../files/file-policies';
 import { isPrivileged } from './ownership';
 
+import { ADMIN_RH_INSTRUCTOR_ROLES } from '../../auth/enums/role-groups';
+
 /** Papéis que criam/editam lições e por isso podem sempre ver os ficheiros. */
-export const CONTENT_MANAGER_ROLES: Role[] = [Role.ADMIN, Role.RH, Role.INSTRUCTOR];
+export const CONTENT_MANAGER_ROLES = ADMIN_RH_INSTRUCTOR_ROLES;
 
 const PDF_DATA_URL = /^data:application\/pdf;base64,/i;
 

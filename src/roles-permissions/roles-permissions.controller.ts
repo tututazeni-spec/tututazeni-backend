@@ -29,7 +29,9 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators';
 
-const ADMIN = ['ADMIN', 'RH'] as const;
+import { ADMIN_RH_ROLES } from '../auth/enums/role-groups';
+
+const ADMIN = ADMIN_RH_ROLES;
 
 @ApiTags('Roles & Permissions')
 @ApiBearerAuth()

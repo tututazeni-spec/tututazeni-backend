@@ -3,12 +3,13 @@
 // Ausências e Calendário (docs/Modulo_Leave.md §2-§6): colaborador → só si;
 // gestor/líder/director → a sua equipa; ADMIN/RH → toda a organização.
 import { Prisma } from '@prisma/client';
-import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
 import { isPrivileged } from '../common/authz/ownership';
 
-export const ORG_WIDE_ROLES = [Role.ADMIN, Role.RH];
-export const TEAM_ROLES = [Role.GESTOR, Role.DIRECTOR, Role.LIDER];
+import { ADMIN_RH_ROLES, DIRECTOR_GESTOR_LIDER_ROLES } from '../auth/enums/role-groups';
+
+export const ORG_WIDE_ROLES = ADMIN_RH_ROLES;
+export const TEAM_ROLES = DIRECTOR_GESTOR_LIDER_ROLES;
 
 export type LeaveScope = 'ORGANIZATION' | 'TEAM' | 'SELF';
 

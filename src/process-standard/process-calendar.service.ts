@@ -13,7 +13,6 @@ import {
 import { InstanceStatus, Prisma, StepProgressStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { isPrivileged } from '../common/authz/ownership';
-import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { ProcessStandardService } from './process-standard.service';
@@ -28,7 +27,9 @@ import {
 } from './process-calendar';
 import { CalendarFilterDto, RescheduleDto } from './process-standard.dto';
 
-const MANAGE_ROLES = [Role.ADMIN, Role.RH, Role.GESTOR];
+import { ADMIN_RH_GESTOR_ROLES } from '../auth/enums/role-groups';
+
+const MANAGE_ROLES = ADMIN_RH_GESTOR_ROLES;
 const MAX_ITEMS = 1000;
 const ACTIVE = ['PENDING', 'IN_PROGRESS', 'BLOCKED', 'ESCALATED'] as const;
 const OPEN_APPROVAL = ['PENDING', 'INFO_REQUESTED', 'ESCALATED'];

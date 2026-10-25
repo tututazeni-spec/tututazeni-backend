@@ -28,22 +28,16 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
-import { Role } from '../auth/enums/role.enum';
 
 import { UploadThrottle } from '../common/security/upload-throttle';
+
+import { ADMIN_RH_LEADERSHIP_INSTRUCTOR_ROLES, ADMIN_RH_ROLES } from '../auth/enums/role-groups';
 // Mesmos papéis que podem criar/gerir formações (TrainingController) —
 // quem não for ADMIN/RH só gere os planos que criou (assertCanManage).
-const CAN_MANAGE_PLANS = [
-  Role.ADMIN,
-  Role.RH,
-  Role.GESTOR,
-  Role.INSTRUCTOR,
-  Role.DIRECTOR,
-  Role.LIDER,
-];
+const CAN_MANAGE_PLANS = ADMIN_RH_LEADERSHIP_INSTRUCTOR_ROLES;
 // Aprovar/rejeitar um plano submetido é sempre ADMIN/RH — não faz sentido
 // um GESTOR aprovar o seu próprio plano.
-const CAN_APPROVE_PLANS = [Role.ADMIN, Role.RH];
+const CAN_APPROVE_PLANS = ADMIN_RH_ROLES;
 
 @ApiTags('Training Plans')
 @ApiBearerAuth()

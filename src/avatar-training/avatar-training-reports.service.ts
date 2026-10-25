@@ -22,13 +22,15 @@ import {
 } from './avatar-training.helpers';
 import { csvCell } from '../common/utils/csv-safe.util';
 
+import { ADMIN_RH_DIRECTOR_AUDITOR_ROLES } from '../auth/enums/role-groups';
+
 const MAX_ROWS = 20_000;
 const DEFAULT_PERIOD_DAYS = 30;
 const TUTOR_TAG = '"channel":"AI_TUTOR"';
 const FINISHED = ['COMPLETED', 'FAILED'] as const;
 const OPEN_ASSIGNMENT = ['ASSIGNED', 'IN_PROGRESS'] as const;
 const SIMULATION_TYPES = ['ROLE_PLAY', 'PRACTICAL_ASSESSMENT'] as const;
-const WIDE_ROLES = [Role.ADMIN, Role.RH, Role.DIRECTOR, Role.AUDITOR];
+const WIDE_ROLES = ADMIN_RH_DIRECTOR_AUDITOR_ROLES;
 const TEAM_ROLES = [Role.GESTOR, Role.LIDER, Role.INSTRUCTOR];
 
 const round1 = (n: number) => Math.round(n * 10) / 10;

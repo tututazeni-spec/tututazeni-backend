@@ -7,8 +7,10 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
-const ADMIN = [Role.ADMIN, Role.RH, Role.DIRECTOR] as const;
-const MGMT = [Role.ADMIN, Role.RH, Role.DIRECTOR, Role.LIDER, Role.GESTOR] as const;
+import { ADMIN_RH_DIRECTOR_ROLES, ADMIN_RH_LEADERSHIP_ROLES } from '../auth/enums/role-groups';
+
+const ADMIN = ADMIN_RH_DIRECTOR_ROLES;
+const MGMT = ADMIN_RH_LEADERSHIP_ROLES;
 
 @ApiTags('Dashboard RH')
 @ApiBearerAuth()

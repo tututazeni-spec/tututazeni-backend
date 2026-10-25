@@ -21,12 +21,14 @@ import { ReportFilterDto, SaveReportDto, CreateScheduleDto } from './reports.dto
 import { ReportCategory } from '@prisma/client';
 import { Role } from '../auth/enums/role.enum';
 
+import { ADMIN_RH_LEADERSHIP_ROLES, ADMIN_RH_ROLES } from '../auth/enums/role-groups';
+
 // ALL_MGMT hand-rolava ['ADMIN','RH','LIDER','DIRECTOR'] e omitia GESTOR — o
 // papel canónico de "gestor de equipa" (ver Role em role.enum.ts) — trancando
 // qualquer gestor de linha real fora de todos os relatórios deste módulo.
 // Mesmo padrão já encontrado em dashboard/dashboard-rh/engagement.
-const ALL_MGMT = [Role.ADMIN, Role.RH, Role.LIDER, Role.DIRECTOR, Role.GESTOR] as const;
-const ADMIN = [Role.ADMIN, Role.RH] as const;
+const ALL_MGMT = ADMIN_RH_LEADERSHIP_ROLES;
+const ADMIN = ADMIN_RH_ROLES;
 
 @ApiTags('Reports')
 @ApiBearerAuth()

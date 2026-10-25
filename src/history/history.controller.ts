@@ -31,11 +31,13 @@ import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 
 import { safeDownloadHeaders } from '../common/files/safe-download';
 
+import { ADMIN_RH_LIDER_GESTOR_ROLES, ADMIN_RH_ROLES } from '../auth/enums/role-groups';
+
 // Tiers indexados pelo enum Role — nunca literais soltos (ver memory
 // role-array-drift: arrays locais já esqueceram GESTOR 5x nesta sessão).
 const ALL_ROLES = AUTHENTICATED_ROLES;
-const MGMT_ROLES = [Role.ADMIN, Role.RH, Role.LIDER, Role.GESTOR] as const;
-const ADMIN_ROLES = [Role.ADMIN, Role.RH] as const;
+const MGMT_ROLES = ADMIN_RH_LIDER_GESTOR_ROLES;
+const ADMIN_ROLES = ADMIN_RH_ROLES;
 
 @ApiTags('History & Timeline')
 @ApiBearerAuth()

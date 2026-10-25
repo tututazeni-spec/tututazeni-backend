@@ -40,12 +40,14 @@ import {
   TalentDevelopmentDashboardFilterDto,
 } from './talent-development.dto';
 
+import { ADMIN_RH_LIDER_GESTOR_ROLES, ADMIN_RH_ROLES } from '../auth/enums/role-groups';
+
 // ALL_ROLES/MGMT_ROLES hand-rolados omitiam Role.GESTOR — mesmo padrão já
 // encontrado em dashboard/dashboard-rh/engagement/reports (5ª instância) —
 // ver [[project-innova-role-array-drift]].
 const ALL_ROLES = [Role.ADMIN, Role.RH, Role.LIDER, Role.GESTOR, Role.COLABORADOR] as const;
-const MGMT_ROLES = [Role.ADMIN, Role.RH, Role.LIDER, Role.GESTOR] as const;
-const ADMIN_ROLES = [Role.ADMIN, Role.RH] as const;
+const MGMT_ROLES = ADMIN_RH_LIDER_GESTOR_ROLES;
+const ADMIN_ROLES = ADMIN_RH_ROLES;
 
 @ApiTags('Talent Development')
 @ApiBearerAuth()

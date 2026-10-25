@@ -1,13 +1,14 @@
 import { NotFoundException } from '@nestjs/common';
-import { Role } from '../auth/enums/role.enum';
 import { isPrivileged } from '../common/authz/ownership';
+
+import { ADMIN_RH_DIRECTOR_AUDITOR_ROLES } from '../auth/enums/role-groups';
 
 interface CallerLike {
   id: number;
   role?: { name: string } | null;
 }
 
-const FULL_ACCESS_ROLES = [Role.ADMIN, Role.RH, Role.AUDITOR, Role.DIRECTOR];
+const FULL_ACCESS_ROLES = ADMIN_RH_DIRECTOR_AUDITOR_ROLES;
 
 /**
  * Feedback recebido e progresso de avaliação são dados de uma pessoa: só ela, os papéis de
