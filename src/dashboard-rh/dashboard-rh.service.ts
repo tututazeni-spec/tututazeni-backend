@@ -179,7 +179,7 @@ export class DashboardRhService {
         this.prisma.read.avatarSession.count({
           where: { status: 'COMPLETED', startedAt: { gte: mS } },
         }),
-        topBadgeAwardeesPromise.catch((e: unknown) => {
+        topBadgeAwardeesPromise.catch((e: unknown): never[] => {
           this.logger.warn({
             action: 'DASHBOARD_RH_FULL_TOP_BADGES',
             err: { message: e instanceof Error ? e.message : String(e) },
@@ -187,7 +187,7 @@ export class DashboardRhService {
           });
           return [];
         }),
-        recentActivityPromise.catch((e: unknown) => {
+        recentActivityPromise.catch((e: unknown): never[] => {
           this.logger.warn({
             action: 'DASHBOARD_RH_FULL_RECENT_ACTIVITY',
             err: { message: e instanceof Error ? e.message : String(e) },
@@ -1070,7 +1070,7 @@ export class DashboardRhService {
             reason: 'Baixa performance + histórico de avaliações',
           })),
         )
-        .catch((e: unknown) => {
+        .catch((e: unknown): never[] => {
           this.logger.warn({
             action: 'DASHBOARD_RH_PREDICTIONS_TURNOVER_RISK',
             err: { message: e instanceof Error ? e.message : String(e) },

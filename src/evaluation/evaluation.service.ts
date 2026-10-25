@@ -1137,7 +1137,7 @@ export class EvaluationService {
         where: { id: dto.requestId },
         include: { cycle: true },
       })
-      .catch((e: unknown) => {
+      .catch((e: unknown): null => {
         this.logger.warn({
           action: 'EVALUATION_REQUEST_FETCH',
           requestId: dto.requestId,

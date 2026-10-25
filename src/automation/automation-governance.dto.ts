@@ -151,8 +151,11 @@ export const CONNECTION_TYPES = ['HTTP', 'WEBHOOK', 'SMTP', 'SMS', 'WHATSAPP', '
 export const CONNECTION_AUTH = ['NONE', 'BEARER', 'BASIC', 'API_KEY_HEADER'] as const;
 
 export class ConnectionFilterDto extends BaseFilterDto {
-  @ApiPropertyOptional() @IsOptional() @IsIn(['ACTIVE', 'DISABLED']) status?: string;
-  @ApiPropertyOptional() @IsOptional() @IsIn([...CONNECTION_TYPES]) type?: string;
+  @ApiPropertyOptional() @IsOptional() @IsIn(['ACTIVE', 'DISABLED']) status?: 'ACTIVE' | 'DISABLED';
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsIn([...CONNECTION_TYPES])
+  type?: (typeof CONNECTION_TYPES)[number];
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(120) search?: string;
 }
 

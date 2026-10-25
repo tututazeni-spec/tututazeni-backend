@@ -145,7 +145,7 @@ export class ExportFilterDto extends BaseFilterDto {
   @ApiPropertyOptional({ enum: ['ACTIVE', 'EXPIRED', 'PURGED'] })
   @IsOptional()
   @IsIn(['ACTIVE', 'EXPIRED', 'PURGED'])
-  status?: string;
+  status?: 'ACTIVE' | 'EXPIRED' | 'PURGED';
 
   @ApiPropertyOptional()
   @IsOptional()

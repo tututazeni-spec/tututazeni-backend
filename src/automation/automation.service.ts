@@ -3116,7 +3116,7 @@ export class AutomationService {
       .findUnique({
         where: { id: executionId },
       })
-      .catch(e => {
+      .catch((e): null => {
         this.logger.warn({
           executionId,
           action: 'RERUN_EXECUTION_FIND',
@@ -3135,7 +3135,7 @@ export class AutomationService {
 
     const rule = await this.prisma.automationRule
       .findUnique({ where: { id: exec.ruleId } })
-      .catch(e => {
+      .catch((e): null => {
         this.logger.warn({
           executionId,
           ruleId: exec.ruleId,

@@ -127,7 +127,7 @@ export class RoiImpactService {
           ? { benefitPerCompletion: params.benefitPerCompletion }
           : {}),
       })
-      .catch((e: unknown) => {
+      .catch((e: unknown): null => {
         this.logger.warn({
           departmentId: filter.departmentId,
           action: 'ROI_IMPACT_TRAINING_ROI',

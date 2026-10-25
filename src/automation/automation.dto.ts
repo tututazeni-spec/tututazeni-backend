@@ -572,7 +572,7 @@ export class UpdateScheduleDto {
   @ApiPropertyOptional({ enum: SCHEDULE_TYPES })
   @IsOptional()
   @IsIn(SCHEDULE_TYPES as readonly string[])
-  type?: string;
+  type?: (typeof SCHEDULE_TYPES)[number];
   @ApiPropertyOptional() @IsOptional() @IsDateString() startDate?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() endDate?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(5) time?: string;
@@ -597,7 +597,7 @@ export class ScheduleFilterDto extends BaseFilterDto {
   @ApiPropertyOptional({ enum: SCHEDULE_STATUSES })
   @IsOptional()
   @IsIn(SCHEDULE_STATUSES as readonly string[])
-  status?: string;
+  status?: (typeof SCHEDULE_STATUSES)[number];
   @ApiPropertyOptional({ enum: SCHEDULE_TYPES })
   @IsOptional()
   @IsIn(SCHEDULE_TYPES as readonly string[])
@@ -743,7 +743,7 @@ export class TaskFilterDto extends BaseFilterDto {
   })
   @IsOptional()
   @IsIn(['PENDING', 'APPROVED', 'REJECTED', 'COMPLETED', 'CANCELLED', 'EXPIRED'])
-  status?: string;
+  status?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
   @ApiPropertyOptional({ enum: ['APPROVAL', 'TASK'] })
   @IsOptional()
   @IsIn(['APPROVAL', 'TASK'])
@@ -751,7 +751,7 @@ export class TaskFilterDto extends BaseFilterDto {
   @ApiPropertyOptional({ enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] })
   @IsOptional()
   @IsIn(['LOW', 'MEDIUM', 'HIGH', 'URGENT'])
-  priority?: string;
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) ruleId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() module?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) approverId?: number;
