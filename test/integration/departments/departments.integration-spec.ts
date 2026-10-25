@@ -65,27 +65,33 @@ describe('Departments Integration', () => {
     // para o resto da suite.
     await prisma.user
       .update({ where: { id: employeeId }, data: { departmentId: employeeOriginalDepartmentId } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     if (careerPositionId) {
       await prisma.userCareer
         .deleteMany({ where: { positionId: careerPositionId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.positionCompetency
         .deleteMany({ where: { positionId: careerPositionId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.careerPosition
         .deleteMany({ where: { id: careerPositionId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
     if (permissionId) {
-      await prisma.permission.deleteMany({ where: { id: permissionId } }).catch(() => undefined);
+      await prisma.permission
+        .deleteMany({ where: { id: permissionId } })
+        .catch((): undefined => undefined);
     }
     if (roleId) {
-      await prisma.rolePermission.deleteMany({ where: { roleId } }).catch(() => undefined);
-      await prisma.role.deleteMany({ where: { id: roleId } }).catch(() => undefined);
+      await prisma.rolePermission
+        .deleteMany({ where: { roleId } })
+        .catch((): undefined => undefined);
+      await prisma.role.deleteMany({ where: { id: roleId } }).catch((): undefined => undefined);
     }
     if (positionId) {
-      await prisma.position.deleteMany({ where: { id: positionId } }).catch(() => undefined);
+      await prisma.position
+        .deleteMany({ where: { id: positionId } })
+        .catch((): undefined => undefined);
     }
     if (childDepartmentId) {
       await prisma.departmentTransferLog
@@ -94,27 +100,29 @@ describe('Departments Integration', () => {
             OR: [{ fromDepartmentId: childDepartmentId }, { toDepartmentId: childDepartmentId }],
           },
         })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.departmentHeadHistory
         .deleteMany({ where: { departmentId: childDepartmentId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.department
         .deleteMany({ where: { id: childDepartmentId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
     if (departmentId) {
       await prisma.departmentTransferLog
         .deleteMany({
           where: { OR: [{ fromDepartmentId: departmentId }, { toDepartmentId: departmentId }] },
         })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.departmentHeadHistory
         .deleteMany({ where: { departmentId } })
-        .catch(() => undefined);
-      await prisma.department.deleteMany({ where: { id: departmentId } }).catch(() => undefined);
+        .catch((): undefined => undefined);
+      await prisma.department
+        .deleteMany({ where: { id: departmentId } })
+        .catch((): undefined => undefined);
     }
     if (unitId) {
-      await prisma.unit.deleteMany({ where: { id: unitId } }).catch(() => undefined);
+      await prisma.unit.deleteMany({ where: { id: unitId } }).catch((): undefined => undefined);
     }
 
     await prisma.$disconnect();
@@ -443,8 +451,9 @@ describe('Departments Integration', () => {
           .set('Authorization', `Bearer ${rhToken}`)
           .expect(200);
         types = res.body.data.map((e: any) => e.type);
-        if (types.includes('Departamento criado') && types.includes('Subdepartamento criado')) break;
-        await new Promise((r) => setTimeout(r, 300));
+        if (types.includes('Departamento criado') && types.includes('Subdepartamento criado'))
+          break;
+        await new Promise(r => setTimeout(r, 300));
       }
       expect(types).toContain('Departamento criado');
       expect(types).toContain('Subdepartamento criado');

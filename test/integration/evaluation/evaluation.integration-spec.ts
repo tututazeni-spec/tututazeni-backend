@@ -86,26 +86,26 @@ describe('Evaluation Integration', () => {
 
     await prisma.performanceEvaluation
       .deleteMany({ where: { evaluatorId: managerId, evaluatedId: employeeId } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     if (legacyEvalId) {
       await prisma.performanceEvaluation
         .deleteMany({ where: { id: legacyEvalId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
     if (requestId) {
       await prisma.evaluationRequest
         .deleteMany({ where: { id: requestId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
     await prisma.notificationLog
       .deleteMany({
         where: { userId: { in: [employeeId, managerId] }, type: { startsWith: 'EVALUATION' } },
       })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     if (CYCLE_ID) {
       await prisma.evaluationCampaign
         .deleteMany({ where: { id: CYCLE_ID } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
 
     await prisma.$disconnect();
@@ -162,7 +162,9 @@ describe('Evaluation Integration', () => {
       expect(res.body.model).toBe('360');
       expect(res.body.status).toBe('DRAFT');
 
-      await prisma.evaluationCampaign.delete({ where: { id: res.body.id } }).catch(() => undefined);
+      await prisma.evaluationCampaign
+        .delete({ where: { id: res.body.id } })
+        .catch((): undefined => undefined);
     });
   });
 

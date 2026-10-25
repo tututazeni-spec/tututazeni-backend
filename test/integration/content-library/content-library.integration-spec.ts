@@ -56,7 +56,9 @@ describe('Content Library Integration', () => {
       await purgeAuditLogs(prisma, { entity: 'ContentAsset', entityId: contentId }).catch(
         () => undefined,
       );
-      await prisma.contentAsset.deleteMany({ where: { id: contentId } }).catch(() => undefined);
+      await prisma.contentAsset
+        .deleteMany({ where: { id: contentId } })
+        .catch((): undefined => undefined);
     }
 
     await prisma.$disconnect();

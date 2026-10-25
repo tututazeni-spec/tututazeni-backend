@@ -71,16 +71,16 @@ describe('Automation Acceptance (§13) Integration', () => {
     // filhos antes dos pais (FK RESTRICT)
     await prisma.automationExecution
       .deleteMany({ where: { ruleId: { in: ruleIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.automationVersion
       .deleteMany({ where: { ruleId: { in: ruleIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.automationRule
       .deleteMany({ where: { id: { in: ruleIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.notificationLog
       .deleteMany({ where: { userId: employeeId, message: 'Aceitação §13' } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.$disconnect();
     await pool.end();
     await app.close();

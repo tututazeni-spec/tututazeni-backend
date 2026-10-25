@@ -64,22 +64,28 @@ describe('Succession Integration', () => {
 
   afterAll(async () => {
     if (successionPlanId) {
-      await prisma.successionPDI.deleteMany({ where: { successionPlanId } }).catch(() => undefined);
+      await prisma.successionPDI
+        .deleteMany({ where: { successionPlanId } })
+        .catch((): undefined => undefined);
       await prisma.successionPlan
         .deleteMany({ where: { id: successionPlanId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
-    await prisma.talentPool.deleteMany({ where: { userId: employeeId } }).catch(() => undefined);
+    await prisma.talentPool
+      .deleteMany({ where: { userId: employeeId } })
+      .catch((): undefined => undefined);
     if (criticalPositionId) {
       await prisma.successionPlan
         .deleteMany({ where: { criticalPositionId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.criticalPosition
         .deleteMany({ where: { id: criticalPositionId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
     if (positionId) {
-      await prisma.position.deleteMany({ where: { id: positionId } }).catch(() => undefined);
+      await prisma.position
+        .deleteMany({ where: { id: positionId } })
+        .catch((): undefined => undefined);
     }
     await prisma.$disconnect();
     await pool.end();
@@ -359,7 +365,9 @@ describe('Succession Integration', () => {
 
     afterAll(async () => {
       if (seededLogIds.length) {
-        await purgeAuditLogs(prisma, { id: { in: seededLogIds } }).catch(() => undefined);
+        await purgeAuditLogs(prisma, { id: { in: seededLogIds } }).catch(
+          (): undefined => undefined,
+        );
       }
     });
 

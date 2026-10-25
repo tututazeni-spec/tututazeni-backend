@@ -49,7 +49,7 @@ describe('Webhooks queue → WebhooksProcessor — Integration', () => {
   afterEach(async () => {
     received = [];
     failFirstN = 0;
-    await queue.empty().catch(() => undefined);
+    await queue.empty().catch((): undefined => undefined);
   });
 
   afterAll(async () => {

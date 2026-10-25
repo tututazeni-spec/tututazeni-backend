@@ -45,11 +45,11 @@ describe('Dashboard Institutional Integration', () => {
   afterAll(async () => {
     await (prisma as any).institutionalSnapshot
       .deleteMany({ where: { period: { in: [snapshotPeriod1, snapshotPeriod2] } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     if (widgetId)
       await (prisma as any).dashboardWidget
         .deleteMany({ where: { id: widgetId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
 
     await prisma.$disconnect();
     await pool.end();

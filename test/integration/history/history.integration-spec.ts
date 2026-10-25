@@ -63,10 +63,10 @@ describe('History & Timeline Integration', () => {
   });
 
   afterAll(async () => {
-    await purgeAuditLogs(prisma, { id: createdEventId }).catch(() => undefined);
+    await purgeAuditLogs(prisma, { id: createdEventId }).catch((): undefined => undefined);
     await prisma.user
       .update({ where: { id: employeeId }, data: { managerId: originalManagerId } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
 
     await prisma.$disconnect();
     await pool.end();

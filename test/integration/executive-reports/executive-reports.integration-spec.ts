@@ -48,19 +48,19 @@ describe('Executive Reports Integration', () => {
     if (ids.length) {
       await prisma.reportAccessLog
         .deleteMany({ where: { reportId: { in: ids } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.reportApproval
         .deleteMany({ where: { reportId: { in: ids } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.executiveMetric
         .deleteMany({ where: { reportId: { in: ids } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.reportLog
         .deleteMany({ where: { fileUrl: { contains: 'executive-' } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.executiveReport
         .deleteMany({ where: { id: { in: ids } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
 
     await prisma.$disconnect();

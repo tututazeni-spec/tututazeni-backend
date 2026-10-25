@@ -72,19 +72,25 @@ describe('Library Integration', () => {
     if (commentId)
       await (prisma as any).libraryComment
         .deleteMany({ where: { id: commentId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     if (itemId) {
-      await (prisma as any).libraryRating.deleteMany({ where: { itemId } }).catch(() => undefined);
-      await (prisma as any).libraryAccess.deleteMany({ where: { itemId } }).catch(() => undefined);
+      await (prisma as any).libraryRating
+        .deleteMany({ where: { itemId } })
+        .catch((): undefined => undefined);
+      await (prisma as any).libraryAccess
+        .deleteMany({ where: { itemId } })
+        .catch((): undefined => undefined);
       await (prisma as any).libraryItem
         .deleteMany({ where: { id: itemId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
     if (collectionId)
       await (prisma as any).libraryCollection
         .deleteMany({ where: { id: collectionId } })
-        .catch(() => undefined);
-    await prisma.user.deleteMany({ where: { email: OTHER_EMPLOYEE_EMAIL } }).catch(() => undefined);
+        .catch((): undefined => undefined);
+    await prisma.user
+      .deleteMany({ where: { email: OTHER_EMPLOYEE_EMAIL } })
+      .catch((): undefined => undefined);
 
     await prisma.$disconnect();
     await pool.end();

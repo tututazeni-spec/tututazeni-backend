@@ -61,20 +61,26 @@ describe('Competencies Integration', () => {
 
   afterAll(async () => {
     if (competencyId) {
-      await prisma.userCompetency.deleteMany({ where: { competencyId } }).catch(() => undefined);
+      await prisma.userCompetency
+        .deleteMany({ where: { competencyId } })
+        .catch((): undefined => undefined);
       await prisma.competencyEvolutionLog
         .deleteMany({ where: { competencyId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.competencyEndorsement
         .deleteMany({ where: { competencyId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.positionCompetency
         .deleteMany({ where: { competencyId } })
-        .catch(() => undefined);
-      await prisma.competency.deleteMany({ where: { id: competencyId } }).catch(() => undefined);
+        .catch((): undefined => undefined);
+      await prisma.competency
+        .deleteMany({ where: { id: competencyId } })
+        .catch((): undefined => undefined);
     }
     if (positionId) {
-      await prisma.position.deleteMany({ where: { id: positionId } }).catch(() => undefined);
+      await prisma.position
+        .deleteMany({ where: { id: positionId } })
+        .catch((): undefined => undefined);
     }
 
     await prisma.$disconnect();

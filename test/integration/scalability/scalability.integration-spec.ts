@@ -52,22 +52,32 @@ describe('Scalability Integration', () => {
   afterAll(async () => {
     if (alertId) await prisma.systemAlert.deleteMany({ where: { id: alertId } }).catch(() => {});
     if (ruleId) {
-      await prisma.automationExecution.deleteMany({ where: { ruleId } }).catch(() => undefined);
-      await prisma.automationRule.deleteMany({ where: { id: ruleId } }).catch(() => undefined);
+      await prisma.automationExecution
+        .deleteMany({ where: { ruleId } })
+        .catch((): undefined => undefined);
+      await prisma.automationRule
+        .deleteMany({ where: { id: ruleId } })
+        .catch((): undefined => undefined);
     }
     if (integrationId) {
       await prisma.integrationSyncLog
         .deleteMany({ where: { integrationId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.integrationConfig
         .deleteMany({ where: { id: integrationId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
     if (tenantId) {
-      await prisma.scalabilityMetric.deleteMany({ where: { tenantId } }).catch(() => undefined);
-      await prisma.slaConfig.deleteMany({ where: { tenantId } }).catch(() => undefined);
-      await prisma.contentDeliveryConfig.deleteMany({ where: { tenantId } }).catch(() => undefined);
-      await prisma.tenantConfig.deleteMany({ where: { id: tenantId } }).catch(() => undefined);
+      await prisma.scalabilityMetric
+        .deleteMany({ where: { tenantId } })
+        .catch((): undefined => undefined);
+      await prisma.slaConfig.deleteMany({ where: { tenantId } }).catch((): undefined => undefined);
+      await prisma.contentDeliveryConfig
+        .deleteMany({ where: { tenantId } })
+        .catch((): undefined => undefined);
+      await prisma.tenantConfig
+        .deleteMany({ where: { id: tenantId } })
+        .catch((): undefined => undefined);
     }
     await prisma.$disconnect();
     await pool.end();
@@ -442,7 +452,7 @@ describe('Scalability Integration', () => {
 
       await prisma.user
         .deleteMany({ where: { email: { contains: 'int.test.bulk.' } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     });
 
     it('agendar teste de carga', async () => {

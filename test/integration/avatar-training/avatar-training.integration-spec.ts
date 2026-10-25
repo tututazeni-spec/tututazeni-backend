@@ -64,9 +64,11 @@ describe('Avatar Training Integration', () => {
     // cascata com a formação; o avatar só depois.
     await prisma.avatarTrainingProgram
       .deleteMany({ where: { title: PROGRAM_TITLE } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     if (avatarId) {
-      await prisma.trainingAvatar.delete({ where: { id: avatarId } }).catch(() => undefined);
+      await prisma.trainingAvatar
+        .delete({ where: { id: avatarId } })
+        .catch((): undefined => undefined);
     }
     await prisma.$disconnect();
     await pool.end();

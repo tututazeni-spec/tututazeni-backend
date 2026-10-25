@@ -82,14 +82,22 @@ describe('Career Plans Integration', () => {
     if (promotionId)
       await prisma.promotionRequest
         .deleteMany({ where: { id: promotionId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     if (goalId)
-      await prisma.careerGoal.deleteMany({ where: { id: goalId } }).catch(() => undefined);
+      await prisma.careerGoal
+        .deleteMany({ where: { id: goalId } })
+        .catch((): undefined => undefined);
     if (planId)
-      await prisma.userCareerPlan.deleteMany({ where: { id: planId } }).catch(() => undefined);
+      await prisma.userCareerPlan
+        .deleteMany({ where: { id: planId } })
+        .catch((): undefined => undefined);
     if (roleId)
-      await prisma.careerRole.deleteMany({ where: { id: roleId } }).catch(() => undefined);
-    await prisma.user.deleteMany({ where: { email: OTHER_EMPLOYEE_EMAIL } }).catch(() => undefined);
+      await prisma.careerRole
+        .deleteMany({ where: { id: roleId } })
+        .catch((): undefined => undefined);
+    await prisma.user
+      .deleteMany({ where: { email: OTHER_EMPLOYEE_EMAIL } })
+      .catch((): undefined => undefined);
 
     await prisma.$disconnect();
     await pool.end();

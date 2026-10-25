@@ -61,16 +61,24 @@ describe('Talent Development Integration', () => {
 
   afterAll(async () => {
     if (mentoringId) {
-      await prisma.mentoringSession.deleteMany({ where: { mentoringId } }).catch(() => undefined);
-      await prisma.mentoring.deleteMany({ where: { id: mentoringId } }).catch(() => undefined);
+      await prisma.mentoringSession
+        .deleteMany({ where: { mentoringId } })
+        .catch((): undefined => undefined);
+      await prisma.mentoring
+        .deleteMany({ where: { id: mentoringId } })
+        .catch((): undefined => undefined);
     }
     if (planId) {
       await prisma.pdiEvidence
         .deleteMany({ where: { developmentPlanAction: { planId } } })
-        .catch(() => undefined);
-      await prisma.developmentPlanAction.deleteMany({ where: { planId } }).catch(() => undefined);
-      await prisma.pdiGoal.deleteMany({ where: { planId } }).catch(() => undefined);
-      await prisma.developmentPlan.deleteMany({ where: { id: planId } }).catch(() => undefined);
+        .catch((): undefined => undefined);
+      await prisma.developmentPlanAction
+        .deleteMany({ where: { planId } })
+        .catch((): undefined => undefined);
+      await prisma.pdiGoal.deleteMany({ where: { planId } }).catch((): undefined => undefined);
+      await prisma.developmentPlan
+        .deleteMany({ where: { id: planId } })
+        .catch((): undefined => undefined);
     }
     await prisma.$disconnect();
     await pool.end();

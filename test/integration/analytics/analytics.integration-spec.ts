@@ -48,7 +48,7 @@ describe('Analytics Integration', () => {
     if (snapshotIds.length > 0) {
       await prisma.dashboardSnapshot
         .deleteMany({ where: { id: { in: snapshotIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
     await prisma.$disconnect();
     await pool.end();

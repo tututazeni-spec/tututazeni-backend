@@ -66,29 +66,49 @@ describe('Evaluation360 Integration', () => {
     if (cycleId) {
       await prisma.evaluationAnswer
         .deleteMany({ where: { response: { cycleId } } })
-        .catch(() => undefined);
-      await prisma.evaluationResponse.deleteMany({ where: { cycleId } }).catch(() => undefined);
-      await prisma.evaluationResult.deleteMany({ where: { cycleId } }).catch(() => undefined);
-      await prisma.evaluatorAssignment.deleteMany({ where: { cycleId } }).catch(() => undefined);
-      await prisma.cycleParticipant.deleteMany({ where: { cycleId } }).catch(() => undefined);
-      await prisma.eval360Question.deleteMany({ where: { cycleId } }).catch(() => undefined);
-      await prisma.eval360CycleCompetency.deleteMany({ where: { cycleId } }).catch(() => undefined);
-      await prisma.eval360Cycle.deleteMany({ where: { id: cycleId } }).catch(() => undefined);
+        .catch((): undefined => undefined);
+      await prisma.evaluationResponse
+        .deleteMany({ where: { cycleId } })
+        .catch((): undefined => undefined);
+      await prisma.evaluationResult
+        .deleteMany({ where: { cycleId } })
+        .catch((): undefined => undefined);
+      await prisma.evaluatorAssignment
+        .deleteMany({ where: { cycleId } })
+        .catch((): undefined => undefined);
+      await prisma.cycleParticipant
+        .deleteMany({ where: { cycleId } })
+        .catch((): undefined => undefined);
+      await prisma.eval360Question
+        .deleteMany({ where: { cycleId } })
+        .catch((): undefined => undefined);
+      await prisma.eval360CycleCompetency
+        .deleteMany({ where: { cycleId } })
+        .catch((): undefined => undefined);
+      await prisma.eval360Cycle
+        .deleteMany({ where: { id: cycleId } })
+        .catch((): undefined => undefined);
     }
     if (feedbackId) {
-      await prisma.eval360Feedback.deleteMany({ where: { id: feedbackId } }).catch(() => undefined);
+      await prisma.eval360Feedback
+        .deleteMany({ where: { id: feedbackId } })
+        .catch((): undefined => undefined);
     }
     if (pulseSurveyId) {
       await prisma.pulseSurveyResponse
         .deleteMany({ where: { surveyId: pulseSurveyId } })
-        .catch(() => undefined);
-      await prisma.pulseSurvey.deleteMany({ where: { id: pulseSurveyId } }).catch(() => undefined);
+        .catch((): undefined => undefined);
+      await prisma.pulseSurvey
+        .deleteMany({ where: { id: pulseSurveyId } })
+        .catch((): undefined => undefined);
     }
     if (competencyId) {
       await prisma.competencyIndicator
         .deleteMany({ where: { competencyId } })
-        .catch(() => undefined);
-      await prisma.competency.deleteMany({ where: { id: competencyId } }).catch(() => undefined);
+        .catch((): undefined => undefined);
+      await prisma.competency
+        .deleteMany({ where: { id: competencyId } })
+        .catch((): undefined => undefined);
     }
 
     await prisma.$disconnect();

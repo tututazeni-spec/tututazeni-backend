@@ -140,29 +140,39 @@ describe('Leave Management Integration', () => {
     });
 
     if (requestId) {
-      await prisma.leaveImpactPreview.deleteMany({ where: { requestId } }).catch(() => undefined);
-      await prisma.leaveDocument.deleteMany({ where: { requestId } }).catch(() => undefined);
-      await prisma.leaveApproval.deleteMany({ where: { requestId } }).catch(() => undefined);
-      await prisma.leaveRequest.deleteMany({ where: { id: requestId } }).catch(() => undefined);
+      await prisma.leaveImpactPreview
+        .deleteMany({ where: { requestId } })
+        .catch((): undefined => undefined);
+      await prisma.leaveDocument
+        .deleteMany({ where: { requestId } })
+        .catch((): undefined => undefined);
+      await prisma.leaveApproval
+        .deleteMany({ where: { requestId } })
+        .catch((): undefined => undefined);
+      await prisma.leaveRequest
+        .deleteMany({ where: { id: requestId } })
+        .catch((): undefined => undefined);
     }
     if (customRequestId) {
       await prisma.leaveApproval
         .deleteMany({ where: { requestId: customRequestId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.leaveRequest
         .deleteMany({ where: { id: customRequestId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
     await prisma.leaveBalanceHistory
       .deleteMany({ where: { userId: employeeId } })
-      .catch(() => undefined);
-    await prisma.leaveBalance.deleteMany({ where: { userId: employeeId } }).catch(() => undefined);
+      .catch((): undefined => undefined);
+    await prisma.leaveBalance
+      .deleteMany({ where: { userId: employeeId } })
+      .catch((): undefined => undefined);
     await prisma.leaveTypeConfig
       .deleteMany({ where: { code: { in: [LEAVE_TYPE_CODE, CUSTOM_LEAVE_TYPE_CODE] } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.notificationLog
       .deleteMany({ where: { userId: { in: [employeeId, managerId] } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
 
     await prisma.$disconnect();
     await pool.end();
@@ -471,22 +481,24 @@ describe('Leave Management Integration', () => {
       for (const id of createdRequestIds) {
         await prisma.attendanceRecord
           .deleteMany({ where: { leaveRequestId: id } })
-          .catch(() => undefined);
-        await prisma.leaveApproval.deleteMany({ where: { requestId: id } }).catch(() => undefined);
+          .catch((): undefined => undefined);
+        await prisma.leaveApproval
+          .deleteMany({ where: { requestId: id } })
+          .catch((): undefined => undefined);
         await prisma.leaveImpactPreview
           .deleteMany({ where: { requestId: id } })
-          .catch(() => undefined);
-        await prisma.leaveRequest.deleteMany({ where: { id } }).catch(() => undefined);
+          .catch((): undefined => undefined);
+        await prisma.leaveRequest.deleteMany({ where: { id } }).catch((): undefined => undefined);
       }
       await prisma.leaveSettingVersion
         .deleteMany({ where: { changeNote: { startsWith: NOTE } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.leaveHoliday
         .deleteMany({ where: { name: { startsWith: NOTE } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.leaveDelegation
         .deleteMany({ where: { delegatorId: managerId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     });
 
     it('submeter reserva os dias (saldo atribuído intacto) e numera o pedido', async () => {

@@ -81,23 +81,29 @@ describe('Position requirements Integration', () => {
     // filhos antes de pais; cada passo com .catch (convenção de teardown.ts)
     await prisma.userLanguage
       .deleteMany({ where: { userId: { in: userIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.userQualification
       .deleteMany({ where: { userId: { in: userIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.userExternalCertification
       .deleteMany({ where: { userId: { in: userIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     if (employeeId) {
       await prisma.user
         .update({ where: { id: employeeId }, data: { priorExperienceYears: null } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
     if (positionId && !positionDeleted) {
-      await prisma.positionRequirement.deleteMany({ where: { positionId } }).catch(() => undefined);
-      await prisma.position.deleteMany({ where: { id: positionId } }).catch(() => undefined);
+      await prisma.positionRequirement
+        .deleteMany({ where: { positionId } })
+        .catch((): undefined => undefined);
+      await prisma.position
+        .deleteMany({ where: { id: positionId } })
+        .catch((): undefined => undefined);
     }
-    await prisma.user.deleteMany({ where: { email: OTHER_EMPLOYEE_EMAIL } }).catch(() => undefined);
+    await prisma.user
+      .deleteMany({ where: { email: OTHER_EMPLOYEE_EMAIL } })
+      .catch((): undefined => undefined);
 
     await prisma.$disconnect();
     await pool.end();

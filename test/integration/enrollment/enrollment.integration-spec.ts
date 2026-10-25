@@ -52,7 +52,7 @@ describe('Enrollment Integration', () => {
     if (employee) {
       await prisma.enrollment
         .deleteMany({ where: { userId: employee.id, courseId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
     await prisma.$disconnect();
     await pool.end();

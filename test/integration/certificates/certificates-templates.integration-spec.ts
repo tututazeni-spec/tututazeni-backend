@@ -105,20 +105,24 @@ describe('Certificate templates API (Postgres real)', () => {
   });
 
   afterAll(async () => {
-    await resetPremium().catch(() => undefined);
+    await resetPremium().catch((): undefined => undefined);
     const ids = [courseA, courseB];
     // filhos antes de pais: certificado → regra/matrícula → curso; imagens à parte
     await prisma.certificate
       .deleteMany({ where: { courseId: { in: ids } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.certificateRule
       .deleteMany({ where: { activityId: { in: ids } } })
-      .catch(() => undefined);
-    await prisma.enrollment.deleteMany({ where: { courseId: { in: ids } } }).catch(() => undefined);
-    await prisma.course.deleteMany({ where: { id: { in: ids } } }).catch(() => undefined);
+      .catch((): undefined => undefined);
+    await prisma.enrollment
+      .deleteMany({ where: { courseId: { in: ids } } })
+      .catch((): undefined => undefined);
+    await prisma.course
+      .deleteMany({ where: { id: { in: ids } } })
+      .catch((): undefined => undefined);
     await prisma.certificateAsset
       .deleteMany({ where: { id: { in: createdAssets } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.$disconnect();
     await pool.end();
     await app.close();

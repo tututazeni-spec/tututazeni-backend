@@ -102,12 +102,16 @@ describe('Certificates API (Postgres real)', () => {
     // filhos antes de pais: certificate → rule/enrollment → course
     await prisma.certificate
       .deleteMany({ where: { courseId: { in: ids } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.certificateRule
       .deleteMany({ where: { activityId: { in: ids } } })
-      .catch(() => undefined);
-    await prisma.enrollment.deleteMany({ where: { courseId: { in: ids } } }).catch(() => undefined);
-    await prisma.course.deleteMany({ where: { id: { in: ids } } }).catch(() => undefined);
+      .catch((): undefined => undefined);
+    await prisma.enrollment
+      .deleteMany({ where: { courseId: { in: ids } } })
+      .catch((): undefined => undefined);
+    await prisma.course
+      .deleteMany({ where: { id: { in: ids } } })
+      .catch((): undefined => undefined);
     await prisma.$disconnect();
     await pool.end();
     await app.close();

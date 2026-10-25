@@ -80,19 +80,19 @@ describe('Enrollments (admin/RH) Integration', () => {
   afterAll(async () => {
     await prisma.certificate
       .deleteMany({ where: { enrollmentId: { in: createdEnrollmentIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.enrollment
       .deleteMany({ where: { id: { in: createdEnrollmentIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.enrollment
       .deleteMany({ where: { courseId: { in: [courseId, mandatoryCourseId] } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.courseAnalytics
       .deleteMany({ where: { courseId: { in: [courseId, mandatoryCourseId] } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.course
       .deleteMany({ where: { id: { in: [courseId, mandatoryCourseId] } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
 
     await prisma.$disconnect();
     await pool.end();
@@ -491,19 +491,23 @@ describe('Enrollments (admin/RH) Integration', () => {
     });
 
     afterAll(async () => {
-      await prisma.certificate.deleteMany({ where: { enrollmentId } }).catch(() => undefined);
+      await prisma.certificate
+        .deleteMany({ where: { enrollmentId } })
+        .catch((): undefined => undefined);
       await prisma.enrollment
         .deleteMany({ where: { courseId: faseCourseId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.courseAnalytics
         .deleteMany({ where: { courseId: faseCourseId } })
-        .catch(() => undefined);
-      await prisma.course.deleteMany({ where: { id: faseCourseId } }).catch(() => undefined);
+        .catch((): undefined => undefined);
+      await prisma.course
+        .deleteMany({ where: { id: faseCourseId } })
+        .catch((): undefined => undefined);
       await prisma.notificationLog
         .deleteMany({
           where: { userId: employeeId, metadata: { contains: `"courseId":${faseCourseId}` } },
         })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     });
 
     it('PUT /enrollments/:id/status {COMPLETED} (admin) → certificado + pontos, não só o estado', async () => {

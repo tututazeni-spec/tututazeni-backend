@@ -73,11 +73,13 @@ describe('Audit Integration', () => {
     // Filhos antes dos pais; cada passo engole o erro (convenção do teardown de integração).
     await (prisma as any).auditExport
       .deleteMany({ where: { fileName: { startsWith: 'evidencia-' }, createdById: { not: null } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await (prisma as any).internalAudit
       .deleteMany({ where: { title: { startsWith: 'Auditoria de teste §16' } } })
-      .catch(() => undefined);
-    await purgeAuditLogs(prisma, { entity: 'IntegrationTestEntity' }).catch(() => undefined);
+      .catch((): undefined => undefined);
+    await purgeAuditLogs(prisma, { entity: 'IntegrationTestEntity' }).catch(
+      (): undefined => undefined,
+    );
 
     await prisma.$disconnect();
     await pool.end();

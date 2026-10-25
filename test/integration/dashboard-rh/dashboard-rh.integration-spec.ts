@@ -47,7 +47,9 @@ describe('Dashboard RH Integration', () => {
 
   afterAll(async () => {
     if (payslipIds.length > 0) {
-      await prisma.payslip.deleteMany({ where: { id: { in: payslipIds } } }).catch(() => undefined);
+      await prisma.payslip
+        .deleteMany({ where: { id: { in: payslipIds } } })
+        .catch((): undefined => undefined);
     }
     await prisma.$disconnect();
     await pool.end();

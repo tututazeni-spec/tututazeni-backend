@@ -65,34 +65,38 @@ describe('Employees Integration', () => {
       // Todas as FKs para Employee são RESTRICT — apagar filhos antes do pai.
       await prisma.attendance
         .deleteMany({ where: { employeeId: { in: ids } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.careerPlan
         .deleteMany({ where: { employeeId: { in: ids } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.contract
         .deleteMany({ where: { employeeId: { in: ids } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.employeeDocument
         .deleteMany({ where: { employeeId: { in: ids } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.employeeSkill
         .deleteMany({ where: { employeeId: { in: ids } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.employeeTimeline
         .deleteMany({ where: { employeeId: { in: ids } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.feedback360
         .deleteMany({ where: { employeeId: { in: ids } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.legacyPdi
         .deleteMany({ where: { employeeId: { in: ids } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.selfServiceRequest
         .deleteMany({ where: { employeeId: { in: ids } } })
-        .catch(() => undefined);
-      await prisma.employee.deleteMany({ where: { id: { in: ids } } }).catch(() => undefined);
+        .catch((): undefined => undefined);
+      await prisma.employee
+        .deleteMany({ where: { id: { in: ids } } })
+        .catch((): undefined => undefined);
     }
-    await prisma.skill.deleteMany({ where: { name: SKILL_NAME } }).catch(() => undefined);
+    await prisma.skill
+      .deleteMany({ where: { name: SKILL_NAME } })
+      .catch((): undefined => undefined);
 
     await prisma.$disconnect();
     await pool.end();

@@ -64,23 +64,33 @@ describe('Onboarding Integration', () => {
 
   afterAll(async () => {
     if (planId) {
-      await prisma.onboardingSurvey.deleteMany({ where: { planId } }).catch(() => undefined);
-      await prisma.onboardingDocument.deleteMany({ where: { planId } }).catch(() => undefined);
-      await prisma.onboardingTaskInstance.deleteMany({ where: { planId } }).catch(() => undefined);
-      await prisma.onboardingPlan.deleteMany({ where: { id: planId } }).catch(() => undefined);
+      await prisma.onboardingSurvey
+        .deleteMany({ where: { planId } })
+        .catch((): undefined => undefined);
+      await prisma.onboardingDocument
+        .deleteMany({ where: { planId } })
+        .catch((): undefined => undefined);
+      await prisma.onboardingTaskInstance
+        .deleteMany({ where: { planId } })
+        .catch((): undefined => undefined);
+      await prisma.onboardingPlan
+        .deleteMany({ where: { id: planId } })
+        .catch((): undefined => undefined);
     }
     if (templateId) {
       await prisma.onboardingTemplateTask
         .deleteMany({ where: { templateId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.onboardingTemplate
         .deleteMany({ where: { id: templateId } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
-    await prisma.userPoints.deleteMany({ where: { userId: employeeId } }).catch(() => undefined);
+    await prisma.userPoints
+      .deleteMany({ where: { userId: employeeId } })
+      .catch((): undefined => undefined);
     await prisma.notificationLog
       .deleteMany({ where: { userId: { in: [employeeId, managerId] } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
 
     await prisma.$disconnect();
     await pool.end();

@@ -41,15 +41,15 @@ describe('User invite email → fila `email` — Integration', () => {
     await app.init();
     rhToken = await getToken(app.getHttpServer(), 'rh');
     emailQueue = app.get<Queue>(getQueueToken('email'));
-    await emailQueue.empty().catch(() => undefined);
+    await emailQueue.empty().catch((): undefined => undefined);
   });
 
   afterAll(async () => {
     // Não deixar jobs (retries com backoff) pendentes na fila partilhada.
-    await emailQueue.empty().catch(() => undefined);
+    await emailQueue.empty().catch((): undefined => undefined);
     await Promise.all(
       (['failed', 'delayed', 'wait', 'completed'] as const).map(t =>
-        emailQueue.clean(0, t).catch(() => undefined),
+        emailQueue.clean(0, t).catch((): undefined => undefined),
       ),
     );
 
@@ -57,12 +57,14 @@ describe('User invite email → fila `email` — Integration', () => {
     if (stale) {
       await prisma.notificationLog
         .deleteMany({ where: { userId: stale.id } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.userAuditLog
         .deleteMany({ where: { OR: [{ userId: stale.id }, { performedById: stale.id }] } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
-    await prisma.user.deleteMany({ where: { email: INVITE_EMAIL } }).catch(() => undefined);
+    await prisma.user
+      .deleteMany({ where: { email: INVITE_EMAIL } })
+      .catch((): undefined => undefined);
     await prisma.$disconnect();
     await pool.end();
     await app.close();

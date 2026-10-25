@@ -89,20 +89,28 @@ describe('Development Plans (PDI) Integration', () => {
     const ids = [planId, secondPlanId].filter(Boolean);
     await prisma.certificate
       .deleteMany({ where: { developmentPlanId: { in: ids } } })
-      .catch(() => undefined);
-    await prisma.pdiApproval.deleteMany({ where: { planId: { in: ids } } }).catch(() => undefined);
+      .catch((): undefined => undefined);
+    await prisma.pdiApproval
+      .deleteMany({ where: { planId: { in: ids } } })
+      .catch((): undefined => undefined);
     await prisma.pdiCheckpoint
       .deleteMany({ where: { planId: { in: ids } } })
-      .catch(() => undefined);
-    await prisma.pdiGoal.deleteMany({ where: { planId: { in: ids } } }).catch(() => undefined);
+      .catch((): undefined => undefined);
+    await prisma.pdiGoal
+      .deleteMany({ where: { planId: { in: ids } } })
+      .catch((): undefined => undefined);
     await prisma.pdiEvidence
       .deleteMany({ where: { developmentPlanAction: { planId: { in: ids } } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.developmentPlanAction
       .deleteMany({ where: { planId: { in: ids } } })
-      .catch(() => undefined);
-    await prisma.developmentPlan.deleteMany({ where: { id: { in: ids } } }).catch(() => undefined);
-    await prisma.user.deleteMany({ where: { id: otherEmployeeId } }).catch(() => undefined);
+      .catch((): undefined => undefined);
+    await prisma.developmentPlan
+      .deleteMany({ where: { id: { in: ids } } })
+      .catch((): undefined => undefined);
+    await prisma.user
+      .deleteMany({ where: { id: otherEmployeeId } })
+      .catch((): undefined => undefined);
 
     await prisma.$disconnect();
     await pool.end();
@@ -191,7 +199,9 @@ describe('Development Plans (PDI) Integration', () => {
         .expect(403);
 
       // limpar este plano extra directamente (não faz parte do afterAll ids[])
-      await prisma.developmentPlan.delete({ where: { id: thirdPlanId } }).catch(() => undefined);
+      await prisma.developmentPlan
+        .delete({ where: { id: thirdPlanId } })
+        .catch((): undefined => undefined);
     });
 
     it('RH (privilegiado) aprova plano PENDING_APPROVAL de qualquer gestor → ACTIVE', async () => {
@@ -214,7 +224,9 @@ describe('Development Plans (PDI) Integration', () => {
         .expect(200);
       expect(res.body.status).toBe('ACTIVE');
 
-      await prisma.developmentPlan.delete({ where: { id: rhPlanId } }).catch(() => undefined);
+      await prisma.developmentPlan
+        .delete({ where: { id: rhPlanId } })
+        .catch((): undefined => undefined);
     });
   });
 
@@ -453,7 +465,9 @@ describe('Development Plans (PDI) Integration', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(403);
 
-      await prisma.developmentPlan.delete({ where: { id: activePlanId } }).catch(() => undefined);
+      await prisma.developmentPlan
+        .delete({ where: { id: activePlanId } })
+        .catch((): undefined => undefined);
     });
   });
 });

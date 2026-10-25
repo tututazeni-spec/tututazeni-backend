@@ -44,8 +44,12 @@ describe('Mobile Integration (bug: MobileModule nunca foi registado em app.modul
   });
 
   afterAll(async () => {
-    await prisma.mobileSession.deleteMany({ where: { userId: employeeId } }).catch(() => undefined);
-    await prisma.mobileSyncLog.deleteMany({ where: { userId: employeeId } }).catch(() => undefined);
+    await prisma.mobileSession
+      .deleteMany({ where: { userId: employeeId } })
+      .catch((): undefined => undefined);
+    await prisma.mobileSyncLog
+      .deleteMany({ where: { userId: employeeId } })
+      .catch((): undefined => undefined);
 
     await prisma.$disconnect();
     await pool.end();

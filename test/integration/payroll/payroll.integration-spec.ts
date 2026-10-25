@@ -133,16 +133,16 @@ describe('Payroll Workflow Integration', () => {
     if (stalePayslipIds.length) {
       await (prisma as any).payslipItem
         .deleteMany({ where: { payslipId: { in: stalePayslipIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await (prisma as any).payslipAccessLog
         .deleteMany({ where: { payslipId: { in: stalePayslipIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await (prisma as any).payslipDispute
         .deleteMany({ where: { payslipId: { in: stalePayslipIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await (prisma as any).payslip
         .deleteMany({ where: { id: { in: stalePayslipIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
 
     // ── CountryConfig AO + escalões IRT (seedPayroll de prisma/seed.ts não é
@@ -187,7 +187,7 @@ describe('Payroll Workflow Integration', () => {
     //    noCompEmployee fica DELIBERADAMENTE sem, para forçar NO_COMPENSATION.
     await (prisma as any).employeeCompensation
       .deleteMany({ where: { userId: { in: testUserIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await (prisma as any).employeeCompensation.create({
       data: { userId: employeeId, baseSalary: 120000, countryCode: 'AO' },
     });
@@ -209,33 +209,33 @@ describe('Payroll Workflow Integration', () => {
 
     await (prisma as any).payslipItem
       .deleteMany({ where: { payslip: { runId: { in: runIds } } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     if (payslipIds.length) {
       await (prisma as any).payslipAccessLog
         .deleteMany({ where: { payslipId: { in: payslipIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await (prisma as any).payslipDispute
         .deleteMany({ where: { payslipId: { in: payslipIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
     await (prisma as any).payslip
       .deleteMany({ where: { runId: { in: runIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await (prisma as any).payrollRun
       .deleteMany({ where: { id: { in: runIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await (prisma as any).employeeCompensation
       .deleteMany({ where: { userId: { in: testUserIds } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await purgeAuditLogs(prisma, { entity: 'PayrollRun', entityId: { in: runIds } }).catch(
       () => undefined,
     );
     await prisma.notificationLog
       .deleteMany({ where: { userId: { in: testUserIds }, type: 'PAYSLIP_ISSUED' } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.user
       .deleteMany({ where: { email: { in: [OTHER_EMPLOYEE_EMAIL, NOCOMP_EMPLOYEE_EMAIL] } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
 
     await prisma.$disconnect();
     await pool.end();

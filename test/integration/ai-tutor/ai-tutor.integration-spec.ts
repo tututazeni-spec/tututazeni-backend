@@ -93,15 +93,19 @@ describe('AI Tutor Integration', () => {
   afterAll(async () => {
     await prisma.aiMessage
       .deleteMany({ where: { session: { userId: employeeId, courseId } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.aiTutorSession
       .deleteMany({ where: { userId: employeeId, courseId } })
-      .catch(() => undefined);
-    await prisma.aiTutorMemory.deleteMany({ where: { userId: employeeId } }).catch(() => undefined);
+      .catch((): undefined => undefined);
+    await prisma.aiTutorMemory
+      .deleteMany({ where: { userId: employeeId } })
+      .catch((): undefined => undefined);
     await prisma.enrollment
       .deleteMany({ where: { userId: employeeId, courseId } })
-      .catch(() => undefined);
-    await prisma.course.deleteMany({ where: { internalCode: COURSE_CODE } }).catch(() => undefined);
+      .catch((): undefined => undefined);
+    await prisma.course
+      .deleteMany({ where: { internalCode: COURSE_CODE } })
+      .catch((): undefined => undefined);
 
     await prisma.$disconnect();
     await pool.end();

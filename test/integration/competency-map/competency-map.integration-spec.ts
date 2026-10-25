@@ -55,16 +55,24 @@ describe('Competency Map Integration', () => {
 
   afterAll(async () => {
     if (skillId) {
-      await prisma.roleSkillRequirement.deleteMany({ where: { skillId } }).catch(() => undefined);
-      await prisma.legacyEmployeeSkill.deleteMany({ where: { skillId } }).catch(() => undefined);
-      await prisma.skillAssessmentHistory.deleteMany({ where: { skillId } }).catch(() => undefined);
-      await prisma.skill.deleteMany({ where: { id: skillId } }).catch(() => undefined);
+      await prisma.roleSkillRequirement
+        .deleteMany({ where: { skillId } })
+        .catch((): undefined => undefined);
+      await prisma.legacyEmployeeSkill
+        .deleteMany({ where: { skillId } })
+        .catch((): undefined => undefined);
+      await prisma.skillAssessmentHistory
+        .deleteMany({ where: { skillId } })
+        .catch((): undefined => undefined);
+      await prisma.skill.deleteMany({ where: { id: skillId } }).catch((): undefined => undefined);
     }
     await prisma.roleSkillMatrix
       .deleteMany({ where: { roleCode: ROLE_CODE } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     if (categoryId) {
-      await prisma.skillCategory.deleteMany({ where: { id: categoryId } }).catch(() => undefined);
+      await prisma.skillCategory
+        .deleteMany({ where: { id: categoryId } })
+        .catch((): undefined => undefined);
     }
 
     await prisma.$disconnect();

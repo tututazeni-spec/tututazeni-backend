@@ -53,10 +53,10 @@ describe('Automation Integration', () => {
     if (ruleIds.length > 0) {
       await prisma.automationExecution
         .deleteMany({ where: { ruleId: { in: ruleIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.automationRule
         .deleteMany({ where: { id: { in: ruleIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
     // Templates aplicados via applyTemplate/initDefaultRules usam nomes fixos
     // (DEFAULT_RULES) — limpar por nome para não deixar lixo entre execuções.
@@ -77,10 +77,10 @@ describe('Automation Integration', () => {
     if (defaultIds.length > 0) {
       await prisma.automationExecution
         .deleteMany({ where: { ruleId: { in: defaultIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
       await prisma.automationRule
         .deleteMany({ where: { id: { in: defaultIds } } })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
 
     await prisma.$disconnect();

@@ -75,11 +75,15 @@ describe('Search Integration', () => {
   });
 
   afterAll(async () => {
-    await prisma.knowledgeTag.deleteMany({ where: { articleId } }).catch(() => undefined);
-    await prisma.knowledgeArticle.deleteMany({ where: { id: articleId } }).catch(() => undefined);
+    await prisma.knowledgeTag
+      .deleteMany({ where: { articleId } })
+      .catch((): undefined => undefined);
+    await prisma.knowledgeArticle
+      .deleteMany({ where: { id: articleId } })
+      .catch((): undefined => undefined);
     await prisma.course
       .deleteMany({ where: { id: { in: [activeCourseId, inactiveCourseId] } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.$disconnect();
     await pool.end();
     await app.close();

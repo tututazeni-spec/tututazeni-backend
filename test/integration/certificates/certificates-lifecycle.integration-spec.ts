@@ -94,13 +94,19 @@ describe('Certificates lifecycle API (Postgres real)', () => {
     // filhos antes de pais: certificate (reemissão → original) → enrollment → course
     await prisma.certificate
       .deleteMany({ where: { replacesId: { not: null }, courseId: { in: ids } } })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
     await prisma.certificate
       .deleteMany({ where: { courseId: { in: ids } } })
-      .catch(() => undefined);
-    await prisma.certificate.deleteMany({ where: { title: externalTitle } }).catch(() => undefined);
-    await prisma.enrollment.deleteMany({ where: { courseId: { in: ids } } }).catch(() => undefined);
-    await prisma.course.deleteMany({ where: { id: { in: ids } } }).catch(() => undefined);
+      .catch((): undefined => undefined);
+    await prisma.certificate
+      .deleteMany({ where: { title: externalTitle } })
+      .catch((): undefined => undefined);
+    await prisma.enrollment
+      .deleteMany({ where: { courseId: { in: ids } } })
+      .catch((): undefined => undefined);
+    await prisma.course
+      .deleteMany({ where: { id: { in: ids } } })
+      .catch((): undefined => undefined);
     await prisma.$disconnect();
     await pool.end();
     await app.close();

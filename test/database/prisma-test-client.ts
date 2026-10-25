@@ -23,5 +23,5 @@ export function createTestDb(): TestDb {
 
 export async function closeTestDb(db: TestDb): Promise<void> {
   await db.prisma.$disconnect();
-  await db.pool.end().catch(() => undefined);
+  await db.pool.end().catch((): undefined => undefined);
 }

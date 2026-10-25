@@ -53,8 +53,10 @@ describe('ACL Integration', () => {
     // à parte, sem nenhuma dança de reatribuição prévia.
     await prisma.role
       .deleteMany({ where: { name: { contains: 'Int Test Role' } } })
-      .catch(() => undefined);
-    await prisma.permission.deleteMany({ where: { name: PERMISSION_NAME } }).catch(() => undefined);
+      .catch((): undefined => undefined);
+    await prisma.permission
+      .deleteMany({ where: { name: PERMISSION_NAME } })
+      .catch((): undefined => undefined);
 
     await prisma.$disconnect();
     await pool.end();
@@ -331,8 +333,10 @@ describe('ACL Integration', () => {
         expect(viaAcl.body.id).toBe(id);
         expect(viaDept.body.id).toBe(id);
       } finally {
-        await prisma.rolePermission.deleteMany({ where: { roleId: id } }).catch(() => undefined);
-        await prisma.role.delete({ where: { id } }).catch(() => undefined);
+        await prisma.rolePermission
+          .deleteMany({ where: { roleId: id } })
+          .catch((): undefined => undefined);
+        await prisma.role.delete({ where: { id } }).catch((): undefined => undefined);
       }
     });
 
