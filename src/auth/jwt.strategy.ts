@@ -74,16 +74,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: { sub: number; email: string; iat?: number; jti?: string }) {
     if (this.revocation) {
-      if (payload.jti && (await this.revocation.isAccessTokenRevoked(payload.jti))) {
+      // Uma só viagem ao Redis para as três marcas (jti revogado, revokedBefore, staleSince).
+      const marks = await this.revocation.getMarks(payload.jti, payload.sub);
+      if (marks.jtiRevoked) {
         throw new UnauthorizedException('Sessão terminada');
       }
-      const revokedBefore = await this.revocation.revokedBefore(payload.sub);
-      if (revokedBefore && payload.iat !== undefined && payload.iat < revokedBefore) {
+      if (marks.revokedBefore && payload.iat !== undefined && payload.iat < marks.revokedBefore) {
         throw new UnauthorizedException('Sessão revogada');
       }
-      const staleSince = await this.revocation.staleSince(payload.sub);
       const entry = this.userCache.get(payload.sub);
-      if (staleSince && entry && entry.loadedAt <= staleSince) this.userCache.delete(payload.sub);
+      if (marks.staleSince && entry && entry.loadedAt <= marks.staleSince) {
+        this.userCache.delete(payload.sub);
+      }
     }
     const cached = this.userCache.get(payload.sub);
     const user =

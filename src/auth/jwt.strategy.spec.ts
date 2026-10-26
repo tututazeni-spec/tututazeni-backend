@@ -48,10 +48,9 @@ const mockPrisma = {
   },
 };
 
+const noMarks = { jtiRevoked: false, revokedBefore: null, staleSince: null };
 const mockRevocation = {
-  isAccessTokenRevoked: jest.fn().mockResolvedValue(false),
-  revokedBefore: jest.fn().mockResolvedValue(null),
-  staleSince: jest.fn().mockResolvedValue(null),
+  getMarks: jest.fn(),
 };
 
 const mockConfig = {
@@ -74,9 +73,7 @@ describe('JwtStrategy', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    mockRevocation.isAccessTokenRevoked.mockResolvedValue(false);
-    mockRevocation.revokedBefore.mockResolvedValue(null);
-    mockRevocation.staleSince.mockResolvedValue(null);
+    mockRevocation.getMarks.mockResolvedValue(noMarks);
     Object.defineProperty(mockPrisma, 'read', {
       get() {
         return mockPrisma;
@@ -97,15 +94,22 @@ describe('JwtStrategy', () => {
   describe('revogação de sessão (Redis)', () => {
     it('access token com jti revogado (logout) → 401', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(baseUser);
-      mockRevocation.isAccessTokenRevoked.mockResolvedValue(true);
+      mockRevocation.getMarks.mockResolvedValue({ ...noMarks, jtiRevoked: true });
       await expect(
         strategy.validate({ sub: 1, email: 'user@innova.com', jti: 'j1', iat: 100 }),
       ).rejects.toThrow(UnauthorizedException);
     });
 
+    it('consulta as marcas de revogação numa única chamada por pedido, com jti e sub', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(baseUser);
+      await strategy.validate({ sub: 1, email: 'user@innova.com', jti: 'j1', iat: 100 });
+      expect(mockRevocation.getMarks).toHaveBeenCalledTimes(1);
+      expect(mockRevocation.getMarks).toHaveBeenCalledWith('j1', 1);
+    });
+
     it('token emitido antes de revokedBefore → 401; emitido depois → ok', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(baseUser);
-      mockRevocation.revokedBefore.mockResolvedValue(1000);
+      mockRevocation.getMarks.mockResolvedValue({ ...noMarks, revokedBefore: 1000 });
       await expect(
         strategy.validate({ sub: 1, email: 'user@innova.com', jti: 'j', iat: 999 }),
       ).rejects.toThrow(UnauthorizedException);
@@ -120,7 +124,7 @@ describe('JwtStrategy', () => {
       await strategy.validate({ sub: 1, email: 'user@innova.com' });
       expect(mockPrisma.user.findUnique).toHaveBeenCalledTimes(1); // cache hit
 
-      mockRevocation.staleSince.mockResolvedValue(Date.now() + 1000);
+      mockRevocation.getMarks.mockResolvedValue({ ...noMarks, staleSince: Date.now() + 1000 });
       mockPrisma.user.findUnique.mockResolvedValue({ ...baseUser, active: false });
       await expect(strategy.validate({ sub: 1, email: 'user@innova.com' })).rejects.toThrow(
         UnauthorizedException,
