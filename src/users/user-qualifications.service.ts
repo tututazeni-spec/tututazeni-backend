@@ -1,11 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCanAccess } from '../common/authz/ownership';
-import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
 import { ExternalCertificationDto, LanguageDto, QualificationDto } from './user-qualifications.dto';
 
-const PRIVILEGED = [Role.ADMIN, Role.RH];
+import { ADMIN_RH_ROLES } from '../auth/enums/role-groups';
+
+const PRIVILEGED = ADMIN_RH_ROLES;
 
 @Injectable()
 export class UserQualificationsService {

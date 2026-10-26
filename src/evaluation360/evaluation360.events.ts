@@ -4,7 +4,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { EvaluatorAssignment, Eval360Feedback } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { CompetencyGapEntry } from './evaluation360.service';
+import type { CompetencyGapEntry } from './evaluation360.types';
 
 // Forma real emitida por generateAutoPdi() em evaluation360.service.ts —
 // não é um tipo Prisma (o PDI ainda não foi criado, é só o "esqueleto" de

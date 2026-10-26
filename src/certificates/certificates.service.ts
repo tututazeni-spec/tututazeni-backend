@@ -3,12 +3,13 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { CertificateOrigin, CertificateStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCanAccess } from '../common/authz/ownership';
-import { Role } from '../auth/enums/role.enum';
 import { Optional } from '@nestjs/common';
 import { CertificateAssetsService } from './templates/certificate-assets.service';
 import { normalizeVerificationCode } from './certificate-code';
 import { buildVerifyUrl, CertificateSnapshot, renderCertificatePdf } from './certificate-renderer';
 import { buildLinkedInUrl } from './certificate-share';
+
+import { ADMIN_RH_AUDITOR_ROLES } from '../auth/enums/role-groups';
 
 interface StatusInput {
   status: CertificateStatus;
@@ -40,7 +41,7 @@ export interface PublicVerifyResult {
 
 // Códigos legados (CERT-<curso>-<user>-<timestamp>) têm hífens; os novos não.
 const LEGACY_CODE = /^[A-Za-z0-9-]{1,64}$/;
-const PDF_PRIVILEGED = [Role.ADMIN, Role.RH, Role.AUDITOR];
+const PDF_PRIVILEGED = ADMIN_RH_AUDITOR_ROLES;
 
 @Injectable()
 export class CertificatesService {

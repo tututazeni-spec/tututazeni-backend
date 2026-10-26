@@ -2,12 +2,18 @@
 import { Role } from '../auth/enums/role.enum';
 import { AvatarStepType, SessionRulesDto, SessionStepDto } from './dto/avatar-training.dto';
 
+import {
+  ADMIN_RH_INSTRUCTOR_ROLES,
+  ADMIN_RH_LEADERSHIP_ROLES,
+  ADMIN_RH_ROLES,
+} from '../auth/enums/role-groups';
+
 /** Gestão de avatares, aprovação/publicação, revisão de tentativas e leitura global. */
-export const AVATAR_ADMIN_ROLES = [Role.ADMIN, Role.RH];
+export const AVATAR_ADMIN_ROLES = ADMIN_RH_ROLES;
 /** Criação/edição de formações, sessões e avaliações. */
-export const AVATAR_AUTHOR_ROLES = [Role.ADMIN, Role.RH, Role.INSTRUCTOR];
+export const AVATAR_AUTHOR_ROLES = ADMIN_RH_INSTRUCTOR_ROLES;
 /** Atribuição a colaboradores (GESTOR/LIDER só sobre subordinados directos). */
-export const AVATAR_ASSIGN_ROLES = [Role.ADMIN, Role.RH, Role.DIRECTOR, Role.GESTOR, Role.LIDER];
+export const AVATAR_ASSIGN_ROLES = ADMIN_RH_LEADERSHIP_ROLES;
 /** Leitura de progresso alargada (restrita à equipa para GESTOR/LIDER). */
 export const AVATAR_PROGRESS_ROLES = [...AVATAR_ASSIGN_ROLES, Role.AUDITOR, Role.INSTRUCTOR];
 

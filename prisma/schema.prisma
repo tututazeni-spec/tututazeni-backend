@@ -1116,6 +1116,7 @@ model User {
   @@index([active])
   @@index([roleId])
   @@index([unitId])
+  @@index([positionId])
 }
 
 model Profile {
@@ -1154,6 +1155,8 @@ model Questions {
   userId    Int
   user      User      @relation(fields: [userId], references: [id])
   answers   Answers[]
+
+  @@index([userId])
 }
 
 model Answers {
@@ -1165,6 +1168,9 @@ model Answers {
   questionId Int
   user       User      @relation(fields: [userId], references: [id])
   question   Questions @relation(fields: [questionId], references: [id])
+
+  @@index([userId])
+  @@index([questionId])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1256,6 +1262,7 @@ model RolePermission {
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@unique([roleId, permissionId])
+  @@index([permissionId])
 }
 
 // Permissões concedidas directamente a um utilizador, além das do seu Role
@@ -1271,6 +1278,7 @@ model UserPermission {
 
   @@unique([userId, permissionId])
   @@index([userId])
+  @@index([permissionId])
 }
 
 model RoleTemplate {
@@ -1383,6 +1391,11 @@ model Department {
 
   @@index([active])
   @@index([parentId])
+  @@index([headId])
+  @@index([deputyHeadId])
+  @@index([directManagerId])
+  @@index([unitId])
+  @@index([processOwnerDepartmentId])
 }
 
 model DepartmentHeadHistory {
@@ -1396,6 +1409,9 @@ model DepartmentHeadHistory {
   department   Department @relation(fields: [departmentId], references: [id])
   head         User       @relation(fields: [headId], references: [id])
   changedBy    User?      @relation("HeadHistoryChangedBy", fields: [changedById], references: [id])
+
+  @@index([departmentId])
+  @@index([headId])
 }
 
 model DepartmentTransferLog {
@@ -1411,6 +1427,7 @@ model DepartmentTransferLog {
 
   @@index([userId])
   @@index([toDepartmentId])
+  @@index([fromDepartmentId])
 }
 
 enum UnitType {
@@ -1492,6 +1509,7 @@ model Position {
   leadershipTargetings LeadershipProgramTargeting[]
 
   @@index([departmentId])
+  @@index([reportsToPositionId])
 }
 
 enum OrgChangeType {
@@ -1528,6 +1546,10 @@ model OrgChangeLog {
   @@index([userId])
   @@index([changeType])
   @@index([effectiveDate])
+  @@index([fromDepartmentId])
+  @@index([toDepartmentId])
+  @@index([fromPositionId])
+  @@index([toPositionId])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1561,6 +1583,10 @@ model UserCareerPlan {
   updatedAt        DateTime           @updatedAt
 
   @@index([userId, status])
+  @@index([currentRoleId])
+  @@index([targetRoleId])
+  @@index([careerPathId])
+  @@index([mentorId])
 }
 
 model CareerRole {
@@ -1590,6 +1616,7 @@ model CareerRole {
 
   @@index([department, level])
   @@index([jobFamilyId])
+  @@index([parentRoleId])
 }
 
 model CareerPosition {
@@ -1686,6 +1713,8 @@ model CareerPathStep {
 
   @@unique([careerPathId, order])
   @@index([careerPathId])
+  @@index([roleId])
+  @@index([positionId])
 }
 
 enum ApplicationStatus {
@@ -1764,6 +1793,7 @@ model InternalVacancy {
   @@index([departmentId])
   @@index([unitId])
   @@index([responsibleManagerId])
+  @@index([positionId])
 }
 
 model ProgressionRule {
@@ -1782,6 +1812,7 @@ model ProgressionRule {
   createdAt                 DateTime   @default(now())
 
   @@unique([fromRoleId, toRoleId])
+  @@index([toRoleId])
 }
 
 model CareerGoal {
@@ -1804,6 +1835,7 @@ model CareerGoal {
   updatedAt    DateTime       @updatedAt
 
   @@index([careerPlanId, status])
+  @@index([skillId])
 }
 
 model PromotionRequest {
@@ -1827,6 +1859,8 @@ model PromotionRequest {
   updatedAt      DateTime        @updatedAt
 
   @@index([userId, status])
+  @@index([targetRoleId])
+  @@index([careerPlanId])
 }
 
 enum SuccessorPriority {
@@ -1860,6 +1894,7 @@ model SuccessionPlan {
   @@unique([criticalPositionId, candidateId])
   @@index([readinessLevel])
   @@index([candidateId])
+  @@index([positionId])
 }
 
 model TalentPool {
@@ -1872,6 +1907,8 @@ model TalentPool {
   createdAt          DateTime       @default(now())
   user               User           @relation(fields: [userId], references: [id])
   mentor             User?          @relation("TalentPoolMentor", fields: [mentorId], references: [id])
+
+  @@index([mentorId])
 }
 
 enum SuccessionPdiStatus {
@@ -2265,6 +2302,7 @@ model PdiApproval {
   approver   User             @relation(fields: [approverId], references: [id])
 
   @@index([planId])
+  @@index([approverId])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2394,6 +2432,7 @@ model Course {
   @@index([primaryInstructorId])
   @@index([requiredCourseId])
   @@index([deletedAt])
+  @@index([departmentId])
 }
 
 model CourseInstructor {
@@ -2493,6 +2532,7 @@ model ModuleCompetency {
   competency   Competency   @relation(fields: [competencyId], references: [id], onDelete: Cascade)
 
   @@unique([moduleId, competencyId])
+  @@index([competencyId])
 }
 
 enum LessonType {
@@ -2633,6 +2673,8 @@ model ModuleMaterial {
   fileSizeKb Int?
   createdAt  DateTime     @default(now())
   module     CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@index([moduleId])
 }
 
 enum EnrollmentStatus {
@@ -2833,6 +2875,9 @@ model Certificate {
   @@index([replacesId])
   @@index([expiresAt])
   @@index([activityKind, activityId])
+  @@index([programId])
+  @@index([developmentPlanId])
+  @@index([eventId])
 }
 
 model CertificateRule {
@@ -2883,6 +2928,8 @@ model QuizQuestion {
   points        Int              @default(1)
   seq           Int
   quiz          Quiz             @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@index([quizId])
 }
 
 model QuizAttempt {
@@ -2910,6 +2957,7 @@ model CourseCompetency {
   competency   Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
 
   @@unique([courseId, competencyId])
+  @@index([competencyId])
 }
 
 model CourseAnalytics {
@@ -2934,6 +2982,7 @@ model CourseFeedback {
   user      User     @relation(fields: [userId], references: [id])
 
   @@unique([courseId, userId])
+  @@index([userId])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -3008,6 +3057,7 @@ model LearningPathCourse {
 
   @@unique([learningPathId, courseId])
   @@index([learningPathId])
+  @@index([courseId])
 }
 
 // Formações (presenciais/online) que fazem parte de uma trilha, ao lado dos cursos.
@@ -3032,6 +3082,8 @@ model LearningPathMilestone {
   description    String?
   seq            Int
   learningPath   LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
+
+  @@index([learningPathId])
 }
 
 enum AssignmentTarget {
@@ -3138,6 +3190,7 @@ model Assessment {
 
   @@index([courseId])
   @@index([status])
+  @@index([moduleId])
 }
 
 enum QuestionType {
@@ -3220,6 +3273,7 @@ model AssessmentAttemptAnswer {
   question        AssessmentQuestion @relation(fields: [questionId], references: [id])
 
   @@unique([attemptId, questionId])
+  @@index([questionId])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -3311,6 +3365,7 @@ model Competency {
   @@index([category])
   @@index([status])
   @@index([isActive])
+  @@index([ownerId])
 }
 
 model CompetencyIndicator {
@@ -3372,6 +3427,7 @@ model CompetencyModel {
   updatedAt      DateTime              @updatedAt
 
   @@index([departmentId])
+  @@index([ownerId])
 }
 
 model CompetencyModelItem {
@@ -3386,6 +3442,7 @@ model CompetencyModelItem {
   competency    Competency      @relation(fields: [competencyId], references: [id])
 
   @@unique([modelId, competencyId])
+  @@index([competencyId])
 }
 
 enum CompetencySource {
@@ -3417,6 +3474,7 @@ model UserCompetency {
 
   @@unique([userId, competencyId])
   @@index([userId])
+  @@index([competencyId])
 }
 
 model CompetencyEvolutionLog {
@@ -3447,6 +3505,8 @@ model CompetencyEndorsement {
   competency   Competency @relation(fields: [competencyId], references: [id])
 
   @@unique([endorserId, userId, competencyId])
+  @@index([userId])
+  @@index([competencyId])
 }
 
 enum MappingPriority {
@@ -3541,6 +3601,10 @@ model PositionCompetency {
   position         Position?       @relation(fields: [positionId], references: [id])
   careerPosition   CareerPosition? @relation(fields: [careerPositionId], references: [id])
   competency       Competency      @relation(fields: [competencyId], references: [id])
+
+  @@index([positionId])
+  @@index([careerPositionId])
+  @@index([competencyId])
 }
 
 model CompetencyMap {
@@ -3670,6 +3734,8 @@ model PerformanceReview {
   @@unique([userId, cycleId, type])
   @@index([userId])
   @@index([status])
+  @@index([reviewerId])
+  @@index([cycleId])
 }
 
 enum PerformanceGoalStatus {
@@ -3701,6 +3767,7 @@ model PerformanceGoal {
   evaluations GoalEvaluation[]
 
   @@index([userId])
+  @@index([cycleId])
 }
 
 model GoalEvaluation {
@@ -3713,6 +3780,7 @@ model GoalEvaluation {
   goal     PerformanceGoal   @relation(fields: [goalId], references: [id])
 
   @@unique([reviewId, goalId])
+  @@index([goalId])
 }
 
 model CompetencyEvaluation {
@@ -3746,6 +3814,8 @@ model ContinuousFeedback {
   cycle         PerformanceCycle? @relation(fields: [cycleId], references: [id])
 
   @@index([userId])
+  @@index([giverId])
+  @@index([cycleId])
 }
 
 model CalibrationLog {
@@ -3758,6 +3828,9 @@ model CalibrationLog {
   createdAt       DateTime          @default(now())
   review          PerformanceReview @relation(fields: [reviewId], references: [id])
   calibrator      User              @relation(fields: [calibratorId], references: [id])
+
+  @@index([reviewId])
+  @@index([calibratorId])
 }
 
 // RESOLVED acrescentado no lote 8 para reutilizar este enum em
@@ -3782,6 +3855,9 @@ model PerformanceDispute {
   createdAt  DateTime          @default(now())
   review     PerformanceReview @relation(fields: [reviewId], references: [id])
   user       User              @relation(fields: [userId], references: [id])
+
+  @@index([reviewId])
+  @@index([userId])
 }
 
 model NineBoxPlacement {
@@ -3798,6 +3874,7 @@ model NineBoxPlacement {
   updatedBy       User              @relation("NineBoxUpdater", fields: [updatedById], references: [id])
 
   @@unique([userId, cycleId])
+  @@index([cycleId])
 }
 
 model PerformanceEvaluation {
@@ -4695,6 +4772,7 @@ model OneOnOne {
   subordinate     User           @relation("OneOnOneSubordinate", fields: [subordinateId], references: [id])
 
   @@index([managerId])
+  @@index([subordinateId])
 }
 
 model LeadershipFeedback360 {
@@ -4717,6 +4795,8 @@ model LeadershipFeedback360Response {
   competency String
   score      Int
   feedback   LeadershipFeedback360 @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+
+  @@index([feedbackId])
 }
 
 model LeadershipPulse {
@@ -4782,6 +4862,8 @@ model MentoringSession {
   rating          Int?
   createdAt       DateTime  @default(now())
   mentoring       Mentoring @relation(fields: [mentoringId], references: [id], onDelete: Cascade)
+
+  @@index([mentoringId])
 }
 
 model TeamHealth {
@@ -4806,6 +4888,7 @@ model Kudos {
   receiver   User     @relation("KudosReceiver", fields: [receiverId], references: [id])
 
   @@index([receiverId])
+  @@index([senderId])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -4929,6 +5012,9 @@ model OnboardingTemplate {
   plans           OnboardingPlan[]
 
   @@index([active])
+  @@index([positionId])
+  @@index([departmentId])
+  @@index([unitId])
 }
 
 model OnboardingTemplateTask {
@@ -4986,6 +5072,10 @@ model OnboardingPlan {
 
   @@index([userId])
   @@index([status])
+  @@index([templateId])
+  @@index([buddyId])
+  @@index([managerId])
+  @@index([hrResponsibleId])
 }
 
 model OnboardingTaskInstance {
@@ -5008,6 +5098,7 @@ model OnboardingTaskInstance {
 
   @@unique([planId, templateTaskId])
   @@index([planId])
+  @@index([templateTaskId])
 }
 
 model OnboardingDocument {
@@ -5025,6 +5116,8 @@ model OnboardingDocument {
   plan            OnboardingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
   uploadedBy      User           @relation("DocUploader", fields: [uploadedById], references: [id])
   validatedBy     User?          @relation("DocValidator", fields: [validatedById], references: [id])
+
+  @@index([planId])
 }
 
 model OnboardingSurvey {
@@ -5065,6 +5158,7 @@ model OnboardingCheckin {
 
   @@index([planId])
   @@index([status])
+  @@index([responsibleId])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -5131,6 +5225,7 @@ model MicroLearning {
   @@index([status])
   @@index([contentType])
   @@index([viewCount])
+  @@index([authorId])
 }
 
 model MicroQuizQuestion {
@@ -5141,6 +5236,8 @@ model MicroQuizQuestion {
   explanation     String?
   seq             Int
   microLearning   MicroLearning @relation(fields: [microLearningId], references: [id], onDelete: Cascade)
+
+  @@index([microLearningId])
 }
 
 model MicroLearningProgress {
@@ -5156,6 +5253,7 @@ model MicroLearningProgress {
 
   @@unique([userId, microLearningId])
   @@index([userId])
+  @@index([microLearningId])
 }
 
 model MicroLearningInteraction {
@@ -5180,6 +5278,9 @@ model MicroQuizAttempt {
   completedAt     DateTime      @default(now())
   user            User          @relation(fields: [userId], references: [id])
   microLearning   MicroLearning @relation(fields: [microLearningId], references: [id])
+
+  @@index([userId])
+  @@index([microLearningId])
 }
 
 model MicroLearningPlaylist {
@@ -5190,6 +5291,8 @@ model MicroLearningPlaylist {
   createdAt   DateTime       @default(now())
   author      User           @relation(fields: [authorId], references: [id])
   items       PlaylistItem[]
+
+  @@index([authorId])
 }
 
 model PlaylistItem {
@@ -5201,6 +5304,7 @@ model PlaylistItem {
   microLearning   MicroLearning         @relation(fields: [microLearningId], references: [id], onDelete: Cascade)
 
   @@unique([playlistId, microLearningId])
+  @@index([microLearningId])
 }
 
 model LearningStreak {
@@ -5430,6 +5534,7 @@ model Training {
   @@index([trainingPlanId])
   @@index([responsibleId])
   @@index([externalInstructorId])
+  @@index([instructorId])
 }
 
 // ─── Plano de Formação ───────────────────────────────────────────────────────
@@ -5483,6 +5588,8 @@ model TrainingPlan {
   @@index([status])
   @@index([year])
   @@index([createdById])
+  @@index([responsibleId])
+  @@index([approverId])
 }
 
 // ─── Competências a desenvolver do plano (M2M) ───────────────────────────────
@@ -5599,6 +5706,7 @@ model TrainingParticipant {
   @@unique([sessionId, userId])
   @@index([userId])
   @@index([status])
+  @@index([trainingId])
 }
 
 model TrainingRating {
@@ -5709,6 +5817,7 @@ model TrainingResource {
 
   @@index([kind])
   @@index([status])
+  @@index([responsibleId])
 }
 
 // Reserva de uma sala/recurso para uma Turma (Training) e/ou Sessão —
@@ -5811,6 +5920,7 @@ model KnowledgeArticle {
   @@index([status])
   @@index([authorId])
   @@index([viewCount])
+  @@index([categoryId])
 }
 
 model KnowledgeTag {
@@ -5846,6 +5956,7 @@ model ArticleRating {
   article   KnowledgeArticle @relation(fields: [articleId], references: [id])
 
   @@unique([userId, articleId])
+  @@index([articleId])
 }
 
 model ArticleComment {
@@ -5861,6 +5972,8 @@ model ArticleComment {
   replies   ArticleComment[] @relation("CommentReplies")
 
   @@index([articleId])
+  @@index([authorId])
+  @@index([parentId])
 }
 
 model ArticleQuestion {
@@ -5891,6 +6004,7 @@ model ArticleVersion {
   author       User             @relation(fields: [authorId], references: [id])
 
   @@unique([articleId, version])
+  @@index([authorId])
 }
 
 model ArticleAcknowledgement {
@@ -5902,6 +6016,7 @@ model ArticleAcknowledgement {
   article        KnowledgeArticle @relation(fields: [articleId], references: [id])
 
   @@unique([userId, articleId])
+  @@index([articleId])
 }
 
 model KnowledgeSearchLog {
@@ -6009,6 +6124,8 @@ model ProcessStandard {
 
   @@index([status])
   @@index([category])
+  @@index([ownerId])
+  @@index([departmentId])
 }
 
 model ProcessStep {
@@ -6064,6 +6181,8 @@ model ProcessStep {
   stepProgress         StepProgress[]
 
   @@index([processId])
+  @@index([responsibleId])
+  @@index([reviewerId])
 }
 
 model ProcessInstance {
@@ -6116,6 +6235,9 @@ model ProcessInstance {
   @@index([currentResponsibleId])
   @@index([departmentId])
   @@index([correlationId])
+  @@index([unitId])
+  @@index([initiatedById])
+  @@index([targetUserId])
 }
 
 model StepProgress {
@@ -6154,6 +6276,8 @@ model StepProgress {
   @@unique([instanceId, stepId])
   @@index([status])
   @@index([assigneeId])
+  @@index([stepId])
+  @@index([reviewerId])
 }
 
 model ProcessStepComment {
@@ -6171,6 +6295,8 @@ model ProcessStepComment {
   author     User            @relation("ProcessStepCommentAuthor", fields: [authorId], references: [id])
 
   @@index([instanceId, stepId])
+  @@index([stepId])
+  @@index([authorId])
 }
 
 // docs/Modulo_Processes.md §7 — pedido de aprovação gerado quando uma etapa
@@ -6215,6 +6341,8 @@ model ProcessApproval {
   @@index([instanceId, stepId])
   @@index([approverId, status])
   @@index([status])
+  @@index([stepId])
+  @@index([requesterId])
 }
 
 // docs/Modulo_Processes.md §11 — referência (não cópia) a um documento do
@@ -6303,6 +6431,8 @@ model ProcessVersion {
   createdById Int
   createdAt   DateTime        @default(now())
   process     ProcessStandard @relation(fields: [processId], references: [id])
+
+  @@index([processId])
 }
 
 model ProcessApprovalLog {
@@ -6315,6 +6445,9 @@ model ProcessApprovalLog {
   createdAt DateTime         @default(now())
   process   ProcessStandard  @relation(fields: [processId], references: [id])
   user      User             @relation(fields: [userId], references: [id])
+
+  @@index([processId])
+  @@index([userId])
 }
 
 model ProcessAuditLog {
@@ -6541,6 +6674,9 @@ model PayslipDispute {
   resolution String?
   payslip    Payslip       @relation(fields: [payslipId], references: [id])
   user       User          @relation(fields: [userId], references: [id])
+
+  @@index([payslipId])
+  @@index([userId])
 }
 
 model CountryConfig {
@@ -6624,6 +6760,8 @@ model EmployeeCompensationComponent {
   componentCode  String
   value          Float
   override       Boolean              @default(false)
+
+  @@index([compensationId])
 }
 
 model PayrollRun {
@@ -6727,6 +6865,8 @@ model WorkDeclaration {
   issuedAt        DateTime?
   createdAt       DateTime  @default(now())
   user            User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }
 
 model UserAttendance {
@@ -6904,6 +7044,7 @@ model BadgeAward {
   @@unique([badgeId, userId])
   @@index([userId])
   @@index([awardedAt])
+  @@index([userPointsId])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -6998,6 +7139,11 @@ model Document {
   @@index([expiresAt, status])
   @@index([sensitivity])
   @@index([requiresReadConfirmation, status])
+  @@index([categoryId])
+  @@index([elaboratedById])
+  @@index([approverId])
+  @@index([supersedesId])
+  @@index([relatedDocumentId])
 }
 
 model DocReadConfirmation {
@@ -7069,6 +7215,7 @@ model DocShareLink {
   createdAt     DateTime        @default(now())
 
   @@index([token])
+  @@index([documentId])
 }
 
 model DocDownload {
@@ -7317,6 +7464,8 @@ model LiveClass {
   @@index([type])
   @@index([moduleId])
   @@index([instructorId])
+  @@index([lessonId])
+  @@index([coInstructorId])
 }
 
 // Sub-ocorrências de uma Aula recorrente (docs/aulas-ao-vivo.md secção 5).
@@ -7350,6 +7499,7 @@ model LiveClassSession {
   @@unique([liveClassId, seq])
   @@index([liveClassId])
   @@index([sessionDate])
+  @@index([instructorId])
 }
 
 model LiveAttendance {
@@ -7382,6 +7532,7 @@ model LiveAttendance {
   // null (ver live-classes.service.ts).
   @@unique([liveClassId, userId, sessionId])
   @@index([sessionId])
+  @@index([userId])
 }
 
 model LiveChatMessage {
@@ -7394,6 +7545,7 @@ model LiveChatMessage {
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([liveClassId])
+  @@index([userId])
 }
 
 model PostClassEvaluation {
@@ -7423,6 +7575,7 @@ model PostClassResponse {
   user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([evaluationId, userId])
+  @@index([userId])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -7497,6 +7650,7 @@ model InstructorCohort {
 
   @@index([instructorId])
   @@index([status])
+  @@index([courseId])
 }
 
 // Único valor confirmado por grep em instructor.service.ts — sem fluxo de
@@ -7594,6 +7748,7 @@ model InstructorCourse {
   marketplaceCourse   MarketplaceCourse @relation(fields: [marketplaceCourseId], references: [id], onDelete: Cascade)
 
   @@unique([instructorId, marketplaceCourseId])
+  @@index([marketplaceCourseId])
 }
 
 model InstructorReview {
@@ -7607,6 +7762,7 @@ model InstructorReview {
   user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([instructorId, userId])
+  @@index([userId])
 }
 
 model InstructorPayout {
@@ -7615,6 +7771,8 @@ model InstructorPayout {
   createdAt    DateTime          @default(now())
   instructorId Int
   instructor   InstructorProfile @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+
+  @@index([instructorId])
 }
 
 model MarketplaceCourse {
@@ -7629,6 +7787,8 @@ model MarketplaceCourse {
   category      String?
   level         String?
   workloadHours Int?
+
+  @@index([instructorId])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -7849,6 +8009,7 @@ model AutomationRule {
 
   @@index([module])
   @@map("automation_rules")
+  @@index([tenantId])
 }
 
 model AutomationExecution {
@@ -8115,6 +8276,7 @@ model SlaConfig {
   tenant            TenantConfig @relation(fields: [tenantId], references: [id])
 
   @@map("sla_configs")
+  @@index([tenantId])
 }
 
 model ContentDeliveryConfig {
@@ -8346,6 +8508,7 @@ model ReportApproval {
   approver   User             @relation(fields: [approverId], references: [id])
 
   @@index([reportId])
+  @@index([approverId])
 }
 
 model ReportAccessLog {
@@ -8465,6 +8628,8 @@ model ExecutiveAlertRule {
   active       Boolean                @default(true)
   updatedAt    DateTime               @updatedAt
   owner        User?                  @relation("ExecAlertRuleOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId])
 }
 
 model ExecutiveAlert {
@@ -8506,6 +8671,7 @@ model ExecutiveAlertEvent {
   user      User?          @relation("ExecAlertEventUser", fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([alertId])
+  @@index([userId])
 }
 
 // Sobreposição configurável de meta/limiares de um KPI (§11, §12.1). A fórmula
@@ -8520,6 +8686,8 @@ model ExecutiveKPIDefinition {
   active            Boolean  @default(true)
   updatedAt         DateTime @updatedAt
   owner             User?    @relation("ExecKpiDefinitionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId])
 }
 
 // Auditoria de geração, consulta, exportação e falhas (§11, §12.7/12.10).
@@ -8558,6 +8726,8 @@ model ExecutiveSnapshot {
   roi                  Float
   createdAt            DateTime     @default(now())
   organization         Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
 }
 
 model DashboardSnapshot {
@@ -8641,6 +8811,7 @@ model IntegrationConfig {
   notes               String?                         @db.Text
 
   @@map("integration_configs")
+  @@index([tenantId])
 }
 
 model TenantConfig {
@@ -8773,6 +8944,7 @@ model IntegrationSyncLog {
   integration      IntegrationConfig @relation(fields: [integrationId], references: [id])
 
   @@map("integration_sync_logs")
+  @@index([integrationId])
 }
 
 enum ApiCallStatus {
@@ -8822,6 +8994,8 @@ model OperationalMetric {
   value     Float
   createdAt DateTime @default(now())
   unit      Unit     @relation(fields: [unitId], references: [id])
+
+  @@index([unitId])
 }
 
 model TrainingImpact {
@@ -8831,6 +9005,8 @@ model TrainingImpact {
   impactRate   Float
   calculatedAt DateTime @default(now())
   course       Course   @relation(fields: [courseId], references: [id])
+
+  @@index([courseId])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -9364,6 +9540,7 @@ model AiTutorSession {
   @@index([userId])
   @@index([courseId])
   @@index([trainingId])
+  @@index([enrollmentId])
 }
 
 model AiMessage {
@@ -9754,6 +9931,7 @@ model EventFeedback {
 
   @@unique([eventId, userId])
   @@index([eventId])
+  @@index([userId])
 }
 
 // ─── Programação (docs/events.md #5) ───────────────────────────────────────
@@ -10194,6 +10372,8 @@ model LeaveDocument {
   // Comprovativos de tipos sensíveis (saúde, etc.) só o titular e o RH abrem.
   isSensitive  Boolean      @default(false)
   createdAt    DateTime     @default(now())
+
+  @@index([requestId])
 }
 
 model LeaveImpactPreview {
@@ -10422,6 +10602,8 @@ model AttendanceJustification {
 
   @@index([attendanceId])
   @@index([status])
+  @@index([userId])
+  @@index([recordId])
 }
 
 // status/context/method reutilizam os mesmos enums já usados por Attendance
@@ -10485,6 +10667,7 @@ model AttendanceAdjustment {
   record       AttendanceRecord? @relation("RecordAdjustments", fields: [recordId], references: [id])
 
   @@index([attendanceId])
+  @@index([recordId])
 }
 
 model WorkSchedule {
@@ -10514,6 +10697,7 @@ model UserSchedule {
   createdAt     DateTime     @default(now())
 
   @@index([userId])
+  @@index([scheduleId])
 }
 
 model OvertimeRecord {
@@ -10534,6 +10718,7 @@ model OvertimeRecord {
   createdAt          DateTime       @default(now())
 
   @@index([userId, status])
+  @@index([attendanceId])
 }
 
 model AllowedLocation {
@@ -10622,6 +10807,8 @@ model EmployeeSkill {
   skill        Skill?    @relation("EmployeeSkillRef", fields: [skillId], references: [id])
 
   @@unique([employeeId, skillId])
+  @@index([assessorId])
+  @@index([skillId])
 }
 
 // status reutiliza EmployeeStatus — confirmado que UpdateContractStatusDto
@@ -10639,6 +10826,8 @@ model Contract {
   notes      String?
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
+
+  @@index([employeeId])
 }
 
 model Feedback360 {
@@ -10682,6 +10871,8 @@ model CareerPlan {
   status          LegacyCareerPlanStatus @default(ACTIVE)
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
+
+  @@index([employeeId])
 }
 
 enum LegacyPdiStatus {
@@ -10718,6 +10909,8 @@ model LegacyPdiAction {
   resourceType String?
   resourceUrl  String?
   createdAt    DateTime  @default(now())
+
+  @@index([pdiId])
 }
 
 enum EmployeeDocumentStatus {
@@ -10798,6 +10991,7 @@ model Evaluation {
   questions          EvaluationQuestion[]
 
   @@index([courseId])
+  @@index([employeeId])
 }
 
 model EvaluationQuestion {
@@ -10877,6 +11071,7 @@ model Skill {
   employeeSkills2   EmployeeSkill[]          @relation("EmployeeSkillRef")
 
   @@index([type, active])
+  @@index([categoryId])
 }
 
 model SkillProficiencyLevel {
@@ -10916,6 +11111,8 @@ model RoleSkillRequirement {
 
   @@unique([matrixId, skillId])
   @@index([matrixId])
+  @@index([skillId])
+  @@index([careerRoleId])
 }
 
 model LegacyEmployeeSkill {
@@ -10941,6 +11138,7 @@ model LegacyEmployeeSkill {
   @@unique([userId, skillId])
   @@index([userId])
   @@index([skillId])
+  @@index([employeeId])
 }
 
 model SkillAssessmentHistory {
@@ -10955,6 +11153,7 @@ model SkillAssessmentHistory {
   snapshotAt   DateTime
 
   @@index([userId, skillId, snapshotAt])
+  @@index([skillId])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -11047,6 +11246,9 @@ model Declaration {
   @@index([code])
   @@index([legacyStatus])
   @@map("declarations")
+  @@index([templateId])
+  @@index([assignedToId])
+  @@index([employeeId])
 }
 
 enum SignerRole {
@@ -11071,6 +11273,7 @@ model DeclarationSignature {
 
   @@unique([declarationId, signerId])
   @@map("declaration_signatures")
+  @@index([signerId])
 }
 
 // Módulo com um único escritor confirmado (work-declaration.service.ts) —
@@ -11138,6 +11341,7 @@ model DeclarationAttachment {
   uploadedBy    User        @relation(fields: [uploadedById], references: [id])
 
   @@map("declaration_attachments")
+  @@index([declarationId])
 }
 
 model DeclarationTenantConfig {
@@ -11212,6 +11416,7 @@ model DeclarationTemplate {
 
   @@index([purposeId, tenantId, type, isActive])
   @@map("declaration_templates")
+  @@index([tenantId])
 }
 
 model DeclarationRequest {
@@ -11239,6 +11444,8 @@ model DeclarationRequest {
 
   @@index([userId, status])
   @@index([verificationCode])
+  @@index([templateId])
+  @@index([purposeId])
 }
 
 model DeclarationApproval {
@@ -11251,6 +11458,8 @@ model DeclarationApproval {
   notes      String?
   reviewedAt DateTime
   createdAt  DateTime           @default(now())
+
+  @@index([reviewerId])
 }
 
 model WorkDeclForm {
@@ -11333,6 +11542,8 @@ model WorkDeclAnswer {
   createdAt    DateTime           @default(now())
 
   @@index([submissionId])
+  @@index([userId])
+  @@index([questionId])
 }
 
 model WorkDeclReview {
@@ -11346,6 +11557,8 @@ model WorkDeclReview {
   correctionFields String[]
   reviewedAt       DateTime
   createdAt        DateTime           @default(now())
+
+  @@index([reviewerId])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -11501,6 +11714,8 @@ model BeneficiaryInteraction {
   @@index([type])
   @@index([date])
   @@index([deletedAt])
+  @@index([userId])
+  @@index([relatedBeneficiaryId])
 }
 
 model BeneficiaryDocument {
@@ -11897,6 +12112,7 @@ model PartnerProgram {
   @@index([program])
   @@index([status])
   @@index([deletedAt])
+  @@index([responsibleId])
 }
 
 // ⑥ Acordos e contratos
@@ -11928,6 +12144,7 @@ model PartnerAgreement {
   @@index([status])
   @@index([endDate])
   @@index([deletedAt])
+  @@index([responsibleId])
 }
 
 model PartnerAgreementVersion {
@@ -11975,6 +12192,7 @@ model PartnerInteraction {
   @@index([type])
   @@index([date])
   @@index([deletedAt])
+  @@index([userId])
 }
 
 // priority reutiliza "NeedPriority" (BeneficiaryNeed, mesmo domínio CRM) —
@@ -12086,6 +12304,7 @@ model PartnerOpportunity {
   @@index([status])
   @@index([expectedDate])
   @@index([deletedAt])
+  @@index([responsibleId])
 }
 
 // ⑫ Indicadores de impacto registados manualmente (o resto do desempenho é derivado)
@@ -12136,6 +12355,7 @@ model PartnerDocument {
   @@index([partnerId])
   @@index([validUntil])
   @@index([deletedAt])
+  @@index([responsibleId])
 }
 
 // ⑭ Filiais / delegações (a sede vive nos campos de morada do próprio Partner)
@@ -12531,6 +12751,8 @@ model Funder {
   @@index([nextReportDue])
   @@index([nextContactAt])
   @@index([deletedAt])
+  @@index([financialManagerId])
+  @@index([technicalManagerId])
 }
 
 // ③ Contactos (vários por financiador, um principal)
@@ -12587,6 +12809,7 @@ model FunderProgram {
   @@index([program])
   @@index([status])
   @@index([deletedAt])
+  @@index([responsibleId])
 }
 
 model FundingGrant {
@@ -12688,6 +12911,7 @@ model FunderOpportunity {
   @@index([status])
   @@index([deadline])
   @@index([deletedAt])
+  @@index([responsibleId])
 }
 
 model FunderOpportunityDocument {
@@ -12739,6 +12963,7 @@ model FunderInteraction {
   @@index([type])
   @@index([responsibleId])
   @@index([deletedAt])
+  @@index([userId])
 }
 
 model FunderReport {
@@ -12810,6 +13035,8 @@ model FunderContract {
   @@index([status])
   @@index([endDate])
   @@index([deletedAt])
+  @@index([responsibleId])
+  @@index([funderContactId])
 }
 
 // ⑫ Indicadores e impacto (configuráveis por financiador, programa ou financiamento)
@@ -13154,6 +13381,8 @@ model LibraryItem {
   @@index([deletedAt])
   @@index([departmentId])
   @@index([mandatory])
+  @@index([unitId])
+  @@index([approverId])
 }
 
 model LibraryAccess {
@@ -13188,6 +13417,7 @@ model LibraryRating {
 
   @@unique([itemId, userId])
   @@index([itemId])
+  @@index([userId])
 }
 
 model LibraryComment {
@@ -13321,6 +13551,7 @@ model IssuedCertificate {
   @@index([isRevoked])
   @@index([issuedAt])
   @@index([deletedAt])
+  @@index([templateId])
 }
 
 model DigitalBadge {
@@ -13554,6 +13785,7 @@ model LmsLiveSession {
   @@index([scheduledAt])
   @@index([status])
   @@index([deletedAt])
+  @@index([instructorId])
 }
 
 model LmsLiveAttendance {
@@ -13815,6 +14047,7 @@ model UserEvaluation {
   @@index([userId])
   @@index([status])
   @@index([deletedAt])
+  @@index([evaluatorId])
 }
 
 enum OkrType {
@@ -14022,6 +14255,8 @@ model EvaluationCampaign {
 
   @@index([status])
   @@index([deletedAt])
+  @@index([templateId])
+  @@index([formId])
 }
 
 model EvaluationCampaignForm {
@@ -14056,6 +14291,7 @@ model EvaluationCampaignQuestion {
   competency Competency?            @relation(fields: [competencyId], references: [id])
 
   @@index([formId])
+  @@index([competencyId])
 }
 
 model EvaluationScale {
@@ -14107,6 +14343,8 @@ model EvaluationCriteria {
   templateLinks EvaluationTemplateCriteria[]
 
   @@index([deletedAt])
+  @@index([scaleId])
+  @@index([competencyId])
 }
 
 model EvaluationTemplate {
@@ -14128,6 +14366,7 @@ model EvaluationTemplate {
   campaigns EvaluationCampaign[]
 
   @@index([deletedAt])
+  @@index([scaleId])
 }
 
 model EvaluationTemplateCriteria {
@@ -14141,6 +14380,7 @@ model EvaluationTemplateCriteria {
   criteria EvaluationCriteria @relation(fields: [criteriaId], references: [id])
 
   @@unique([templateId, criteriaId])
+  @@index([criteriaId])
 }
 
 model SavedReport {
@@ -14295,6 +14535,7 @@ model Recognition {
   @@index([fromUserId])
   @@index([public])
   @@index([createdAt])
+  @@index([badgeId])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -14353,6 +14594,7 @@ model EngagementAction {
   @@index([assigneeId])
   @@index([createdById])
   @@index([surveyId])
+  @@index([departmentId])
 }
 
 enum EngagementFeedbackType {
@@ -14460,6 +14702,7 @@ model Eval360CycleCompetency {
 
   @@unique([cycleId, competencyId])
   @@index([cycleId])
+  @@index([competencyId])
 }
 
 // ─── QUESTIONÁRIOS 360° (docs/evaluation360.md §6) ──────────────────────
@@ -14504,6 +14747,7 @@ model Eval360QuestionnaireCompetency {
 
   @@unique([questionnaireId, competencyId])
   @@index([questionnaireId])
+  @@index([competencyId])
 }
 
 model Eval360QuestionnaireQuestion {
@@ -14631,6 +14875,7 @@ model EvaluationAnswer {
 
   @@unique([responseId, questionId])
   @@index([responseId])
+  @@index([questionId])
 }
 
 model EvaluationResult {
@@ -14949,6 +15194,7 @@ model AvatarTrainingSession {
 
   @@index([programId])
   @@index([status])
+  @@index([avatarId])
 }
 
 model AvatarTrainingAssignment {
@@ -14976,6 +15222,7 @@ model AvatarTrainingAssignment {
   @@index([userId])
   @@index([status])
   @@index([dueDate])
+  @@index([enrollmentId])
 }
 
 model AvatarTrainingAttempt {
@@ -15037,6 +15284,8 @@ model AvatarTrainingAssessment {
   updatedAt               DateTime              @updatedAt
   session                 AvatarTrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   assessment              Assessment?           @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
+
+  @@index([assessmentId])
 }
 
 // Fase 6 — competências demonstradas numa tentativa concluída. O nível oficial
@@ -15142,6 +15391,7 @@ model FunderDocument {
   @@index([type])
   @@index([validUntil])
   @@index([deletedAt])
+  @@index([responsibleId])
 }
 
 // ⑲ Consentimentos de comunicação (um registo por financiador)

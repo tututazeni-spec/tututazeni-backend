@@ -19,6 +19,7 @@ import {
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
+import { MAX_UNPAGINATED_LIST } from '../common/helpers/pagination.helper';
 import {
   CreateCareerPathDto,
   UpdateCareerPathDto,
@@ -849,6 +850,7 @@ export class CareerService {
         },
       },
       orderBy: { appliedAt: 'asc' },
+      take: MAX_UNPAGINATED_LIST,
     });
   }
 

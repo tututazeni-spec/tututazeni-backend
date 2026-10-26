@@ -46,16 +46,11 @@ import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 import { UploadThrottle } from '../common/security/upload-throttle';
+
+import { ADMIN_RH_LEADERSHIP_INSTRUCTOR_ROLES } from '../auth/enums/role-groups';
 // Papéis que podem CRIAR formações. Quem não for ADMIN/RH só gere as que
 // criou — aplicado ao nível do serviço (assertCanManage), não aqui.
-const CAN_CREATE_TRAININGS = [
-  Role.ADMIN,
-  Role.RH,
-  Role.GESTOR,
-  Role.INSTRUCTOR,
-  Role.DIRECTOR,
-  Role.LIDER,
-];
+const CAN_CREATE_TRAININGS = ADMIN_RH_LEADERSHIP_INSTRUCTOR_ROLES;
 
 @ApiTags('Trainings')
 @ApiBearerAuth()

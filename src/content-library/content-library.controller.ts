@@ -18,7 +18,7 @@ import { StripInlineFilesInterceptor } from './strip-inline-files.interceptor';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
-import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
+import { AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 import {
   CreateContentDto,
   UpdateContentDto,
@@ -29,8 +29,10 @@ import {
 } from './content-library.dto';
 
 import { UploadThrottle } from '../common/security/upload-throttle';
-const AUTHOR_ROLES = [Role.ADMIN, Role.RH, Role.INSTRUCTOR] as const;
-const ADMIN_ROLES = [Role.ADMIN, Role.RH] as const;
+
+import { ADMIN_RH_INSTRUCTOR_ROLES, ADMIN_RH_ROLES } from '../auth/enums/role-groups';
+const AUTHOR_ROLES = ADMIN_RH_INSTRUCTOR_ROLES;
+const ADMIN_ROLES = ADMIN_RH_ROLES;
 
 @ApiTags('Content Library')
 @ApiBearerAuth()

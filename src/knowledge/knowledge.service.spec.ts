@@ -164,4 +164,42 @@ describe('KnowledgeService', () => {
       expect(result.name).toBe('Nova Categoria');
     });
   });
+
+  describe('getAcknowledgementReport', () => {
+    it('calcula pendentes e total na BD (active + sem leitura do artigo)', async () => {
+      mockPrisma.knowledgeArticle.findUnique.mockResolvedValue({ id: 7, title: 'Política' });
+      mockPrisma.articleAcknowledgement.findMany = jest
+        .fn()
+        .mockResolvedValue([{ userId: 1, user: { id: 1, fullName: 'Ana' } }]);
+      const pending = [{ id: 2, fullName: 'Rui', department: null }];
+      (mockPrisma as any).user.findMany = jest.fn().mockResolvedValue(pending);
+      (mockPrisma as any).user.count = jest.fn().mockResolvedValue(4);
+
+      const r = await service.getAcknowledgementReport(7);
+
+      expect((mockPrisma as any).user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { active: true, articleAcknowledgements: { none: { articleId: 7 } } },
+        }),
+      );
+      expect(r).toMatchObject({
+        articleId: 7,
+        total: 4,
+        read: 1,
+        notRead: 1,
+        readPct: 25,
+        acknowledgedUsers: [{ id: 1, fullName: 'Ana' }],
+        pendingUsers: pending,
+      });
+    });
+
+    it('sem utilizadores activos: readPct 0', async () => {
+      mockPrisma.knowledgeArticle.findUnique.mockResolvedValue({ id: 7, title: 'P' });
+      mockPrisma.articleAcknowledgement.findMany = jest.fn().mockResolvedValue([]);
+      (mockPrisma as any).user.findMany = jest.fn().mockResolvedValue([]);
+      (mockPrisma as any).user.count = jest.fn().mockResolvedValue(0);
+      const r = await service.getAcknowledgementReport(7);
+      expect(r).toMatchObject({ total: 0, readPct: 0, notRead: 0 });
+    });
+  });
 });

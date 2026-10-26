@@ -8,7 +8,9 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { GlobalSearchDto, TypedSearchDto, AutocompleteDto, SearchEntityType } from './search.dto';
 
-const ADMIN = ['ADMIN', 'RH'] as const;
+import { ADMIN_RH_ROLES } from '../auth/enums/role-groups';
+
+const ADMIN = ADMIN_RH_ROLES;
 
 @ApiTags('Search — Universal Search')
 @ApiBearerAuth()

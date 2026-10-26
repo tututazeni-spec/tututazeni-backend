@@ -3,6 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../../../src/app.module';
 import { getToken } from '../helpers/auth.helper';
+import { countWorkDays } from '../../../src/leave-management/leave-calendar.helper';
 
 describe('Attendance Integration', () => {
   let app: INestApplication;
@@ -146,11 +147,12 @@ describe('Attendance Integration', () => {
   describe('POST /attendance/leaves → consolidação com leave-management (Fase B)', () => {
     it('licença aprovada automaticamente (sem gestor atribuído) deduz o saldo real de LeaveBalance', async () => {
       // Um único dia útil, pelo menos 60 dias no futuro — nunca +60/+61 fixos,
-      // que podem cair num fim-de-semana (workDays conta 0 dias úteis, o
-      // saldo não é deduzido e a asserção abaixo falha de forma intermitente
-      // consoante a data em que os testes correm).
+      // que podem cair num fim-de-semana ou feriado (ex.: Natal): countWorkDays
+      // dá 0, o saldo não é deduzido e a asserção abaixo falha de forma
+      // intermitente consoante a data em que os testes correm. Usa o mesmo
+      // countWorkDays do serviço para escolher o dia.
       const day = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
-      while (day.getDay() === 0 || day.getDay() === 6) day.setDate(day.getDate() + 1);
+      while (countWorkDays(day, day) === 0) day.setDate(day.getDate() + 1);
       const start = day.toISOString().split('T')[0];
       const end = start;
 

@@ -34,8 +34,10 @@ import {
 import { effectiveDependencies } from './process-workflow';
 import { ApprovalFilterDto, DecideApprovalDto, RespondApprovalDto } from './process-standard.dto';
 
+import { ADMIN_RH_ROLES } from '../auth/enums/role-groups';
+
 const VIEW_ALL_ROLES = [Role.ADMIN, Role.RH, Role.GESTOR, Role.AUDITOR];
-const ADMIN_ROLES = [Role.ADMIN, Role.RH];
+const ADMIN_ROLES = ADMIN_RH_ROLES;
 const DECIDABLE = ['PENDING', 'ESCALATED'];
 const user2 = { select: { id: true, fullName: true } } as const;
 

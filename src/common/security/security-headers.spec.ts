@@ -36,6 +36,12 @@ describe('security headers (produção, atrás do proxy TLS)', () => {
     expect(res.headers['x-powered-by']).toBeUndefined();
   });
 
+  it('emite X-XSS-Protection desligado e Referrer-Policy restritiva', async () => {
+    const res = await request(app).get('/ping').set('X-Forwarded-Proto', 'https');
+    expect(res.headers['x-xss-protection']).toBe('0');
+    expect(res.headers['referrer-policy']).toBe('no-referrer');
+  });
+
   it.each(['GET', 'POST'] as const)(
     'bloqueia downgrade: %s em http → 308 para https',
     async method => {

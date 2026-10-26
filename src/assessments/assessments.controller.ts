@@ -30,7 +30,9 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
-import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
+import { AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
+
+import { ADMIN_RH_LEADERSHIP_INSTRUCTOR_ROLES } from '../auth/enums/role-groups';
 
 // Papéis que podem criar/gerir avaliações formais (EXAM) dentro do módulo
 // evaluation — ADMIN/RH mantêm-se (também usados para os quizzes de curso
@@ -39,14 +41,7 @@ import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 // frontend a consumir POST/PUT/DELETE /assessments (só leitura via
 // ListView/AssessmentPlayer/ReviewView), por isso alargar aqui não muda
 // nenhum fluxo LMS-quiz já em uso.
-const EVAL_CREATOR_ROLES = [
-  Role.ADMIN,
-  Role.RH,
-  Role.GESTOR,
-  Role.INSTRUCTOR,
-  Role.DIRECTOR,
-  Role.LIDER,
-] as const;
+const EVAL_CREATOR_ROLES = ADMIN_RH_LEADERSHIP_INSTRUCTOR_ROLES;
 
 @ApiTags('Assessments')
 @ApiBearerAuth()

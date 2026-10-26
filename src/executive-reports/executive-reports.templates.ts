@@ -4,6 +4,8 @@
 // o código + versão do modelo e a versão das fórmulas (§12.4).
 import type { KpiCode } from './executive-reports.kpi-catalog';
 
+import { ADMIN_DIRECTOR_ROLES } from '../auth/enums/role-groups';
+
 /** Incrementar quando uma fórmula do catálogo de KPIs mudar (§12.4). */
 export const FORMULA_VERSION = '1';
 
@@ -118,7 +120,7 @@ export interface TemplateDef {
   roles?: string[];
 }
 
-const RESTRICTED_ROLES = ['ADMIN', 'DIRECTOR'];
+const RESTRICTED_ROLES = ADMIN_DIRECTOR_ROLES;
 
 export const REPORT_TEMPLATES: TemplateDef[] = [
   {

@@ -7,7 +7,9 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles, CurrentUser, CurrentUserData } from '../common/decorators';
 import { UpdateRoiConfigDto } from './roi-impact.dto';
 
-const ADMIN = ['ADMIN', 'RH', 'DIRECTOR'] as const;
+import { ADMIN_RH_DIRECTOR_ROLES } from '../auth/enums/role-groups';
+
+const ADMIN = ADMIN_RH_DIRECTOR_ROLES;
 
 @ApiTags('ROI & Impact — Configurações')
 @ApiBearerAuth()

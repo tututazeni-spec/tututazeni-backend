@@ -33,7 +33,9 @@ import {
 } from './leave-management.dto';
 
 import { UploadThrottle } from '../common/security/upload-throttle';
-const REVIEWER_ROLES = [Role.ADMIN, Role.RH, Role.GESTOR, Role.DIRECTOR, Role.LIDER];
+
+import { ADMIN_RH_LEADERSHIP_ROLES } from '../auth/enums/role-groups';
+const REVIEWER_ROLES = ADMIN_RH_LEADERSHIP_ROLES;
 
 @ApiTags('Leave Management — Ausências')
 @ApiBearerAuth()

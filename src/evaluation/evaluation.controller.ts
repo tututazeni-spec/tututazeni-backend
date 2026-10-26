@@ -47,9 +47,11 @@ import {
   EvaluationReportFilterDto,
 } from './evaluation.dto';
 
+import { ADMIN_RH_LIDER_GESTOR_ROLES, ADMIN_RH_ROLES } from '../auth/enums/role-groups';
+
 const ALL_ROLES = AUTHENTICATED_ROLES;
-const MGMT_ROLES = [Role.ADMIN, Role.RH, Role.LIDER, Role.GESTOR] as const;
-const ADMIN_ROLES = [Role.ADMIN, Role.RH] as const;
+const MGMT_ROLES = ADMIN_RH_LIDER_GESTOR_ROLES;
+const ADMIN_ROLES = ADMIN_RH_ROLES;
 
 @ApiTags('Evaluation 360°')
 @ApiBearerAuth()

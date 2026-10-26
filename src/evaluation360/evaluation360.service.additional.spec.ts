@@ -472,6 +472,50 @@ describe('Evaluation360Service (additional)', () => {
     });
   });
 
+  // ─── escritas em lote (addParticipants / distribuição) ────────────────────
+
+  describe('escritas em lote', () => {
+    it('addParticipants: um createMany; duplicados contam como skipped', async () => {
+      cycleMock.findUnique.mockResolvedValue(baseCycle);
+      const createMany = jest.fn().mockResolvedValue({ count: 2 });
+      mockPrisma.cycleParticipant = { createMany };
+      const result = await service.addParticipants(
+        'cycle-1',
+        { userIds: ['u1', 'u2', 'u3'] } as any,
+        'admin-1',
+      );
+      expect(createMany).toHaveBeenCalledTimes(1);
+      expect(createMany).toHaveBeenCalledWith({
+        data: ['u1', 'u2', 'u3'].map(userId => ({ cycleId: 'cycle-1', userId, status: 'PENDING' })),
+        skipDuplicates: true,
+      });
+      expect(result).toEqual({ added: 2, skipped: 1 });
+    });
+
+    it('addParticipantsByDepartment: um createMany com os utilizadores activos', async () => {
+      cycleMock.findUnique.mockResolvedValue(baseCycle);
+      mockPrisma.user.findMany.mockResolvedValueOnce([{ id: 1 }, { id: 2 }]);
+      const createMany = jest.fn().mockResolvedValue({ count: 2 });
+      mockPrisma.cycleParticipant = { createMany };
+      const result = await service.addParticipantsByDepartment(
+        'cycle-1',
+        { departmentIds: ['5'] } as any,
+        'admin-1',
+      );
+      expect(createMany).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ added: 2, skipped: 0 });
+    });
+
+    it('addParticipants: lista vazia não toca na BD', async () => {
+      cycleMock.findUnique.mockResolvedValue(baseCycle);
+      const createMany = jest.fn();
+      mockPrisma.cycleParticipant = { createMany };
+      const result = await service.addParticipants('cycle-1', { userIds: [] } as any, 'admin-1');
+      expect(createMany).not.toHaveBeenCalled();
+      expect(result).toEqual({ added: 0, skipped: 0 });
+    });
+  });
+
   // ─── sendCycleInvites ────────────────────────────────────────────────────
 
   describe('sendCycleInvites', () => {
@@ -486,6 +530,13 @@ describe('Evaluation360Service (additional)', () => {
       };
       const result = await service.sendCycleInvites('cycle-1', 'admin-1');
       expect(result.sent).toBe(2);
+      expect(mockPrisma.evaluatorAssignment.update).not.toHaveBeenCalled();
+      expect(mockPrisma.evaluatorAssignment.updateMany).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.evaluatorAssignment.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['a1', 'a2'] } },
+        data: { status: 'INVITED', invitedAt: expect.any(Date) },
+      });
+      expect(mockEvents.emit).toHaveBeenCalledTimes(2);
       expect(mockEvents.emit).toHaveBeenCalledWith(
         'evaluation.invitation.send',
         expect.any(Object),
@@ -503,6 +554,7 @@ describe('Evaluation360Service (additional)', () => {
       };
       const result = await service.sendCycleInvites('cycle-1', 'admin-1');
       expect(result.sent).toBe(0);
+      expect(mockPrisma.evaluatorAssignment.updateMany).not.toHaveBeenCalled();
     });
   });
 
@@ -521,6 +573,11 @@ describe('Evaluation360Service (additional)', () => {
       };
       const result = await service.sendReminders('cycle-1', { channels: ['EMAIL'] }, 'admin-1');
       expect(result.reminded).toBe(2);
+      expect(mockPrisma.evaluatorAssignment.update).not.toHaveBeenCalled();
+      expect(mockPrisma.evaluatorAssignment.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['a1', 'a2'] } },
+        data: { reminderCount: { increment: 1 }, lastReminderAt: expect.any(Date) },
+      });
       expect(mockEvents.emit).toHaveBeenCalledWith('evaluation.reminder.send', expect.any(Object));
     });
 

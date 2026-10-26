@@ -78,6 +78,44 @@ describe('csrfHeaderMiddleware', () => {
   });
 });
 
+describe('csrfHeaderMiddleware — validação de Origin/Referer', () => {
+  const allowed = ['https://innova.ao'];
+  const ok = { [CSRF_HEADER]: CSRF_HEADER_VALUE };
+
+  function run(headers: Record<string, string>) {
+    const req = { method: 'POST', cookies: { token: 'x' }, headers } as never;
+    const json = jest.fn();
+    const status = jest.fn().mockReturnValue({ json });
+    const next = jest.fn();
+    csrfHeaderMiddleware('token', { allowedOrigins: allowed })(req, { status } as never, next);
+    return { status, next };
+  }
+
+  it('aceita Origin da allowlist', () => {
+    expect(run({ ...ok, origin: 'https://innova.ao' }).next).toHaveBeenCalled();
+  });
+
+  it('rejeita Origin fora da allowlist', () => {
+    const r = run({ ...ok, origin: 'https://evil.example' });
+    expect(r.status).toHaveBeenCalledWith(403);
+    expect(r.next).not.toHaveBeenCalled();
+  });
+
+  it('rejeita Origin: null', () => {
+    expect(run({ ...ok, origin: 'null' }).status).toHaveBeenCalledWith(403);
+  });
+
+  it('sem Origin, valida o Referer', () => {
+    expect(run({ ...ok, referer: 'https://innova.ao/courses/1' }).next).toHaveBeenCalled();
+    expect(run({ ...ok, referer: 'https://evil.example/x' }).status).toHaveBeenCalledWith(403);
+    expect(run({ ...ok, referer: 'lixo' }).status).toHaveBeenCalledWith(403);
+  });
+
+  it('sem Origin nem Referer (cliente não-browser) passa para as restantes camadas', () => {
+    expect(run(ok).next).toHaveBeenCalled();
+  });
+});
+
 describe('csrfHeaderMiddleware — token double-submit assinado', () => {
   const secret = 'segredo-de-teste';
   const session = 'jwt-da-sessao';

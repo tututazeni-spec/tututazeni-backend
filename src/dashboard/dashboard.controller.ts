@@ -6,11 +6,13 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { DashboardFilterDto, OrgFilterDto, DashboardPeriod } from './dashboard.dto';
-import { AUTHENTICATED_ROLES, Role } from '../auth/enums/role.enum';
+import { AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
+
+import { ADMIN_RH_LIDER_GESTOR_ROLES, ADMIN_RH_ROLES } from '../auth/enums/role-groups';
 
 const ALL_ROLES = AUTHENTICATED_ROLES;
-const MGMT_ROLES = [Role.ADMIN, Role.RH, Role.LIDER, Role.GESTOR] as const;
-const ADMIN_ROLES = [Role.ADMIN, Role.RH] as const;
+const MGMT_ROLES = ADMIN_RH_LIDER_GESTOR_ROLES;
+const ADMIN_ROLES = ADMIN_RH_ROLES;
 
 @ApiTags('Dashboard')
 @ApiBearerAuth()

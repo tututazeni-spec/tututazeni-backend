@@ -8,7 +8,6 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCanAccess, isPrivileged } from '../common/authz/ownership';
-import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
 import { buildCsvString } from '../common/utils/csv-export.util';
 import {
@@ -19,7 +18,9 @@ import {
   TrainingPlanFilterDto,
 } from './trainings.dto';
 
-const PRIVILEGED_ROLES = [Role.ADMIN, Role.RH];
+import { ADMIN_RH_ROLES } from '../auth/enums/role-groups';
+
+const PRIVILEGED_ROLES = ADMIN_RH_ROLES;
 
 @Injectable()
 export class TrainingPlanService {

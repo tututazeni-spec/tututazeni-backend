@@ -58,6 +58,7 @@ async function bootstrap() {
   app.use(enforceHttpsMiddleware(isProd));
   app.use(compression());
   app.use(cookieParser());
+  const allowedOrigins = parseAllowedOrigins(process.env.ALLOWED_ORIGINS, isProd);
   // Segunda camada de defesa CSRF, além de SameSite=Lax + CORS restrito
   // (ver csrf-header-guard.ts) — tem de correr depois do cookieParser.
   app.use(
@@ -65,6 +66,7 @@ async function bootstrap() {
       secret: process.env.JWT_SECRET,
       strict: process.env.CSRF_TOKEN_STRICT === 'true',
       isProd,
+      allowedOrigins,
     }),
   );
 
@@ -87,7 +89,7 @@ async function bootstrap() {
 
   // ─── CORS ────────────────────────────────────────────────────────────────
   app.enableCors({
-    origin: parseAllowedOrigins(process.env.ALLOWED_ORIGINS, isProd),
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });

@@ -3,6 +3,13 @@
 // duplicada em dezenas de serviços. Agnósticos do cliente Prisma usado
 // (this.prisma, this.prisma.read, etc.) — recebem apenas valores já calculados.
 
+/**
+ * Tecto de segurança para listagens que devolvem um array simples (sem paginação
+ * no contrato). Não é um limite funcional: serve só para que uma tabela que cresça
+ * não devolva dezenas de milhares de linhas numa resposta.
+ */
+export const MAX_UNPAGINATED_LIST = 500;
+
 export interface PaginationMeta {
   total: number;
   page: number;

@@ -10,7 +10,6 @@ import {
 import { Prisma, TrainingAssessmentRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCanAccess, isPrivileged } from '../common/authz/ownership';
-import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
 import { AuditService } from '../common/services/audit.service';
 import { CompetenciesService } from '../competencies/competencies.service';
@@ -40,11 +39,13 @@ import {
 } from './trainings.dto';
 import { buildCsvString } from '../common/utils/csv-export.util';
 
+import { ADMIN_RH_ROLES } from '../auth/enums/role-groups';
+
 // Papéis com acesso total de gestão a QUALQUER formação. Os restantes
 // papéis autorizados a criar formações (GESTOR, INSTRUCTOR, DIRECTOR,
 // LIDER — ver TrainingController) só gerem as que criaram (createdById),
 // mesmo padrão de src/common/authz/ownership.ts usado noutros módulos.
-const PRIVILEGED_ROLES = [Role.ADMIN, Role.RH];
+const PRIVILEGED_ROLES = ADMIN_RH_ROLES;
 
 @Injectable()
 export class TrainingService {

@@ -47,10 +47,36 @@ export interface CsrfMiddlewareOptions {
    */
   strict?: boolean;
   isProd?: boolean;
+  /** Allowlist de origens (a mesma do CORS). Se definida, Origin/Referer de escritas com sessão têm de pertencer-lhe. */
+  allowedOrigins?: string[];
+}
+
+function refererOrigin(referer: unknown): string | undefined {
+  if (typeof referer !== 'string') return undefined;
+  try {
+    return new URL(referer).origin;
+  } catch {
+    return 'invalid';
+  }
+}
+
+/**
+ * Valida Origin (ou, na sua falta, Referer) contra a allowlist. Sem nenhum dos dois
+ * (clientes não-browser) passa: aí contam o cabeçalho custom e o token assinado.
+ * `Origin: null` (iframes sandbox, redirects cross-site) é rejeitado.
+ */
+export function isOriginAllowed(
+  headers: Record<string, unknown>,
+  allowedOrigins: string[],
+): boolean {
+  const origin = typeof headers.origin === 'string' ? headers.origin : undefined;
+  const candidate = origin ?? refererOrigin(headers.referer);
+  if (candidate === undefined) return true;
+  return allowedOrigins.includes(candidate);
 }
 
 export function csrfHeaderMiddleware(tokenCookieName: string, options: CsrfMiddlewareOptions = {}) {
-  const { secret, strict = false, isProd = false } = options;
+  const { secret, strict = false, isProd = false, allowedOrigins } = options;
   return (req: Request, res: Response, next: NextFunction): void => {
     const cookies = req.cookies as Record<string, unknown> | undefined;
     const session = cookies?.[tokenCookieName];
@@ -69,6 +95,13 @@ export function csrfHeaderMiddleware(tokenCookieName: string, options: CsrfMiddl
 
     if (!requiresCsrfHeaderCheck(req.method, cookies, tokenCookieName)) {
       next();
+      return;
+    }
+    if (allowedOrigins && !isOriginAllowed(req.headers, allowedOrigins)) {
+      res.status(403).json({
+        statusCode: 403,
+        message: 'Pedido rejeitado: origem não autorizada',
+      });
       return;
     }
     if (req.headers[CSRF_HEADER] !== CSRF_HEADER_VALUE) {

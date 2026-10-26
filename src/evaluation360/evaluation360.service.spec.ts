@@ -52,6 +52,7 @@ const objectiveMock = { findMany: jest.fn().mockResolvedValue([]) };
 const competencyEvaluationMock = { findMany: jest.fn().mockResolvedValue([]) };
 
 const crud = () => ({
+  createMany: jest.fn().mockResolvedValue({ count: 0 }),
   create: jest.fn().mockResolvedValue({ id: 'id-1' }),
   findMany: jest.fn().mockResolvedValue([]),
   findUnique: jest.fn().mockResolvedValue(null),
@@ -404,7 +405,7 @@ describe('Evaluation360Service', () => {
         { userIds: ['user-1', 'user-2'] } as any,
         'admin-1',
       );
-      expect(result).toBeDefined();
+      expect(result).toEqual({ added: 0, skipped: 2 });
     });
   });
 

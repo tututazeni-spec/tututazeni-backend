@@ -10,6 +10,8 @@ import { CurrentUserData } from '../common/decorators';
 import { UpdateRolePermissionDto } from './automation-governance.dto';
 import { AutomationAuditService, diffFields } from './automation-audit.service';
 
+import { ADMIN_RH_ROLES } from '../auth/enums/role-groups';
+
 export const AUTOMATION_ACTIONS = [
   'view',
   'create',
@@ -40,7 +42,7 @@ const ALL_FALSE = Object.fromEntries(AUTOMATION_ACTIONS.map(a => [a, false])) as
 >;
 
 /** Perfis que chegam ao módulo (ver @Roles do controller) — o ADMIN nunca é restringido. */
-export const MANAGED_ROLES = ['ADMIN', 'RH'] as const;
+export const MANAGED_ROLES = ADMIN_RH_ROLES;
 
 export const DEFAULT_GRANTS: Record<string, RoleGrant> = {
   ADMIN: { roleCode: 'ADMIN', actions: ALL_TRUE, scope: 'ALL' },
