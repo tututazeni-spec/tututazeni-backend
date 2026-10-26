@@ -5,8 +5,11 @@
   BadRequestException,
   ForbiddenException,
   Logger,
+  Optional,
 } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { Cron } from '@nestjs/schedule';
+import { CacheService } from '../cache/cache.service';
 import { assertLessonFileClean } from '../common/authz/lesson-files';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -73,6 +76,33 @@ const COURSE_DETAIL_INCLUDE = {
   department: { select: { id: true, name: true, code: true } },
 } as const;
 
+// ── Cache do catálogo (GET /courses) ──────────────────────────────────────────
+// O catálogo não depende do utilizador (só dos filtros), mas custa 6 queries por pedido e, no
+// perfil de carga, o pipeline do Prisma é a maior fatia do CPU da thread principal.
+// - Chave = versão do catálogo + hash dos filtros. Cada mutação de curso muda a versão, o que
+//   invalida de uma vez todas as variantes (o CacheService não apaga por padrão).
+// - TTL curto: cursos alterados fora deste service (ex.: matrículas, que mexem em
+//   `_count.enrollments` e no progresso médio) ficam desactualizados no máximo este tempo.
+// - Pesquisa livre (search/unit) não é cacheada: cardinalidade ilimitada.
+// - Com RLS_ENABLED o resultado varia por utilizador (User/Enrollment têm políticas por dono):
+//   uma cache partilhada misturaria vistas, por isso fica desligada.
+const CATALOG_CACHE_TTL_SECONDS = 30;
+const CATALOG_VERSION_KEY = 'courses:catalog:version';
+const CATALOG_VERSION_TTL_SECONDS = 24 * 60 * 60;
+
+function isCatalogCacheable(filters: CourseFilterDto): boolean {
+  return !filters.search && !filters.unit && process.env.RLS_ENABLED !== 'true';
+}
+
+function catalogCacheKey(version: number, filters: CourseFilterDto): string {
+  // Todos os filtros definidos, por ordem de nome: um filtro novo no DTO entra na chave sozinho.
+  const entries = Object.entries(filters)
+    .filter(([, value]) => value !== undefined)
+    .sort(([a], [b]) => a.localeCompare(b));
+  const digest = createHash('sha1').update(JSON.stringify(entries)).digest('hex');
+  return `courses:catalog:${version}:${digest}`;
+}
+
 function toDateOrNull(value?: string | null) {
   return value ? new Date(value) : value === null ? null : undefined;
 }
@@ -104,11 +134,27 @@ export class CoursesService {
     private prisma: PrismaService,
     private readonly courseCompletion: CourseCompletionService,
     private readonly certificates: CertificatesService,
+    // Opcional: specs e módulos sem CacheModule continuam a montar o serviço (sempre à BD).
+    @Optional() private readonly cache?: CacheService,
   ) {}
 
   // ─── Catálogo ─────────────────────────────────────────────────────────────
 
   async findAll(filters: CourseFilterDto) {
+    const cache = this.cache;
+    if (!cache || !isCatalogCacheable(filters)) return this.loadCatalog(filters);
+    const version = (await cache.get<number>(CATALOG_VERSION_KEY)) ?? 0;
+    return cache.getOrSet(catalogCacheKey(version, filters), CATALOG_CACHE_TTL_SECONDS, () =>
+      this.loadCatalog(filters),
+    );
+  }
+
+  /** Muda a versão do catálogo: chamar depois de cada escrita que altere o que GET /courses mostra. */
+  private async invalidateCatalog(): Promise<void> {
+    await this.cache?.set(CATALOG_VERSION_KEY, Date.now(), CATALOG_VERSION_TTL_SECONDS);
+  }
+
+  private async loadCatalog(filters: CourseFilterDto) {
     const {
       page = 1,
       limit = 20,
@@ -261,12 +307,13 @@ export class CoursesService {
       data: { courseId: course.id, totalEnrollments: 0, totalCompleted: 0, avgRating: 0 },
     });
 
+    await this.invalidateCatalog();
     return course;
   }
 
   async update(id: number, dto: UpdateCourseDto) {
     await this.findOne(id);
-    return this.prisma.course.update({
+    const updated = await this.prisma.course.update({
       where: { id },
       data: {
         ...dto,
@@ -274,6 +321,8 @@ export class CoursesService {
         endDate: toDateOrNull(dto.endDate),
       },
     });
+    await this.invalidateCatalog();
+    return updated;
   }
 
   async publish(id: number) {
@@ -289,15 +338,22 @@ export class CoursesService {
     if (publishedModules === 0) {
       throw new BadRequestException('Publique pelo menos um módulo antes de publicar o curso');
     }
-    return this.prisma.course.update({
+    const published = await this.prisma.course.update({
       where: { id },
       data: { status: 'PUBLISHED', publishedAt: new Date() },
     });
+    await this.invalidateCatalog();
+    return published;
   }
 
   async archive(id: number) {
     await this.findOne(id);
-    return this.prisma.course.update({ where: { id }, data: { status: 'ARCHIVED' } });
+    const archived = await this.prisma.course.update({
+      where: { id },
+      data: { status: 'ARCHIVED' },
+    });
+    await this.invalidateCatalog();
+    return archived;
   }
 
   async duplicate(id: number) {
@@ -443,6 +499,7 @@ export class CoursesService {
       data: { courseId: copy.id, totalEnrollments: 0, totalCompleted: 0, avgRating: 0 },
     });
 
+    await this.invalidateCatalog();
     return copy;
   }
 
@@ -458,6 +515,7 @@ export class CoursesService {
       where: { id },
       data: { deletedAt: new Date(), deletedById: userId ?? null },
     });
+    await this.invalidateCatalog();
     return { message: 'Curso movido para a reciclagem' };
   }
 
@@ -496,6 +554,7 @@ export class CoursesService {
       where: { id },
       data: { deletedAt: null, deletedById: null },
     });
+    await this.invalidateCatalog();
     return { message: 'Curso restaurado' };
   }
 
@@ -527,15 +586,21 @@ export class CoursesService {
 
   async addCompetency(courseId: number, competencyId: number) {
     await this.findOne(courseId);
-    return this.prisma.courseCompetency.upsert({
+    const linked = await this.prisma.courseCompetency.upsert({
       where: { courseId_competencyId: { courseId, competencyId } },
       create: { courseId, competencyId },
       update: {},
     });
+    await this.invalidateCatalog();
+    return linked;
   }
 
   async removeCompetency(courseId: number, competencyId: number) {
-    return this.prisma.courseCompetency.deleteMany({ where: { courseId, competencyId } });
+    const removed = await this.prisma.courseCompetency.deleteMany({
+      where: { courseId, competencyId },
+    });
+    await this.invalidateCatalog();
+    return removed;
   }
 
   // ─── Módulos ──────────────────────────────────────────────────────────────
@@ -552,6 +617,7 @@ export class CoursesService {
       },
     });
     await this.syncModuleCompetencies(mod.id, competencyIds);
+    await this.invalidateCatalog(); // _count.modules do catálogo
     return mod;
   }
 
@@ -612,7 +678,9 @@ export class CoursesService {
       await this.prisma.quiz.deleteMany({ where: { id: { in: quizzes.map(q => q.id) } } });
     }
 
-    return this.prisma.courseModule.delete({ where: { id: moduleId } });
+    const deleted = await this.prisma.courseModule.delete({ where: { id: moduleId } });
+    await this.invalidateCatalog(); // _count.modules do catálogo
+    return deleted;
   }
 
   // ─── Aulas ────────────────────────────────────────────────────────────────
