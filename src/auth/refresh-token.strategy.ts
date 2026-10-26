@@ -4,6 +4,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy, JwtFromRequestFunction } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
+import { toSecretKeyObject } from './jwt-key';
 
 export const refreshCookieExtractor: JwtFromRequestFunction = (req: Request) => {
   const cookies = (req?.cookies ?? {}) as Record<string, string | undefined>;
@@ -22,7 +23,8 @@ export class RefreshTokenStrategy extends PassportStrategy(Strategy, 'jwt-refres
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([refreshCookieExtractor]),
       ignoreExpiration: false,
-      secretOrKey: secret,
+      // KeyObject pré-criado (ver jwt-key.ts); os tipos do passport-jwt só declaram string | Buffer.
+      secretOrKey: toSecretKeyObject(secret) as unknown as Buffer,
       passReqToCallback: true,
     });
   }

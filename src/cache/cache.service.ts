@@ -75,6 +75,40 @@ export class CacheService implements OnModuleDestroy {
     }
   }
 
+  /**
+   * Lê várias chaves numa só viagem (MGET). Mesma semântica fail-open de get(): flag off, Redis em
+   * baixo ou valor ilegível → null nessa posição. Pressupõe Redis de nó único (num Cluster, MGET
+   * entre slots diferentes falha).
+   */
+  async mget<T>(keys: string[]): Promise<(T | null)[]> {
+    if (keys.length === 0) return [];
+    if (!this.cacheEnabled) return keys.map((): null => null);
+    try {
+      const raw = await this.redis.mget(...keys);
+      return raw.map(hit => {
+        if (hit) {
+          try {
+            const value = JSON.parse(hit) as T;
+            this.cacheCounter.inc({ result: 'hit' });
+            return value;
+          } catch {
+            // valor corrompido: tratado como miss, só nesta posição
+          }
+        }
+        this.cacheCounter.inc({ result: 'miss' });
+        return null;
+      });
+    } catch (e: unknown) {
+      this.logger.warn({
+        op: 'mget',
+        keys,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'cache mget falhou — a devolver null',
+      });
+      return keys.map((): null => null);
+    }
+  }
+
   /** Escreve um valor na cache com TTL. Flag off ou Redis em baixo → no-op silencioso. */
   async set<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
     if (!this.cacheEnabled) return;

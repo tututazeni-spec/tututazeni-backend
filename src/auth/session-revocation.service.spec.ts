@@ -7,6 +7,7 @@ function fakeCache() {
     get: jest.fn(async (k: string) => (store.has(k) ? store.get(k) : null)),
     set: jest.fn(async (k: string, v: unknown) => void store.set(k, v)),
     del: jest.fn(async (k: string) => void store.delete(k)),
+    mget: jest.fn(async (keys: string[]) => keys.map(k => (store.has(k) ? store.get(k) : null))),
   };
 }
 
@@ -39,5 +40,40 @@ describe('SessionRevocationService', () => {
     expect(await svc.revokedBefore(7)).toEqual(expect.any(Number));
     expect(await svc.staleSince(7)).toEqual(expect.any(Number));
     expect(await svc.revokedBefore(8)).toBeNull();
+  });
+
+  describe('getMarks — as 3 marcas numa só consulta', () => {
+    const empty = { jtiRevoked: false, revokedBefore: null, staleSince: null };
+
+    it('devolve tudo vazio quando nada foi marcado', async () => {
+      const svc = new SessionRevocationService(fakeCache() as never);
+      await expect(svc.getMarks('jti-1', 7)).resolves.toEqual(empty);
+    });
+
+    it('reflete jti revogado, revokedBefore e staleSince do utilizador certo', async () => {
+      const svc = new SessionRevocationService(fakeCache() as never);
+      await svc.revokeAccessToken('jti-1', 900);
+      await svc.revokeAllUserSessions(7);
+      await svc.invalidateUserCache(7);
+      const marks = await svc.getMarks('jti-1', 7);
+      expect(marks.jtiRevoked).toBe(true);
+      expect(marks.revokedBefore).toEqual(expect.any(Number));
+      expect(marks.staleSince).toEqual(expect.any(Number));
+      await expect(svc.getMarks('outro-jti', 8)).resolves.toEqual(empty);
+    });
+
+    it('faz uma única leitura à cache (mget), não três', async () => {
+      const cache = fakeCache();
+      await new SessionRevocationService(cache as never).getMarks('jti-1', 7);
+      expect(cache.mget).toHaveBeenCalledTimes(1);
+      expect(cache.get).not.toHaveBeenCalled();
+    });
+
+    it('sem jti (token antigo) só consulta as marcas do utilizador', async () => {
+      const cache = fakeCache();
+      const marks = await new SessionRevocationService(cache as never).getMarks(undefined, 7);
+      expect(marks.jtiRevoked).toBe(false);
+      expect(cache.mget.mock.calls[0][0]).toHaveLength(2);
+    });
   });
 });

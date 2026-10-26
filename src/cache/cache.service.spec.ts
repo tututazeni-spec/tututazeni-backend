@@ -166,3 +166,54 @@ describe('CacheService.ping', () => {
     await expect(svc.ping()).rejects.toThrow('down');
   });
 });
+
+describe('CacheService.mget', () => {
+  it('lê todas as chaves numa só viagem e devolve valores parseados ou null por posição', async () => {
+    const redis = {
+      mget: jest.fn().mockResolvedValue([JSON.stringify(true), null, JSON.stringify(1234)]),
+    } as any;
+    const svc = new CacheService(redis, makeConfig(), makeCounter(), makeLogger());
+    const out = await svc.mget<unknown>(['a', 'b', 'c']);
+    expect(out).toEqual([true, null, 1234]);
+    expect(redis.mget).toHaveBeenCalledTimes(1);
+    expect(redis.mget).toHaveBeenCalledWith('a', 'b', 'c');
+  });
+
+  it('conta um hit por chave encontrada e um miss por chave em falta', async () => {
+    const redis = { mget: jest.fn().mockResolvedValue([JSON.stringify(1), null, null]) } as any;
+    const counter = makeCounter();
+    const svc = new CacheService(redis, makeConfig(), counter, makeLogger());
+    await svc.mget(['a', 'b', 'c']);
+    expect(counter.inc).toHaveBeenCalledWith({ result: 'hit' });
+    expect(counter.inc.mock.calls.filter(([l]: any) => l.result === 'hit')).toHaveLength(1);
+    expect(counter.inc.mock.calls.filter(([l]: any) => l.result === 'miss')).toHaveLength(2);
+  });
+
+  it('CACHE_ENABLED=false devolve só null, sem tocar no redis', async () => {
+    const redis = { mget: jest.fn() } as any;
+    const svc = new CacheService(redis, makeConfig('false'), makeCounter(), makeLogger());
+    await expect(svc.mget(['a', 'b'])).resolves.toEqual([null, null]);
+    expect(redis.mget).not.toHaveBeenCalled();
+  });
+
+  it('Redis em baixo: fail-open (todos null) e regista aviso', async () => {
+    const redis = { mget: jest.fn().mockRejectedValue(new Error('down')) } as any;
+    const logger = makeLogger();
+    const svc = new CacheService(redis, makeConfig(), makeCounter(), logger);
+    await expect(svc.mget(['a', 'b'])).resolves.toEqual([null, null]);
+    expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ op: 'mget' }));
+  });
+
+  it('um valor corrompido (JSON inválido) vira null só nessa posição', async () => {
+    const redis = { mget: jest.fn().mockResolvedValue(['{nao-json', JSON.stringify(7)]) } as any;
+    const svc = new CacheService(redis, makeConfig(), makeCounter(), makeLogger());
+    await expect(svc.mget<number>(['a', 'b'])).resolves.toEqual([null, 7]);
+  });
+
+  it('sem chaves devolve [] sem ir ao redis', async () => {
+    const redis = { mget: jest.fn() } as any;
+    const svc = new CacheService(redis, makeConfig(), makeCounter(), makeLogger());
+    await expect(svc.mget([])).resolves.toEqual([]);
+    expect(redis.mget).not.toHaveBeenCalled();
+  });
+});
