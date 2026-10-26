@@ -67,4 +67,15 @@ function logErrors(requestParams, response, context, events, done) {
   return done();
 }
 
-module.exports = { setRandomIds, logErrors };
+/**
+ * afterResponse do login — copia o cookie csrf_token (só vem em Set-Cookie, não no
+ * corpo) para context.vars.csrfToken, como o frontend faz para o cabeçalho X-CSRF-Token.
+ */
+function captureCsrfToken(requestParams, response, context, events, done) {
+  const setCookie = [].concat(response.headers['set-cookie'] || []);
+  const cookie = setCookie.find(c => c.startsWith('csrf_token='));
+  if (cookie) context.vars.csrfToken = cookie.split(';')[0].slice('csrf_token='.length);
+  return done();
+}
+
+module.exports = { setRandomIds, logErrors, captureCsrfToken };

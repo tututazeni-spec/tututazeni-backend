@@ -203,6 +203,7 @@ scenarios:
       - post:
           url: "/auth/login"
           name: "POST /auth/login (enroll)"
+          afterResponse: "captureCsrfToken"
           json:
             email: "{{ email }}"
             password: "LoadTest@2024"
@@ -219,6 +220,12 @@ scenarios:
           name: "POST /enrollments/self-enroll/:courseId"
           headers:
             Authorization: "Bearer {{ token }}"
+            # O Artillery guarda o cookie de sessão do login; escritas com esse cookie
+            # exigem o cabeçalho anti-CSRF (src/common/security/csrf-header-guard.ts).
+            # Sem ele: 403 "cabeçalho anti-CSRF em falta". O login também emite o cookie
+            # csrf_token, por isso é preciso devolvê-lo em X-CSRF-Token (captureCsrfToken).
+            X-Requested-With: "XMLHttpRequest"
+            X-CSRF-Token: "{{ csrfToken }}"
           expect:
             - statusCode: [201, 409]
 
