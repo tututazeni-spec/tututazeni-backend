@@ -4,6 +4,19 @@ import { JwtStrategy, buildJwtExtractors, isBearerAllowed } from './jwt.strategy
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { SessionRevocationService } from './session-revocation.service';
+import { KeyObject } from 'crypto';
+import * as jwt from 'jsonwebtoken';
+
+// Corre a estratégia como o passport o faz (cópia por pedido) e devolve o desfecho.
+function authenticate(strat: unknown, token: string) {
+  return new Promise<{ kind: 'success' | 'fail' | 'error'; detail?: unknown }>(resolve => {
+    const s = Object.create(strat as object);
+    s.success = (user: unknown) => resolve({ kind: 'success', detail: user });
+    s.fail = (info: unknown) => resolve({ kind: 'fail', detail: info });
+    s.error = (err: unknown) => resolve({ kind: 'error', detail: err });
+    s.authenticate({ headers: { authorization: `Bearer ${token}` }, cookies: {} });
+  });
+}
 
 // C4: buildJwtExtractors respeita a flag AUTH_ALLOW_BEARER
 describe('buildJwtExtractors', () => {
@@ -113,6 +126,50 @@ describe('JwtStrategy', () => {
         UnauthorizedException,
       );
       expect(mockPrisma.user.findUnique).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('chave de verificação do JWT', () => {
+    it('entrega ao jsonwebtoken um KeyObject pré-criado, não o segredo em texto', () => {
+      // Com o segredo em string, o jsonwebtoken 9 tenta createPublicKey() em CADA pedido,
+      // falha e só depois cria a chave (≈750 µs vs ≈16 µs). Medido no perfil de carga.
+      let key: unknown;
+      (
+        strategy as unknown as {
+          _secretOrKeyProvider: (
+            r: unknown,
+            t: unknown,
+            d: (e: unknown, k: unknown) => void,
+          ) => void;
+        }
+      )._secretOrKeyProvider(null, null, (_e, k) => (key = k));
+      expect(key).toBeInstanceOf(KeyObject);
+      expect((key as KeyObject).type).toBe('secret');
+    });
+
+    it('aceita um token válido assinado com JWT_SECRET', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(baseUser);
+      const token = jwt.sign({ sub: 1, email: 'user@innova.com' }, 'test-secret', {
+        expiresIn: '15m',
+      });
+      const out = await authenticate(strategy, token);
+      expect(out.kind).toBe('success');
+    });
+
+    it('rejeita um token assinado com outro segredo', async () => {
+      const token = jwt.sign({ sub: 1, email: 'user@innova.com' }, 'outro-segredo', {
+        expiresIn: '15m',
+      });
+      const out = await authenticate(strategy, token);
+      expect(out.kind).toBe('fail');
+    });
+
+    it('rejeita um token expirado', async () => {
+      const token = jwt.sign({ sub: 1, email: 'user@innova.com' }, 'test-secret', {
+        expiresIn: -10,
+      });
+      const out = await authenticate(strategy, token);
+      expect(out.kind).toBe('fail');
     });
   });
 

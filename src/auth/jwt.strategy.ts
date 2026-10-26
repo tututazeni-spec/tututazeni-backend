@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { runAsSystem } from '../common/rls/rls-context';
 import { withFlatPermissions } from '../common/utils/role-permissions';
 import { SessionRevocationService } from './session-revocation.service';
+import { toSecretKeyObject } from './jwt-key';
 
 // Extrai o JWT do cookie httpOnly 'token' (definido pelo backend no login).
 const cookieExtractor: JwtFromRequestFunction = (req: Request) => {
@@ -66,7 +67,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       // Cookie httpOnly tem prioridade; Bearer desligável via AUTH_ALLOW_BEARER=false (A2-7).
       jwtFromRequest: ExtractJwt.fromExtractors(buildJwtExtractors(isBearerAllowed())),
       ignoreExpiration: false,
-      secretOrKey: jwtSecret,
+      // KeyObject pré-criado (ver jwt-key.ts); os tipos do passport-jwt só declaram string | Buffer.
+      secretOrKey: toSecretKeyObject(jwtSecret) as unknown as Buffer,
     });
   }
 
