@@ -26,7 +26,6 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
-import { Role } from '../auth/enums/role.enum';
 
 import { ADMIN_RH_LEADERSHIP_INSTRUCTOR_ROLES } from '../auth/enums/role-groups';
 

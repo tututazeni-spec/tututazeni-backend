@@ -5,7 +5,6 @@ import { DashboardRhService } from './dashboard-rh.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators';
-import { Role } from '../auth/enums/role.enum';
 
 import { ADMIN_RH_DIRECTOR_ROLES, ADMIN_RH_LEADERSHIP_ROLES } from '../auth/enums/role-groups';
 

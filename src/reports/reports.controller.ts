@@ -19,7 +19,6 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { ReportFilterDto, SaveReportDto, CreateScheduleDto } from './reports.dto';
 import { ReportCategory } from '@prisma/client';
-import { Role } from '../auth/enums/role.enum';
 
 import { ADMIN_RH_LEADERSHIP_ROLES, ADMIN_RH_ROLES } from '../auth/enums/role-groups';
 

@@ -27,7 +27,7 @@ import {
 } from './history.dto';
 import { HistoryHubService } from './history-hub.service';
 import { HistoryReportsService } from './history-reports.service';
-import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
+import { AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 
 import { safeDownloadHeaders } from '../common/files/safe-download';
 
