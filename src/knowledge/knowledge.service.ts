@@ -339,23 +339,24 @@ export class KnowledgeService {
       select: { userId: true },
       distinct: ['userId'],
     });
-    for (const b of bookmarkers) {
+    if (bookmarkers.length) {
+      // Um único INSERT em lote em vez de N round-trips sequenciais.
       await this.prisma.notificationLog
-        .create({
-          data: {
+        .createMany({
+          data: bookmarkers.map(b => ({
             userId: b.userId,
             type: 'KNOWLEDGE_UPDATED',
             message: `O artigo "${updated.title}" foi actualizado`,
             metadata: JSON.stringify({}),
-          },
+          })),
         })
         .catch((e: unknown) => {
           this.logger.warn({
-            userId: b.userId,
             action: 'KNOWLEDGE_UPDATED_NOTIFY',
             entityId: id,
+            recipients: bookmarkers.length,
             err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao notificar utilizador sobre actualização de artigo',
+            msg: 'Falha ao notificar utilizadores sobre actualização de artigo',
           });
         });
     }
