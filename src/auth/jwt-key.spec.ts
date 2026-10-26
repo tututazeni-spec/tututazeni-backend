@@ -1,4 +1,4 @@
-import { KeyObject } from 'crypto';
+import { generateKeyPairSync, KeyObject } from 'crypto';
 import * as jwt from 'jsonwebtoken';
 import { toSecretKeyObject } from './jwt-key';
 
@@ -25,7 +25,7 @@ describe('toSecretKeyObject', () => {
   it('um segredo que seja um PEM de chave pública não permite aceitar tokens RS256 (confusão de algoritmo)', () => {
     // Antes (segredo em string) o jsonwebtoken tratava um segredo com formato PEM como chave
     // pública e aceitava RS256. Como KeyObject "secret", só HS* é possível.
-    const { publicKey, privateKey } = require('crypto').generateKeyPairSync('rsa', {
+    const { publicKey, privateKey } = generateKeyPairSync('rsa', {
       modulusLength: 2048,
     });
     const pem = publicKey.export({ type: 'spki', format: 'pem' }) as string;
