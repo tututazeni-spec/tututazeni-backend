@@ -20,6 +20,7 @@ Arquitectura e fluxo completos: `docs/deploy/arquitetura-producao.md`; operaçã
 - **CI**: `npx prisma migrate deploy` contra uma BD limpa em cada PR prova que o histórico completo aplica.
 - **Nunca**: `prisma db push`, `migrate reset`, DDL manual (`psql`) ou editar uma migration já aplicada em qualquer ambiente. `db:push` e `db:reset` existem só para BD local descartável.
 - **Expand/contract** para deploy sem janela: (1) migration aditiva (coluna nullable/tabela nova) com código que tolera ambos os estados; (2) backfill; (3) numa release posterior, remover o antigo. Migrations destrutivas exigem backup prévio e janela (ver `runbook.md`).
+- **CI**: o passo "Schema sem drift face às migrations" corre `prisma migrate diff --exit-code` depois do `migrate deploy`; um PR que altere `schema.prisma` sem migration falha.
 - Erro tipo "Unknown argument" num campo: confirmar `npx prisma migrate status`, `npx prisma generate` e reiniciar o processo, antes de assumir que falta o campo.
 - Backfills de dados vão em migration SQL ou script versionado em `scripts/`, nunca executados à mão.
 
