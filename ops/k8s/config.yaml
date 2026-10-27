@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: innova-config
+data:
+  NODE_ENV: production
+  PORT: '4000'
+  LOG_LEVEL: info
+  QUEUE_ENABLED: 'true'
+  CACHE_ENABLED: 'true'
+  REDIS_PORT: '6379'
+  API_INTERNAL_URL: http://app:4000
+# O resto (DATABASE_URL, JWT_*, REDIS_PASSWORD, METRICS_TOKEN, ...) vive no Secret
+# `innova-secrets`, criado fora do git (ideal: External Secrets / Sealed Secrets).

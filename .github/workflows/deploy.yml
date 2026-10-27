@@ -77,6 +77,17 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Bloqueia o deploy se a imagem trouxer CVE crítica com correção disponível
+      # (base node:20-slim + dependências). Só em push: em PR a imagem não é publicada.
+      - name: Scan de vulnerabilidades (Trivy)
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE }}:sha-${{ github.sha }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
   deploy:
     runs-on: ubuntu-latest
     needs: [preflight, build]

@@ -185,6 +185,10 @@ async function bootstrap() {
     });
   });
 
+  // SIGTERM (docker stop / rollout do K8s) passa a drenar pedidos em curso e a correr os
+  // onModuleDestroy (Prisma, Redis, filas) em vez de matar o processo a meio.
+  app.enableShutdownHooks();
+
   const port = process.env.PORT ?? 4000;
   await app.listen(port);
 

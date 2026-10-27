@@ -9,6 +9,15 @@
 #   Ver docs/deploy/cloudflare.md e docs/deploy/ha-and-spof.md.
 name: innova
 
+# Rotação dos logs json-file: sem isto crescem sem limite e enchem o disco do VPS
+# (DiskSpaceLow só avisa depois do estrago).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
+
+
 services:
   # ─── Migrations: job one-shot que corre ANTES das réplicas da app ──────────
   # Tira o `prisma migrate deploy` do arranque de cada réplica — senão N
@@ -38,6 +47,9 @@ services:
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
+    init: true # PID 1 propaga SIGTERM e apanha zombies
+    stop_grace_period: 30s # tempo para drenar pedidos (enableShutdownHooks)
+    logging: *default-logging
     security_opt: ['no-new-privileges:true']
     cap_drop: ['ALL']
     deploy:
@@ -63,6 +75,9 @@ services:
       app:
         condition: service_started
     restart: unless-stopped
+    init: true
+    stop_grace_period: 20s
+    logging: *default-logging
     security_opt: ['no-new-privileges:true']
     cap_drop: ['ALL']
     deploy:
@@ -94,6 +109,7 @@ services:
       - app
       - frontend
     restart: always
+    logging: *default-logging
     security_opt: ['no-new-privileges:true']
     # Caddy faz bind a 80/443 como não-root dentro do contentor.
     cap_drop: ['ALL']
