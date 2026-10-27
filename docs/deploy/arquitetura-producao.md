@@ -123,6 +123,13 @@ Regra de migrations: **expand/contract**. O rollback repõe a imagem, não desfa
 - [ ] Alertas `AppReplicaDown`, `HighErrorRate`, `DiskSpaceLow`, `BackupTooOld` verificados em simulação
 - [ ] Ninguém a olhar só para o Prometheus: há destinatário definido para cada alerta crítico
 
+**Operação e suporte (primeiras 72 h)**
+- [ ] Escala das 72 h preenchida (pessoa **e** suplente por janela) e enviada à equipa 24 h antes — `primeiras-72h.md`
+- [ ] Alerta de teste recebido por todos os da escala; todos entram por SSH no VPS
+- [ ] `SUPPORT_EMAIL` e `STATUS_PAGE_URL` definidos; `npm run seed:help` corrido neste ambiente (6 artigos iniciais)
+- [ ] Papéis do incidente lidos por quem está na escala — `gestao-incidentes.md` §2.1
+- [ ] Segredos que não se podem perder (`PII_ENCRYPTION_KEY`, `PASSWORD_PEPPER`, `BACKUP_ENCRYPT_PASSPHRASE`) no cofre com 2 pessoas com acesso — `variaveis-de-ambiente.md`
+
 **Carga e fiabilidade**
 - [ ] Artillery (smoke → load → stress → spike, ver `CLAUDE.md`) contra um ambiente equivalente; p95 < 3 s e erros < 1 %
 - [ ] `docker stop` a uma réplica durante carga: sem 5xx visíveis (valida o `enableShutdownHooks`)

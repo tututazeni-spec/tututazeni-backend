@@ -21,6 +21,27 @@ Incidentes de **segurança ou dados pessoais** são sempre tratados como SEV1 at
 - **Operador:** investiga e aplica a correcção (ver `runbook.md`).
 - **Comunicação:** publica na página de estado e responde aos pedidos de suporte com a mesma mensagem.
 
+### 2.1 Quem faz o quê, passo a passo
+
+Os papéis são ocupados por pessoas concretas na escala de cada período (`primeiras-72h.md` para o lançamento; depois, a escala de piquete em vigor). **Se a escala não estiver preenchida, não há procedimento — preencher é pré-requisito do go-live.**
+
+| Passo | IC | Operador | Comunicação | Suporte (fila de pedidos) |
+|---|---|---|---|---|
+| Alerta recebido / pedido CRITICAL | **Reconhece em ≤ 15 min (SEV1)** e assume o papel de IC | Confirma o sintoma nas sondas e logs | — | Escala ao IC qualquer pedido CRITICAL ou 3+ pedidos iguais em 15 min |
+| Declarar e classificar | **Decide a severidade** e abre a entrada em `ops/status-page/incidents.json` | Fornece o impacto (quem, o quê, desde quando) | Prepara a primeira mensagem | Anexa pedidos ao incidente |
+| Mitigar | **Aprova** rollback/feature flag/redução de carga | **Executa** (`runbook.md`, `deploys-graduais.md`) e reporta de 10 em 10 min | — | — |
+| Comunicar | Valida o texto | — | **Publica** na página de estado nos prazos da secção 1 e dá o mesmo texto ao suporte | **Responde** aos pedidos com a mensagem aprovada |
+| Resolver | **Declara** resolvido após 30 min estáveis | Confirma alertas limpos | Marca `resolved` com `resolvedAt` e publica o resumo | Fecha/actualiza os pedidos ligados |
+| Aprender | **Marca** o post-mortem (≤ 5 dias úteis) e é o dono do documento | Fornece cronologia técnica | Fornece o que foi dito e quando | Fornece o impacto visto nos pedidos |
+
+Regras:
+
+- **Uma só voz para o cliente.** Só o papel Comunicação publica; o Operador não responde a clientes durante o incidente.
+- **O IC não mexe em produção.** Se o IC e o Operador forem a mesma pessoa (equipa mínima), diz-se isso no registo e a decisão de rollback é confirmada por uma segunda pessoa por mensagem, mesmo que breve.
+- **Escalar sem esperar:** se o primeiro contacto não reconhecer em 15 min (SEV1) ou 30 min (SEV2), liga-se ao suplente da escala; passados mais 15 min, ao responsável de engenharia. Nunca se espera por quem "devia" estar disponível.
+- **Registo cronológico** (hora · quem · o quê) mantido pelo IC desde a declaração; é a base do post-mortem.
+- **Segurança/dados pessoais:** além dos passos acima, o IC avisa o responsável de privacidade na hora da confirmação; a notificação à autoridade e ao cliente segue os prazos de `sla-contratual.md`. Não se apagam logs nem se reinicia o que possa ser prova antes de o IC autorizar.
+
 ## 3. Ciclo de vida
 
 1. **Detectar** — alerta (`alerting.md`), sonda da página de estado, ou pedido de suporte com prioridade CRITICAL.
