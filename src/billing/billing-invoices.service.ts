@@ -3,12 +3,14 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { writeChainedAuditLog } from '../common/helpers/audit-chain';
 import { swallow } from '../common/logging/swallow';
 import { BillingLimitsService } from './billing-limits.service';
+import { BillingNotifierService } from './billing-notifier.service';
 import { computeTax, invoiceHash, invoiceSeries, vatRate } from './billing.math';
 import { FiscalUpdateDto, PaymentFailedDto, RegisterPaymentDto } from './billing.dto';
 
@@ -19,6 +21,7 @@ export class BillingInvoicesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly limits: BillingLimitsService,
+    @Optional() private readonly notifier?: BillingNotifierService,
   ) {}
 
   private audit(action: string, entityId: string, actorId: number | undefined, extra: object) {
@@ -98,6 +101,10 @@ export class BillingInvoicesService {
       fullNumber: invoice.fullNumber,
       total,
     });
+    await this.notifier?.notify(`Fatura ${invoice.fullNumber} emitida`, [
+      `A fatura ${invoice.fullNumber} (${invoice.total} ${invoice.currency}) foi emitida e vence em ${invoice.dueDate.toISOString().slice(0, 10)}.`,
+      `Período: ${p.periodStart.toISOString().slice(0, 10)} a ${p.periodEnd.toISOString().slice(0, 10)}.`,
+    ]);
     return invoice;
   }
 
@@ -166,6 +173,17 @@ export class BillingInvoicesService {
     });
     this.limits.invalidate();
     await this.audit('BILLING_PAYMENT_CONFIRMED', id, actorId, { amount: dto.amount, fullyPaid });
+    await this.notifier?.notify(
+      fullyPaid
+        ? `Pagamento da fatura ${inv.fullNumber} confirmado`
+        : `Pagamento parcial da fatura ${inv.fullNumber}`,
+      [
+        `Recebemos ${dto.amount} ${inv.currency} referentes à fatura ${inv.fullNumber}.`,
+        fullyPaid
+          ? 'A fatura está liquidada e a subscrição segue activa. Obrigado.'
+          : 'Ainda falta liquidar o restante valor da fatura.',
+      ],
+    );
     return this.get(id);
   }
 
@@ -193,6 +211,11 @@ export class BillingInvoicesService {
     ]);
     this.limits.invalidate();
     await this.audit('BILLING_PAYMENT_FAILED', id, actorId, { reason: dto.reason });
+    await this.notifier?.notify(`Falha na cobrança da fatura ${inv.fullNumber}`, [
+      `Não foi possível cobrar a fatura ${inv.fullNumber} (${inv.total} ${inv.currency}).`,
+      ...(dto.reason ? [`Motivo: ${dto.reason}`] : []),
+      'Regularize o pagamento para evitar a passagem da plataforma a modo só de leitura.',
+    ]);
     return this.get(id);
   }
 

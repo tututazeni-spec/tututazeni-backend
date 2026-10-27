@@ -5,6 +5,7 @@ import { BillingController } from './billing.controller';
 import { BillingInvoicesService } from './billing-invoices.service';
 import { BillingLimitsService } from './billing-limits.service';
 import { BillingMetricsService } from './billing-metrics.service';
+import { BillingNotifierService } from './billing-notifier.service';
 import { BillingPlansService } from './billing-plans.service';
 import { BillingReadOnlyGuard } from './billing-readonly.guard';
 import { BillingEntitlementsGuard } from './billing-entitlements.guard';
@@ -19,6 +20,7 @@ import { BillingSubscriptionsService } from './billing-subscriptions.service';
   controllers: [BillingController],
   providers: [
     BillingPlansService,
+    BillingNotifierService,
     BillingLimitsService,
     BillingInvoicesService,
     BillingSubscriptionsService,

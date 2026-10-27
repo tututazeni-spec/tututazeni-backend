@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { BillingPlan, BillingSubscription, TenantPlan } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -11,6 +12,7 @@ import { writeChainedAuditLog } from '../common/helpers/audit-chain';
 import { swallow } from '../common/logging/swallow';
 import { BillingInvoicesService } from './billing-invoices.service';
 import { BillingLimitsService } from './billing-limits.service';
+import { BillingNotifierService } from './billing-notifier.service';
 import { BillingPlansService } from './billing-plans.service';
 import { addInterval, Interval } from './billing.math';
 
@@ -24,6 +26,7 @@ export class BillingSubscriptionsService {
     private readonly plans: BillingPlansService,
     private readonly invoices: BillingInvoicesService,
     private readonly limits: BillingLimitsService,
+    @Optional() private readonly notifier?: BillingNotifierService,
   ) {}
 
   private audit(action: string, entityId: string, actorId: number | undefined, extra: object) {
@@ -100,6 +103,11 @@ export class BillingSubscriptionsService {
     });
     await this.syncTenant(sub, plan);
     await this.audit('BILLING_TRIAL_STARTED', sub.id, actorId, { planCode, trialEndsAt });
+    await this.notifier?.notify('Bem-vindo ao INNOVA — o seu período de teste começou', [
+      `O plano ${plan.name} está activo em teste até ${trialEndsAt.toISOString().slice(0, 10)} (${plan.trialDays} dias).`,
+      `Limites: ${plan.maxUsers} utilizadores e ${plan.maxStorageGb} GB de armazenamento.`,
+      'Contrate um plano antes do fim do teste para manter o acesso total.',
+    ]);
     return sub;
   }
 
@@ -203,6 +211,11 @@ export class BillingSubscriptionsService {
     });
     this.limits.invalidate();
     await this.audit('BILLING_CANCELED', sub.id, actorId, { reason, atPeriodEnd });
+    await this.notifier?.notify('Cancelamento da subscrição registado', [
+      atPeriodEnd
+        ? `A subscrição mantém-se activa até ${sub.currentPeriodEnd.toISOString().slice(0, 10)} e não será renovada.`
+        : 'A subscrição foi cancelada com efeito imediato.',
+    ]);
     return updated;
   }
 }
