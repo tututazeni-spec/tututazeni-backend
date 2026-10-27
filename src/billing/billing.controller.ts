@@ -8,12 +8,15 @@ import {
   Post,
   Put,
   Query,
+  Res,
   DefaultValuePipe,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../common/decorators';
 import { CurrentUser, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
+import { issuerFromEnv, renderInvoiceHtml } from './billing-invoice-document';
 import { BillingInvoicesService } from './billing-invoices.service';
 import { BillingMetricsService } from './billing-metrics.service';
 import { BillingPlansService } from './billing-plans.service';
@@ -102,6 +105,23 @@ export class BillingController {
   @Get('invoices/:id')
   getInvoice(@Param('id') id: string) {
     return this.invoices.get(id);
+  }
+
+  @Get('invoices/:id/document')
+  @ApiOperation({ summary: 'Documento imprimível da fatura (HTML, com dados do emitente)' })
+  async invoiceDocument(@Param('id') id: string, @Res() res: Response) {
+    const inv = await this.invoices.get(id);
+    const html = renderInvoiceHtml(
+      {
+        ...inv,
+        subtotal: Number(inv.subtotal),
+        taxRate: Number(inv.taxRate),
+        taxAmount: Number(inv.taxAmount),
+        total: Number(inv.total),
+      },
+      issuerFromEnv(),
+    );
+    res.type('text/html; charset=utf-8').send(html);
   }
 
   @Post('invoices/:id/payments')

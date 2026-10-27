@@ -38,4 +38,6 @@ Os textos de termos e privacidade vivem no frontend (e não aqui) para haver **u
 | Prova de aceitação dos termos | `legal_acceptances` (`GET /legal/acceptances`, ADMIN/RH) |
 | Registo de acessos e alterações | Auditoria append-only com cadeia de hash (módulo Auditoria) |
 | Dados sensíveis em repouso | NIF/NIB cifrados (AES-256-GCM) |
+| Cookies | Política em `/privacidade` §10: só cookies estritamente necessários (sessão, `csrf_token`, `innova-theme`), por isso sem banner de consentimento. **Se se adicionar analítica ou cookies de terceiros, é obrigatório acrescentar o banner de consentimento antes** |
+| Faturação fiscal | `docs/deploy/faturacao-saas.md`: documento interno com emitente/IVA/NIF; a certificação AGT (assinatura RSA, SAF-T, ATCUD) continua a ser do software certificado |
 | Incidente de segurança / violação de dados | `docs/deploy/gestao-incidentes.md` (SEV1) |
