@@ -268,6 +268,63 @@ groups:
           summary: 'Deadlocks no Postgres'
           description: 'Houve deadlocks nos últimos 10 minutos. Ver o log do Postgres.'
 
+  # ── Filas Bull e tarefas agendadas ───────────────────────────────────────
+  # bull_queue_jobs: QueueMetricsService (a cada 15 s). cron_*: ClusterCronLockService.
+  - name: innova-queues-cron
+    rules:
+      - alert: QueueBacklogHigh
+        expr: bull_queue_jobs{state="waiting"} > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Fila {{ $labels.queue }} com acumulação de jobs'
+          description: >
+            {{ $value | printf "%.0f" }} jobs à espera há mais de 10 minutos na fila
+            {{ $labels.queue }}. O processamento está lento ou parado (Redis, worker, destino externo).
+
+      - alert: QueueFailedJobs
+        expr: bull_queue_jobs{state="failed"} > 50
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Fila {{ $labels.queue }} com jobs falhados'
+          description: >
+            {{ $value | printf "%.0f" }} jobs falhados na fila {{ $labels.queue }}. Ver os logs da app
+            (reqId/job) e reprocessar ou limpar depois de corrigir a causa.
+
+      - alert: QueueMetricsMissing
+        expr: absent(bull_queue_jobs)
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Sem métricas das filas Bull'
+          description: 'Nenhuma réplica está a reportar bull_queue_jobs: Redis em baixo ou app sem métricas.'
+
+      - alert: CronJobErrors
+        expr: sum by (job) (increase(cron_runs_total{result="error"}[30m])) > 3
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Tarefa agendada {{ $labels.job }} a falhar'
+          description: '{{ $labels.job }} falhou {{ $value | printf "%.0f" }} vezes nos últimos 30 minutos.'
+
+      # Há tarefas de minuto a minuto: se nenhuma réplica executa nada há 30 min, o agendador parou.
+      - alert: CronSchedulerStalled
+        expr: time() - max(cron_last_run_timestamp_seconds) > 1800
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Agendador de tarefas parado'
+          description: >
+            Nenhuma tarefa agendada correu com sucesso nos últimos 30 minutos em nenhuma réplica
+            (lock Redis preso ou ScheduleModule parado). Lembretes, expiração de sessões e
+            anonimizações deixam de acontecer.
+
   # SLO de disponibilidade 99,5 % (orçamento de erro 0,5 %) — ver docs/deploy/sla-slo.md.
   # SLI = 1 − (respostas 5xx / total). Alertas multi-janela de consumo do orçamento:
   # consumo rápido (14,4× → 0,072) pagina; consumo lento (6× → 0,03) avisa.

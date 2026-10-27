@@ -49,7 +49,7 @@ Regra de migrations: **expand/contract**. O rollback repõe a imagem, não desfa
 | Logs JSON estruturados, `reqId`, redact de dados sensíveis | ✅ | `observabilidade.md` |
 | Health live/ready (Postgres crítico; Redis, filas, disco, heap, event loop informativos) | ✅ | `src/health` |
 | Métricas HTTP, Prisma, cache + SO + Postgres | ✅ | Prometheus, 15 d de retenção |
-| 19 regras de alerta (réplicas, erros, latência, disco, backups, Postgres, Watchdog) | ✅ | `ops/monitoring/alert-rules.yml` |
+| Regras de alerta (réplicas, erros, latência, disco, backups, Postgres, filas Bull, tarefas agendadas, Watchdog) | ✅ | `ops/monitoring/alert-rules.yml` |
 | Rotação de logs do Docker | ✅ **corrigido** | `x-logging` no compose (10 MB × 5) |
 | Dashboards (Grafana) | ✅ opt-in | `ENABLE_OBSERVABILITY=true` |
 | Agregação/pesquisa de logs centralizada (Loki) | ✅ opt-in | idem |
@@ -75,6 +75,10 @@ Regra de migrations: **expand/contract**. O rollback repõe a imagem, não desfa
 | 11 | Workflows em `actions/checkout@v3`/`setup-node@v3` | Runtimes Node antigos | ✅ v4 (Dependabot mantém as versões, mensal) |
 | 12 | `CSRF_TOKEN_STRICT=false` em produção | Escritas sem token double-submit | ⏳ por data, não por código: activar a partir de 2026-11-01 (`docs/seguranca-pendentes.md`) |
 | 13 | Sem dashboards, logs centralizados nem erros de aplicação | Diagnóstico lento | ✅ opt-in: Grafana + Loki + Promtail (`ENABLE_OBSERVABILITY`) e Sentry (`SENTRY_DSN`) |
+| 14 | Filas Bull e tarefas agendadas só tinham health informativo, sem métrica nem alerta | Fila parada ou `@Cron` morto passa despercebido (lembretes, anonimizações, webhooks) | ✅ gauges `bull_queue_jobs` e `cron_*`; alertas `QueueBacklogHigh`, `QueueFailedJobs`, `QueueMetricsMissing`, `CronJobErrors`, `CronSchedulerStalled` |
+| 15 | `.env.production.example` só tinha `SMTP_PASSWORD` (Alertmanager); a app lê `SMTP_PASS`/`SMTP_FROM` | Em produção a app tentava enviar e-mail sem palavra-passe | ✅ variáveis da app acrescentadas ao exemplo; `preflight:golive` avisa se faltarem |
+| 16 | Sem verificação nem documentação de SPF/DKIM/DMARC | Convites e resets no spam; domínio falsificável | ✅ `docs/deploy/dns-e-email.md` + `npm run ops:dns-check` |
+| 17 | Persistência dos uploads não documentada nem verificada | Risco de alguém usar disco local numa feature nova | ✅ auditado (a app não escreve em disco) + `docs/deploy/ficheiros-e-persistencia.md` + checks no preflight |
 
 ## 5. Docker / Kubernetes
 
@@ -109,6 +113,11 @@ Regra de migrations: **expand/contract**. O rollback repõe a imagem, não desfa
 - [ ] Primeiro deploy → `stable` existe; **rollback ensaiado uma vez** (`rollback.sh`)
 - [ ] Staging provisionado (secrets `STAGING_*`) ou decisão explícita de não o ter
 
+**Domínio, e-mail e ficheiros**
+- [ ] `npm run ops:dns-check` sem `FALHA` (SPF, DKIM, DMARC, A) — ver `dns-e-email.md`
+- [ ] SMTP da app (`SMTP_HOST/PASS/FROM`) preenchido e convite de teste fora do spam
+- [ ] Bucket de ficheiros com versionamento; `npm run preflight:golive` sem `FALHA` de storage — ver `ficheiros-e-persistencia.md`
+
 **Observabilidade**
 - [ ] Alerta `Watchdog` a chegar ao healthchecks.io; e-mail e Telegram testados com um alerta falso
 - [ ] Alertas `AppReplicaDown`, `HighErrorRate`, `DiskSpaceLow`, `BackupTooOld` verificados em simulação
@@ -124,5 +133,6 @@ Regra de migrations: **expand/contract**. O rollback repõe a imagem, não desfa
 1. Provisionar o VPS de staging e criar os secrets `STAGING_*` (sem eles o job é ignorado).
 2. Activar `ENABLE_OBSERVABILITY=true` e/ou criar o projecto Sentry e pôr o `SENTRY_DSN`.
 3. Correr `ops/backup/install-cron.sh` no VPS para instalar o watchdog do Caddy e o restore drill, e executar `restore-drill.sh` uma vez à mão.
+4. Publicar SPF/DKIM/DMARC no DNS do domínio real e criar o bucket com versionamento (`dns-e-email.md`, `ficheiros-e-persistencia.md`).
 4. `CSRF_TOKEN_STRICT=true` a partir de 2026-11-01.
 5. Decisão formal VPS vs `ops/k8s` + Redis gerido, pelos gatilhos da secção 1.

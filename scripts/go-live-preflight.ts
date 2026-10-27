@@ -41,6 +41,31 @@ async function main() {
     ? add('OK', 'RLS_ENABLED=true com DATABASE_APP_URL')
     : add('FALHA', 'RLS_ENABLED=true com DATABASE_APP_URL', 'ver ops/db/rls/README.md');
 
+  // Ficheiros: o disco do contentor é efémero (redeploy/rollback/réplica nova apaga-o), por isso o
+  // storage tem de ser externo e HTTPS. A app não escreve uploads em disco (ver docs/deploy/ficheiros-e-persistencia.md).
+  const storage = env.STORAGE_BASE_URL ?? '';
+  /^https:\/\//.test(storage) && !/example\.|localhost|127\.0\.0\.1/.test(storage)
+    ? add('OK', 'STORAGE_BASE_URL externo e HTTPS', storage)
+    : add(
+        'FALHA',
+        'STORAGE_BASE_URL externo e HTTPS',
+        'definir o bucket/CDN real (R2/S3), não localhost nem exemplo',
+      );
+  env.ALLOWED_FILE_HOST && !/CHANGE_ME|example\./.test(env.ALLOWED_FILE_HOST)
+    ? add('OK', 'ALLOWED_FILE_HOST definido')
+    : add(
+        'FALHA',
+        'ALLOWED_FILE_HOST definido',
+        'sem ele os fileUrl são recusados ou aceitam qualquer host',
+      );
+  env.SMTP_HOST && env.SMTP_PASS && env.SMTP_FROM
+    ? add('OK', 'SMTP da aplicação (SMTP_HOST/SMTP_PASS/SMTP_FROM)')
+    : add(
+        'AVISO',
+        'SMTP da aplicação (SMTP_HOST/SMTP_PASS/SMTP_FROM)',
+        'sem isto não há convites nem reset de password (SMTP_PASSWORD é só do Alertmanager)',
+      );
+
   const pool = new Pool({
     connectionString: env.DATABASE_URL,
     ssl: env.DB_SSL_CA ? { ca: env.DB_SSL_CA.replace(/\n/g, '\n') } : undefined,

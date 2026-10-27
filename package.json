@@ -66,6 +66,7 @@
     "seed:loadtest": "ts-node --transpile-only prisma/seed-load-test.ts",
     "seed:help": "ts-node --transpile-only prisma/seed-help-articles.ts",
     "preflight:golive": "ts-node --transpile-only scripts/go-live-preflight.ts",
+    "ops:dns-check": "ts-node --transpile-only scripts/check-dns-email.ts",
     "backfill:pii": "ts-node --transpile-only prisma/backfill-encrypt-user-pii.ts && ts-node --transpile-only prisma/backfill-encrypt-secrets.ts",
     "start:test": "cross-env UV_THREADPOOL_SIZE=16 NODE_ENV=test nest start --watch",
     "audit:uploads": "ts-node -P tsconfig.json scripts/audit-upload-data.ts",
