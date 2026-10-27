@@ -1,5 +1,11 @@
 // src/api-integration/api-integration.service.ts
-import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { Prisma, ApiIntegrationLog } from '@prisma/client';
@@ -15,6 +21,7 @@ import {
   WebhookEventType,
 } from './api-integration.dto';
 import * as crypto from 'crypto';
+import { isInternalHostname } from '../common/validators/safe-file-url';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 import { writeChainedAuditLog } from '../common/helpers/audit-chain';
@@ -716,11 +723,40 @@ export class ApiIntegrationService {
     return { valid: true, scopes: key.scopes ?? [], name: key.name };
   }
 
+  /**
+   * Autenticação de pedidos feitos com chave (API pública): devolve o registo completo
+   * (id, scopes, limite por minuto, IPs permitidos) ou null se a chave é inválida,
+   * revogada ou expirada. Não toca em lastUsedAt — quem chama decide (ver ApiKeyGuard).
+   */
+  async authenticateApiKey(rawKey: string): Promise<ApiKeyRecord | null> {
+    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+    const key = await (
+      safeM(this.prisma, 'apiKey').findFirst({
+        where: { keyHash, active: true },
+      }) as Promise<ApiKeyRecord | null>
+    ).catch((): null => null);
+    if (!key) return null;
+    if (key.expiresAt && new Date(key.expiresAt) < new Date()) return null;
+    return key;
+  }
+
+  touchApiKey(keyId: number): void {
+    safeM(this.prisma, 'apiKey')
+      .update({ where: { id: keyId }, data: { lastUsedAt: new Date() } })
+      .catch((): void => undefined);
+  }
+
   // ══════════════════════════════════════════════════════
   // WEBHOOKS
   // ══════════════════════════════════════════════════════
 
   async createWebhook(dto: CreateWebhookDto, createdById: number) {
+    // Em produção, nunca aceitar destinos internos (SSRF): o servidor faz o POST.
+    if (process.env.NODE_ENV === 'production' && isInternalHostname(new URL(dto.url).hostname)) {
+      throw new BadRequestException(
+        'O URL do webhook aponta para um endereço interno não permitido',
+      );
+    }
     const secret = dto.secret ?? crypto.randomBytes(20).toString('hex');
 
     return safeM(this.prisma, 'webhook')

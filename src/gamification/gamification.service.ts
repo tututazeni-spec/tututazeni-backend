@@ -1,4 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { PlatformEventsService } from '../api-integration/platform-events.service';
+import { WebhookEventType } from '../api-integration/api-integration.dto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -12,7 +14,10 @@ import { PrismaService } from '../prisma/prisma.service';
 export class GamificationService {
   private readonly logger = new Logger(GamificationService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly events?: PlatformEventsService,
+  ) {}
 
   /**
    * Incrementa os pontos (XP) de um utilizador via upsert em `UserPoints`
@@ -57,6 +62,7 @@ export class GamificationService {
         return;
       }
       await this.prisma.badgeAward.create({ data: { userId, badgeId: badge.id } });
+      this.events?.emit(WebhookEventType.BADGE_AWARDED, { userId, badgeId: badge.id });
     } catch (e: unknown) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         // Badge já atribuído a este utilizador — idempotente.

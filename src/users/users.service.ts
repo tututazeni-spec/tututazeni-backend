@@ -9,6 +9,8 @@ import {
   Logger,
   Optional,
 } from '@nestjs/common';
+import { PlatformEventsService } from '../api-integration/platform-events.service';
+import { WebhookEventType } from '../api-integration/api-integration.dto';
 import { Prisma } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
@@ -97,6 +99,8 @@ export class UsersService {
     @Optional() private readonly revocation?: SessionRevocationService,
     // Limite de utilizadores do plano (faturação). Optional pelo mesmo motivo.
     @Optional() private readonly planLimits?: BillingLimitsService,
+    // Webhooks: publica employee.created. Optional pelo mesmo motivo.
+    @Optional() private readonly events?: PlatformEventsService,
   ) {}
 
   // ─── Sanitizar (remover password) ────────────────────────────────────────
@@ -508,6 +512,7 @@ export class UsersService {
 
     // Inicializar pontos
     await this.prisma.userPoints.create({ data: { userId: user.id, points: 0 } });
+    this.events?.emit(WebhookEventType.EMPLOYEE_CREATED, { userId: user.id });
 
     // Notificar
     await this.prisma.notificationLog

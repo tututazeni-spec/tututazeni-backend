@@ -95,6 +95,7 @@ import { HealthModule } from './health/health.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { FeatureFlagsModule } from './common/feature-flags/feature-flags.module';
 import { BillingModule } from './billing/billing.module';
+import { PublicApiModule } from './public-api/public-api.module';
 import { ProductExperienceModule } from './product-experience/product-experience.module';
 
 // INFRA
@@ -242,6 +243,7 @@ const accessPath = (url = ''): string => url.split('?')[0];
     MetricsModule,
     FeatureFlagsModule,
     BillingModule,
+    PublicApiModule,
     ProductExperienceModule,
   ],
   providers: [
