@@ -10673,6 +10673,7 @@ model AttendanceAdjustment {
 
   @@index([attendanceId])
   @@index([recordId])
+  @@index([adjustedById])
 }
 
 model WorkSchedule {
@@ -16139,6 +16140,7 @@ model BillingSubscription {
   invoices           BillingInvoice[]
 
   @@index([tenantId, status])
+  @@index([planId])
   @@index([status, currentPeriodEnd])
   @@map("billing_subscriptions")
 }

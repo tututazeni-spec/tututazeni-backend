@@ -25,6 +25,7 @@ import { isInternalHostname } from '../common/validators/safe-file-url';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 import { writeChainedAuditLog } from '../common/helpers/audit-chain';
+import { decryptPii, encryptPii } from '../common/security/pii-crypto';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -765,12 +766,13 @@ export class ApiIntegrationService {
           name: dto.name,
           url: dto.url,
           events: dto.events,
-          secret,
+          secret: encryptPii(secret) ?? secret, // cifrado em repouso; o claro só se devolve aqui, uma vez
           active: dto.active ?? true,
           retryMax: dto.retryMax ?? 3,
           createdById,
         },
       })
+      .then(created => ({ ...created, secret }))
       .catch((err: unknown) => {
         this.logger.error({
           createdById,
@@ -920,7 +922,8 @@ export class ApiIntegrationService {
     // A persistência de WebhookDelivery continua a degradar via safeM()
     // (modelo ausente do schema) — migração desse modelo fica como follow-up.
     const body = JSON.stringify({ event, data: payload, timestamp: new Date().toISOString() });
-    const signature = hook.secret ? signPayload(hook.secret, body) : undefined;
+    const secret = decryptPii(hook.secret); // legado em claro passa tal como está
+    const signature = secret ? signPayload(secret, body) : undefined;
 
     await this.webhooksQueue.add(
       'deliver',

@@ -2,6 +2,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { decryptPii, encryptPii } from '../../common/security/pii-crypto';
 import {
   buildPaginatedResponse,
   calculatePagination,
@@ -79,12 +80,23 @@ export class EmployeeCompensationService {
     return buildPaginatedResponse(data, total, page, limit);
   }
 
-  current(userId: number) {
-    return this.prisma.read.employeeCompensation.findFirst({
+  /** IBAN/conta são gravados cifrados (AES-256-GCM); a API continua a devolvê-los em claro. */
+  private plain<T extends { iban?: string | null; accountNumber?: string | null }>(c: T): T;
+  private plain<T extends { iban?: string | null; accountNumber?: string | null }>(
+    c: T | null,
+  ): T | null;
+  private plain<T extends { iban?: string | null; accountNumber?: string | null }>(c: T | null) {
+    if (!c) return c;
+    return { ...c, iban: decryptPii(c.iban), accountNumber: decryptPii(c.accountNumber) };
+  }
+
+  async current(userId: number) {
+    const c = await this.prisma.read.employeeCompensation.findFirst({
       where: { userId, effectiveTo: null },
       orderBy: { effectiveFrom: 'desc' },
       include: { components: true },
     });
+    return this.plain(c);
   }
 
   create(dto: CreateEmployeeCompensationDto) {
@@ -94,19 +106,20 @@ export class EmployeeCompensationService {
         where: { userId: dto.userId, effectiveTo: null },
         data: { effectiveTo: new Date(effectiveFrom.getTime() - 1000) },
       });
-      return tx.employeeCompensation.create({
+      const created = await tx.employeeCompensation.create({
         data: {
           userId: dto.userId,
           baseSalary: dto.baseSalary,
           countryCode: dto.countryCode ?? 'AO',
           bankName: dto.bankName ?? null,
-          iban: dto.iban ?? null,
-          accountNumber: dto.accountNumber ?? null,
+          iban: encryptPii(dto.iban),
+          accountNumber: encryptPii(dto.accountNumber),
           effectiveFrom,
           foodAllowance: dto.foodAllowance ?? null,
           transportAllowance: dto.transportAllowance ?? null,
         },
       });
+      return this.plain(created);
     });
   }
 
@@ -117,12 +130,12 @@ export class EmployeeCompensationService {
     if (dto.baseSalary !== undefined) data.baseSalary = dto.baseSalary;
     if (dto.countryCode !== undefined) data.countryCode = dto.countryCode;
     if (dto.bankName !== undefined) data.bankName = dto.bankName;
-    if (dto.iban !== undefined) data.iban = dto.iban;
-    if (dto.accountNumber !== undefined) data.accountNumber = dto.accountNumber;
+    if (dto.iban !== undefined) data.iban = encryptPii(dto.iban);
+    if (dto.accountNumber !== undefined) data.accountNumber = encryptPii(dto.accountNumber);
     if (dto.effectiveFrom !== undefined) data.effectiveFrom = new Date(dto.effectiveFrom);
     if (dto.foodAllowance !== undefined) data.foodAllowance = dto.foodAllowance;
     if (dto.transportAllowance !== undefined) data.transportAllowance = dto.transportAllowance;
-    return this.prisma.employeeCompensation.update({ where: { id }, data });
+    return this.plain(await this.prisma.employeeCompensation.update({ where: { id }, data }));
   }
 
   async setComponents(id: number, dto: UpsertCompensationComponentsDto) {
@@ -163,7 +176,7 @@ export class EmployeeCompensationService {
       foodAllowance: c.foodAllowance,
       transportAllowance: c.transportAllowance,
       bankName: c.bankName,
-      ibanMasked: this.maskIban(c.iban),
+      ibanMasked: this.maskIban(decryptPii(c.iban)),
       effectiveFrom: c.effectiveFrom,
     };
   }

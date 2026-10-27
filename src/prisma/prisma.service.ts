@@ -209,7 +209,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
    * Postgres ignora todas as policies e o RLS fica activo só no papel.
    */
   private async assertRlsRoleIsRestricted() {
-    if (!rlsEnabled()) return;
+    if (!rlsEnabled()) {
+      await this.assertNotSuperuserInProduction();
+      return;
+    }
     const rows = await this.$queryRawUnsafe<{ current_user: string; bypass: boolean }[]>(
       'SELECT current_user, (rolsuper OR rolbypassrls) AS bypass FROM pg_roles WHERE rolname = current_user',
     );
@@ -221,6 +224,26 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     } else {
       this.logger.log(`RLS activo: ligado como "${row?.current_user}" (sem BYPASSRLS).`);
     }
+  }
+
+  /**
+   * Menor privilégio: em produção a app não pode correr como superuser (um SQL injection ou
+   * credencial vazada daria acesso total ao servidor). `ALLOW_SUPERUSER_DB=true` é uma válvula
+   * de emergência explícita, não uma configuração normal.
+   */
+  private async assertNotSuperuserInProduction() {
+    if (process.env.NODE_ENV !== 'production') return;
+    const rows = await this.$queryRawUnsafe<{ current_user: string; rolsuper: boolean }[]>(
+      'SELECT current_user, rolsuper FROM pg_roles WHERE rolname = current_user',
+    );
+    const row = rows[0];
+    if (!row?.rolsuper) return;
+    const msg = `A app está ligada à BD como superuser "${row.current_user}" — usar uma role sem SUPERUSER (ver ops/db/rls/README.md).`;
+    if (process.env.ALLOW_SUPERUSER_DB === 'true') {
+      this.logger.error(`${msg} (ALLOW_SUPERUSER_DB=true: a continuar)`);
+      return;
+    }
+    throw new Error(msg);
   }
 
   async onModuleInit() {

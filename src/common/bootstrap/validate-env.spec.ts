@@ -89,6 +89,24 @@ describe('validateEnv', () => {
       expect(() => validateEnv({ ...PROD, [name]: value })).toThrow(name);
     });
 
+    it.each([
+      ['DATABASE_URL', 'postgresql://postgres:S3nhaForte@db:5432/innova'],
+      ['DATABASE_URL', 'postgresql://root:S3nhaForte@db:5432/innova'],
+      ['DATABASE_APP_URL', 'postgresql://admin:S3nhaForte@db:5432/innova'],
+    ])('lança quando %s usa a conta administrativa', (name, value) => {
+      expect(() => validateEnv({ ...PROD, [name]: value })).toThrow('utilizador administrativo');
+    });
+
+    it('aceita uma role dedicada com permissões mínimas', () => {
+      expect(() =>
+        validateEnv({
+          ...PROD,
+          DATABASE_URL: 'postgresql://innova_owner:S3nhaForte@db:5432/innova',
+          DATABASE_APP_URL: 'postgresql://innova_app:S3nhaForte@db:5432/innova',
+        }),
+      ).not.toThrow();
+    });
+
     it('fora de produção não bloqueia', () => {
       expect(() =>
         validateEnv({ ...BASE, DATABASE_URL: 'postgresql://postgres:postgres@localhost/x' }),

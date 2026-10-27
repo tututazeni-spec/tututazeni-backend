@@ -64,6 +64,18 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
         '[BOOT] DATABASE_URL usa credenciais por defeito (ex.: postgres:postgres) — cria um utilizador próprio.',
       );
     }
+    // Menor privilégio: a app não se liga à BD com a conta administrativa (postgres/root/admin).
+    for (const name of ['DATABASE_URL', 'DATABASE_APP_URL'] as const) {
+      const user = /^[a-z]+:\/\/([^:@/]+)[:@]/i.exec(env[name] ?? '')?.[1];
+      if (
+        user &&
+        /^(postgres|root|admin|administrator|superuser)$/i.test(decodeURIComponent(user))
+      ) {
+        throw new Error(
+          `[BOOT] ${name} usa o utilizador administrativo "${user}" — cria uma role dedicada com permissões mínimas.`,
+        );
+      }
+    }
     if (/localhost|127\.0\.0\.1/i.test(env.ALLOWED_ORIGINS ?? '')) {
       throw new Error('[BOOT] ALLOWED_ORIGINS em produção não pode incluir localhost.');
     }
@@ -77,6 +89,16 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
     if (JWT_SECRET === JWT_REFRESH_SECRET) {
       bootWarn(
         'JWT_SECRET e JWT_REFRESH_SECRET são iguais — um token de acesso valeria como refresh.',
+      );
+    }
+    if (env.RLS_ENABLED !== 'true') {
+      bootWarn(
+        'RLS_ENABLED não está true — a app corre com a role dona das tabelas, sem isolamento por linha (ver ops/db/rls/README.md).',
+      );
+    }
+    if (!env.PII_ENCRYPTION_KEY) {
+      bootWarn(
+        'PII_ENCRYPTION_KEY não definido — NIF/NIB/IBAN e segredos cifrados derivam de JWT_SECRET; rodá-lo tornaria-os ilegíveis.',
       );
     }
     if (!env.REDIS_PASSWORD) {
