@@ -1,0 +1,9 @@
+# Revisão das áreas sensíveis (para ser vinculativo, activar "Require review from Code Owners" na branch protection).
+*                       @tututazeni-spec
+/prisma/                @tututazeni-spec
+/src/auth/              @tututazeni-spec
+/src/audit/             @tututazeni-spec
+/src/common/security/   @tututazeni-spec
+/ops/                   @tututazeni-spec
+/.github/               @tututazeni-spec
+/docs/security/         @tututazeni-spec
