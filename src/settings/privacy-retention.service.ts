@@ -6,22 +6,27 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 import { PrismaService } from '../prisma/prisma.service';
+import { ANONYMIZED_DOMAIN, PersonalDataService } from './personal-data.service';
 import { parsePrivacySettings } from './privacy-settings';
 
 const DAY_MS = 86_400_000;
 const REVOKED_TOKEN_GRACE_DAYS = 30;
+const EXIT_ANONYMIZE_BATCH = 100;
 
 @Injectable()
 export class PrivacyRetentionService {
   private readonly logger = new Logger(PrivacyRetentionService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly personalData: PersonalDataService,
+  ) {}
 
   @Cron('40 3 * * *')
   async run() {
     const result = await this.purge();
     this.logger.log(
-      `Retenção: ${result.notifications} notificações e ${result.refreshTokens} refresh tokens apagados`,
+      `Retenção: ${result.notifications} notificações e ${result.refreshTokens} refresh tokens apagados; ${result.exitAnonymized} ex-colaboradores anonimizados`,
     );
   }
 
@@ -31,7 +36,9 @@ export class PrivacyRetentionService {
       where: { id },
       select: { privacySettingsJson: true },
     });
-    const { retentionDays } = parsePrivacySettings(t.privacySettingsJson);
+    const { retentionDays, exitRetentionYears, anonymizationEnabled } = parsePrivacySettings(
+      t.privacySettingsJson,
+    );
     const cutoff = new Date(now.getTime() - retentionDays * DAY_MS);
     const tokenCutoff = new Date(now.getTime() - REVOKED_TOKEN_GRACE_DAYS * DAY_MS);
 
@@ -41,6 +48,29 @@ export class PrivacyRetentionService {
         where: { OR: [{ expiresAt: { lt: tokenCutoff } }, { revokedAt: { lt: tokenCutoff } }] },
       }),
     ]);
-    return { notifications: notifications.count, refreshTokens: refreshTokens.count };
+
+    // LPDP (art. 11.º, conservação limitada à finalidade): ex-colaboradores deixam de ser
+    // identificáveis passado o prazo configurado. Recibos/presenças mantêm-se (obrigações legais).
+    let exitAnonymized = 0;
+    if (exitRetentionYears > 0 && anonymizationEnabled) {
+      const exitCutoff = new Date(now);
+      exitCutoff.setFullYear(exitCutoff.getFullYear() - exitRetentionYears);
+      const leavers = await this.prisma.user.findMany({
+        where: { exitDate: { lt: exitCutoff }, NOT: { email: { endsWith: `@${ANONYMIZED_DOMAIN}` } } },
+        select: { id: true },
+        take: EXIT_ANONYMIZE_BATCH,
+      });
+      for (const { id: userId } of leavers) {
+        await this.personalData.anonymizeUser(userId).then(
+          () => exitAnonymized++,
+          err => this.logger.error(`Anonimização do utilizador ${userId} falhou: ${String(err)}`),
+        );
+      }
+    }
+    return {
+      notifications: notifications.count,
+      refreshTokens: refreshTokens.count,
+      exitAnonymized,
+    };
   }
 }

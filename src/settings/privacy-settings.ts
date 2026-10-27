@@ -17,6 +17,8 @@ export interface PrivacySettings {
   dpoPhone: string;
   /** Prazo de retenção geral de dados pessoais, em dias. */
   retentionDays: number;
+  /** Anos após `exitDate` em que o ex-colaborador é anonimizado automaticamente (0 desactiva). */
+  exitRetentionYears: number;
   anonymizationEnabled: boolean;
   exportEnabled: boolean;
   /** Eliminar automaticamente os dados do titular ao aprovar um pedido de eliminação. */
@@ -30,6 +32,7 @@ export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   dpoEmail: '',
   dpoPhone: '',
   retentionDays: 1825,
+  exitRetentionYears: 5,
   anonymizationEnabled: true,
   exportEnabled: true,
   autoDeleteOnRequest: false,

@@ -208,6 +208,7 @@ Notas: o `pg_restore` usa `--clean --exit-on-error`; em Postgres gerido, erros d
 - [ ] `$C ps` — réplicas `app` e `frontend` *healthy*; `$C logs --tail=100 app` sem erros
 - [ ] `curl -sf https://$DOMAIN/health/ready`
 - [ ] Login funciona com um utilizador real
+- [ ] LPDP: reaplicar eliminações já concluídas (o backup traz de volta dados apagados): `POST /settings/privacy/erasures/reapply` como ADMIN; confirmar `reapplied` e arquivar o resultado
 - [ ] Backup imediato pós-restore: `set -a; . /opt/innova/.env.production; set +a; /opt/innova/backup/backup-postgres.sh`
 - [ ] Crons activos: `crontab -l | grep INNOVA-BACKUP`
 - [ ] Documentar o incidente e RCA em < 24 h (secção 13)

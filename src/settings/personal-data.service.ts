@@ -14,7 +14,7 @@ import { decryptUserPii } from '../common/security/pii-crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { PrivacySettings, parsePrivacySettings } from './privacy-settings';
 
-const ANONYMIZED_DOMAIN = 'anonimizado.invalid';
+export const ANONYMIZED_DOMAIN = 'anonimizado.invalid';
 const EXPORT_NOTIFICATIONS_LIMIT = 1000;
 
 @Injectable()
@@ -200,6 +200,27 @@ export class PersonalDataService {
     await this.anonymizeUser(request.userId, actorId).catch(
       swallow('personal-data.service', 'auto-anonimização falhou', undefined, 'error'),
     );
+  }
+
+  /**
+   * Depois de restaurar um backup, volta a aplicar as eliminações concluídas (o backup traz de
+   * volta dados que o titular já tinha mandado apagar). Idempotente.
+   */
+  async reapplyCompletedErasures(actorId?: number) {
+    const done = await this.prisma.dataSubjectRequest.findMany({
+      where: { type: DsrType.ERASURE, status: DsrStatus.COMPLETED, userId: { not: null } },
+      select: { userId: true },
+      distinct: ['userId'],
+    });
+    let reapplied = 0;
+    for (const { userId } of done) {
+      if (!userId) continue;
+      const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+      if (!u || u.email.endsWith(`@${ANONYMIZED_DOMAIN}`)) continue;
+      await this.anonymizeUser(userId, actorId);
+      reapplied++;
+    }
+    return { checked: done.length, reapplied };
   }
 
   /** Pedido do próprio titular (autoatendimento), ligado à sua conta. */

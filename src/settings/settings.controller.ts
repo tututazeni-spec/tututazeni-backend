@@ -494,6 +494,13 @@ export class SettingsController {
     return this.personalData.executeRequest(id, admin.id);
   }
 
+  @Post('privacy/erasures/reapply')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Após restaurar um backup: reaplicar as eliminações já concluídas' })
+  reapplyErasures(@CurrentUser() admin: CurrentUserData) {
+    return this.personalData.reapplyCompletedErasures(admin.id);
+  }
+
   // Autoatendimento do titular (LPDP): qualquer utilizador autenticado, só sobre os seus dados.
   @Get('privacy/me/export')
   @AnyAuthenticated()

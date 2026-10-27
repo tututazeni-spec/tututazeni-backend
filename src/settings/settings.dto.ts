@@ -601,6 +601,16 @@ export class UpdatePrivacySettingsDto {
   @Max(3650)
   retentionDays?: number;
 
+  @ApiPropertyOptional({
+    description: 'Anos após a saída do colaborador para anonimizar a conta (0 desactiva)',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(30)
+  exitRetentionYears?: number;
+
   @ApiPropertyOptional() @IsOptional() @IsBoolean() anonymizationEnabled?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() exportEnabled?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() autoDeleteOnRequest?: boolean;

@@ -58,8 +58,12 @@ describe('PrivacyRetentionService', () => {
       notificationLog: { deleteMany: jest.Mock };
     };
     const now = new Date('2026-10-27T00:00:00Z');
-    const out = await new PrivacyRetentionService(prisma as never).purge(now);
-    expect(out).toEqual({ notifications: 3, refreshTokens: 2 });
+    const personalData = { anonymizeUser: jest.fn().mockResolvedValue({}) };
+    const p = prisma as unknown as { user: { findMany: jest.Mock } };
+    p.user.findMany = jest.fn().mockResolvedValue([{ id: 9 }]);
+    const out = await new PrivacyRetentionService(prisma as never, personalData as never).purge(now);
+    expect(out).toEqual({ notifications: 3, refreshTokens: 2, exitAnonymized: 1 });
+    expect(personalData.anonymizeUser).toHaveBeenCalledWith(9);
     const cutoff = prisma.notificationLog.deleteMany.mock.calls[0][0].where.createdAt.lt as Date;
     expect(cutoff.toISOString()).toBe('2026-07-19T00:00:00.000Z');
   });
