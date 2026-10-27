@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import { verify } from 'jsonwebtoken';
+import { toSecretKeyObject } from '../../auth/jwt-key';
 import { setRequestUserId } from './request-context';
 
 const BEARER = /^Bearer\s+(.+)$/i;
@@ -19,11 +20,14 @@ function extractToken(req: Request): string | null {
  * (logout, refresh), onde o guard não chega a correr.
  */
 export function logIdentityMiddleware(secret: string | undefined) {
+  // KeyObject criado uma só vez: com o segredo em texto o jsonwebtoken tenta
+  // createPublicKey() (e falha com excepção) em CADA pedido — ver auth/jwt-key.ts.
+  const key = secret ? toSecretKeyObject(secret) : null;
   return (req: Request, _res: Response, next: NextFunction): void => {
-    const token = secret ? extractToken(req) : null;
-    if (token && secret) {
+    const token = key ? extractToken(req) : null;
+    if (token && key) {
       try {
-        const payload = verify(token, secret, { algorithms: ['HS256'] });
+        const payload = verify(token, key, { algorithms: ['HS256'] });
         if (typeof payload === 'object' && payload.sub != null) {
           setRequestUserId(payload.sub);
         }

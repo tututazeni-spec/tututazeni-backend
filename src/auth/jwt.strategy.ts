@@ -46,6 +46,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     number,
     { user: Awaited<ReturnType<JwtStrategy['loadUser']>>; expiresAt: number; loadedAt: number }
   >();
+  private readonly loading = new Map<number, ReturnType<JwtStrategy['loadUser']>>();
   private readonly cacheTtlMs = parseInt(process.env.JWT_USER_CACHE_TTL_MS || '30000', 10);
 
   constructor(
@@ -89,7 +90,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
     const cached = this.userCache.get(payload.sub);
     const user =
-      cached && cached.expiresAt > Date.now() ? cached.user : await this.loadUser(payload.sub);
+      cached && cached.expiresAt > Date.now() ? cached.user : await this.loadUserOnce(payload.sub);
 
     // Access token emitido antes de uma alteração de senha é inválido.
     if (
@@ -101,6 +102,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Sessão expirada por alteração de senha');
     }
     return user;
+  }
+
+  /**
+   * Single-flight por utilizador: um cliente que dispara vários pedidos em paralelo (uma página
+   * faz 5-10 chamadas) com a cache expirada faria 5-10 × ~6 queries idênticas; assim fazem-se 6.
+   */
+  private loadUserOnce(sub: number) {
+    let pending = this.loading.get(sub);
+    if (!pending) {
+      pending = this.loadUser(sub).finally(() => this.loading.delete(sub));
+      this.loading.set(sub, pending);
+    }
+    return pending;
   }
 
   private async loadUser(sub: number) {
