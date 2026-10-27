@@ -8,6 +8,7 @@ import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Histogram } from 'prom-client';
 import { RlsPool } from './rls-pool';
 import { logQueryEvent, observeQueryDuration, PrismaQueryEvent } from './query-logging';
+import { evaluatePoolBudget } from './pool-budget';
 
 /**
  * RLS_ENABLED=true: a app liga-se com a role innova_app (sem BYPASSRLS) e cada transacção
@@ -81,9 +82,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       throw new Error('RLS_ENABLED=true exige DATABASE_APP_URL (role innova_app, sem BYPASSRLS).');
     }
     const poolerUrl = rlsEnabled() ? undefined : process.env.DATABASE_POOLER_URL;
+    const writePoolMax = parseInt(process.env.DB_POOL_MAX || '50', 10);
     const writePool = makePool(
       appUrl || poolerUrl || process.env.DATABASE_URL,
-      parseInt(process.env.DB_POOL_MAX || '50', 10),
+      writePoolMax,
       !poolerUrl && !(appUrl && /@pgbouncer[:/]/.test(appUrl)),
     );
     super({
@@ -96,6 +98,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     });
 
     this.warmPools = [writePool];
+    this.writePoolMax = writePoolMax;
+    // Com PgBouncer as ligações ao Postgres são do pooler, não deste processo: nada a verificar aqui.
+    this.behindPooler = !!poolerUrl || !!(appUrl && /@pgbouncer[:/]/.test(appUrl));
 
     // ─── Réplica (leitura) — opcional, controlada por feature flag ───
     const replicaUrl = rlsEnabled()
@@ -125,6 +130,36 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   /** Pools a pré-aquecer no arranque (primary; a réplica junta-se se existir). */
   private readonly warmPools: Pool[];
+  private readonly writePoolMax: number;
+  private readonly behindPooler: boolean;
+
+  /**
+   * Compara o pool desta instância com o `max_connections` real do Postgres (ver pool-budget.ts).
+   * Só regista: um orçamento mal dimensionado deve ser visível no arranque, nunca impedi-lo.
+   */
+  private async checkConnectionBudget() {
+    if (this.behindPooler) return;
+    try {
+      const [row] = await this.$queryRaw<{ max: number; reserved: number; used: number }[]>`
+        SELECT current_setting('max_connections')::int AS max,
+               current_setting('superuser_reserved_connections')::int AS reserved,
+               (SELECT count(*)::int FROM pg_stat_activity
+                 WHERE backend_type = 'client backend' AND pid <> pg_backend_pid()) AS used`;
+      if (!row) return;
+      const budget = evaluatePoolBudget({
+        poolMax: this.writePoolMax,
+        serverMax: row.max,
+        reserved: row.reserved,
+        othersInUse: row.used,
+      });
+      if (budget.level === 'error') this.logger.error(budget.message);
+      else if (budget.level === 'warn') this.logger.warn(budget.message);
+      else this.logger.log(budget.message);
+    } catch (err: unknown) {
+      const reason = err instanceof Error ? err.message : 'erro desconhecido';
+      this.logger.warn(`Não foi possível verificar o orçamento de ligações: ${reason}`);
+    }
+  }
 
   /**
    * Abre várias ligações em paralelo antes do primeiro tick de cron (o fan-out do
@@ -194,6 +229,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     if (this.replicaClient) {
       await this.replicaClient.$connect();
     }
+    // Antes do warm-up: depois dele as ligações que este processo abre contariam como "de outros".
+    await this.checkConnectionBudget();
     await this.warmUpPools();
 
     (this as { $on: (e: 'query', cb: (e: PrismaQueryEvent) => void) => void }).$on('query', e => {
