@@ -1,0 +1,9 @@
+# load-tests/phases/profile.yml
+# 90 s a ritmo constante (8 sessões/s) — curto o suficiente para analisar um --cpu-prof
+# do servidor. Uso: artillery run -t http://127.0.0.1:4001 --config load-tests/phases/profile.yml load-tests/artillery.yml
+config:
+  phases:
+    - name: "Perfil 8/s"
+      duration: 90
+      arrivalRate: 8
+      maxVusers: 250

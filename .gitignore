@@ -132,3 +132,6 @@ fix-all.js
 
 # Cliente Prisma gerado localmente (prisma generate corre no postinstall)
 prisma/generated/
+
+# Pool de JWTs gerada por load-tests/scripts/prepare-data.js (credenciais vivas)
+load-tests/data/tokens.csv
