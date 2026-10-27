@@ -635,6 +635,7 @@ enum HrStatus {
 }
 
 model User {
+  productFeedback           ProductFeedback[]          @relation("ProductFeedbackUser")
   avatarTrainingAssignments AvatarTrainingAssignment[]
   avatarTrainingAttempts    AvatarTrainingAttempt[]
   // ─── Identidade ───────────────────────────────────────────────
@@ -16228,4 +16229,39 @@ model BillingMetricSnapshot {
   updatedAt        DateTime @updatedAt
 
   @@map("billing_metric_snapshots")
+}
+
+// ─── Experiência do produto: feedback, sondagem NPS, uso e checklist de arranque ───
+model ProductFeedback {
+  id        String   @id @default(cuid())
+  userId    Int?
+  user      User?    @relation("ProductFeedbackUser", fields: [userId], references: [id], onDelete: SetNull)
+  kind      String // IDEA | PROBLEM | PRAISE | NPS
+  score     Int? // NPS 0-10 (só kind=NPS)
+  comment   String?  @db.Text
+  page      String?
+  createdAt DateTime @default(now())
+
+  @@index([kind, createdAt])
+  @@index([userId, kind, createdAt])
+  @@map("product_feedback")
+}
+
+model ProductUsageEvent {
+  id        String   @id @default(cuid())
+  userId    Int?
+  event     String // page_view | feature_used | ...
+  path      String?
+  createdAt DateTime @default(now())
+
+  @@index([event, createdAt])
+  @@index([userId, createdAt])
+  @@map("product_usage_events")
+}
+
+model GettingStartedDismissal {
+  userId      Int      @id
+  dismissedAt DateTime @default(now())
+
+  @@map("getting_started_dismissals")
 }
