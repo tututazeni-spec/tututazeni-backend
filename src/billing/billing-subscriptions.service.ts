@@ -31,9 +31,9 @@ export class BillingSubscriptionsService {
       userId: actorId,
       action,
       entity: 'BillingSubscription',
-      entityId,
+      // AuditLog.entityId é inteiro; os ids de faturação são cuid, vão em metadata.
+      metadata: JSON.stringify({ id: entityId, ...extra }),
       severity: 'HIGH',
-      metadata: JSON.stringify(extra),
     }).catch(
       swallow('billing-subscriptions.service', 'falha ao gravar auditoria', undefined, 'error'),
     );

@@ -78,6 +78,8 @@ export interface BusinessMetrics {
   cac: number | null;
   newCustomers: number;
   trialConversionPct: number | null;
+  reliable: boolean;
+  reliabilityNote: string | null;
 }
 
 /**
@@ -124,5 +126,67 @@ export function computeMetrics(
     cac: newCustomers > 0 ? round2(acquisitionSpend / newCustomers) : null,
     newCustomers,
     trialConversionPct: trialsEnded.length ? round2((converted / trialsEnded.length) * 100) : null,
+    ...reliability(Math.max(payingAtStart, paying.length)),
+  };
+}
+
+/** Abaixo disto, churn/LTV/CAC/conversão são anedotas, não estatísticas: mostram-se com aviso. */
+export const MIN_CUSTOMERS_FOR_RATES = 10;
+
+function reliability(customers: number): { reliable: boolean; reliabilityNote: string | null } {
+  return customers >= MIN_CUSTOMERS_FOR_RATES
+    ? { reliable: true, reliabilityNote: null }
+    : {
+        reliable: false,
+        reliabilityNote: `Amostra de ${customers} cliente(s) pago(s) (mínimo ${MIN_CUSTOMERS_FOR_RATES}): churn, LTV, CAC e conversão são indicativos. MRR, ARPA e cobrança são exactos.`,
+      };
+}
+
+export interface InvoiceSnapshot {
+  status: string;
+  total: number;
+  issueDate: Date;
+  dueDate: Date;
+  paidAt: Date | null;
+}
+
+export interface CollectionMetrics {
+  invoicesDue: number;
+  collectionRatePct: number | null;
+  avgDaysToPay: number | null;
+  overdueAmount: number;
+  overdueRatePct: number | null;
+}
+
+/**
+ * Saúde da cobrança — útil mesmo com um só cliente:
+ * taxa de cobrança = faturas vencidas na janela que foram pagas ÷ vencidas na janela;
+ * prazo médio = dias entre emissão e pagamento das pagas.
+ */
+export function computeCollections(
+  invoices: InvoiceSnapshot[],
+  windowStart: Date,
+  windowEnd: Date,
+): CollectionMetrics {
+  const live = invoices.filter(i => i.status !== 'VOID');
+  const due = live.filter(i => i.dueDate >= windowStart && i.dueDate <= windowEnd);
+  const paid = due.filter(i => i.status === 'PAID');
+  const dues = due.reduce((a, i) => a + i.total, 0);
+  const overdue = live.filter(
+    i => ['ISSUED', 'OVERDUE'].includes(i.status) && i.dueDate < windowEnd,
+  );
+  const overdueAmount = round2(overdue.reduce((a, i) => a + i.total, 0));
+  const withPay = live.filter(i => i.status === 'PAID' && i.paidAt);
+  return {
+    invoicesDue: due.length,
+    collectionRatePct: due.length ? round2((paid.length / due.length) * 100) : null,
+    avgDaysToPay: withPay.length
+      ? round2(
+          withPay.reduce((a, i) => a + (i.paidAt!.getTime() - i.issueDate.getTime()) / 864e5, 0) /
+            withPay.length,
+        )
+      : null,
+    overdueAmount,
+    overdueRatePct: dues > 0 ? round2((overdueAmount / dues) * 100) : null,
   };
 }

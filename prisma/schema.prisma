@@ -16213,3 +16213,19 @@ model AcquisitionSpend {
   @@index([month])
   @@map("acquisition_spend")
 }
+
+model BillingMetricSnapshot {
+  id               String   @id @default(cuid())
+  month            String   @unique // YYYY-MM
+  mrr              Decimal  @db.Decimal(14, 2)
+  arr              Decimal  @db.Decimal(14, 2)
+  payingCustomers  Int
+  trialing         Int
+  newCustomers     Int
+  churnRatePct     Decimal  @db.Decimal(7, 2)
+  revenueCollected Decimal  @db.Decimal(14, 2)
+  outstanding      Decimal  @db.Decimal(14, 2)
+  updatedAt        DateTime @updatedAt
+
+  @@map("billing_metric_snapshots")
+}

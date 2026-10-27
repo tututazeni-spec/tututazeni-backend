@@ -7,6 +7,8 @@ import { BillingLimitsService } from './billing-limits.service';
 import { BillingMetricsService } from './billing-metrics.service';
 import { BillingPlansService } from './billing-plans.service';
 import { BillingReadOnlyGuard } from './billing-readonly.guard';
+import { BillingEntitlementsGuard } from './billing-entitlements.guard';
+import { ScalabilityStorageService } from '../scalability/scalability-storage.service';
 import { BillingSchedulerService } from './billing-scheduler.service';
 import { BillingSubscriptionsService } from './billing-subscriptions.service';
 
@@ -23,6 +25,8 @@ import { BillingSubscriptionsService } from './billing-subscriptions.service';
     BillingMetricsService,
     BillingSchedulerService,
     { provide: APP_GUARD, useClass: BillingReadOnlyGuard },
+    { provide: APP_GUARD, useClass: BillingEntitlementsGuard },
+    ScalabilityStorageService,
   ],
   exports: [BillingLimitsService],
 })

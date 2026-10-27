@@ -56,9 +56,9 @@ export class BillingSchedulerService {
     return writeChainedAuditLog(this.prisma, {
       action,
       entity: 'BillingSubscription',
-      entityId,
+      // AuditLog.entityId é inteiro; os ids de faturação são cuid, vão em metadata.
+      metadata: JSON.stringify({ id: entityId, ...extra }),
       severity: 'MEDIUM',
-      metadata: JSON.stringify(extra),
     }).catch(swallow('billing-scheduler', 'falha ao gravar auditoria', undefined, 'error'));
   }
 

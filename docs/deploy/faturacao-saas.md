@@ -10,7 +10,9 @@ Módulo `src/billing/`. Tudo em `/billing/*` é **só ADMIN**. A plataforma cont
   - **Utilizadores:** `UsersService.create` recusa com 403 quando se atinge `maxUsers` do plano (`BillingLimitsService.assertCanAddUser`).
   - **Estado da subscrição:** expirada, cancelada (após o período pago) ou com teste terminado → plataforma em **modo só de leitura** (`BillingReadOnlyGuard`; GET e `/auth`, `/billing`, `/health`, `/metrics` continuam a funcionar). Falha aberta: erro a ler o estado não bloqueia nada.
   - Sem subscrição, valem os limites de `TenantConfig` (comportamento anterior): instalações existentes não são afectadas.
-- **Ainda não aplicado:** limite de armazenamento (o uso real de disco não é medido; só o máximo é exposto) e exclusão de módulos por plano (existe `assertModuleIncluded(subject)` mas nenhuma rota o chama; usar nos controllers dos módulos que se queiram restringir).
+- **Armazenamento:** o uso real vem de `ScalabilityStorageService.getStorageMetrics()` (soma dos bytes registados nas tabelas de ficheiros; medido de 5 em 5 min, em cache) e aparece em `GET /billing/subscription`. Com a quota esgotada, `BillingEntitlementsGuard` recusa (403) **escritas que trazem ficheiros** (multipart ou data-URL no corpo); consultas e escritas sem ficheiros continuam. Mede o que a aplicação regista, não o espaço físico do disco/bucket.
+- **Módulos:** o plano (`modulesJson`) e os interruptores de Definições → Licença e Módulos (`moduleFlagsJson`, até aqui sem efeito) são aplicados pelo mesmo guard, por prefixo de rota (`billing-route-modules.ts`: payroll, LMS, avaliação, talento, biblioteca, avatar training, ROI, history, relatórios). O núcleo (auth, utilizadores, definições, dashboard, notificações) nunca é bloqueado. Por omissão todos os módulos estão incluídos e activos, por isso nada muda até alguém restringir um plano.
+- Todos os guards **falham abertos**: se o estado de faturação não puder ser lido (ex.: migration por aplicar), a aplicação continua; o limite de utilizadores regista o erro e deixa criar.
 
 ## Ciclo de vida da subscrição
 
@@ -61,8 +63,10 @@ Sem gateway: pagamento por transferência/referência, confirmado manualmente pe
 | Conversão de teste | testes terminados que passaram a pagos ÷ testes terminados |
 | Receita cobrada / em aberto | faturas `PAID` na janela / `ISSUED`+`OVERDUE` |
 
-Com um único cliente, MRR/ARPA/receita são exactos mas churn, LTV e CAC só fazem sentido quando houver vários clientes (a fórmula é a mesma).
+**Fiabilidade:** a resposta traz `reliable` e `reliabilityNote`. Com menos de 10 clientes pagos (`MIN_CUSTOMERS_FOR_RATES`) churn, LTV, CAC e conversão são indicativos e o painel deve mostrá-los com esse aviso; MRR, ARPA e cobrança são sempre exactos. Com um só cliente, o que interessa é o bloco `collections`: taxa de cobrança (faturas vencidas na janela que foram pagas), prazo médio de pagamento, valor e % em atraso.
+
+**Histórico:** as subscrições só guardam o estado actual, por isso um cron diário (06:30) grava a foto do mês em `billing_metric_snapshots` (MRR, ARR, clientes, receita, em aberto). `GET /billing/metrics/history?months=12` devolve a série; o último dia de cada mês fica como valor final.
 
 ## Estado de verificação
 
-Migration `20261201000000_billing_saas`: gerada com `prisma migrate diff`, **ainda não aplicada** a nenhuma BD. Compila (`tsc`), lint e prettier limpos; unitários da matemática (IVA, períodos, hash, métricas) passam. **Por correr:** migration, integração (fluxo trial → subscribe → pagamento → renovação → dunning) e `test:authz`.
+Migrations `20261201000000_billing_saas` e `20261202000000_billing_metric_snapshots`: aplicadas à BD de testes (`NODE_ENV=test prisma migrate deploy`). A BD de desenvolvimento e a de produção recebem-nas pelo fluxo normal (`migrate deploy`; em produção, pelo job `migrate` do deploy). Compila (`tsc`), lint e prettier limpos; unitários (matemática, guard de direitos) e o spec de integração `test/integration/billing` cobrem trial único, numeração e IVA, hash encadeado, cobrança falhada, pagamento, métricas, módulo fora do plano, limite de utilizadores e modo só de leitura. **Não coberto por testes:** os crons (renovação, dunning, fim de trial) e a quota de armazenamento contra uma BD real.

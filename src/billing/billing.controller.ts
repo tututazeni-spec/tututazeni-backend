@@ -137,8 +137,16 @@ export class BillingController {
   }
 
   // ── Métricas de negócio ──
+  @Get('metrics/history')
+  @ApiOperation({ summary: 'Série mensal de MRR, clientes e receita' })
+  history(@Query('months', new DefaultValuePipe(12), ParseIntPipe) months: number) {
+    return this.metrics.history(months);
+  }
+
   @Get('metrics')
-  @ApiOperation({ summary: 'MRR, ARR, churn, LTV, CAC e conversão de trial' })
+  @ApiOperation({
+    summary: 'MRR, ARR, cobrança, churn, LTV, CAC e conversão (com indicador de fiabilidade)',
+  })
   summary(@Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number) {
     return this.metrics.summary(Math.min(Math.max(days, 1), 365));
   }
