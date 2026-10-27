@@ -17,6 +17,7 @@ import { SettingsService } from '../settings/settings.service';
 import { SecuritySettingsService } from '../settings/security-settings.service';
 import { SessionRevocationService } from '../auth/session-revocation.service';
 import { hashPassword, verifyPassword } from '../common/security/password-hasher';
+import { decryptUserPii, encryptPii } from '../common/security/pii-crypto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { flattenRolePermissions } from '../common/utils/role-permissions';
 import {
@@ -103,7 +104,7 @@ export class UsersService {
   // Genérico preserva o shape real do argumento menos `password`.
   private sanitize<T extends { password?: string | null }>(user: T): Omit<T, 'password'> {
     const { password, ...rest } = user;
-    return rest;
+    return decryptUserPii(rest);
   }
 
   // ─── FORMATO DE EMAIL DO TENANT ───────────────────────────────────────────
@@ -324,7 +325,7 @@ export class UsersService {
       },
     });
     if (!user) throw new NotFoundException(`Utilizador #${id} não encontrado`);
-    return user;
+    return decryptUserPii(user);
   }
 
   // ─── LOOKUPS (formulário "Novo Utilizador") ───────────────────────────────
@@ -400,7 +401,7 @@ export class UsersService {
             preferredName: dto.preferredName,
             nationality: dto.nationality,
             identificationNumber: dto.identificationNumber,
-            nif: dto.nif,
+            nif: encryptPii(dto.nif),
             personalEmail: dto.personalEmail,
             alternatePhone: dto.alternatePhone,
             address: dto.address,
@@ -564,6 +565,7 @@ export class UsersService {
     }
 
     const data: Prisma.UserUpdateInput = { ...dto };
+    if (dto.nif !== undefined) data.nif = encryptPii(dto.nif);
     // Nunca deixa passar a senha do DTO em claro (ex.: '' é falsy e escapava ao hash).
     delete data.password;
     if (dto.password) throw new BadRequestException(PASSWORD_BY_ADMIN_MESSAGE);

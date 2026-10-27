@@ -2,6 +2,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { decryptUserPii } from '../../common/security/pii-crypto';
 import { PdfService } from '../../pdf/pdf.service';
 
 interface PdfPayslipInput {
@@ -110,7 +111,10 @@ export class PayslipPdfService {
     });
     if (!payslip) throw new NotFoundException('Recibo não encontrado');
 
-    const input = buildPdfInput(payslip as SlipForPdf);
+    const input = buildPdfInput({
+      ...payslip,
+      user: decryptUserPii(payslip.user),
+    } as SlipForPdf);
 
     if (payslip.receiptCode) {
       input.stampHash = createHash('sha256')
