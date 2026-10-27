@@ -19,10 +19,33 @@ export class CacheService implements OnModuleDestroy {
     return this.config.get<string>('CACHE_ENABLED', 'true') !== 'false';
   }
 
+  /** Cálculos em curso por chave (single-flight, só dentro deste processo). */
+  private readonly inflight = new Map<string, Promise<unknown>>();
+
   /** Devolve o valor em cache ou calcula-o, guarda-o (TTL) e devolve-o.
-   *  Flag off ou Redis em baixo → calcula sem quebrar. */
+   *  Flag off ou Redis em baixo → calcula sem quebrar.
+   *
+   *  Single-flight: pedidos concorrentes à mesma chave partilham UM cálculo (e um GET ao Redis).
+   *  Sem isto, quando uma chave quente expira com o servidor sob carga, todos os pedidos em fila
+   *  falham a cache e recalculam o mesmo valor em paralelo — o que atrasa o recálculo e prolonga
+   *  a janela de miss (cache stampede). A chave tem de identificar o valor por completo, tal como
+   *  já era preciso para o partilhar via Redis. */
   async getOrSet<T>(key: string, ttlSeconds: number, compute: () => Promise<T>): Promise<T> {
     if (!this.cacheEnabled) return compute();
+    const pending = this.inflight.get(key);
+    if (pending) return pending as Promise<T>;
+    const run = this.readOrCompute(key, ttlSeconds, compute).finally(() => {
+      this.inflight.delete(key);
+    });
+    this.inflight.set(key, run);
+    return run;
+  }
+
+  private async readOrCompute<T>(
+    key: string,
+    ttlSeconds: number,
+    compute: () => Promise<T>,
+  ): Promise<T> {
     try {
       const hit = await this.redis.get(key);
       if (hit) {
