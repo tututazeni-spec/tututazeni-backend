@@ -626,6 +626,12 @@ export class CreateDataSubjectRequestDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(4000) details?: string;
 }
 
+/** Pedido feito pelo próprio titular (autoatendimento). */
+export class CreateOwnDataRequestDto {
+  @ApiProperty({ enum: DsrType }) @IsEnum(DsrType) type!: DsrType;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(4000) details?: string;
+}
+
 export class UpdateDataSubjectRequestDto {
   @ApiPropertyOptional({ enum: DsrStatus }) @IsOptional() @IsEnum(DsrStatus) status?: DsrStatus;
 

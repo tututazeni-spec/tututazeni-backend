@@ -11,6 +11,8 @@ import { NotificationSettingsService } from './notification-settings.service';
 import { IntegrationSettingsService } from './integration-settings.service';
 import { CertificateSettingsService } from './certificate-settings.service';
 import { PrivacySettingsService } from './privacy-settings.service';
+import { PersonalDataService } from './personal-data.service';
+import { PrivacyRetentionService } from './privacy-retention.service';
 import { LicenseSettingsService } from './license-settings.service';
 import { AuditDataSettingsService } from './audit-data-settings.service';
 import { AuthSettingsService } from './auth-settings.service';
@@ -38,6 +40,8 @@ import { SystemSettingsInterceptor } from './system-settings.interceptor';
     IntegrationSettingsService,
     CertificateSettingsService,
     PrivacySettingsService,
+    PersonalDataService,
+    PrivacyRetentionService,
     LicenseSettingsService,
     AuditDataSettingsService,
     AuthSettingsService,
@@ -55,6 +59,7 @@ import { SystemSettingsInterceptor } from './system-settings.interceptor';
     IntegrationSettingsService,
     CertificateSettingsService,
     PrivacySettingsService,
+    PersonalDataService,
     LicenseSettingsService,
     AuditDataSettingsService,
     AuthSettingsService,
