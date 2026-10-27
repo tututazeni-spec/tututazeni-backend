@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>INNOVA — Estado do serviço</title>
+  <style>
+    :root { --bg:#f6f7f9; --card:#fff; --fg:#0f1f3d; --muted:#5b6678; --ok:#16a34a; --bad:#dc2626; --warn:#d97706; --line:#e3e6ec; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#0b1220; --card:#121b2e; --fg:#e8ecf4; --muted:#93a0b8; --line:#243049; } }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, sans-serif; }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+    h1 { font-size: 1.4rem; margin: 0 0 16px; }
+    h2 { font-size: 1.05rem; margin: 32px 0 12px; }
+    .banner { padding: 16px; border-radius: 10px; color:#fff; font-weight:600; }
+    .banner.ok { background: var(--ok); } .banner.bad { background: var(--bad); } .banner.warn { background: var(--warn); }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-top:10px; }
+    .row { display:flex; justify-content:space-between; gap:12px; align-items:center; }
+    .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; background:var(--ok); }
+    .dot.bad { background:var(--bad); }
+    .muted { color:var(--muted); font-size:.875rem; }
+    .bars { display:flex; gap:2px; margin-top:10px; height:28px; }
+    .bars i { flex:1; border-radius:2px; background:var(--ok); }
+    .bars i.warn { background:var(--warn); } .bars i.bad { background:var(--bad); } .bars i.none { background:var(--line); }
+    .inc h3 { margin:0; font-size:1rem; } .inc p { margin:6px 0 0; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>INNOVA — Estado do serviço</h1>
+  <div id="banner" class="banner ok">A carregar…</div>
+  <h2>Componentes</h2>
+  <div id="components"></div>
+  <h2>Incidentes</h2>
+  <div id="incidents"><p class="muted">A carregar…</p></div>
+  <p class="muted" id="updated"></p>
+</main>
+<script>
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const get = u => fetch(u + '?t=' + Date.now()).then(r => r.ok ? r.json() : Promise.reject(r.status));
+
+  function bars(days) {
+    const out = [];
+    for (let i = 89; i >= 0; i--) {
+      const key = new Date(Date.now() - i * 864e5).toISOString().slice(0, 10);
+      const d = days[key];
+      const cls = !d ? 'none' : d.ok === d.total ? '' : d.ok / d.total >= 0.99 ? 'warn' : 'bad';
+      const tip = d ? key + ': ' + (100 * d.ok / d.total).toFixed(2) + '%' : key + ': sem dados';
+      out.push('<i class="' + cls + '" title="' + tip + '"></i>');
+    }
+    return '<div class="bars">' + out.join('') + '</div>';
+  }
+  function uptime30(days) {
+    let ok = 0, total = 0;
+    for (const [k, d] of Object.entries(days)) if (Date.now() - Date.parse(k) <= 30 * 864e5) { ok += d.ok; total += d.total; }
+    return total ? (100 * ok / total).toFixed(2) + '%' : '—';
+  }
+
+  Promise.all([get('status.json').catch(() => null), get('incidents.json').catch(() => [])]).then(([status, incidents]) => {
+    const targets = status ? Object.values(status.targets) : [];
+    const open = incidents.filter(i => i.status !== 'resolved');
+    const down = targets.filter(t => !t.up);
+    const b = document.getElementById('banner');
+    if (!status) { b.className = 'banner warn'; b.textContent = 'Sem dados de monitorização de momento'; }
+    else if (down.length || open.some(i => i.impact === 'major')) { b.className = 'banner bad'; b.textContent = 'Estamos com problemas num ou mais componentes'; }
+    else if (open.length) { b.className = 'banner warn'; b.textContent = 'Incidente em acompanhamento'; }
+    else { b.className = 'banner ok'; b.textContent = 'Todos os sistemas operacionais'; }
+
+    document.getElementById('components').innerHTML = targets.map(t =>
+      '<div class="card"><div class="row"><span><span class="dot ' + (t.up ? '' : 'bad') + '"></span>' + esc(t.name) +
+      '</span><span class="muted">' + uptime30(t.days) + ' (30 dias)</span></div>' + bars(t.days) + '</div>').join('');
+
+    document.getElementById('incidents').innerHTML = incidents.length
+      ? incidents.slice(0, 15).map(i => '<div class="card inc"><h3>' + esc(i.title) + ' — ' +
+          (i.status === 'resolved' ? 'Resolvido' : esc(i.status)) + '</h3><div class="muted">' + esc(i.startedAt) +
+          (i.resolvedAt ? ' → ' + esc(i.resolvedAt) : '') + '</div>' +
+          (i.updates || []).map(u => '<p><b>' + esc(u.at) + '</b> — ' + esc(u.text) + '</p>').join('') + '</div>').join('')
+      : '<p class="muted">Sem incidentes registados.</p>';
+    if (status) document.getElementById('updated').textContent = 'Última verificação: ' + new Date(status.updatedAt).toLocaleString('pt-PT');
+  });
+</script>
+</body>
+</html>

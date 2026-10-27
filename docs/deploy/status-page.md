@@ -38,3 +38,26 @@ Regras: factos e hora, sem culpar terceiros, sem prometer o que não se controla
 ## Pós-incidente
 
 Registar duração e consumo do orçamento de erro (`sla-slo.md`); post-mortem curto se > 10 % do orçamento.
+
+## Implementação neste repositório (activa depois de 3 passos manuais)
+
+A página é estática e vive em `ops/status-page/`; a sonda é o workflow `.github/workflows/status-page.yml` (GitHub Actions, **fora do VPS**), que de 5 em 5 min faz GET aos alvos, guarda agregados diários de 90 dias em `status.json` e publica tudo no branch `gh-pages` (GitHub Pages).
+
+Passos únicos (só o dono do repositório consegue fazer):
+
+1. **Variável** `STATUS_TARGETS` (Settings → Secrets and variables → Actions → Variables):
+   `[{"id":"web","name":"Aplicação web","url":"https://<dominio>/"},{"id":"api","name":"API","url":"https://<dominio>/api/health/ready"}]`
+2. Correr uma vez o workflow *Status Page* (Actions → Run workflow) para criar o branch `gh-pages`, e depois **Settings → Pages → Source: `gh-pages` / root**.
+3. (Opcional) domínio próprio: `status.<dominio>` como CNAME para `<owner>.github.io` na Cloudflare **sem proxy**, e indicá-lo em Settings → Pages.
+
+Incidentes: acrescentar uma entrada a `ops/status-page/incidents.json` (PR → merge republica a página):
+
+```json
+{ "title": "Lentidão no login", "status": "investigating", "impact": "minor",
+  "startedAt": "2026-10-27 10:05 UTC",
+  "updates": [{ "at": "10:05", "text": "A investigar." }] }
+```
+
+`status`: `investigating` | `identified` | `monitoring` | `resolved` (acrescentar `resolvedAt`); `impact: "major"` mostra o banner vermelho.
+
+Limites: o cron do GitHub Actions pode atrasar alguns minutos em horas de pico; o histórico guarda só agregados diários. Se for preciso resolução de 1 min e alertas por SMS, migrar para um serviço dedicado (Better Stack/Instatus) mantendo esta página como alternativa.

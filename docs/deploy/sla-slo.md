@@ -46,4 +46,4 @@ Disponibilidade nos últimos 30 dias (PromQL, para o Grafana):
 
 ## Revisão
 
-Rever este documento trimestralmente e sempre que a topologia mudar.
+SLA contratual (proposta): `sla-contratual.md`. Rever este documento trimestralmente e sempre que a topologia mudar.
