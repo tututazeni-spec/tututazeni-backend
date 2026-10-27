@@ -638,6 +638,7 @@ model User {
   productFeedback           ProductFeedback[]          @relation("ProductFeedbackUser")
   supportTickets            SupportTicket[]            @relation("SupportTicketRequester")
   supportMessages           SupportTicketMessage[]     @relation("SupportMessageAuthor")
+  legalAcceptances          LegalAcceptance[]          @relation("LegalAcceptanceUser")
   avatarTrainingAssignments AvatarTrainingAssignment[]
   avatarTrainingAttempts    AvatarTrainingAttempt[]
   // ─── Identidade ───────────────────────────────────────────────
@@ -16305,4 +16306,21 @@ model SupportTicketMessage {
 
   @@index([ticketId, createdAt])
   @@map("support_ticket_messages")
+}
+
+// ─── Aceitação de documentos legais (termos de utilização / política de privacidade) ───
+// Prova de consentimento: quem aceitou, que versão, quando e de onde. Uma linha por (utilizador, documento, versão).
+model LegalAcceptance {
+  id         String   @id @default(cuid())
+  userId     Int
+  user       User     @relation("LegalAcceptanceUser", fields: [userId], references: [id], onDelete: Cascade)
+  docType    String // TERMS | PRIVACY
+  version    String
+  acceptedAt DateTime @default(now())
+  ip         String?
+  userAgent  String?
+
+  @@unique([userId, docType, version])
+  @@index([docType, version])
+  @@map("legal_acceptances")
 }
