@@ -38,6 +38,8 @@ services:
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
+    security_opt: ['no-new-privileges:true']
+    cap_drop: ['ALL']
     deploy:
       replicas: 2
       resources:
@@ -61,6 +63,8 @@ services:
       app:
         condition: service_started
     restart: unless-stopped
+    security_opt: ['no-new-privileges:true']
+    cap_drop: ['ALL']
     deploy:
       replicas: 2
       resources:
@@ -90,6 +94,10 @@ services:
       - app
       - frontend
     restart: always
+    security_opt: ['no-new-privileges:true']
+    # Caddy faz bind a 80/443 como não-root dentro do contentor.
+    cap_drop: ['ALL']
+    cap_add: ['NET_BIND_SERVICE']
     stop_grace_period: 15s
     healthcheck:
       # A admin API do Caddy escuta em localhost:2019. Se o Caddy pendurar (não
@@ -150,12 +158,16 @@ services:
   redis:
     image: redis:7-alpine
     container_name: innova-redis-prod
-    command: ['redis-server', '--appendonly', 'yes']
+    # Sem porta publicada, mas qualquer contentor comprometido na rede Docker falava com ele em
+    # claro: requirepass vem do .env.production (a app lê a mesma REDIS_PASSWORD).
+    env_file: .env.production
+    command: ['sh', '-c', 'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"']
     volumes:
       - redis-data:/data
     restart: unless-stopped
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      # REDISCLI_AUTH evita a password na linha de comandos (visível em `ps`).
+      test: ['CMD-SHELL', 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
       interval: 10s
       timeout: 5s
       retries: 5

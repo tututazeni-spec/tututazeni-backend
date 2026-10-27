@@ -34,6 +34,8 @@ import {
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 import { IsWebLink } from '../common/validators/is-web-link.decorator';
+import { IsOptionalImageRef } from '../common/validators/optional-image-ref.decorator';
+import { FILE_POLICIES } from '../common/files/file-policies';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 // NOTA: ParticipantStatus aqui é o `EventParticipantStatus` do Prisma — nome
@@ -241,6 +243,7 @@ export class CreateEventDto {
   @ApiPropertyOptional({ description: 'URL da imagem/banner' })
   @IsOptional()
   @IsString()
+  @IsOptionalImageRef(FILE_POLICIES.IMAGE)
   bannerUrl?: string;
 }
 
@@ -722,6 +725,7 @@ export class CreateEventSpeakerDto {
   @ApiPropertyOptional({ description: 'URL da fotografia' })
   @IsOptional()
   @IsString()
+  @IsOptionalImageRef(FILE_POLICIES.IMAGE)
   photoUrl?: string;
 
   @ApiPropertyOptional({ description: 'Tema da participação' })

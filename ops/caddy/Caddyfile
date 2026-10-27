@@ -36,6 +36,14 @@ http://{$DOMAIN} {
 	# HSTS na borda (a Cloudflare também o pode emitir; manter aqui é defesa extra).
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 
+	# /metrics é só para o Prometheus (rede Docker, directo a app:4000, com Bearer). Pelo domínio
+	# público não há motivo para existir: o guard por token é a 2.ª linha, esta é a 1.ª.
+	# (`handle` e não `respond` solto: a ordem das directivas do Caddy poria o handle_path à frente.)
+	@internal_only path /api/metrics /api/metrics/*
+	handle @internal_only {
+		respond 404
+	}
+
 	# API: strip do prefixo /api → réplicas do serviço `app`.
 	# `dynamic a` resolve o nome `app` do DNS do Docker para TODOS os IPs das
 	# réplicas (refresh 5s → apanha réplicas novas/recriadas). round-robin entre

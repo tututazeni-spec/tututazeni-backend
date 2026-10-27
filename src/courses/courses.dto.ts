@@ -35,6 +35,7 @@ import { BaseFilterDto } from '../common/dtos/pagination.dto';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 import { IsOptionalImageRef } from '../common/validators/optional-image-ref.decorator';
 import { IsWebLink } from '../common/validators/is-web-link.decorator';
+import { IsWebLinkOrInlineFile } from '../common/validators/is-web-link-or-inline-file.decorator';
 
 export {
   CourseLevel,
@@ -400,6 +401,7 @@ export class CreateLessonDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @IsWebLinkOrInlineFile()
   contentUrl?: string;
 
   @ApiPropertyOptional()
@@ -731,6 +733,7 @@ export class CreateLessonActivityDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @IsWebLinkOrInlineFile()
   contentUrl?: string;
 
   @ApiPropertyOptional()

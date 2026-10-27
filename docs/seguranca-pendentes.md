@@ -1,5 +1,7 @@
 # Segurança — itens pendentes da auditoria (2026-10-25)
 
+> Actualização 2026-10-27: relatório consolidado, achados de infraestrutura e o que foi fechado em `docs/security/2026-10-27-relatorio-consolidado-producao.md`. Dos campos de URL "ainda por fazer" na secção 4, ficaram fechados `courses.contentUrl`, `assessments.mediaUrl`, `events.bannerUrl/photoUrl`, `crm-beneficiaries.photoUrl` e `live-classes.meetingUrl/recordingUrl`; continuam abertos `content-library.url`, `users.avatarUrl` e `settings.*Url` (precisam de alinhamento com o frontend).
+
 Auditoria dos 5 pontos (SQL injection, XSS, CSRF, validação, headers). Estado verificado por leitura de código; não foram corridos testes nem a aplicação.
 
 ## Concluído
