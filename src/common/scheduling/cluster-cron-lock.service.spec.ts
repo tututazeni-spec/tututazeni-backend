@@ -5,7 +5,11 @@ const makeJob = (fn: jest.Mock) => ({ _callbacks: [fn] });
 function build(redisSet: jest.Mock, job: ReturnType<typeof makeJob>, flag = 'true') {
   const registry = { getCronJobs: () => new Map([['job-a', job]]) };
   const config = { get: () => flag };
-  const svc = new ClusterCronLockService(registry as never, config as never, { set: redisSet } as never);
+  const svc = new ClusterCronLockService(
+    registry as never,
+    config as never,
+    { set: redisSet } as never,
+  );
   svc.onApplicationBootstrap();
   return job;
 }

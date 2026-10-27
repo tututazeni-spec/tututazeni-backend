@@ -48,16 +48,17 @@ export class ClusterCronLockService implements OnApplicationBootstrap {
     const redis = this.redis;
     const id = this.instanceId;
     const logger = this.logger;
-    job._callbacks = job._callbacks.map(callback =>
-      async function lockedTick(this: unknown, ...args: unknown[]) {
-        try {
-          const got = await redis.set(`cron-lock:${name}`, id, 'PX', LOCK_TTL_MS, 'NX');
-          if (got !== 'OK') return undefined;
-        } catch (err) {
-          logger.warn(`Lock de "${name}" indisponível, a executar sem lock: ${String(err)}`);
-        }
-        return callback.apply(this, args);
-      },
+    job._callbacks = job._callbacks.map(
+      callback =>
+        async function lockedTick(this: unknown, ...args: unknown[]) {
+          try {
+            const got = await redis.set(`cron-lock:${name}`, id, 'PX', LOCK_TTL_MS, 'NX');
+            if (got !== 'OK') return undefined;
+          } catch (err) {
+            logger.warn(`Lock de "${name}" indisponível, a executar sem lock: ${String(err)}`);
+          }
+          return callback.apply(this, args);
+        },
     );
     job.__clusterLocked = true;
     return true;

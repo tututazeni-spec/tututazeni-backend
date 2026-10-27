@@ -113,7 +113,7 @@ jobs:
       # (base node:20-slim + dependências). Só em push: em PR a imagem não é publicada.
       - name: Scan de vulnerabilidades (Trivy)
         if: ${{ github.event_name != 'pull_request' }}
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: ${{ env.IMAGE }}:sha-${{ github.sha }}
           severity: CRITICAL
