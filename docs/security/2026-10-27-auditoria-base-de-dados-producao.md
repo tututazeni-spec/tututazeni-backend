@@ -13,6 +13,8 @@ Verificado por leitura de código/configuração; **nenhum teste foi corrido** (
 | 7 | Dados sensíveis encriptados | Parcial → **completado** | Já cifrados: `User.nif/nib`, `twoFactorSecret`, segredos de SSO/WhatsApp/integrações. **Novo:** `EmployeeCompensation.iban/accountNumber` e `Webhook.secret` (AES-256-GCM, `pii-crypto.ts`). Leitura tolera claro legado; backfill: `npx ts-node prisma/backfill-encrypt-secrets.ts [--dry-run]`. Aviso se `PII_ENCRYPTION_KEY` não estiver definida |
 
 ## Acções manuais antes do go-live
+Verificação automática (só leitura, contra a BD de produção): `npm run preflight:golive` — lista o que falta e sai com código 1 se houver bloqueantes. Backfill de cifra: `npm run backfill:pii`.
+
 1. Definir `PII_ENCRYPTION_KEY` própria e, **depois**, correr `backfill-encrypt-user-pii.ts` e `backfill-encrypt-secrets.ts`.
 2. Em produção: criar a role `innova_app` (`ops/db/rls/01_rls_harden.sql`), definir `DATABASE_APP_URL` e `RLS_ENABLED=true` (RLS ainda com smoke autenticado pendente).
 3. Correr uma vez `restore-drill.sh` com `DRILL_MIGRATE_IMAGE=<imagem candidata>` e confirmar ausência de avisos de utilizadores de teste.
