@@ -636,6 +636,8 @@ enum HrStatus {
 
 model User {
   productFeedback           ProductFeedback[]          @relation("ProductFeedbackUser")
+  supportTickets            SupportTicket[]            @relation("SupportTicketRequester")
+  supportMessages           SupportTicketMessage[]     @relation("SupportMessageAuthor")
   avatarTrainingAssignments AvatarTrainingAssignment[]
   avatarTrainingAttempts    AvatarTrainingAttempt[]
   // ─── Identidade ───────────────────────────────────────────────
@@ -16264,4 +16266,43 @@ model GettingStartedDismissal {
   dismissedAt DateTime @default(now())
 
   @@map("getting_started_dismissals")
+}
+
+// ─── Suporte: tickets com tempo de primeira resposta (horas úteis) ───
+model SupportTicket {
+  id                 Int                    @id @default(autoincrement())
+  requesterId        Int
+  requester          User                   @relation("SupportTicketRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  subject            String
+  description        String                 @db.Text
+  category           String // ACCESS | BUG | QUESTION | REQUEST | BILLING | OTHER
+  priority           String // CRITICAL | HIGH | NORMAL | LOW
+  status             String                 @default("OPEN") // OPEN | IN_PROGRESS | WAITING_CUSTOMER | RESOLVED | CLOSED
+  page               String?
+  firstResponseDueAt DateTime
+  firstRespondedAt   DateTime?
+  resolvedAt         DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  messages           SupportTicketMessage[]
+
+  @@index([requesterId, createdAt])
+  @@index([status, priority])
+  @@index([firstResponseDueAt])
+  @@map("support_tickets")
+}
+
+model SupportTicketMessage {
+  id        Int           @id @default(autoincrement())
+  ticketId  Int
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId  Int?
+  author    User?         @relation("SupportMessageAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  body      String        @db.Text
+  staff     Boolean       @default(false)
+  internal  Boolean       @default(false) // nota interna: invisível ao pedinte
+  createdAt DateTime      @default(now())
+
+  @@index([ticketId, createdAt])
+  @@map("support_ticket_messages")
 }
