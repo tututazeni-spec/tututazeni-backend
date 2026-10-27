@@ -32,6 +32,47 @@ describe('CacheService', () => {
     expect(redis.set).toHaveBeenCalledWith('k', JSON.stringify({ a: 2 }), 'EX', 90);
   });
 
+  it('miss concorrente na mesma chave: um só cálculo e um só GET (sem stampede)', async () => {
+    const redis = {
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn().mockResolvedValue('OK'),
+    } as any;
+    const svc = new CacheService(redis, makeConfig(), makeCounter(), makeLogger());
+    let release!: () => void;
+    const compute = jest.fn(
+      () => new Promise<{ a: number }>(res => (release = () => res({ a: 9 }))),
+    );
+    const calls = Array.from({ length: 30 }, () => svc.getOrSet('hot', 90, compute));
+    await new Promise(r => setImmediate(r));
+    release();
+    const results = await Promise.all(calls);
+    expect(results).toEqual(Array(30).fill({ a: 9 }));
+    expect(compute).toHaveBeenCalledTimes(1);
+    expect(redis.get).toHaveBeenCalledTimes(1);
+    expect(redis.set).toHaveBeenCalledTimes(1);
+  });
+
+  it('single-flight: chaves diferentes não se bloqueiam e falhas não ficam presas', async () => {
+    const redis = {
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn().mockResolvedValue('OK'),
+    } as any;
+    const svc = new CacheService(redis, makeConfig(), makeCounter(), makeLogger());
+    const [a, b] = await Promise.all([
+      svc.getOrSet('a', 90, async () => 'A'),
+      svc.getOrSet('b', 90, async () => 'B'),
+    ]);
+    expect([a, b]).toEqual(['A', 'B']);
+
+    await expect(
+      svc.getOrSet('f', 90, async () => {
+        throw new Error('boom');
+      }),
+    ).rejects.toThrow('boom');
+    // a falha não fica em voo: a chamada seguinte volta a calcular
+    await expect(svc.getOrSet('f', 90, async () => 'ok')).resolves.toBe('ok');
+  });
+
   it('CACHE_ENABLED=false calcula sem tocar no redis', async () => {
     const redis = { get: jest.fn(), set: jest.fn() } as any;
     const counter = makeCounter();

@@ -37,6 +37,14 @@ config:
         - userId
       skipHeader: true
       order: random
+    # Pool de tokens pré-gerada (prepare-data.js): sessões já iniciadas, como na vida real.
+    # Sem isto cada vuser faz login e o teste mede o Argon2 em vez da API.
+    - path: "./data/tokens.csv"
+      fields:
+        - tokenEmail
+        - token
+      skipHeader: true
+      order: random
 
   plugins:
     metrics-by-endpoint:
@@ -62,24 +70,12 @@ scenarios:
   # ── Cenário 1: Academia — fluxo de leitura (COLABORADOR) ──────────────────
   # Simula o colaborador típico: browse cursos, ver progresso, certificados
   - name: "Academia — leitura (COLABORADOR)"
-    weight: 50
+    weight: 45
     beforeScenario: "setRandomIds"
     afterResponse:  "logErrors"
     flow:
 
-      # Login — cada cenário renova o token (JWT expira em 15 min)
-      - post:
-          url: "/auth/login"
-          name: "POST /auth/login"
-          json:
-            email: "{{ email }}"
-            password: "LoadTest@2024"
-          capture:
-            - json: "$.accessToken"   # camelCase — NÃO access_token
-              as: "token"
-          expect:
-            - statusCode: 201
-            - hasProperty: "accessToken"
+      # Sem login: {{ token }} vem da pool (JWT 15 min — correr prepare-data.js antes do teste)
 
       # Catálogo de cursos
       - get:
@@ -143,18 +139,6 @@ scenarios:
     afterResponse:  "logErrors"
     flow:
 
-      - post:
-          url: "/auth/login"
-          name: "POST /auth/login (RH)"
-          json:
-            email: "{{ email }}"
-            password: "LoadTest@2024"
-          capture:
-            - json: "$.accessToken"
-              as: "token"
-          expect:
-            - statusCode: 201
-
       # Listagem de utilizadores — requer role ADMIN | RH | GESTOR
       - get:
           url: "/users"
@@ -195,23 +179,10 @@ scenarios:
   # ── Cenário 3: Inscrição — escrita crítica ────────────────────────────────
   # Testa o ponto de escrita mais frequente; 409 é esperado (@@unique)
   - name: "Inscrição — escrita crítica"
-    weight: 20
+    weight: 15
     beforeScenario: "setRandomIds"
     afterResponse:  "logErrors"
     flow:
-
-      - post:
-          url: "/auth/login"
-          name: "POST /auth/login (enroll)"
-          afterResponse: "captureCsrfToken"
-          json:
-            email: "{{ email }}"
-            password: "LoadTest@2024"
-          capture:
-            - json: "$.accessToken"
-              as: "token"
-          expect:
-            - statusCode: 201
 
       # Auto-matrícula — rota real: /enrollments/self-enroll/:courseId
       # 201 = inscrito com sucesso | 409 = já inscrito (@@unique [courseId, userId])
@@ -233,6 +204,43 @@ scenarios:
       - get:
           url: "/enrollments/my"
           name: "GET /enrollments/my (pós-inscrição)"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          expect:
+            - statusCode: 200
+
+  # ── Cenário 4: Início de sessão — login + primeiras leituras ──────────────
+  # ~10% das sessões: o Argon2 é caro de propósito (não enfraquecer); aqui mede-se
+  # o custo real dos logins em simultâneo com o resto do tráfego.
+  - name: "Início de sessão — login"
+    weight: 10
+    afterResponse:  "logErrors"
+    flow:
+
+      - post:
+          url: "/auth/login"
+          name: "POST /auth/login"
+          json:
+            email: "{{ email }}"
+            password: "LoadTest@2024"
+          capture:
+            - json: "$.accessToken"   # camelCase — NÃO access_token
+              as: "token"
+          expect:
+            - statusCode: 201
+            - hasProperty: "accessToken"
+
+      - get:
+          url: "/notifications/my/unread-count"
+          name: "GET /notifications/my/unread-count"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          expect:
+            - statusCode: 200
+
+      - get:
+          url: "/enrollments/my"
+          name: "GET /enrollments/my"
           headers:
             Authorization: "Bearer {{ token }}"
           expect:

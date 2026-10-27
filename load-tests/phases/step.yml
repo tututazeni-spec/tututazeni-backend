@@ -1,0 +1,10 @@
+# load-tests/phases/step.yml
+# Degraus de carga para encontrar o joelho de capacidade de UMA instância.
+# Uso: artillery run -t http://127.0.0.1:4001 --config load-tests/phases/step.yml load-tests/artillery.yml
+# (correr antes: node load-tests/scripts/prepare-data.js — os JWT duram 15 min)
+config:
+  phases:
+    - { name: "Degrau 1 — 8/s",  duration: 40, arrivalRate: 8,  maxVusers: 400 }
+    - { name: "Degrau 2 — 20/s", duration: 50, arrivalRate: 20, maxVusers: 600 }
+    - { name: "Degrau 3 — 40/s", duration: 50, arrivalRate: 40, maxVusers: 900 }
+    - { name: "Arrefecimento",   duration: 20, arrivalRate: 4,  maxVusers: 100 }

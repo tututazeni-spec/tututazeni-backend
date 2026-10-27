@@ -29,6 +29,8 @@ const TTL_MS = 10_000;
 @Injectable()
 export class SystemSettingsService {
   private cache: { at: number; settings: SystemSettings } | null = null;
+  private inflight: Promise<SystemSettings> | null = null;
+  private generation = 0;
   private readonly queues: Record<SystemQueueName, Queue>;
 
   constructor(
@@ -45,13 +47,24 @@ export class SystemSettingsService {
   /** Lido em cada pedido pelo interceptor — cache curta em memória. */
   async load(): Promise<SystemSettings> {
     if (this.cache && Date.now() - this.cache.at < TTL_MS) return this.cache.settings;
+    // Single-flight: quando o TTL expira com o servidor sob carga, todos os pedidos em fila
+    // partilham UMA leitura em vez de cada um disparar as suas (cache stampede, que por sua vez
+    // atrasa mais a leitura e prolonga a janela).
+    this.inflight ??= this.fetchSettings(this.generation).finally(() => {
+      this.inflight = null;
+    });
+    return this.inflight;
+  }
+
+  private async fetchSettings(generation: number): Promise<SystemSettings> {
     const id = await resolveDefaultTenantId(this.prisma);
     const row = await this.prisma.tenantConfig.findUnique({
       where: { id },
       select: { systemSettingsJson: true },
     });
     const settings = parseSystemSettings(row?.systemSettingsJson);
-    this.cache = { at: Date.now(), settings };
+    // Um update() entre o início e o fim desta leitura invalida-a: não repor valores antigos.
+    if (generation === this.generation) this.cache = { at: Date.now(), settings };
     return settings;
   }
 
@@ -85,6 +98,8 @@ export class SystemSettingsService {
       data: { systemSettingsJson: JSON.stringify(next) },
     });
     this.cache = null;
+    this.inflight = null;
+    this.generation++;
     await this.audit(actorId, 'SETTINGS_SYSTEM_UPDATE', 'HIGH', { before: cur, after: next });
     return this.get();
   }

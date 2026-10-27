@@ -89,6 +89,54 @@ describe('SystemSettingsService', () => {
       expect(prisma.tenantConfig.findUnique).toHaveBeenCalledTimes(2);
       now.mockRestore();
     });
+
+    it('cache expirada + pedidos concorrentes → uma só leitura (sem stampede)', async () => {
+      await Promise.all(Array.from({ length: 50 }, () => service.load()));
+      expect(prisma.tenantConfig.findUnique).toHaveBeenCalledTimes(1);
+
+      const now = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 11_000);
+      await Promise.all(Array.from({ length: 50 }, () => service.load()));
+      expect(prisma.tenantConfig.findUnique).toHaveBeenCalledTimes(2);
+      now.mockRestore();
+    });
+
+    it('leitura que começa durante a gravação do update() não repõe valores antigos na cache', async () => {
+      await service.load(); // cache preenchida (defaults)
+      stored({ maintenance: { enabled: true } }); // o que a BD passa a devolver após o update
+      const t0 = Date.now();
+      const clock = jest.spyOn(Date, 'now');
+
+      // update(): a gravação fica pendente até a libertarmos
+      let finishWrite!: () => void;
+      prisma.tenantConfig.update.mockReturnValueOnce(
+        new Promise<object>(res => {
+          finishWrite = () => res({});
+        }),
+      );
+      const updating = service.update({ maintenance: { enabled: true } } as never);
+      await Promise.resolve();
+
+      // Cache já expirada: este load() lê o valor ANTIGO enquanto a gravação ainda não acabou
+      clock.mockReturnValue(t0 + 11_000);
+      let finishRead!: (v: { systemSettingsJson: string }) => void;
+      prisma.tenantConfig.findUnique.mockReturnValueOnce(
+        new Promise(res => {
+          finishRead = res;
+        }),
+      );
+      const stale = service.load();
+
+      finishWrite();
+      await updating; // cache invalidada e repreenchida com o valor novo
+      // A leitura antiga termina DEPOIS: sem o contador de geração sobrescreveria a cache
+      finishRead({ systemSettingsJson: JSON.stringify({ maintenance: { enabled: false } }) });
+      await stale;
+
+      const reads = prisma.tenantConfig.findUnique.mock.calls.length;
+      expect((await service.load()).maintenance.enabled).toBe(true);
+      expect(prisma.tenantConfig.findUnique.mock.calls.length).toBe(reads); // servido da cache
+      clock.mockRestore();
+    });
   });
 
   describe('update', () => {
