@@ -40,7 +40,12 @@ export async function resolveDefaultTenantId(
 }
 
 const DEFAULT_TENANT_TTL_MS = 60_000;
-const defaultTenantCache = new WeakMap<object, { id: Promise<string>; expiresAt: number }>();
+let defaultTenantCache = new WeakMap<object, { id: Promise<string>; expiresAt: number }>();
+
+/** Só para testes: specs que reutilizam o mesmo mock de Prisma entre casos herdariam a cache. */
+export function resetDefaultTenantCache(): void {
+  defaultTenantCache = new WeakMap();
+}
 
 function lookupOrCreateDefaultTenant(prisma: PrismaService): Promise<string> {
   // Config global do tenant (guarda segredos de SSO/webhook): fora do RLS de utilizador.

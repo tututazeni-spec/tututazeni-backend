@@ -7,6 +7,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ApiIntegrationService } from '../api-integration/api-integration.service';
 import { AutomationTrigger } from './scalability.dto';
+import { resetDefaultTenantCache } from '../common/helpers/tenant.helper';
 
 const baseTenant = {
   id: 'tenant-1',
@@ -167,6 +168,9 @@ describe('ScalabilityService (additional)', () => {
   // tenant.helper.spec.ts) — aqui só confirma a delegação correcta.
 
   describe('resolveTenantId', () => {
+    // O helper memoriza o tenant por instância de Prisma; o mock é partilhado entre os casos.
+    beforeEach(() => resetDefaultTenantCache());
+
     it('devolve o tenantId recebido sem tocar na BD, se fornecido', async () => {
       const result = await service.resolveTenantId('explicit-tenant');
       expect(result).toBe('explicit-tenant');
