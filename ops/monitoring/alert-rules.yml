@@ -187,6 +187,19 @@ groups:
             O VPS não consegue aceder ao bucket S3 de backup há mais de 15 minutos.
             Verificar credenciais AWS e conectividade de rede.
 
+      # O restauro de teste mensal (restore-drill.sh) deixou de passar ou de correr
+      - alert: RestoreDrillTooOld
+        expr: >
+          (time() - innova_restore_drill_last_success_timestamp_seconds) / 86400 > 40
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Restauro de teste de backups em atraso'
+          description: >
+            O último restore drill bem-sucedido tem {{ $value | printf "%.0f" }} dias (limite: 40).
+            Sem restauro provado, o backup é só uma esperança. Ver /var/log/innova-backup.log.
+
   # ─── Postgres (postgres-exporter) — lag, ligações, cache, deadlocks ───────
   - name: innova-postgres
     rules:

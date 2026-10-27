@@ -1,13 +1,19 @@
 name: Deploy
 
-# Regra 10: deploy com monitorização e rollback automático.
-# Sem VPS: o destino de produção ainda não está decidido, por isso o workflow é
-# agnóstico da plataforma e só fala com ela por dois webhooks opcionais:
-#   DEPLOY_WEBHOOK_URL    → recebe POST {"tag": "sha-<commit>"} e deve publicar essa imagem
-#   ROLLBACK_WEBHOOK_URL  → recebe POST {"tag": "stable"} e deve voltar à última release verificada
-# Fluxo: build+push da imagem → deploy (webhook) → smoke contra SMOKE_BASE_URL
-# → se verde, a tag passa a `stable`; se vermelho, rollback automático para `stable`.
-# Sem os secrets, só o build corre (e em PRs não há push). Ver docs/deploy/.
+# Fluxo: build+push da imagem → scan Trivy → [staging] → produção → health gate → smoke
+# → se verde, a tag passa a `stable`; se vermelho, rollback automático.
+#
+# Modo de deploy (escolhido pelos secrets, por esta ordem):
+#   1. SSH   — DEPLOY_HOST/DEPLOY_USER/DEPLOY_SSH_KEY: copia ops/ para /opt/innova e corre
+#              deploy.sh (rolling, health gate por réplica). É o caminho descrito em
+#              docs/deploy/runbook.md e o que o rollback.sh assume.
+#   2. Webhook — DEPLOY_WEBHOOK_URL/ROLLBACK_WEBHOOK_URL: para plataformas geridas; o
+#              receptor tem de publicar a tag recebida e repor `stable` no rollback.
+#   Sem nenhum dos dois, só o build corre (e em PRs não há push).
+# Staging (opcional): STAGING_HOST/STAGING_USER/STAGING_SSH_KEY/STAGING_SMOKE_BASE_URL.
+# Se existir, a produção só avança depois de o staging passar health gate + smoke.
+# Frontend: o repo tututazeni-frontend dispara `repository_dispatch: frontend-updated`
+# (client_payload.tag) → redeploy só do frontend, com a tag do backend já em produção.
 
 on:
   push:
@@ -16,6 +22,7 @@ on:
     paths:
       - 'Dockerfile'
       - '.dockerignore'
+      - 'ops/**'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
     inputs:
@@ -23,6 +30,8 @@ on:
         description: 'Tag existente no GHCR a fazer deploy (ex. sha-abc123). Vazio = build do commit actual.'
         required: false
         default: ''
+  repository_dispatch:
+    types: [frontend-updated]
 
 # Mínimo por omissão; os jobs que precisam de mais (packages: write) declaram-no.
 permissions:
@@ -34,26 +43,49 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/${{ github.repository }}
+  DEPLOY_TAG: ${{ github.event.inputs.tag != '' && github.event.inputs.tag || format('sha-{0}', github.sha) }}
+  # Ficheiros copiados para /opt/innova (strip_components 1: ops/deploy/x → /opt/innova/deploy/x)
+  DEPLOY_FILES: ops/docker-compose.prod.yml,ops/caddy/Caddyfile,ops/deploy/deploy.sh,ops/deploy/rollback.sh,ops/deploy/origin-firewall.sh,ops/deploy/caddy-watchdog.sh,ops/monitoring/prometheus.yml,ops/monitoring/alert-rules.yml,ops/monitoring/alertmanager.yml.tpl,ops/monitoring/loki.yml,ops/monitoring/promtail.yml,ops/monitoring/grafana,ops/backup/backup-postgres.sh,ops/backup/restore-postgres.sh,ops/backup/verify-backup.sh,ops/backup/restore-drill.sh,ops/backup/backup-secrets.sh,ops/backup/backup-metrics.sh,ops/backup/install-cron.sh,ops/dr/DISASTER-RECOVERY.md
 
 jobs:
   preflight:
     runs-on: ubuntu-latest
     outputs:
       can_deploy: ${{ steps.check.outputs.can_deploy }}
+      mode: ${{ steps.check.outputs.mode }}
+      staging: ${{ steps.check.outputs.staging }}
     steps:
       - id: check
-        run: echo "can_deploy=${{ secrets.DEPLOY_WEBHOOK_URL != '' && github.event_name != 'pull_request' }}" >> "$GITHUB_OUTPUT"
+        env:
+          HAS_SSH: ${{ secrets.DEPLOY_HOST != '' }}
+          HAS_WEBHOOK: ${{ secrets.DEPLOY_WEBHOOK_URL != '' }}
+          HAS_STAGING: ${{ secrets.STAGING_HOST != '' }}
+          IS_PR: ${{ github.event_name == 'pull_request' }}
+        run: |
+          mode=none
+          if [ "$IS_PR" != "true" ]; then
+            if [ "$HAS_SSH" = "true" ]; then mode=ssh
+            elif [ "$HAS_WEBHOOK" = "true" ]; then mode=webhook; fi
+          fi
+          # o frontend só se faz deploy por SSH (o webhook só conhece a imagem do backend)
+          if [ "$mode" != "ssh" ] && [ "${{ github.event_name }}" = "repository_dispatch" ]; then mode=none; fi
+          {
+            echo "mode=$mode"
+            echo "can_deploy=$([ "$mode" != none ] && echo true || echo false)"
+            echo "staging=$([ "$mode" = ssh ] && [ "$HAS_STAGING" = "true" ] && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
+          echo "modo de deploy: $mode"
 
   build:
     runs-on: ubuntu-latest
-    # dispatch com tag explícita → não reconstrói, faz deploy dessa tag
-    if: ${{ github.event.inputs.tag == '' }}
+    # dispatch com tag explícita ou do frontend → não reconstrói o backend
+    if: ${{ github.event.inputs.tag == '' && github.event_name != 'repository_dispatch' }}
     permissions:
       contents: read
       packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Buildx
         uses: docker/setup-buildx-action@v3
@@ -77,29 +109,154 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy:
-    runs-on: ubuntu-latest
+      # Bloqueia o deploy se a imagem trouxer CVE crítica com correção disponível
+      # (base node:20-slim + dependências). Só em push: em PR a imagem não é publicada.
+      # Imagem oficial do Trivy a correr directamente (sem depender de actions de terceiros,
+      # que já falharam por referenciarem tags inexistentes).
+      - name: Scan de vulnerabilidades (Trivy)
+        if: ${{ github.event_name != 'pull_request' }}
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          SCAN_IMAGE: ${{ env.IMAGE }}:sha-${{ github.sha }}
+        run: |
+          docker run --rm -e TRIVY_USERNAME -e TRIVY_PASSWORD aquasec/trivy:0.58.1             image --severity CRITICAL --ignore-unfixed --exit-code 1 --no-progress "$SCAN_IMAGE"
+
+  # Ensaio geral: mesmo compose, mesmo deploy.sh, BD e domínio próprios (outro VPS).
+  # Apanha migrations partidas e config em falta antes de tocarem em produção.
+  staging:
+    runs-on: ubuntu-24.04
     needs: [preflight, build]
     if: >-
       ${{ !cancelled() &&
-          needs.preflight.outputs.can_deploy == 'true' &&
-          (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+          needs.preflight.outputs.staging == 'true' &&
+          needs.build.result == 'success' }}
+    permissions:
+      contents: read
+      packages: read
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Copiar artefactos para o staging
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          source: ${{ env.DEPLOY_FILES }}
+          target: /opt/innova
+          strip_components: 1
+          overwrite: true
+
+      - name: Deploy no staging (deploy.sh)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script_stop: true
+          envs: DEPLOY_TAG,GHCR_TOKEN,GHCR_USER
+          script: |
+            case "$DEPLOY_TAG" in
+              *[!a-zA-Z0-9._-]*|'') echo "Tag invalida"; exit 1 ;;
+            esac
+            chmod +x /opt/innova/deploy/*.sh
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            /opt/innova/deploy/deploy.sh "$DEPLOY_TAG"
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Smoke no staging
+        run: npm run test:regression
+        env:
+          SMOKE_BASE_URL: ${{ secrets.STAGING_SMOKE_BASE_URL }}
+          SMOKE_SEED: 'false'
+          SMOKE_ALLOW_WRITES: 'false'
+          SMOKE_EMPLOYEE_EMAIL: ${{ secrets.STAGING_SMOKE_EMPLOYEE_EMAIL }}
+          SMOKE_EMPLOYEE_PASSWORD: ${{ secrets.STAGING_SMOKE_EMPLOYEE_PASSWORD }}
+          SMOKE_RH_EMAIL: ${{ secrets.STAGING_SMOKE_RH_EMAIL }}
+          SMOKE_RH_PASSWORD: ${{ secrets.STAGING_SMOKE_RH_PASSWORD }}
+          SMOKE_COURSE_ID: ${{ secrets.STAGING_SMOKE_COURSE_ID }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [preflight, build, staging]
+    if: >-
+      ${{ !cancelled() &&
+          needs.preflight.outputs.can_deploy == 'true' &&
+          (needs.build.result == 'success' || needs.build.result == 'skipped') &&
+          (needs.staging.result == 'success' || needs.staging.result == 'skipped') }}
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+        if: ${{ needs.preflight.outputs.mode == 'ssh' }}
+
+      - name: Copiar artefactos de deploy para o VPS
+        if: ${{ needs.preflight.outputs.mode == 'ssh' }}
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: ${{ env.DEPLOY_FILES }}
+          target: /opt/innova
+          strip_components: 1
+          overwrite: true
+
+      - name: Deploy no VPS (deploy.sh, rolling com health gate)
+        if: ${{ needs.preflight.outputs.mode == 'ssh' }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
+          envs: DEPLOY_TAG,FRONTEND_TAG,EVENT,GHCR_TOKEN,GHCR_USER
+          script: |
+            # redeploy do frontend: mantém a tag do backend que já corre
+            if [ "$EVENT" = "repository_dispatch" ]; then
+              DEPLOY_TAG="$(cat /opt/innova/current_tag)"
+              case "$FRONTEND_TAG" in *[!a-zA-Z0-9._-]*|'') echo "Tag do frontend invalida"; exit 1 ;; esac
+              export FRONTEND_TAG
+            fi
+            case "$DEPLOY_TAG" in
+              *[!a-zA-Z0-9._-]*|'') echo "Tag invalida"; exit 1 ;;
+            esac
+            chmod +x /opt/innova/deploy/*.sh
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            /opt/innova/deploy/deploy.sh "$DEPLOY_TAG"
+        env:
+          EVENT: ${{ github.event_name }}
+          FRONTEND_TAG: ${{ github.event.client_payload.tag }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+
       - name: Pedir o deploy à plataforma (webhook)
+        if: ${{ needs.preflight.outputs.mode == 'webhook' }}
         env:
           DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
-          DEPLOY_TAG: ${{ github.event.inputs.tag != '' && github.event.inputs.tag || format('sha-{0}', github.sha) }}
         run: |
           case "$DEPLOY_TAG" in
             *[!a-zA-Z0-9._-]*|'') echo "Tag invalida"; exit 1 ;;
           esac
-          curl -fsS --max-time 60 -X POST -H 'Content-Type: application/json'             -d "{\"tag\":\"$DEPLOY_TAG\"}" "$DEPLOY_WEBHOOK_URL"
+          curl -fsS --max-time 60 -X POST -H 'Content-Type: application/json' \
+            -d "{\"tag\":\"$DEPLOY_TAG\"}" "$DEPLOY_WEBHOOK_URL"
           echo "deploy pedido para $DEPLOY_TAG"
 
       - name: Esperar que a nova versão responda (GET /health/ready)
         env:
           SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL }}
-          DEPLOY_TAG: ${{ github.event.inputs.tag != '' && github.event.inputs.tag || format('sha-{0}', github.sha) }}
+          EVENT: ${{ github.event_name }}
         run: |
           [ -n "$SMOKE_BASE_URL" ] || { echo "SMOKE_BASE_URL não definido — sem health gate"; exit 1; }
           sha="${DEPLOY_TAG#sha-}"
@@ -107,8 +264,9 @@ jobs:
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$SMOKE_BASE_URL/health/ready" || true)
             ver=$(curl -s --max-time 10 "$SMOKE_BASE_URL/health" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
             echo "tentativa $i: ready=$code version=$ver"
-            # BUILD_SHA 'unknown' = plataforma que não injecta o commit: só o ready conta
-            if [ "$code" = "200" ] && { [ "$ver" = "$sha" ] || [ "$ver" = "unknown" ]; }; then
+            # BUILD_SHA 'unknown' = plataforma que não injecta o commit; num redeploy só do
+            # frontend a versão do backend não muda, por isso só o ready conta
+            if [ "$code" = "200" ] && { [ "$ver" = "$sha" ] || [ "$ver" = "unknown" ] || [ "$EVENT" = "repository_dispatch" ]; }; then
               exit 0
             fi
             sleep 10
@@ -123,11 +281,9 @@ jobs:
       contents: read
       packages: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -160,12 +316,13 @@ jobs:
           SMOKE_RH_PASSWORD: ${{ secrets.SMOKE_RH_PASSWORD }}
           SMOKE_COURSE_ID: ${{ secrets.SMOKE_COURSE_ID }}
 
-      - name: Marcar a imagem como `stable` (alvo do rollback)
-        if: ${{ success() }}
+      # `stable` = última release verificada (alvo do rollback por webhook). Um redeploy só
+      # do frontend não muda a imagem do backend, por isso não a move.
+      - name: Marcar a imagem como `stable`
+        if: ${{ success() && github.event_name != 'repository_dispatch' }}
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
-          DEPLOY_TAG: ${{ github.event.inputs.tag != '' && github.event.inputs.tag || format('sha-{0}', github.sha) }}
         run: |
           echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
           docker buildx imagetools create -t "$IMAGE:stable" "$IMAGE:$DEPLOY_TAG"
@@ -179,12 +336,24 @@ jobs:
           needs.preflight.outputs.can_deploy == 'true' &&
           (needs.deploy.result == 'failure' || needs.verify.result == 'failure') }}
     steps:
-      - name: Rollback automático para a última release verificada (stable)
+      - name: Rollback automático (rollback.sh no VPS)
+        if: ${{ needs.preflight.outputs.mode == 'ssh' }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
+          script: /opt/innova/deploy/rollback.sh
+
+      - name: Rollback automático (webhook → stable)
+        if: ${{ needs.preflight.outputs.mode == 'webhook' }}
         env:
           ROLLBACK_WEBHOOK_URL: ${{ secrets.ROLLBACK_WEBHOOK_URL }}
         run: |
           [ -n "$ROLLBACK_WEBHOOK_URL" ] || { echo "ROLLBACK_WEBHOOK_URL não definido — rollback impossível"; exit 1; }
-          curl -fsS --max-time 60 -X POST -H 'Content-Type: application/json'             -d '{"tag":"stable"}' "$ROLLBACK_WEBHOOK_URL"
+          curl -fsS --max-time 60 -X POST -H 'Content-Type: application/json' \
+            -d '{"tag":"stable"}' "$ROLLBACK_WEBHOOK_URL"
           echo "rollback pedido para a tag stable"
 
   notify:

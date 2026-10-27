@@ -22,9 +22,11 @@ import {
 import { runWithRequestContext } from './common/logging/request-context';
 import { logIdentityMiddleware } from './common/logging/identity.middleware';
 import { runWithRls } from './common/rls/rls-context';
+import { initSentry } from './common/observability/sentry';
 
 async function bootstrap() {
   validateEnv();
+  initSentry();
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
   const logger = app.get(Logger);
@@ -184,6 +186,10 @@ async function bootstrap() {
       timestamp: new Date().toISOString(),
     });
   });
+
+  // SIGTERM (docker stop / rollout do K8s) passa a drenar pedidos em curso e a correr os
+  // onModuleDestroy (Prisma, Redis, filas) em vez de matar o processo a meio.
+  app.enableShutdownHooks();
 
   const port = process.env.PORT ?? 4000;
   await app.listen(port);

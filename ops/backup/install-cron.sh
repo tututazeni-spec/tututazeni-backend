@@ -44,6 +44,7 @@ chmod +x "${BACKUP_DIR}/backup-postgres.sh"
 chmod +x "${BACKUP_DIR}/restore-postgres.sh"
 chmod +x "${BACKUP_DIR}/verify-backup.sh"
 chmod +x "${BACKUP_DIR}/backup-secrets.sh"
+[ ! -f "${BACKUP_DIR}/restore-drill.sh" ] || chmod +x "${BACKUP_DIR}/restore-drill.sh"
 log "Permissões de execução definidas nos scripts de backup"
 
 # ── Ficheiro de log ───────────────────────────────────────────
@@ -61,6 +62,10 @@ CRON_DAILY="0 2 * * * set -a; . ${ENV_FILE}; set +a; ${BACKUP_DIR}/backup-postgr
 CRON_WEEKLY="0 4 * * 0 set -a; . ${ENV_FILE}; set +a; ${BACKUP_DIR}/verify-backup.sh >> ${LOG_FILE} 2>&1 ${CRON_MARKER}"
 # Segredos (.env.production + cert Origin CA) cifrados para o S3 — domingos 03:00
 CRON_SECRETS="0 3 * * 0 set -a; . ${ENV_FILE}; set +a; INNOVA_DIR=${INNOVA_DIR} ${BACKUP_DIR}/backup-secrets.sh >> ${LOG_FILE} 2>&1 ${CRON_MARKER}"
+# Watchdog do Caddy (reinicia se unhealthy) — a cada minuto
+CRON_CADDY="* * * * * set -a; . ${ENV_FILE}; set +a; ${INNOVA_DIR}/deploy/caddy-watchdog.sh >> ${LOG_FILE} 2>&1 ${CRON_MARKER}"
+# Teste de restauro num Postgres descartável — dia 1 de cada mês, 05:00 (alerta RestoreDrillTooOld)
+CRON_DRILL="0 5 1 * * set -a; . ${ENV_FILE}; set +a; ${BACKUP_DIR}/restore-drill.sh >> ${LOG_FILE} 2>&1 ${CRON_MARKER}"
 # Métricas de backup para Prometheus (textfile collector do node-exporter)
 CRON_METRICS="*/15 * * * * set -a; . ${ENV_FILE}; set +a; ${BACKUP_DIR}/backup-metrics.sh >> ${LOG_FILE} 2>&1 ${CRON_MARKER}"
 
@@ -76,12 +81,16 @@ fi
  echo "$CRON_DAILY"
  echo "$CRON_WEEKLY"
  echo "$CRON_SECRETS"
+ echo "$CRON_DRILL"
+ [ ! -f "${INNOVA_DIR}/deploy/caddy-watchdog.sh" ] || echo "$CRON_CADDY"
  echo "$CRON_METRICS"
 ) | crontab -
 
 log "Cron jobs instalados:"
 log "  Backup diário  : todos os dias às 02:00"
 log "  Verificação    : todos os domingos às 04:00"
+log "  Caddy watchdog : a cada minuto"
+log "  Restore drill  : dia 1 de cada mês às 05:00"
 log "  Métricas backup: a cada 15 minutos (Prometheus textfile)"
 
 # ── Teste de conectividade ao S3 ──────────────────────────────

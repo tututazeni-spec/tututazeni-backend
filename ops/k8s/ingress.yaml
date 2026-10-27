@@ -1,0 +1,41 @@
+# Espelha o Caddyfile: /api/* → app (prefixo removido; /api/metrics bloqueado), resto → frontend.
+# Dois Ingress porque o rewrite-target só pode valer para a API.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: innova-api
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: 'true'
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-body-size: 25m
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      if ($request_uri ~* "^/api/metrics") { return 404; }
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [innova.example.com] # = DOMAIN
+      secretName: innova-tls
+  rules:
+    - host: innova.example.com
+      http:
+        paths:
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend: { service: { name: app, port: { number: 4000 } } }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: innova-frontend
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [innova.example.com]
+      secretName: innova-tls
+  rules:
+    - host: innova.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: frontend, port: { number: 3000 } } }

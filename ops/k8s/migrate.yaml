@@ -1,0 +1,24 @@
+# Correr ANTES do rollout:
+#   kubectl -n innova delete job migrate --ignore-not-found && kubectl apply -f ops/k8s/migrate.yaml
+#   kubectl -n innova wait --for=condition=complete job/migrate --timeout=300s
+# Migrations têm de ser expand/contract: o rollback da imagem não as desfaz.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+  namespace: innova
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: ghcr.io/tututazeni-spec/tututazeni-backend:stable # substituir pela tag a lançar
+          command: ['npx', 'prisma', 'migrate', 'deploy']
+          envFrom:
+            - secretRef: { name: innova-secrets }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 512Mi }

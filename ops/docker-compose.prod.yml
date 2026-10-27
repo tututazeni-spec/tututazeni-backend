@@ -9,6 +9,17 @@
 #   Ver docs/deploy/cloudflare.md e docs/deploy/ha-and-spof.md.
 name: innova
 
+# Rotação dos logs json-file: sem isto crescem sem limite e enchem o disco do VPS
+# (DiskSpaceLow só avisa depois do estrago).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
+    # o Promtail lê o serviço compose a partir do campo `attrs` de cada linha
+    labels: 'com.docker.compose.service'
+
+
 services:
   # ─── Migrations: job one-shot que corre ANTES das réplicas da app ──────────
   # Tira o `prisma migrate deploy` do arranque de cada réplica — senão N
@@ -38,6 +49,9 @@ services:
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
+    init: true # PID 1 propaga SIGTERM e apanha zombies
+    stop_grace_period: 30s # tempo para drenar pedidos (enableShutdownHooks)
+    logging: *default-logging
     security_opt: ['no-new-privileges:true']
     cap_drop: ['ALL']
     deploy:
@@ -63,6 +77,9 @@ services:
       app:
         condition: service_started
     restart: unless-stopped
+    init: true
+    stop_grace_period: 20s
+    logging: *default-logging
     security_opt: ['no-new-privileges:true']
     cap_drop: ['ALL']
     deploy:
@@ -94,6 +111,7 @@ services:
       - app
       - frontend
     restart: always
+    logging: *default-logging
     security_opt: ['no-new-privileges:true']
     # Caddy faz bind a 80/443 como não-root dentro do contentor.
     cap_drop: ['ALL']
@@ -161,7 +179,14 @@ services:
     # Sem porta publicada, mas qualquer contentor comprometido na rede Docker falava com ele em
     # claro: requirepass vem do .env.production (a app lê a mesma REDIS_PASSWORD).
     env_file: .env.production
-    command: ['sh', '-c', 'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"']
+    # maxmemory abaixo do limite do container (limite 256M) deixa folga para o fork do AOF rewrite.
+    # volatile-lru só despeja chaves COM TTL (cache); as chaves do Bull (filas) não têm TTL,
+    # logo nunca são despejadas. Se a memória esgotar com só chaves sem TTL, as escritas
+    # falham (visível/alertável) em vez de o kernel matar o Redis e perder a fila.
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --maxmemory 160mb --maxmemory-policy volatile-lru --requirepass "$$REDIS_PASSWORD"
     volumes:
       - redis-data:/data
     restart: unless-stopped
@@ -174,7 +199,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 192M
+          memory: 256M
 
   # ─── Monitorização (regra 9) — sem portas públicas; UI só via túnel SSH ───
   # Limites de memória (ponto 9): um pico do Prometheus/Alertmanager não pode
@@ -243,7 +268,71 @@ services:
         limits:
           memory: 96M
 
+  # ─── Observabilidade (opt-in: ENABLE_OBSERVABILITY=true no .env.production) ──
+  # Grafana + Loki + Promtail (~+640 MB). Perfil `observability`: não sobe por omissão
+  # num VPS pequeno. UI só por túnel SSH: ssh -L 3001:127.0.0.1:3001 deploy@<HOST>.
+  loki:
+    image: grafana/loki:3.1.0
+    profiles: ['observability']
+    command: ['-config.file=/etc/loki/loki.yml']
+    volumes:
+      - ./monitoring/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    restart: unless-stopped
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  promtail:
+    image: grafana/promtail:3.1.0
+    profiles: ['observability']
+    command: ['-config.file=/etc/promtail/promtail.yml']
+    volumes:
+      - ./monitoring/promtail.yml:/etc/promtail/promtail.yml:ro
+      # ficheiros de log do Docker, só leitura; sem docker.sock (não dá root no host)
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - promtail-positions:/positions
+    depends_on:
+      - loki
+    restart: unless-stopped
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 96M
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    profiles: ['observability']
+    env_file: .env.production
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      # GF_SECURITY_ADMIN_PASSWORD vem do env_file (.env.production)
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - '127.0.0.1:3001:3000'
+    depends_on:
+      - prometheus
+      - loki
+    restart: unless-stopped
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 288M
+
 volumes:
+  loki-data:
+  promtail-positions:
+  grafana-data:
   redis-data:
   prometheus-data:
   alertmanager-data:
