@@ -93,6 +93,7 @@ import { LibraryModule } from './library/library.module';
 import { DashboardInstitutionalModule } from './dashboard-institutional/dashboard-institutional.module';
 import { HealthModule } from './health/health.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { FeatureFlagsModule } from './common/feature-flags/feature-flags.module';
 
 // INFRA
 import { QueueModule } from './queue/queue.module';
@@ -237,6 +238,7 @@ const accessPath = (url = ''): string => url.split('?')[0];
     DashboardInstitutionalModule,
     HealthModule,
     MetricsModule,
+    FeatureFlagsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
