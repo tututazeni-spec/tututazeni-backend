@@ -33,6 +33,31 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
     if (!env.APP_URL?.startsWith('https://')) {
       throw new Error('[BOOT] APP_URL é obrigatório em produção e tem de começar por https://');
     }
+
+    // Placeholders dos ficheiros de exemplo (`CHANGE_ME`, `change-me-in-production`) em produção
+    // são segredos públicos: quem leu o repositório forja tokens ou abre o Swagger/métricas.
+    for (const name of [
+      'JWT_SECRET',
+      'JWT_REFRESH_SECRET',
+      'SWAGGER_TOKEN',
+      'METRICS_TOKEN',
+    ] as const) {
+      if (/^change[-_]?me/i.test(env[name] ?? '')) {
+        throw new Error(`[BOOT] ${name} ainda tem o valor placeholder — define um segredo forte.`);
+      }
+    }
+    // Só avisam (não bloqueiam): um deploy existente com segredos curtos não pode deixar de arrancar.
+    if (JWT_SECRET.length < 32) {
+      bootWarn('JWT_SECRET tem menos de 32 caracteres — gerar com `openssl rand -base64 48`.');
+    }
+    if (JWT_SECRET === JWT_REFRESH_SECRET) {
+      bootWarn(
+        'JWT_SECRET e JWT_REFRESH_SECRET são iguais — um token de acesso valeria como refresh.',
+      );
+    }
+    if (!env.REDIS_PASSWORD) {
+      bootWarn('REDIS_PASSWORD não definido — Redis (filas, throttler, cache) sem autenticação.');
+    }
   } else if (!env.APP_URL) {
     bootWarn('APP_URL não definido — links em documentos e declarações usarão o valor hardcoded.');
   }

@@ -53,6 +53,29 @@ describe('validateEnv', () => {
       expect(() => validateEnv({ ...BASE, APP_URL: 'http://localhost:3000' })).not.toThrow();
     });
   });
+  describe('segredos placeholder em produção', () => {
+    const PROD = { ...BASE, NODE_ENV: 'production', APP_URL: 'https://innova.ao' };
+
+    it.each(['JWT_REFRESH_SECRET', 'SWAGGER_TOKEN', 'METRICS_TOKEN'])(
+      'lança com %s=CHANGE_ME',
+      name => {
+        expect(() => validateEnv({ ...PROD, [name]: 'CHANGE_ME' })).toThrow(name);
+      },
+    );
+
+    it('lança com SWAGGER_TOKEN=change-me-in-production', () => {
+      expect(() => validateEnv({ ...PROD, SWAGGER_TOKEN: 'change-me-in-production' })).toThrow(
+        'SWAGGER_TOKEN',
+      );
+    });
+
+    it('fora de produção não bloqueia', () => {
+      expect(() =>
+        validateEnv({ ...BASE, SWAGGER_TOKEN: 'change-me-in-production' }),
+      ).not.toThrow();
+    });
+  });
+
   describe('UPLOAD_VALIDATION_MODE', () => {
     const captured = (env: NodeJS.ProcessEnv): string => {
       const write = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);

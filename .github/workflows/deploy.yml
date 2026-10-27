@@ -24,6 +24,10 @@ on:
         required: false
         default: ''
 
+# Mínimo por omissão; os jobs que precisam de mais (packages: write) declaram-no.
+permissions:
+  contents: read
+
 concurrency:
   group: deploy-production
   cancel-in-progress: false
