@@ -772,7 +772,7 @@ export class ApiIntegrationService {
           createdById,
         },
       })
-      .then(created => ({ ...created, secret }))
+      .then(created => ({ ...(created as Record<string, unknown>), secret }))
       .catch((err: unknown) => {
         this.logger.error({
           createdById,
