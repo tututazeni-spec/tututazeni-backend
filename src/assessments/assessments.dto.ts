@@ -23,6 +23,7 @@ import {
   QuestionType,
   AttemptStatus,
 } from '@prisma/client';
+import { IsWebLinkOrInlineFile } from '../common/validators/is-web-link-or-inline-file.decorator';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -59,6 +60,7 @@ export class CreateQuestionDto {
   @ApiPropertyOptional({ description: 'URL de imagem/vídeo associado' })
   @IsOptional()
   @IsString()
+  @IsWebLinkOrInlineFile()
   mediaUrl?: string;
 
   @ApiPropertyOptional({ type: [QuestionOptionDto] })

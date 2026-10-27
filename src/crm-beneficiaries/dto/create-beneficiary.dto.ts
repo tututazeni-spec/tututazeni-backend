@@ -23,6 +23,8 @@ import {
   FollowUpStatus,
   ConsentStatus,
 } from '@prisma/client';
+import { IsOptionalImageRef } from '../../common/validators/optional-image-ref.decorator';
+import { FILE_POLICIES } from '../../common/files/file-policies';
 
 export class CreateBeneficiaryDto {
   @ApiProperty({ enum: BeneficiaryType })
@@ -149,6 +151,7 @@ export class CreateBeneficiaryDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @IsOptionalImageRef(FILE_POLICIES.IMAGE)
   photoUrl?: string;
 
   @ApiPropertyOptional()

@@ -21,6 +21,7 @@ import {
   SessionModality,
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
+import { IsWebLink } from '../common/validators/is-web-link.decorator';
 
 export {
   LiveClassType,
@@ -122,7 +123,7 @@ export class CreateLiveClassDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) lateToleranceMinutes?: number;
 
   // Etapa 7 — Gravação
-  @ApiPropertyOptional() @IsOptional() @IsString() recordingUrl?: string;
+  @ApiPropertyOptional() @IsOptional() @IsWebLink() recordingUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() recordSession?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsDateString() recordingExpiresAt?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() allowRecordingDownload?: boolean;
@@ -152,7 +153,7 @@ export class CreateLiveClassSessionDto {
   @ApiProperty() @IsInt() durationMinutes!: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() instructorId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() location?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() meetingUrl?: string;
+  @ApiPropertyOptional() @IsOptional() @IsWebLink() meetingUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
   @ApiPropertyOptional({
     type: [Number],
@@ -168,7 +169,7 @@ export class UpdateLiveClassSessionDto extends PartialType(CreateLiveClassSessio
   @IsOptional()
   @IsEnum(LiveClassStatus)
   status?: LiveClassStatus;
-  @ApiPropertyOptional() @IsOptional() @IsString() recordingUrl?: string;
+  @ApiPropertyOptional() @IsOptional() @IsWebLink() recordingUrl?: string;
 }
 
 export class LiveChatMessageDto {
