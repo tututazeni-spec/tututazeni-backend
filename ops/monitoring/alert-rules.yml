@@ -132,6 +132,43 @@ groups:
             Menos de 5% de espaço livre. O Postgres pode falhar a escrever WAL
             e a app pode entrar em crash loop.
 
+      # ── CPU e RAM do host (node-exporter) ──────────────────────────────────
+      - alert: HostCpuHigh
+        expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'CPU do VPS acima de 85%'
+          description: 'Utilização média de CPU do host acima de 85% há 10 minutos. Ver o dashboard «INNOVA — API» e `docker stats`.'
+
+      - alert: HostCpuCritical
+        expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.95
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'CPU do VPS acima de 95%'
+          description: 'CPU saturado há 5 minutos — pedidos a atrasar e risco de timeouts. Escalar ou isolar o processo responsável.'
+
+      - alert: HostMemoryLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'RAM do VPS com menos de 10% disponível'
+          description: 'Memória disponível do host abaixo de 10% há 5 minutos. Risco de OOM-killer (app, Postgres ou Redis).'
+
+      - alert: HostMemoryCritical
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.04
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'RAM do VPS com menos de 4% disponível — OOM iminente'
+          description: 'O kernel vai começar a matar processos. Reduzir carga ou reiniciar o serviço com fuga de memória.'
+
       # Dead-man's switch: dispara SEMPRE. O Alertmanager encaminha-o como
       # heartbeat para o healthchecks.io — se os pings pararem, o alerta vem de fora.
       - alert: Watchdog

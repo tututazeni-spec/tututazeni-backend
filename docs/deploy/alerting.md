@@ -10,12 +10,23 @@
 
 | Severidade | Canal |
 |---|---|
-| critical (`AppDown`, `HighErrorRate`) | email + Telegram |
-| warning (`HighLatencyP95`, `SlowDbQueries`, `EventLoopLag`, `HighMemory`) | Telegram |
+| critical (`AppAllReplicasDown`, `HighErrorRate`, `HostCpuCritical`, `HostMemoryCritical`, `DiskSpaceCritical`…) | email + Telegram (+ SMS e Slack, se configurados) |
+| warning (`HighLatencyP95`, `SlowDbQueries`, `EventLoopLag`, `HighMemory`, `HostCpuHigh`, `HostMemoryLow`…) | Telegram (+ Slack, se configurado) |
 | info (`LowCacheHitRate`) | só UI do Alertmanager |
 | `Watchdog` (dead-man) | heartbeat → healthchecks.io |
 
 `repeat_interval: 4h`; agrupamento por `alertname`.
+
+### Canais opcionais: Slack e SMS
+
+Email e Telegram são obrigatórios; Slack e SMS ligam-se só preenchendo o `.env.production`
+(vazio = desligado, o `deploy.sh` descarta as linhas `#SLACK#`/`#SMS#` do template):
+
+- **Slack:** `SLACK_WEBHOOK_URL` (Incoming Webhook) — recebe critical e warning, com mensagem de resolução.
+- **SMS (só critical):** `ALERT_SMS_TO` (números E.164, separados por vírgulas) + `TWILIO_ACCOUNT_SID`,
+  `TWILIO_AUTH_TOKEN`, `TWILIO_SMS_FROM` (as mesmas da app). O Alertmanager chama o
+  `sms-relay` (`ops/monitoring/sms-relay.mjs`, perfil compose `sms`), que fala directamente com a Twilio —
+  deliberadamente fora da app, para o SMS sair mesmo com todas as réplicas em baixo.
 
 ## Mudar um threshold (sem redeploy da app)
 
