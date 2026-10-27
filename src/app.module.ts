@@ -101,6 +101,7 @@ import { SessionRevocationModule } from './auth/session-revocation.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { ClusterCronLockService } from './common/scheduling/cluster-cron-lock.service';
 
 const accessPath = (url = ''): string => url.split('?')[0];
 
@@ -242,6 +243,7 @@ const accessPath = (url = ''): string => url.split('?')[0];
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: AppThrottlerGuard },
+    ClusterCronLockService,
   ],
 })
 export class AppModule {}
