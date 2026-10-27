@@ -12,7 +12,9 @@ jest.mock('../common/helpers/audit-chain', () => ({
 const prismaWith = (privacy: object) =>
   ({
     tenantConfig: {
-      findUniqueOrThrow: jest.fn().mockResolvedValue({ privacySettingsJson: JSON.stringify(privacy) }),
+      findUniqueOrThrow: jest
+        .fn()
+        .mockResolvedValue({ privacySettingsJson: JSON.stringify(privacy) }),
     },
     user: {
       findUnique: jest.fn().mockResolvedValue({ id: 7, email: 'a@b.com' }),
@@ -40,15 +42,19 @@ describe('PersonalDataService', () => {
     const prisma = prismaWith({ anonymizationEnabled: true });
     const svc = new PersonalDataService(prisma, sessions);
     await expect(svc.anonymizeUser(7, 1)).resolves.toEqual({ userId: 7, anonymized: true });
-    expect((sessions as { revokeAllUserSessions: jest.Mock }).revokeAllUserSessions).toHaveBeenCalledWith(7);
+    expect(
+      (sessions as { revokeAllUserSessions: jest.Mock }).revokeAllUserSessions,
+    ).toHaveBeenCalledWith(7);
   });
 
   it('não anonimiza duas vezes', async () => {
-    const prisma = prismaWith({ anonymizationEnabled: true }) as { user: { findUnique: jest.Mock } };
+    const prisma = prismaWith({ anonymizationEnabled: true }) as {
+      user: { findUnique: jest.Mock };
+    };
     prisma.user.findUnique.mockResolvedValue({ id: 7, email: 'anonimizado-7@anonimizado.invalid' });
-    await expect(new PersonalDataService(prisma as never, sessions).anonymizeUser(7)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      new PersonalDataService(prisma as never, sessions).anonymizeUser(7),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });
 
@@ -61,7 +67,9 @@ describe('PrivacyRetentionService', () => {
     const personalData = { anonymizeUser: jest.fn().mockResolvedValue({}) };
     const p = prisma as unknown as { user: { findMany: jest.Mock } };
     p.user.findMany = jest.fn().mockResolvedValue([{ id: 9 }]);
-    const out = await new PrivacyRetentionService(prisma as never, personalData as never).purge(now);
+    const out = await new PrivacyRetentionService(prisma as never, personalData as never).purge(
+      now,
+    );
     expect(out).toEqual({ notifications: 3, refreshTokens: 2, exitAnonymized: 1 });
     expect(personalData.anonymizeUser).toHaveBeenCalledWith(9);
     const cutoff = prisma.notificationLog.deleteMany.mock.calls[0][0].where.createdAt.lt as Date;

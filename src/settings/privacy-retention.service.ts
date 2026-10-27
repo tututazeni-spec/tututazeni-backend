@@ -56,7 +56,10 @@ export class PrivacyRetentionService {
       const exitCutoff = new Date(now);
       exitCutoff.setFullYear(exitCutoff.getFullYear() - exitRetentionYears);
       const leavers = await this.prisma.user.findMany({
-        where: { exitDate: { lt: exitCutoff }, NOT: { email: { endsWith: `@${ANONYMIZED_DOMAIN}` } } },
+        where: {
+          exitDate: { lt: exitCutoff },
+          NOT: { email: { endsWith: `@${ANONYMIZED_DOMAIN}` } },
+        },
         select: { id: true },
         take: EXIT_ANONYMIZE_BATCH,
       });

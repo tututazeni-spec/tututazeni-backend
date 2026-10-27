@@ -110,7 +110,9 @@ export class PersonalDataService {
   /** Torna o titular não identificável e encerra as suas sessões. Irreversível. */
   async anonymizeUser(userId: number, actorId?: number) {
     if (!(await this.settings()).anonymizationEnabled) {
-      throw new BadRequestException('A anonimização está desactivada nas definições de privacidade');
+      throw new BadRequestException(
+        'A anonimização está desactivada nas definições de privacidade',
+      );
     }
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -215,7 +217,10 @@ export class PersonalDataService {
     let reapplied = 0;
     for (const { userId } of done) {
       if (!userId) continue;
-      const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+      const u = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true },
+      });
       if (!u || u.email.endsWith(`@${ANONYMIZED_DOMAIN}`)) continue;
       await this.anonymizeUser(userId, actorId);
       reapplied++;
