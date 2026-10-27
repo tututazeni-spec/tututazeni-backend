@@ -110,7 +110,7 @@ Regra de migrations: **expand/contract**. O rollback repõe a imagem, não desfa
 **Pipeline**
 - [ ] Secrets do GitHub: `DEPLOY_WEBHOOK_URL`, `ROLLBACK_WEBHOOK_URL`, `SMOKE_BASE_URL`, `SMOKE_FRONTEND_URL`, `SMOKE_*`, `TELEGRAM_*`
 - [ ] Check `quality` obrigatório em `main` (já activo); Trivy verde
-- [ ] Primeiro deploy → `stable` existe; **rollback ensaiado uma vez** (`rollback.sh`)
+- [ ] Primeiro deploy → `stable` existe; **rollback ensaiado uma vez** (`ops/deploy/rollback-drill.sh`, < 300 s)
 - [ ] Staging provisionado (secrets `STAGING_*`) ou decisão explícita de não o ter
 
 **Domínio, e-mail e ficheiros**
@@ -130,9 +130,10 @@ Regra de migrations: **expand/contract**. O rollback repõe a imagem, não desfa
 
 ## 7. O que ainda depende de ti (não é código)
 
-1. Provisionar o VPS de staging e criar os secrets `STAGING_*` (sem eles o job é ignorado).
+1. Provisionar o VPS de staging com `ops/deploy/bootstrap-vps.sh`, criar os secrets `STAGING_*` e correr `rollback-drill.sh` (guia: `staging-e-rollback.md`; sem os secrets o job é ignorado).
 2. Activar `ENABLE_OBSERVABILITY=true` e/ou criar o projecto Sentry e pôr o `SENTRY_DSN`.
 3. Correr `ops/backup/install-cron.sh` no VPS para instalar o watchdog do Caddy e o restore drill, e executar `restore-drill.sh` uma vez à mão.
-4. Publicar SPF/DKIM/DMARC no DNS do domínio real e criar o bucket com versionamento (`dns-e-email.md`, `ficheiros-e-persistencia.md`).
+4. Publicar o DNS real (`ops/dns/render-records.sh` gera os registos; `dns-e-email.md`) e criar o bucket de ficheiros
+   (`terraform apply` em `ops/infra/files-bucket/`; `ficheiros-e-persistencia.md`).
 4. `CSRF_TOKEN_STRICT=true` a partir de 2026-11-01.
 5. Decisão formal VPS vs `ops/k8s` + Redis gerido, pelos gatilhos da secção 1.

@@ -14,6 +14,14 @@
 
 `ALLOWED_ORIGINS`, `FRONTEND_URL`, `APP_URL` têm de usar exactamente este domínio.
 
+Os registos desta página (e os do e-mail abaixo) saem prontos em formato de zona com:
+
+```bash
+DOMAIN=innova.ao APP_HOST=app.innova.ao ORIGIN_IP=<ip-do-vps> SPF_INCLUDE=<spf-do-fornecedor> DKIM_SELECTOR=<selector> DKIM_TARGET=<cname-do-fornecedor> ops/dns/render-records.sh
+```
+
+Só imprime; os registos criam-se no painel do registrador/Cloudflare e validam-se com `npm run ops:dns-check`.
+
 ## 2. E-mail: três registos, três funções
 
 O domínio do `SMTP_FROM` (ex.: `innova.ao`) tem de publicar:

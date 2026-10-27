@@ -28,6 +28,19 @@ Volumes nomeados do compose existem só para Prometheus, Alertmanager, Redis (AO
 4. Os custos de armazenamento por cliente são controlados pela quota de storage do plano de
    faturação (`billing`), não pelo disco do VPS.
 
+## Criar o bucket
+
+`ops/infra/files-bucket/` (Terraform): versionamento, SSE-S3, acesso público bloqueado, CORS só para o
+frontend, versões antigas recuperáveis 90 dias e `prevent_destroy`.
+
+```bash
+cd ops/infra/files-bucket && terraform init
+terraform plan -var 'allowed_origins=["https://app.innova.ao"]' -out=tfplan && terraform apply tfplan
+```
+
+Servir pela CDN (Cloudflare) com o bucket como origem; `STORAGE_BASE_URL`, `ALLOWED_FILE_HOST` e
+`IMG_ALLOWED_HOSTS` levam o domínio da CDN.
+
 ## Verificação
 
 - Ensaio de persistência: carregar um ficheiro de cada caminho, fazer `docker compose up -d --force-recreate app`
