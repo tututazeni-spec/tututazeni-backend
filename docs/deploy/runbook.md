@@ -79,6 +79,7 @@ Acrescentar ao `/opt/innova/.env.production`: `FRONTEND_IMAGE_TAG=latest` e
 | `SMOKE_RH_EMAIL` / `SMOKE_RH_PASSWORD` | utilizador RH real de smoke em produção |
 | `SMOKE_COURSE_ID` | id de um curso publicado usado pela suite |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | (opcional) notificações de deploy |
+| `STAGING_HOST` / `STAGING_USER` / `STAGING_SSH_KEY` / `STAGING_SMOKE_*` | (opcional) 2.º VPS de staging; com ele, a produção espera pelo staging verde |
 
 Criar os utilizadores/curso de smoke na BD de produção antes do primeiro deploy
 (a suite corre com `SMOKE_SEED=false` e `SMOKE_ALLOW_WRITES=false` — só leituras;

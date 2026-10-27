@@ -45,11 +45,22 @@ disco <15 % degraded, <5 % down; heap ≥85 % degraded, ≥95 % down; event loop
   `docker compose -f ops/monitoring/local/docker-compose.monitoring.local.yml up -d`.
   O ficheiro `ops/monitoring/local/metrics_token` (gitignored) tem de ter o valor de `METRICS_TOKEN` do `.env`.
 
-## Deploy e rollback (sem VPS)
+## Deploy e rollback
 
-`.github/workflows/deploy.yml` é agnóstico da plataforma — o destino de produção ainda não está decidido:
-`build → deploy (DEPLOY_WEBHOOK_URL) → health gate (/health/ready) → smoke (npm run test:regression) → tag stable`.
-Falha em deploy/verify → `rollback` pede ao `ROLLBACK_WEBHOOK_URL` a imagem `stable`.
-Secrets: `DEPLOY_WEBHOOK_URL`, `ROLLBACK_WEBHOOK_URL`, `SMOKE_BASE_URL`, `SMOKE_FRONTEND_URL` (opcional),
-`SMOKE_EMPLOYEE_*`, `SMOKE_RH_*`, `SMOKE_COURSE_ID`, e `TELEGRAM_*` (opcional, notificação).
-Os ficheiros `ops/deploy/*.sh` e `ops/docker-compose.prod.yml` são do antigo VPS e já não são usados pelo workflow.
+Destino de produção: **VPS com Docker Compose** (`ops/docker-compose.prod.yml`), decisão confirmada em 2026-10-27.
+`.github/workflows/deploy.yml`:
+`build → scan Trivy → [staging] → deploy (SSH + deploy.sh rolling) → health gate (/health/ready) → smoke (npm run test:regression) → tag stable`.
+Falha em deploy/verify → `rollback.sh` repõe as tags anteriores.
+
+- **Modo SSH (principal):** secrets `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`. O workflow copia `ops/` para `/opt/innova` e corre `deploy.sh`.
+- **Modo webhook (alternativa, plataformas geridas):** `DEPLOY_WEBHOOK_URL` + `ROLLBACK_WEBHOOK_URL`; o receptor publica a tag e repõe `stable`. Só é usado se não houver `DEPLOY_HOST`.
+- **Staging (opcional):** `STAGING_HOST`, `STAGING_USER`, `STAGING_SSH_KEY`, `STAGING_SMOKE_BASE_URL`, `STAGING_SMOKE_*`. Se existir, a produção só avança depois de o staging passar.
+- Comuns: `SMOKE_BASE_URL`, `SMOKE_FRONTEND_URL` (opcional), `SMOKE_EMPLOYEE_*`, `SMOKE_RH_*`, `SMOKE_COURSE_ID`, `TELEGRAM_*` (opcional).
+
+## Grafana, Loki e erros de aplicação (opcionais)
+
+- `ENABLE_OBSERVABILITY=true` no `.env.production` → o `deploy.sh` sobe Grafana + Loki + Promtail (perfil `observability`, ≈ +640 MB).
+  Grafana em `127.0.0.1:3001` (túnel SSH), datasources e o dashboard «INNOVA — API» já provisionados.
+  O Promtail lê os ficheiros json-file do Docker (sem `docker.sock`); o serviço vem do label `com.docker.compose.service`.
+- `SENTRY_DSN` definido → erros 5xx vão para o Sentry (`src/common/observability/sentry.ts`). Sem DSN é no-op.
+  Cookies, cabeçalhos, corpos e query params estão desligados (dados pessoais de RH).

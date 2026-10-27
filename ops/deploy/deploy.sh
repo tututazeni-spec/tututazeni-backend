@@ -72,14 +72,76 @@ fi
 IMAGE_TAG="$TAG" FRONTEND_IMAGE_TAG="$FTAG" docker compose -f "$COMPOSE_FILE" pull app migrate frontend \
   || echo "⚠ pull falhou — a usar imagem local se existir"
 
-# `up -d` corre o job `migrate` até terminar (as réplicas `app` dependem de
-# `service_completed_successfully`) e sobe/recria tudo o resto. Se a migração
-# falhar, o compose sai != 0 → `set -e` aborta → o job de deploy falha → o
-# workflow dispara o rollback automático.
-IMAGE_TAG="$TAG" FRONTEND_IMAGE_TAG="$FTAG" docker compose -f "$COMPOSE_FILE" up -d
+# ─── Deploy rolling (uma réplica de cada vez → sem janela de indisponibilidade) ──
+# `compose up -d` recriava todas as réplicas em simultâneo (janela de 5–15 s). Aqui:
+#   1. suporte (redis/pgbouncer) sobe primeiro e fica healthy;
+#   2. migrations correm e têm de terminar com 0 (senão `set -e` aborta ANTES de tocar
+#      nas réplicas → o workflow dispara o rollback sem nada ter mudado);
+#   3. cada réplica é parada com graceful shutdown (stop_grace_period) e substituída
+#      pela imagem nova; só passa à seguinte quando a nova estiver healthy.
+DC() { IMAGE_TAG="$TAG" FRONTEND_IMAGE_TAG="$FTAG" docker compose -f "$COMPOSE_FILE" "$@"; }
+
+echo "▶ infra de suporte"
+DC up -d --no-deps --wait redis pgbouncer postgres-exporter
+
+echo "▶ migrations"
+DC run --rm --no-deps migrate
+
+# Conta réplicas healthy/total de um serviço (SVC_HEALTHY / SVC_TOTAL).
+svc_counts() {
+  local svc="$1" cid st
+  SVC_TOTAL=0
+  SVC_HEALTHY=0
+  for cid in $(DC ps -q "$svc" || true); do
+    SVC_TOTAL=$((SVC_TOTAL + 1))
+    st="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || echo none)"
+    if [ "$st" = "healthy" ]; then SVC_HEALTHY=$((SVC_HEALTHY + 1)); fi
+  done
+}
+
+wait_all_healthy() {
+  local svc="$1" limit=$((SECONDS + 120))
+  while [ "$SECONDS" -lt "$limit" ]; do
+    svc_counts "$svc"
+    if [ "$SVC_TOTAL" -ge 1 ] && [ "$SVC_HEALTHY" -eq "$SVC_TOTAL" ]; then return 0; fi
+    sleep 3
+  done
+  echo "❌ $svc: $SVC_HEALTHY/$SVC_TOTAL healthy ao fim de 120s"
+  DC logs --tail 50 "$svc" || true
+  return 1
+}
+
+roll_service() {
+  local svc="$1" old cid
+  old="$(DC ps -q "$svc" || true)"
+  if [ -z "$old" ]; then
+    echo "▶ $svc: primeira subida"
+    DC up -d --no-deps --no-recreate "$svc"
+    wait_all_healthy "$svc"
+    return
+  fi
+  for cid in $old; do
+    echo "▶ $svc: a substituir $(docker inspect -f '{{.Name}}' "$cid")"
+    docker stop -t 30 "$cid" >/dev/null
+    docker rm "$cid" >/dev/null
+    # --no-recreate: preserva as réplicas restantes, cria só a que falta (já com a imagem nova)
+    DC up -d --no-deps --no-recreate "$svc"
+    wait_all_healthy "$svc"
+  done
+}
+
+roll_service app
+roll_service frontend
+
+echo "▶ borda e monitorização"
+DC up -d --no-deps caddy prometheus alertmanager node-exporter
+if [ "$(env_val ENABLE_OBSERVABILITY)" = "true" ]; then
+  echo "▶ observabilidade (Grafana + Loki + Promtail)"
+  DC --profile observability up -d --no-deps loki promtail grafana
+fi
 
 # configs de monitorização são bind-mounts — reiniciar para recarregar
-IMAGE_TAG="$TAG" docker compose -f "$COMPOSE_FILE" restart prometheus alertmanager
+DC restart prometheus alertmanager
 
 # ─── Health gate: TODAS as réplicas de `app` têm de ficar healthy ───────────
 # (substitui a verificação antiga por nome de container, que já não existe —

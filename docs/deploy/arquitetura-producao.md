@@ -51,14 +51,12 @@ Regra de migrations: **expand/contract**. O rollback repõe a imagem, não desfa
 | Métricas HTTP, Prisma, cache + SO + Postgres | ✅ | Prometheus, 15 d de retenção |
 | 19 regras de alerta (réplicas, erros, latência, disco, backups, Postgres, Watchdog) | ✅ | `ops/monitoring/alert-rules.yml` |
 | Rotação de logs do Docker | ✅ **corrigido** | `x-logging` no compose (10 MB × 5) |
-| Dashboards (Grafana) | ❌ | fase 2 abaixo |
-| Agregação/pesquisa de logs centralizada | ❌ | fase 2 abaixo |
-| Tracing / erros de aplicação (Sentry ou OTel) | ❌ | fase 2 abaixo |
+| Dashboards (Grafana) | ✅ opt-in | `ENABLE_OBSERVABILITY=true` |
+| Agregação/pesquisa de logs centralizada (Loki) | ✅ opt-in | idem |
+| Erros de aplicação (Sentry) | ✅ opt-in | `SENTRY_DSN`; tracing/OTel continua fora |
 
-**Fase 2 (quando houver folga de RAM — os limites actuais já somam ≈3,4 GB de 8 GB):**
-Grafana + Loki + Promtail (≈ +600 MB) num segundo compose de monitorização; ou, se preferires não operar
-a stack, Grafana Cloud free tier com `remote_write` do Prometheus. SLOs sugeridos para os alertas:
-disponibilidade 99,9 % mensal (≈ 43 min de erro), p95 < 1 s em leitura, taxa de 5xx < 1 %.
+**Opt-in (já implementado):** com `ENABLE_OBSERVABILITY=true` sobem Grafana + Loki + Promtail (≈ +640 MB; só com o VPS de 8 GB — os limites actuais somam ≈ 3,9 GB com Redis a 256 MB).
+`SENTRY_DSN` activa o envio de erros 5xx. SLOs sugeridos para os alertas: disponibilidade 99,9 % mensal (≈ 43 min de erro), p95 < 1 s em leitura, taxa de 5xx < 1 %.
 
 ## 4. Lacunas encontradas
 
@@ -68,14 +66,15 @@ disponibilidade 99,9 % mensal (≈ 43 min de erro), p95 < 1 s em leitura, taxa d
 | 2 | Logs do Docker sem rotação | Disco do VPS enche; `DiskSpaceLow` avisa tarde | ✅ corrigido |
 | 3 | `stop_grace_period`/`init` ausentes em app e frontend | Docker mata ao fim de 10 s; sem PID 1 a propagar sinais | ✅ corrigido (30 s / 20 s, `init: true`) |
 | 4 | Imagem sem scan de vulnerabilidades | CVE crítica chega a produção | ✅ Trivy no `deploy.yml` |
-| 5 | `docker compose up -d` recria as 2 réplicas quase juntas | Janela de ~5–15 s com retry do Caddy | ⚠ aberta — resolve com `ops/k8s` (rolling real) ou Swarm; mitigação: deploy fora de horas de pico |
-| 6 | Caddy pendurado não é reiniciado pelo Compose | Outage total até intervenção | ⚠ aberta — sidecar `autoheal` ou 2º nó |
-| 7 | Redis sem `maxmemory` | Pico enche os 192 MB → OOM kill → perde-se fila | ⚠ aberta — definir `--maxmemory 150mb --maxmemory-policy noeviction` **depois** de medir uso real (noeviction faz falhar escritas de cache em vez de matar o processo) |
-| 8 | Sem ambiente de staging | Migrations e config só são exercitadas em produção | ⚠ aberta — clonar o compose com BD própria; gate manual antes de `main` |
-| 9 | Sem teste periódico de restauro | Backup não verificado não é backup | `verify-backup.sh` existe; agendar restore mensal num Postgres descartável |
-| 10 | `docs/deploy/observabilidade.md` diz que `ops/deploy/*.sh` e o compose "já não são usados", mas `runbook.md` e `deploy.sh` descrevem-nos como o caminho real | Equipa segue o documento errado em incidente | ⚠ aberta — confirmar qual é o destino real e apagar o texto obsoleto |
-| 11 | Workflows usam `actions/checkout@v3`/`setup-node@v3` | Runtimes Node antigos, avisos de depreciação | ⚠ aberta — subir para v4 e fixar por SHA |
-| 12 | `CSRF_TOKEN_STRICT=false` em produção | Escritas sem token double-submit | Pendente em `docs/seguranca-pendentes.md` (seguro a partir de 2026-11-01) |
+| 5 | `docker compose up -d` recriava as 2 réplicas quase juntas | Janela de ~5–15 s | ✅ `deploy.sh` rolling (migrations → uma réplica de cada vez, só avança com a nova `healthy`). Testado com compose de ensaio: mínimo observado de 1 réplica saudável, nunca 0 |
+| 6 | Caddy pendurado não é reiniciado pelo Compose | Outage total até intervenção | ✅ `ops/deploy/caddy-watchdog.sh` (cron por minuto, 2 leituras `unhealthy` → `docker restart` + Telegram). Sem `docker.sock` em containers |
+| 7 | Redis sem `maxmemory` | OOM kill → perde-se a fila | ✅ `maxmemory 160mb` + `volatile-lru` (só despeja cache com TTL; chaves do Bull ficam), limite do container 256 MB |
+| 8 | Sem ambiente de staging | Migrations e config só exercitadas em produção | ✅ job `staging` opcional no `deploy.yml` (2.º VPS, mesmo compose). **Falta provisionar o VPS e os secrets `STAGING_*`** |
+| 9 | Sem teste periódico de restauro | Backup não verificado não é backup | ✅ `ops/backup/restore-drill.sh` (dia 1 de cada mês, Postgres descartável) + alerta `RestoreDrillTooOld` (>40 dias) |
+| 10 | Docs contraditórios sobre o caminho de deploy | Equipa segue o documento errado | ✅ decidido: VPS + Compose via SSH; `observabilidade.md` corrigido; webhook mantido como alternativa |
+| 11 | Workflows em `actions/checkout@v3`/`setup-node@v3` | Runtimes Node antigos | ✅ v4 (Dependabot mantém as versões, mensal) |
+| 12 | `CSRF_TOKEN_STRICT=false` em produção | Escritas sem token double-submit | ⏳ por data, não por código: activar a partir de 2026-11-01 (`docs/seguranca-pendentes.md`) |
+| 13 | Sem dashboards, logs centralizados nem erros de aplicação | Diagnóstico lento | ✅ opt-in: Grafana + Loki + Promtail (`ENABLE_OBSERVABILITY`) e Sentry (`SENTRY_DSN`) |
 
 ## 5. Docker / Kubernetes
 
@@ -108,6 +107,7 @@ disponibilidade 99,9 % mensal (≈ 43 min de erro), p95 < 1 s em leitura, taxa d
 - [ ] Secrets do GitHub: `DEPLOY_WEBHOOK_URL`, `ROLLBACK_WEBHOOK_URL`, `SMOKE_BASE_URL`, `SMOKE_FRONTEND_URL`, `SMOKE_*`, `TELEGRAM_*`
 - [ ] Check `quality` obrigatório em `main` (já activo); Trivy verde
 - [ ] Primeiro deploy → `stable` existe; **rollback ensaiado uma vez** (`rollback.sh`)
+- [ ] Staging provisionado (secrets `STAGING_*`) ou decisão explícita de não o ter
 
 **Observabilidade**
 - [ ] Alerta `Watchdog` a chegar ao healthchecks.io; e-mail e Telegram testados com um alerta falso
@@ -119,9 +119,10 @@ disponibilidade 99,9 % mensal (≈ 43 min de erro), p95 < 1 s em leitura, taxa d
 - [ ] `docker stop` a uma réplica durante carga: sem 5xx visíveis (valida o `enableShutdownHooks`)
 - [ ] Runbook de DR lido por quem está de piquete (`disaster-recovery.md`); RTO/RPO escritos e aceites
 
-## 7. Ordem recomendada do que falta
+## 7. O que ainda depende de ti (não é código)
 
-1. Itens 5–8 da secção 4 (maior risco residual por esforço).
-2. Staging e restore mensal automatizado.
-3. Grafana + Loki (fase 2), SLOs nos alertas.
-4. Decisão formal: ficar no VPS ou migrar para `ops/k8s` + Redis gerido, usando os gatilhos da secção 1.
+1. Provisionar o VPS de staging e criar os secrets `STAGING_*` (sem eles o job é ignorado).
+2. Activar `ENABLE_OBSERVABILITY=true` e/ou criar o projecto Sentry e pôr o `SENTRY_DSN`.
+3. Correr `ops/backup/install-cron.sh` no VPS para instalar o watchdog do Caddy e o restore drill, e executar `restore-drill.sh` uma vez à mão.
+4. `CSRF_TOKEN_STRICT=true` a partir de 2026-11-01.
+5. Decisão formal VPS vs `ops/k8s` + Redis gerido, pelos gatilhos da secção 1.

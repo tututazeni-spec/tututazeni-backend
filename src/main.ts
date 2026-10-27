@@ -22,9 +22,11 @@ import {
 import { runWithRequestContext } from './common/logging/request-context';
 import { logIdentityMiddleware } from './common/logging/identity.middleware';
 import { runWithRls } from './common/rls/rls-context';
+import { initSentry } from './common/observability/sentry';
 
 async function bootstrap() {
   validateEnv();
+  initSentry();
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
   const logger = app.get(Logger);

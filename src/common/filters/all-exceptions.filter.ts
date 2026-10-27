@@ -2,6 +2,7 @@ import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from
 import { randomUUID } from 'node:crypto';
 import { Request, Response } from 'express';
 import { PinoLogger } from 'nestjs-pino';
+import { captureServerError } from '../observability/sentry';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -54,8 +55,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
       err,
     };
     const logMessage = exception instanceof Error ? exception.message : 'Unknown exception';
-    if (isServerError) this.logger.error(logPayload, logMessage);
-    else this.logger.warn(logPayload, logMessage);
+    if (isServerError) {
+      this.logger.error(logPayload, logMessage);
+      captureServerError(exception, {
+        requestId,
+        method: req.method,
+        route: logPayload.path,
+      });
+    } else this.logger.warn(logPayload, logMessage);
 
     res.status(status).json({
       statusCode: status,

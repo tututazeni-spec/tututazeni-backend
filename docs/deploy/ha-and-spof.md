@@ -47,11 +47,10 @@
 ### Nota sobre "2 réplicas no mesmo host"
 
 As réplicas protegem contra **falha de processo** (crash, OOM, deadlock, bug que
-mata um worker), não contra **falha de host**. Um `docker compose up -d` num
-redeploy recria as duas réplicas quase em simultâneo → há uma janela de ~5–15 s
-em que o Caddy faz retry (`lb_try_duration 5s`) e a Cloudflare pode servir
-cache. Deploy verdadeiramente *rolling* (zero downtime) exige Docker Swarm mode
-ou a topologia de 2 nós — ver abaixo.
+mata um worker), não contra **falha de host**. Desde 2026-10-27 o `deploy.sh` faz deploy **rolling**: as
+migrations correm primeiro, depois cada réplica é parada com graceful shutdown e substituída por
+uma da imagem nova, só avançando quando esta fica `healthy`. Testado com um compose de ensaio:
+nunca houve zero réplicas saudáveis durante a troca. Continua a não proteger contra falha do host.
 
 ## Dimensionamento do VPS
 
