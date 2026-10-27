@@ -94,6 +94,7 @@ import { DashboardInstitutionalModule } from './dashboard-institutional/dashboar
 import { HealthModule } from './health/health.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { FeatureFlagsModule } from './common/feature-flags/feature-flags.module';
+import { BillingModule } from './billing/billing.module';
 
 // INFRA
 import { QueueModule } from './queue/queue.module';
@@ -239,6 +240,7 @@ const accessPath = (url = ''): string => url.split('?')[0];
     HealthModule,
     MetricsModule,
     FeatureFlagsModule,
+    BillingModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

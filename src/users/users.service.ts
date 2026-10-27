@@ -14,6 +14,7 @@ import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
+import { BillingLimitsService } from '../billing/billing-limits.service';
 import { SecuritySettingsService } from '../settings/security-settings.service';
 import { SessionRevocationService } from '../auth/session-revocation.service';
 import { hashPassword, verifyPassword } from '../common/security/password-hasher';
@@ -94,6 +95,8 @@ export class UsersService {
     @Optional() private readonly security?: SecuritySettingsService,
     // Revogação imediata de sessões (logout forçado, papel alterado).
     @Optional() private readonly revocation?: SessionRevocationService,
+    // Limite de utilizadores do plano (faturação). Optional pelo mesmo motivo.
+    @Optional() private readonly planLimits?: BillingLimitsService,
   ) {}
 
   // ─── Sanitizar (remover password) ────────────────────────────────────────
@@ -349,6 +352,7 @@ export class UsersService {
     opts: { skipPolicy?: boolean; actorRole?: string } = {},
   ) {
     await this.assertCanAssignRole(dto.roleId, opts.actorRole);
+    await this.planLimits?.assertCanAddUser();
     if (this.settings && !opts.skipPolicy) dto = await this.settings.applyUserPolicy(dto);
 
     // Guards de unicidade antes da escrita: força primary para não validar contra réplica atrasada.
