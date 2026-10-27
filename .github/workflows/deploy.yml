@@ -111,17 +111,16 @@ jobs:
 
       # Bloqueia o deploy se a imagem trouxer CVE crítica com correção disponível
       # (base node:20-slim + dependências). Só em push: em PR a imagem não é publicada.
+      # Imagem oficial do Trivy a correr directamente (sem depender de actions de terceiros,
+      # que já falharam por referenciarem tags inexistentes).
       - name: Scan de vulnerabilidades (Trivy)
         if: ${{ github.event_name != 'pull_request' }}
-        uses: aquasecurity/trivy-action@v0.28.0
-        with:
-          image-ref: ${{ env.IMAGE }}:sha-${{ github.sha }}
-          severity: CRITICAL
-          ignore-unfixed: true
-          exit-code: '1'
         env:
           TRIVY_USERNAME: ${{ github.actor }}
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          SCAN_IMAGE: ${{ env.IMAGE }}:sha-${{ github.sha }}
+        run: |
+          docker run --rm -e TRIVY_USERNAME -e TRIVY_PASSWORD aquasec/trivy:0.58.1             image --severity CRITICAL --ignore-unfixed --exit-code 1 --no-progress "$SCAN_IMAGE"
 
   # Ensaio geral: mesmo compose, mesmo deploy.sh, BD e domínio próprios (outro VPS).
   # Apanha migrations partidas e config em falta antes de tocarem em produção.
