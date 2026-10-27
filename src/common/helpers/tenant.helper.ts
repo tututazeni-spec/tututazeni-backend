@@ -24,6 +24,25 @@ export async function resolveDefaultTenantId(
   tenantId?: string,
 ): Promise<string> {
   if (tenantId) return tenantId;
+  // Chamado por ~15 serviços de Definições, vários deles em caminho quente (o interceptor de
+  // sistema lê as definições em CADA pedido): o id do tenant por omissão praticamente não muda,
+  // por isso memoriza-se com TTL curto. A promise (e não o valor) fica em cache, o que também
+  // deduplica chamadas concorrentes. Falhas não ficam em cache.
+  const hit = defaultTenantCache.get(prisma);
+  if (hit && hit.expiresAt > Date.now()) return hit.id;
+
+  const id = lookupOrCreateDefaultTenant(prisma);
+  defaultTenantCache.set(prisma, { id, expiresAt: Date.now() + DEFAULT_TENANT_TTL_MS });
+  id.catch(() => {
+    if (defaultTenantCache.get(prisma)?.id === id) defaultTenantCache.delete(prisma);
+  });
+  return id;
+}
+
+const DEFAULT_TENANT_TTL_MS = 60_000;
+const defaultTenantCache = new WeakMap<object, { id: Promise<string>; expiresAt: number }>();
+
+function lookupOrCreateDefaultTenant(prisma: PrismaService): Promise<string> {
   // Config global do tenant (guarda segredos de SSO/webhook): fora do RLS de utilizador.
   return runAsSystem(async () => {
     const existing = await prisma.tenantConfig.findFirst();
