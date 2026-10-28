@@ -26,5 +26,6 @@ commits = [
   '9fc40f3cd2de69cc31e032ef124ceb3b05f57566',
   'e71941822f12444f9711fa65001820c557770bc4',
   '266d7e60ab76d160e873e03b6fe44f7b4dcccfe3',
+  '4ebc83b274dc43e3e70184d093131a89cd7c19fc',   # JWT_SECRET de teste (fictício) nos env do job de integração
   'ed61bd75935f0cd91fafe66c69b90e13a85f332d',  # JWT_SECRET de teste fictício nas env do job de quality
 ]
