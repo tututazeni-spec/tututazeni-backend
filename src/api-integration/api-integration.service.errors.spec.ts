@@ -4,6 +4,9 @@ import { getQueueToken } from '@nestjs/bull';
 import { ApiIntegrationService } from './api-integration.service';
 import { PrismaService } from '../prisma/prisma.service';
 
+// createWebhook cifra o segredo em repouso (pii-crypto), que exige uma chave no ambiente.
+process.env.PII_ENCRYPTION_KEY ??= 'chave-de-teste-api-integration';
+
 const mockWebhooksQueue = { add: jest.fn().mockResolvedValue(undefined) };
 
 // Nota: ApiKey e Webhook NÃO existem no schema Prisma (nunca migrados). O

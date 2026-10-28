@@ -1,0 +1,10 @@
+# Revisão das áreas sensíveis. Só passa a ser vinculativo ("Require review from Code Owners" na branch protection)
+# quando houver um segundo revisor com acesso de escrita; com um único colaborador bloquearia todos os merges.
+*                       @tututazeni-spec
+/prisma/                @tututazeni-spec
+/src/auth/              @tututazeni-spec
+/src/audit/             @tututazeni-spec
+/src/common/security/   @tututazeni-spec
+/ops/                   @tututazeni-spec
+/.github/               @tututazeni-spec
+/docs/security/         @tututazeni-spec

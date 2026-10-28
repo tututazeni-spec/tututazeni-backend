@@ -1,4 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
+import { decryptPii } from '../common/security/pii-crypto';
 import type { PrismaClient } from '@prisma/client';
 
 /**
@@ -40,7 +41,7 @@ export async function buildEmployeeSnapshotData(
     role: employee.position?.name ?? '',
     department: employee.department?.name ?? '',
     admissionDate: employee.hireDate ?? null,
-    nationalId: employee.nif ?? null,
+    nationalId: decryptPii(employee.nif),
   };
 }
 

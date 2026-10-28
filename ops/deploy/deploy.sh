@@ -47,7 +47,23 @@ chmod 600 monitoring/metrics_token
 
 # substituição nativa do bash — sem armadilhas de escaping do sed com URLs
 am_cfg="$(cat monitoring/alertmanager.yml.tpl)"
-for var in SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASSWORD ALERT_EMAIL_TO \
+
+# Canais opcionais (Slack, SMS): activa as linhas "#TAG# " se a variável existir, senão remove-as.
+enable_optional() {
+  local tag="$1" gate="$2" out="" line
+  while IFS= read -r line; do
+    if [[ "$line" == "#${tag}# "* ]]; then
+      if [ -n "$(env_val "$gate")" ]; then out+="${line#"#${tag}# "}"$'\n'; fi
+    else
+      out+="$line"$'\n'
+    fi
+  done <<< "$am_cfg"
+  am_cfg="${out%$'\n'}"
+}
+enable_optional SLACK SLACK_WEBHOOK_URL
+enable_optional SMS ALERT_SMS_TO
+
+for var in SLACK_WEBHOOK_URL SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASSWORD ALERT_EMAIL_TO \
            TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID HEALTHCHECKS_PING_URL; do
   am_cfg="${am_cfg//\$\{${var}\}/$(env_val "$var")}"
 done
@@ -135,6 +151,10 @@ roll_service frontend
 
 echo "▶ borda e monitorização"
 DC up -d --no-deps caddy prometheus alertmanager node-exporter
+if [ -n "$(env_val ALERT_SMS_TO)" ]; then
+  echo "▶ relay de SMS para alertas críticos"
+  DC --profile sms up -d --no-deps sms-relay
+fi
 if [ "$(env_val ENABLE_OBSERVABILITY)" = "true" ]; then
   echo "▶ observabilidade (Grafana + Loki + Promtail)"
   DC --profile observability up -d --no-deps loki promtail grafana

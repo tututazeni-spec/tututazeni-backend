@@ -93,6 +93,12 @@ import { LibraryModule } from './library/library.module';
 import { DashboardInstitutionalModule } from './dashboard-institutional/dashboard-institutional.module';
 import { HealthModule } from './health/health.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { FeatureFlagsModule } from './common/feature-flags/feature-flags.module';
+import { BillingModule } from './billing/billing.module';
+import { PublicApiModule } from './public-api/public-api.module';
+import { SupportModule } from './support/support.module';
+import { LegalModule } from './legal/legal.module';
+import { ProductExperienceModule } from './product-experience/product-experience.module';
 
 // INFRA
 import { QueueModule } from './queue/queue.module';
@@ -237,6 +243,12 @@ const accessPath = (url = ''): string => url.split('?')[0];
     DashboardInstitutionalModule,
     HealthModule,
     MetricsModule,
+    FeatureFlagsModule,
+    BillingModule,
+    PublicApiModule,
+    SupportModule,
+    LegalModule,
+    ProductExperienceModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

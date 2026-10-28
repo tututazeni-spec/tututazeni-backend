@@ -1,4 +1,5 @@
 ﻿import {
+  Optional,
   Injectable,
   NotFoundException,
   ConflictException,
@@ -6,6 +7,8 @@
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { PlatformEventsService } from '../api-integration/platform-events.service';
+import { WebhookEventType } from '../api-integration/api-integration.dto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CourseCompletionService } from '../course-completion/course-completion.service';
@@ -69,6 +72,7 @@ export class EnrollmentsService {
   constructor(
     private prisma: PrismaService,
     private readonly courseCompletion: CourseCompletionService,
+    @Optional() private readonly events?: PlatformEventsService,
   ) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -428,6 +432,12 @@ export class EnrollmentsService {
           });
         }),
     ]);
+
+    this.events?.emit(WebhookEventType.COURSE_ENROLLED, {
+      enrollmentId: enrollment.id,
+      userId: dto.userId,
+      courseId: dto.courseId,
+    });
 
     return withCurrentCertificate(enrollment);
   }

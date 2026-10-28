@@ -17,6 +17,7 @@ import { SecuritySettingsService } from '../settings/security-settings.service';
 import { AuthSettingsService } from '../settings/auth-settings.service';
 import { isPasswordExpired, isTwoFactorRequired } from '../settings/security-policy';
 import { verifyTotp } from '../settings/totp';
+import { decryptUserPii } from '../common/security/pii-crypto';
 import { decryptSecret } from '../automation/automation-connections.service';
 import { LoginDto, RegisterDto, ChangePasswordDto } from './auth.dto';
 import {
@@ -464,7 +465,7 @@ export class AuthService {
     });
     if (!user) throw new UnauthorizedException();
     const { password: _, ...rest } = user;
-    return { ...rest, role: withFlatPermissions(user.role) };
+    return { ...decryptUserPii(rest), role: withFlatPermissions(user.role) };
   }
 
   private async persistRefreshToken(

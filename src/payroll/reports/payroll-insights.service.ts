@@ -1,3 +1,4 @@
+import { decryptPii } from '../../common/security/pii-crypto';
 import { toJson } from '../../common/helpers/prisma-json';
 // src/payslips/payroll-insights.service.ts
 // Leituras agregadas do Payroll (docs/payroll.md §1, §3, §5, §9): visão geral,
@@ -226,7 +227,7 @@ export class PayrollInsightsService {
         userId: p.userId,
         fullName: p.user.fullName,
         employeeNumber: p.user.employeeNumber,
-        nif: p.user.nif,
+        nif: decryptPii(p.user.nif),
         department: p.user.department?.name ?? null,
         position: p.user.position?.name ?? null,
         baseSalary: p.baseSalary,
@@ -267,6 +268,8 @@ export class PayrollInsightsService {
       },
     });
     if (!user) throw new NotFoundException('Colaborador não encontrado');
+    const plainNib = decryptPii(user.nib);
+    const maskedNib = plainNib ? `••••${plainNib.slice(-4)}` : null;
     const [compensations, payslips] = await Promise.all([
       this.prisma.read.employeeCompensation.findMany({
         where: { userId },
@@ -292,7 +295,7 @@ export class PayrollInsightsService {
     ]);
     const current = compensations.find(c => !c.effectiveTo) ?? compensations[0] ?? null;
     return {
-      user: { ...user, nib: user.nib ? `••••${user.nib.slice(-4)}` : null },
+      user: { ...user, nif: decryptPii(user.nif), nib: maskedNib },
       compensation: current,
       salaryHistory: compensations.map(c => ({
         id: c.id,

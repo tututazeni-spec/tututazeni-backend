@@ -635,6 +635,10 @@ enum HrStatus {
 }
 
 model User {
+  productFeedback           ProductFeedback[]          @relation("ProductFeedbackUser")
+  supportTickets            SupportTicket[]            @relation("SupportTicketRequester")
+  supportMessages           SupportTicketMessage[]     @relation("SupportMessageAuthor")
+  legalAcceptances          LegalAcceptance[]          @relation("LegalAcceptanceUser")
   avatarTrainingAssignments AvatarTrainingAssignment[]
   avatarTrainingAttempts    AvatarTrainingAttempt[]
   // ─── Identidade ───────────────────────────────────────────────
@@ -8008,8 +8012,8 @@ model AutomationRule {
   schedules           AutomationSchedule[]
 
   @@index([module])
-  @@map("automation_rules")
   @@index([tenantId])
+  @@map("automation_rules")
 }
 
 model AutomationExecution {
@@ -8275,8 +8279,8 @@ model SlaConfig {
   updatedAt         DateTime     @updatedAt
   tenant            TenantConfig @relation(fields: [tenantId], references: [id])
 
-  @@map("sla_configs")
   @@index([tenantId])
+  @@map("sla_configs")
 }
 
 model ContentDeliveryConfig {
@@ -8810,8 +8814,8 @@ model IntegrationConfig {
   // padrão de AutomationRule.createdBy, evita tocar no modelo User
   notes               String?                         @db.Text
 
-  @@map("integration_configs")
   @@index([tenantId])
+  @@map("integration_configs")
 }
 
 model TenantConfig {
@@ -8823,6 +8827,7 @@ model TenantConfig {
   maxStorageGb             Int                       @default(50)
   isActive                 Boolean                   @default(true)
   trialEndsAt              DateTime?
+  billingSubscriptions     BillingSubscription[]
   billingCycleStart        DateTime?
   contractStartDate        DateTime?
   contractEndDate          DateTime?
@@ -8943,8 +8948,8 @@ model IntegrationSyncLog {
   detailsJson      String? // JSON com detalhes de erros individuais
   integration      IntegrationConfig @relation(fields: [integrationId], references: [id])
 
-  @@map("integration_sync_logs")
   @@index([integrationId])
+  @@map("integration_sync_logs")
 }
 
 enum ApiCallStatus {
@@ -10668,6 +10673,7 @@ model AttendanceAdjustment {
 
   @@index([attendanceId])
   @@index([recordId])
+  @@index([adjustedById])
 }
 
 model WorkSchedule {
@@ -11245,10 +11251,10 @@ model Declaration {
   @@index([tenantId, requestedById])
   @@index([code])
   @@index([legacyStatus])
-  @@map("declarations")
   @@index([templateId])
   @@index([assignedToId])
   @@index([employeeId])
+  @@map("declarations")
 }
 
 enum SignerRole {
@@ -11272,8 +11278,8 @@ model DeclarationSignature {
   signer          User          @relation(fields: [signerId], references: [id])
 
   @@unique([declarationId, signerId])
-  @@map("declaration_signatures")
   @@index([signerId])
+  @@map("declaration_signatures")
 }
 
 // Módulo com um único escritor confirmado (work-declaration.service.ts) —
@@ -11340,8 +11346,8 @@ model DeclarationAttachment {
   declaration   Declaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
   uploadedBy    User        @relation(fields: [uploadedById], references: [id])
 
-  @@map("declaration_attachments")
   @@index([declarationId])
+  @@map("declaration_attachments")
 }
 
 model DeclarationTenantConfig {
@@ -11415,8 +11421,8 @@ model DeclarationTemplate {
   updatedAt        DateTime             @updatedAt
 
   @@index([purposeId, tenantId, type, isActive])
-  @@map("declaration_templates")
   @@index([tenantId])
+  @@map("declaration_templates")
 }
 
 model DeclarationRequest {
@@ -16057,4 +16063,266 @@ model EnrollmentRunLesson {
 
   @@unique([runId, lessonId])
   @@index([runId])
+}
+
+// ─── Faturação SaaS (docs/deploy/faturacao-saas.md) ───
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+enum BillingSubscriptionStatus {
+  TRIALING
+  PENDING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+enum BillingInvoiceStatus {
+  ISSUED
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum BillingPaymentStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+enum BillingFiscalStatus {
+  NOT_SUBMITTED
+  SUBMITTED
+  CERTIFIED
+}
+
+model BillingPlan {
+  id            String                @id @default(cuid())
+  code          String                @unique // STARTER | GROWTH | ENTERPRISE | CUSTOM
+  name          String
+  priceMonthly  Decimal               @db.Decimal(14, 2)
+  priceYearly   Decimal               @db.Decimal(14, 2)
+  currency      String                @default("AOA")
+  maxUsers      Int
+  maxStorageGb  Int
+  modulesJson   String? // JSON: lista de PermissionSubject incluídos; null = todos
+  trialDays     Int                   @default(14)
+  isActive      Boolean               @default(true)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  subscriptions BillingSubscription[]
+
+  @@map("billing_plans")
+}
+
+model BillingSubscription {
+  id                 String                    @id @default(cuid())
+  tenantId           String
+  tenant             TenantConfig              @relation(fields: [tenantId], references: [id])
+  planId             String
+  plan               BillingPlan               @relation(fields: [planId], references: [id])
+  status             BillingSubscriptionStatus
+  interval           BillingInterval           @default(MONTHLY)
+  priceAmount        Decimal                   @db.Decimal(14, 2) // preço acordado (snapshot do plano)
+  currency           String                    @default("AOA")
+  trialEndsAt        DateTime?
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean                   @default(false)
+  canceledAt         DateTime?
+  cancelReason       String?
+  convertedAt        DateTime? // primeira passagem de trial a pago
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  invoices           BillingInvoice[]
+
+  @@index([tenantId, status])
+  @@index([planId])
+  @@index([status, currentPeriodEnd])
+  @@map("billing_subscriptions")
+}
+
+model BillingInvoice {
+  id              String               @id @default(cuid())
+  subscriptionId  String
+  subscription    BillingSubscription  @relation(fields: [subscriptionId], references: [id])
+  series          String // ex.: "FT 2026"
+  number          Int
+  fullNumber      String               @unique // ex.: "FT 2026/12"
+  status          BillingInvoiceStatus @default(ISSUED)
+  issueDate       DateTime             @default(now())
+  dueDate         DateTime
+  periodStart     DateTime
+  periodEnd       DateTime
+  currency        String               @default("AOA")
+  subtotal        Decimal              @db.Decimal(14, 2)
+  taxRate         Decimal              @db.Decimal(5, 2)
+  taxAmount       Decimal              @db.Decimal(14, 2)
+  total           Decimal              @db.Decimal(14, 2)
+  customerName    String
+  customerNif     String?
+  customerAddress String?
+  customerCountry String?
+  description     String
+  hash            String // SHA-256 encadeado (não é a assinatura RSA exigida pela AGT)
+  previousHash    String?
+  fiscalStatus    BillingFiscalStatus  @default(NOT_SUBMITTED)
+  fiscalRef       String? // referência no software certificado (AGT)
+  paidAt          DateTime?
+  voidedAt        DateTime?
+  voidReason      String?
+  reminderCount   Int                  @default(0)
+  lastReminderAt  DateTime?
+  createdAt       DateTime             @default(now())
+  payments        BillingPayment[]
+
+  @@unique([series, number])
+  @@index([subscriptionId, periodStart])
+  @@index([status, dueDate])
+  @@map("billing_invoices")
+}
+
+model BillingInvoiceSequence {
+  series String @id // ex.: "FT 2026"
+  last   Int    @default(0)
+
+  @@map("billing_invoice_sequences")
+}
+
+model BillingPayment {
+  id            String               @id @default(cuid())
+  invoiceId     String
+  invoice       BillingInvoice       @relation(fields: [invoiceId], references: [id])
+  amount        Decimal              @db.Decimal(14, 2)
+  method        String // TRANSFER | REFERENCE | CASH | GATEWAY
+  reference     String?
+  status        BillingPaymentStatus @default(PENDING)
+  failureReason String?
+  createdAt     DateTime             @default(now())
+  confirmedAt   DateTime?
+
+  @@index([invoiceId])
+  @@map("billing_payments")
+}
+
+model AcquisitionSpend {
+  id        String   @id @default(cuid())
+  month     String // YYYY-MM
+  channel   String
+  amount    Decimal  @db.Decimal(14, 2)
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@index([month])
+  @@map("acquisition_spend")
+}
+
+model BillingMetricSnapshot {
+  id               String   @id @default(cuid())
+  month            String   @unique // YYYY-MM
+  mrr              Decimal  @db.Decimal(14, 2)
+  arr              Decimal  @db.Decimal(14, 2)
+  payingCustomers  Int
+  trialing         Int
+  newCustomers     Int
+  churnRatePct     Decimal  @db.Decimal(7, 2)
+  revenueCollected Decimal  @db.Decimal(14, 2)
+  outstanding      Decimal  @db.Decimal(14, 2)
+  updatedAt        DateTime @updatedAt
+
+  @@map("billing_metric_snapshots")
+}
+
+// ─── Experiência do produto: feedback, sondagem NPS, uso e checklist de arranque ───
+model ProductFeedback {
+  id        String   @id @default(cuid())
+  userId    Int?
+  user      User?    @relation("ProductFeedbackUser", fields: [userId], references: [id], onDelete: SetNull)
+  kind      String // IDEA | PROBLEM | PRAISE | NPS
+  score     Int? // NPS 0-10 (só kind=NPS)
+  comment   String?  @db.Text
+  page      String?
+  createdAt DateTime @default(now())
+
+  @@index([kind, createdAt])
+  @@index([userId, kind, createdAt])
+  @@map("product_feedback")
+}
+
+model ProductUsageEvent {
+  id        String   @id @default(cuid())
+  userId    Int?
+  event     String // page_view | feature_used | ...
+  path      String?
+  createdAt DateTime @default(now())
+
+  @@index([event, createdAt])
+  @@index([userId, createdAt])
+  @@map("product_usage_events")
+}
+
+model GettingStartedDismissal {
+  userId      Int      @id
+  dismissedAt DateTime @default(now())
+
+  @@map("getting_started_dismissals")
+}
+
+// ─── Suporte: tickets com tempo de primeira resposta (horas úteis) ───
+model SupportTicket {
+  id                 Int                    @id @default(autoincrement())
+  requesterId        Int
+  requester          User                   @relation("SupportTicketRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  subject            String
+  description        String                 @db.Text
+  category           String // ACCESS | BUG | QUESTION | REQUEST | BILLING | OTHER
+  priority           String // CRITICAL | HIGH | NORMAL | LOW
+  status             String                 @default("OPEN") // OPEN | IN_PROGRESS | WAITING_CUSTOMER | RESOLVED | CLOSED
+  page               String?
+  firstResponseDueAt DateTime
+  firstRespondedAt   DateTime?
+  resolvedAt         DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  messages           SupportTicketMessage[]
+
+  @@index([requesterId, createdAt])
+  @@index([status, priority])
+  @@index([firstResponseDueAt])
+  @@map("support_tickets")
+}
+
+model SupportTicketMessage {
+  id        Int           @id @default(autoincrement())
+  ticketId  Int
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId  Int?
+  author    User?         @relation("SupportMessageAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  body      String        @db.Text
+  staff     Boolean       @default(false)
+  internal  Boolean       @default(false) // nota interna: invisível ao pedinte
+  createdAt DateTime      @default(now())
+
+  @@index([ticketId, createdAt])
+  @@map("support_ticket_messages")
+}
+
+// ─── Aceitação de documentos legais (termos de utilização / política de privacidade) ───
+// Prova de consentimento: quem aceitou, que versão, quando e de onde. Uma linha por (utilizador, documento, versão).
+model LegalAcceptance {
+  id         String   @id @default(cuid())
+  userId     Int
+  user       User     @relation("LegalAcceptanceUser", fields: [userId], references: [id], onDelete: Cascade)
+  docType    String // TERMS | PRIVACY
+  version    String
+  acceptedAt DateTime @default(now())
+  ip         String?
+  userAgent  String?
+
+  @@unique([userId, docType, version])
+  @@index([docType, version])
+  @@map("legal_acceptances")
 }

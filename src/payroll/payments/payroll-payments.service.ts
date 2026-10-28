@@ -13,6 +13,7 @@ import { money } from '../taxes/money.util';
 import { CreatePayrollPaymentDto, UpdatePaymentStatusDto } from '../payroll.dto';
 
 import { csvCell } from '../../common/utils/csv-safe.util';
+import { decryptPii } from '../../common/security/pii-crypto';
 
 type PaymentStatus = UpdatePaymentStatusDto['status'];
 
@@ -179,12 +180,13 @@ export class PayrollPaymentsService {
     const lines = ['employee_number;full_name;nib;amount'];
     const missing: string[] = [];
     for (const p of payslips) {
-      if (!p.user.nib) {
+      const nib = decryptPii(p.user.nib);
+      if (!nib) {
         missing.push(p.user.fullName);
         continue;
       }
       lines.push(
-        [p.user.employeeNumber ?? '', p.user.fullName, p.user.nib, p.netSalary.toFixed(2)]
+        [p.user.employeeNumber ?? '', p.user.fullName, nib, p.netSalary.toFixed(2)]
           .map(csvCell)
           .join(';'),
       );

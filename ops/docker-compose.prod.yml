@@ -239,6 +239,23 @@ services:
         limits:
           memory: 128M
 
+  # ─── SMS de alertas críticos (opcional) ───────────────────────────────────
+  # Só sobe com `--profile sms` (deploy.sh fá-lo se ALERT_SMS_TO estiver definido).
+  # Relay sem dependências Alertmanager -> Twilio; independente da app.
+  sms-relay:
+    image: node:22-alpine
+    container_name: innova-sms-relay
+    profiles: ['sms']
+    command: ['node', '/app/sms-relay.mjs']
+    env_file: .env.production
+    volumes:
+      - ./monitoring/sms-relay.mjs:/app/sms-relay.mjs:ro
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
   # ─── Métricas do SO (disco, CPU, RAM, rede) — B3-3 ───────────────────────
   # Expõe métricas do host para o Prometheus. Sem porta pública — só acessível
   # internamente na rede Docker. Necessário para alertas de disco (DiskSpaceLow).

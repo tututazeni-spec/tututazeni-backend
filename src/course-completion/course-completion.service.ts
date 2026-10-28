@@ -1,4 +1,5 @@
 import {
+  Optional,
   BadRequestException,
   ForbiddenException,
   Injectable,
@@ -6,6 +7,8 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { PlatformEventsService } from '../api-integration/platform-events.service';
+import { WebhookEventType } from '../api-integration/api-integration.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { GamificationService } from '../gamification/gamification.service';
 import { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
@@ -31,6 +34,7 @@ export class CourseCompletionService {
     private readonly gamification: GamificationService,
     private readonly certificates: CertificateIssuanceService,
     private readonly learningPaths: LearningPathCertificationService,
+    @Optional() private readonly events?: PlatformEventsService,
   ) {}
 
   /**
@@ -316,6 +320,11 @@ export class CourseCompletionService {
     await this.issueCertificateInternal(enrollment);
     await this.learningPaths.onCourseCompleted(enrollment.userId, enrollment.courseId);
     await this.gamification.awardPoints(enrollment.userId, 100, 'course-completion');
+    this.events?.emit(WebhookEventType.COURSE_COMPLETED, {
+      enrollmentId,
+      userId: enrollment.userId,
+      courseId: enrollment.courseId,
+    });
 
     await createNotificationSafe(this.prisma, this.logger, {
       userId: enrollment.userId,

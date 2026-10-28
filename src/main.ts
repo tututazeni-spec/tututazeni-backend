@@ -23,6 +23,7 @@ import { runWithRequestContext } from './common/logging/request-context';
 import { logIdentityMiddleware } from './common/logging/identity.middleware';
 import { runWithRls } from './common/rls/rls-context';
 import { initSentry } from './common/observability/sentry';
+import { apiVersionMiddleware } from './common/versioning/api-version.middleware';
 
 async function bootstrap() {
   validateEnv();
@@ -51,6 +52,9 @@ async function bootstrap() {
 
   // ─── Security ────────────────────────────────────────────────────────────
   const isProd = process.env.NODE_ENV === 'production';
+
+  // Versionamento (/v1/...): primeiro middleware, para tudo o resto ver o caminho canónico.
+  app.use(apiVersionMiddleware());
 
   // Atrás da borda Caddy: X-Forwarded-* passam a alimentar req.secure/req.ip.
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
@@ -116,9 +120,24 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('INNOVA - ACADEMIA CORPORATIVA e RH')
-    .setDescription('API completa para plataforma de Academia Corporativa e Recursos Humanos')
+    .setDescription(
+      [
+        'API completa para plataforma de Academia Corporativa e Recursos Humanos.',
+        '',
+        '**Versões:** use o prefixo `/v1` em novas integrações (ex.: `/v1/public-api/courses`). Rotas sem prefixo equivalem à versão actual.',
+        'Cada resposta traz `X-API-Version`; versões em fim de vida passam a trazer `Deprecation` e `Sunset`.',
+        '',
+        '**Integração externa:** a tag *Public API* aceita chave no cabeçalho `X-API-Key` (criada em Integrações → Chaves de API). Cada chave tem scopes (`read`, `write`, `admin`), IPs permitidos opcionais e um limite de pedidos por minuto; ao excedê-lo recebe `429` com `Retry-After` (cabeçalhos `X-RateLimit-*` em todas as respostas).',
+        '',
+        '**Webhooks:** o corpo é JSON `{event, data, timestamp}` e vai assinado em `X-Innova-Signature` (HMAC-SHA256 do corpo com o segredo do webhook); `X-Innova-Delivery` identifica a entrega para deduplicação. Falhas são repetidas com backoff exponencial.',
+      ].join('\n'),
+    )
     .setVersion('1.0')
+    .addServer('/v1', 'Versão 1 (recomendado)')
+    .addServer('/', 'Versão actual (sem prefixo)')
     .addBearerAuth()
+    .addApiKey({ type: 'apiKey', name: 'X-API-Key', in: 'header' }, 'api-key')
+    .addTag('Public API', 'API pública para integrações externas (autenticada por chave)')
     .addTag('Auth', 'Autenticação e autorização')
     .addTag('Users', 'Gestão de utilizadores')
     .addTag('Departments', 'Departamentos')

@@ -25,6 +25,7 @@ import {
   IntegrationSyncDirection,
   SyncFrequency,
 } from '@prisma/client';
+import { IsHttpsUrl } from '../common/validators/is-https-url.decorator';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Enums ────────────────────────────────────────────────────────
@@ -189,7 +190,7 @@ export class CreateApiKeyDto {
 
 export class CreateWebhookDto {
   @ApiProperty() @IsString() @MaxLength(100) name!: string;
-  @ApiProperty() @IsString() url!: string;
+  @ApiProperty() @IsHttpsUrl() @MaxLength(2048) url!: string;
   @ApiProperty({ enum: WebhookEventType, isArray: true })
   @IsArray()
   @IsEnum(WebhookEventType, { each: true })

@@ -107,6 +107,17 @@ bruno/               # coleção de testes de API
 
 ---
 
+## 📚 Engenharia e operação
+
+- Fluxo Git, PRs e revisão: [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- Ambientes, migrações e testes: [`docs/engenharia/ambientes-e-migracoes.md`](docs/engenharia/ambientes-e-migracoes.md)
+- Arquitectura e deploy: [`docs/deploy/arquitetura-producao.md`](docs/deploy/arquitetura-producao.md) · [`runbook`](docs/deploy/runbook.md)
+- SLA/SLO, página de estado e deploys graduais: [`sla-slo`](docs/deploy/sla-slo.md) · [`status-page`](docs/deploy/status-page.md) · [`deploys-graduais`](docs/deploy/deploys-graduais.md)
+- Faturação SaaS (planos, trial, faturas, métricas): [`faturacao-saas`](docs/deploy/faturacao-saas.md)
+- API (Swagger): `/docs` · colecção Bruno em `bruno/`
+
+---
+
 ## 📝 Convenções do projeto
 
 - Modelo `User`: usar `fullName` (nunca `name`) e `roleCode` para filtrar cargos

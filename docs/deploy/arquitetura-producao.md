@@ -49,7 +49,7 @@ Regra de migrations: **expand/contract**. O rollback repõe a imagem, não desfa
 | Logs JSON estruturados, `reqId`, redact de dados sensíveis | ✅ | `observabilidade.md` |
 | Health live/ready (Postgres crítico; Redis, filas, disco, heap, event loop informativos) | ✅ | `src/health` |
 | Métricas HTTP, Prisma, cache + SO + Postgres | ✅ | Prometheus, 15 d de retenção |
-| 19 regras de alerta (réplicas, erros, latência, disco, backups, Postgres, Watchdog) | ✅ | `ops/monitoring/alert-rules.yml` |
+| Regras de alerta (réplicas, erros, latência, disco, backups, Postgres, filas Bull, tarefas agendadas, Watchdog) | ✅ | `ops/monitoring/alert-rules.yml` |
 | Rotação de logs do Docker | ✅ **corrigido** | `x-logging` no compose (10 MB × 5) |
 | Dashboards (Grafana) | ✅ opt-in | `ENABLE_OBSERVABILITY=true` |
 | Agregação/pesquisa de logs centralizada (Loki) | ✅ opt-in | idem |
@@ -75,6 +75,10 @@ Regra de migrations: **expand/contract**. O rollback repõe a imagem, não desfa
 | 11 | Workflows em `actions/checkout@v3`/`setup-node@v3` | Runtimes Node antigos | ✅ v4 (Dependabot mantém as versões, mensal) |
 | 12 | `CSRF_TOKEN_STRICT=false` em produção | Escritas sem token double-submit | ⏳ por data, não por código: activar a partir de 2026-11-01 (`docs/seguranca-pendentes.md`) |
 | 13 | Sem dashboards, logs centralizados nem erros de aplicação | Diagnóstico lento | ✅ opt-in: Grafana + Loki + Promtail (`ENABLE_OBSERVABILITY`) e Sentry (`SENTRY_DSN`) |
+| 14 | Filas Bull e tarefas agendadas só tinham health informativo, sem métrica nem alerta | Fila parada ou `@Cron` morto passa despercebido (lembretes, anonimizações, webhooks) | ✅ gauges `bull_queue_jobs` e `cron_*`; alertas `QueueBacklogHigh`, `QueueFailedJobs`, `QueueMetricsMissing`, `CronJobErrors`, `CronSchedulerStalled` |
+| 15 | `.env.production.example` só tinha `SMTP_PASSWORD` (Alertmanager); a app lê `SMTP_PASS`/`SMTP_FROM` | Em produção a app tentava enviar e-mail sem palavra-passe | ✅ variáveis da app acrescentadas ao exemplo; `preflight:golive` avisa se faltarem |
+| 16 | Sem verificação nem documentação de SPF/DKIM/DMARC | Convites e resets no spam; domínio falsificável | ✅ `docs/deploy/dns-e-email.md` + `npm run ops:dns-check` |
+| 17 | Persistência dos uploads não documentada nem verificada | Risco de alguém usar disco local numa feature nova | ✅ auditado (a app não escreve em disco) + `docs/deploy/ficheiros-e-persistencia.md` + checks no preflight |
 
 ## 5. Docker / Kubernetes
 
@@ -106,13 +110,25 @@ Regra de migrations: **expand/contract**. O rollback repõe a imagem, não desfa
 **Pipeline**
 - [ ] Secrets do GitHub: `DEPLOY_WEBHOOK_URL`, `ROLLBACK_WEBHOOK_URL`, `SMOKE_BASE_URL`, `SMOKE_FRONTEND_URL`, `SMOKE_*`, `TELEGRAM_*`
 - [ ] Check `quality` obrigatório em `main` (já activo); Trivy verde
-- [ ] Primeiro deploy → `stable` existe; **rollback ensaiado uma vez** (`rollback.sh`)
+- [ ] Primeiro deploy → `stable` existe; **rollback ensaiado uma vez** (`ops/deploy/rollback-drill.sh`, < 300 s)
 - [ ] Staging provisionado (secrets `STAGING_*`) ou decisão explícita de não o ter
+
+**Domínio, e-mail e ficheiros**
+- [ ] `npm run ops:dns-check` sem `FALHA` (SPF, DKIM, DMARC, A) — ver `dns-e-email.md`
+- [ ] SMTP da app (`SMTP_HOST/PASS/FROM`) preenchido e convite de teste fora do spam
+- [ ] Bucket de ficheiros com versionamento; `npm run preflight:golive` sem `FALHA` de storage — ver `ficheiros-e-persistencia.md`
 
 **Observabilidade**
 - [ ] Alerta `Watchdog` a chegar ao healthchecks.io; e-mail e Telegram testados com um alerta falso
 - [ ] Alertas `AppReplicaDown`, `HighErrorRate`, `DiskSpaceLow`, `BackupTooOld` verificados em simulação
 - [ ] Ninguém a olhar só para o Prometheus: há destinatário definido para cada alerta crítico
+
+**Operação e suporte (primeiras 72 h)**
+- [ ] Escala das 72 h preenchida (pessoa **e** suplente por janela) e enviada à equipa 24 h antes — `primeiras-72h.md`
+- [ ] Alerta de teste recebido por todos os da escala; todos entram por SSH no VPS
+- [ ] `SUPPORT_EMAIL` e `STATUS_PAGE_URL` definidos; `npm run seed:help` corrido neste ambiente (6 artigos iniciais)
+- [ ] Papéis do incidente lidos por quem está na escala — `gestao-incidentes.md` §2.1
+- [ ] Segredos que não se podem perder (`PII_ENCRYPTION_KEY`, `PASSWORD_PEPPER`, `BACKUP_ENCRYPT_PASSPHRASE`) no cofre com 2 pessoas com acesso — `variaveis-de-ambiente.md`
 
 **Carga e fiabilidade**
 - [ ] Artillery (smoke → load → stress → spike, ver `CLAUDE.md`) contra um ambiente equivalente; p95 < 3 s e erros < 1 %
@@ -121,8 +137,10 @@ Regra de migrations: **expand/contract**. O rollback repõe a imagem, não desfa
 
 ## 7. O que ainda depende de ti (não é código)
 
-1. Provisionar o VPS de staging e criar os secrets `STAGING_*` (sem eles o job é ignorado).
+1. Provisionar o VPS de staging com `ops/deploy/bootstrap-vps.sh`, criar os secrets `STAGING_*` e correr `rollback-drill.sh` (guia: `staging-e-rollback.md`; sem os secrets o job é ignorado).
 2. Activar `ENABLE_OBSERVABILITY=true` e/ou criar o projecto Sentry e pôr o `SENTRY_DSN`.
 3. Correr `ops/backup/install-cron.sh` no VPS para instalar o watchdog do Caddy e o restore drill, e executar `restore-drill.sh` uma vez à mão.
+4. Publicar o DNS real (`ops/dns/render-records.sh` gera os registos; `dns-e-email.md`) e criar o bucket de ficheiros
+   (`terraform apply` em `ops/infra/files-bucket/`; `ficheiros-e-persistencia.md`).
 4. `CSRF_TOKEN_STRICT=true` a partir de 2026-11-01.
 5. Decisão formal VPS vs `ops/k8s` + Redis gerido, pelos gatilhos da secção 1.

@@ -20,6 +20,7 @@ import {
 } from './payslips.dto';
 import { randomBytes } from 'crypto';
 import { assertCanAccess, isPrivileged } from '../../common/authz/ownership';
+import { decryptUserPii } from '../../common/security/pii-crypto';
 import { Role } from '../../auth/enums/role.enum';
 import { CurrentUserData } from '../../common/types/current-user';
 import {
@@ -269,7 +270,7 @@ export class PayslipsService {
       }
     } else if (!p) throw new NotFoundException('Recibo não encontrado');
 
-    return p;
+    return { ...p, user: decryptUserPii(p.user) };
   }
 
   // ─── CRIAR INDIVIDUAL ──────────────────────────────────────────────────────

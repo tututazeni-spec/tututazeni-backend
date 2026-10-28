@@ -45,7 +45,7 @@ env:
   IMAGE: ghcr.io/${{ github.repository }}
   DEPLOY_TAG: ${{ github.event.inputs.tag != '' && github.event.inputs.tag || format('sha-{0}', github.sha) }}
   # Ficheiros copiados para /opt/innova (strip_components 1: ops/deploy/x → /opt/innova/deploy/x)
-  DEPLOY_FILES: ops/docker-compose.prod.yml,ops/caddy/Caddyfile,ops/deploy/deploy.sh,ops/deploy/rollback.sh,ops/deploy/origin-firewall.sh,ops/deploy/caddy-watchdog.sh,ops/monitoring/prometheus.yml,ops/monitoring/alert-rules.yml,ops/monitoring/alertmanager.yml.tpl,ops/monitoring/loki.yml,ops/monitoring/promtail.yml,ops/monitoring/grafana,ops/backup/backup-postgres.sh,ops/backup/restore-postgres.sh,ops/backup/verify-backup.sh,ops/backup/restore-drill.sh,ops/backup/backup-secrets.sh,ops/backup/backup-metrics.sh,ops/backup/install-cron.sh,ops/dr/DISASTER-RECOVERY.md
+  DEPLOY_FILES: ops/docker-compose.prod.yml,ops/caddy/Caddyfile,ops/deploy/deploy.sh,ops/deploy/rollback.sh,ops/deploy/origin-firewall.sh,ops/deploy/caddy-watchdog.sh,ops/deploy/rollback-drill.sh,ops/deploy/bootstrap-vps.sh,ops/monitoring/prometheus.yml,ops/monitoring/alert-rules.yml,ops/monitoring/alertmanager.yml.tpl,ops/monitoring/loki.yml,ops/monitoring/promtail.yml,ops/monitoring/grafana,ops/backup/backup-postgres.sh,ops/backup/restore-postgres.sh,ops/backup/verify-backup.sh,ops/backup/restore-drill.sh,ops/backup/backup-secrets.sh,ops/backup/backup-metrics.sh,ops/backup/install-cron.sh,ops/dr/DISASTER-RECOVERY.md
 
 jobs:
   preflight:

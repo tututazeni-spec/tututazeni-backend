@@ -108,6 +108,13 @@ jobs:
         env:
           DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/innova_test'
 
+      - name: Schema sem drift face às migrations
+        # Falha se schema.prisma tiver alterações sem migration correspondente
+        # (exit code 2 = diferenças). Corre sobre a BD acabada de migrar.
+        run: npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+        env:
+          DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/innova_test'
+
       - name: Cobertura de autorização (todo o handler tem política)
         run: npm run test:authz
 

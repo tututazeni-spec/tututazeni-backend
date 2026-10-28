@@ -9,14 +9,18 @@ import {
   Logger,
   Optional,
 } from '@nestjs/common';
+import { PlatformEventsService } from '../api-integration/platform-events.service';
+import { WebhookEventType } from '../api-integration/api-integration.dto';
 import { Prisma } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
+import { BillingLimitsService } from '../billing/billing-limits.service';
 import { SecuritySettingsService } from '../settings/security-settings.service';
 import { SessionRevocationService } from '../auth/session-revocation.service';
 import { hashPassword, verifyPassword } from '../common/security/password-hasher';
+import { decryptUserPii, encryptPii } from '../common/security/pii-crypto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { flattenRolePermissions } from '../common/utils/role-permissions';
 import {
@@ -93,6 +97,10 @@ export class UsersService {
     @Optional() private readonly security?: SecuritySettingsService,
     // Revogação imediata de sessões (logout forçado, papel alterado).
     @Optional() private readonly revocation?: SessionRevocationService,
+    // Limite de utilizadores do plano (faturação). Optional pelo mesmo motivo.
+    @Optional() private readonly planLimits?: BillingLimitsService,
+    // Webhooks: publica employee.created. Optional pelo mesmo motivo.
+    @Optional() private readonly events?: PlatformEventsService,
   ) {}
 
   // ─── Sanitizar (remover password) ────────────────────────────────────────
@@ -103,7 +111,7 @@ export class UsersService {
   // Genérico preserva o shape real do argumento menos `password`.
   private sanitize<T extends { password?: string | null }>(user: T): Omit<T, 'password'> {
     const { password, ...rest } = user;
-    return rest;
+    return decryptUserPii(rest);
   }
 
   // ─── FORMATO DE EMAIL DO TENANT ───────────────────────────────────────────
@@ -324,7 +332,7 @@ export class UsersService {
       },
     });
     if (!user) throw new NotFoundException(`Utilizador #${id} não encontrado`);
-    return user;
+    return decryptUserPii(user);
   }
 
   // ─── LOOKUPS (formulário "Novo Utilizador") ───────────────────────────────
@@ -348,6 +356,7 @@ export class UsersService {
     opts: { skipPolicy?: boolean; actorRole?: string } = {},
   ) {
     await this.assertCanAssignRole(dto.roleId, opts.actorRole);
+    await this.planLimits?.assertCanAddUser();
     if (this.settings && !opts.skipPolicy) dto = await this.settings.applyUserPolicy(dto);
 
     // Guards de unicidade antes da escrita: força primary para não validar contra réplica atrasada.
@@ -400,7 +409,7 @@ export class UsersService {
             preferredName: dto.preferredName,
             nationality: dto.nationality,
             identificationNumber: dto.identificationNumber,
-            nif: dto.nif,
+            nif: encryptPii(dto.nif),
             personalEmail: dto.personalEmail,
             alternatePhone: dto.alternatePhone,
             address: dto.address,
@@ -503,6 +512,7 @@ export class UsersService {
 
     // Inicializar pontos
     await this.prisma.userPoints.create({ data: { userId: user.id, points: 0 } });
+    this.events?.emit(WebhookEventType.EMPLOYEE_CREATED, { userId: user.id });
 
     // Notificar
     await this.prisma.notificationLog
@@ -564,6 +574,7 @@ export class UsersService {
     }
 
     const data: Prisma.UserUpdateInput = { ...dto };
+    if (dto.nif !== undefined) data.nif = encryptPii(dto.nif);
     // Nunca deixa passar a senha do DTO em claro (ex.: '' é falsy e escapava ao hash).
     delete data.password;
     if (dto.password) throw new BadRequestException(PASSWORD_BY_ADMIN_MESSAGE);

@@ -83,6 +83,23 @@ for t in "${CRITICAL_TABLES[@]}"; do
 done
 [ "${#empty[@]}" -eq 0 ] || fail "tabelas vazias/ilegíveis após restauro: ${empty[*]}"
 
+# Dados de teste não podem chegar a produção: contas @innova-test.com / load.test.* no backup real
+# são um alerta (não falha o drill — o restauro em si está provado).
+test_users="$(docker exec "$CONTAINER" psql -U postgres -d drill -tA -c   "SELECT count(*) FROM \"User\" WHERE email ILIKE '%@innova-test.com' OR email ILIKE 'load.test.%'" 2>/dev/null || echo ERR)"
+if [ "$test_users" != "0" ] && [ "$test_users" != "ERR" ]; then
+  log "AVISO: $test_users utilizadores de teste encontrados na BD restaurada"
+  notify "⚠️ INNOVA restore drill: $test_users utilizadores de teste (@innova-test.com / load.test.*) na BD de produção — remover."
+fi
+
+# Migrações sobre uma cópia REAL dos dados: prova que `prisma migrate deploy` aplica o que está
+# pendente em cima de dados de produção (e não só numa BD vazia, como no CI). Opcional: definir
+# DRILL_MIGRATE_IMAGE com a imagem da app actual (ex.: a que está em produção ou a candidata).
+if [ -n "${DRILL_MIGRATE_IMAGE:-}" ]; then
+  log "A aplicar migrações pendentes sobre a cópia restaurada (${DRILL_MIGRATE_IMAGE})..."
+  docker run --rm --network "container:${CONTAINER}"     -e DATABASE_URL="postgresql://postgres:${pw}@127.0.0.1:5432/drill"     --entrypoint npx "$DRILL_MIGRATE_IMAGE" prisma migrate deploy >"${DRILL_TMP}/migrate.log" 2>&1     || { tail -n 20 "${DRILL_TMP}/migrate.log" >&2; fail "prisma migrate deploy falhou sobre a cópia dos dados reais"; }
+  log "Migrações aplicadas sem erros sobre dados reais"
+fi
+
 mkdir -p "$METRICS_DIR" 2>/dev/null || true
 if [ -d "$METRICS_DIR" ]; then
   tmp="$(mktemp "${METRICS_DIR}/.drill.XXXXXX")"

@@ -24,6 +24,7 @@ import { NotificationSettingsService } from './notification-settings.service';
 import { IntegrationSettingsService } from './integration-settings.service';
 import { CertificateSettingsService } from './certificate-settings.service';
 import { PrivacySettingsService } from './privacy-settings.service';
+import { PersonalDataService } from './personal-data.service';
 import { LicenseSettingsService } from './license-settings.service';
 import { AuditDataSettingsService } from './audit-data-settings.service';
 import { AuthSettingsService } from './auth-settings.service';
@@ -34,6 +35,7 @@ import { SystemSettingsService } from './system-settings.service';
 import {
   CreateCertificateTemplateDto,
   CreateDataSubjectRequestDto,
+  CreateOwnDataRequestDto,
   DisableTwoFactorDto,
   FlushCacheDto,
   PublishConsentTextDto,
@@ -72,6 +74,7 @@ export class SettingsController {
     private readonly integrations: IntegrationSettingsService,
     private readonly certificates: CertificateSettingsService,
     private readonly privacy: PrivacySettingsService,
+    private readonly personalData: PersonalDataService,
     private readonly license: LicenseSettingsService,
     private readonly auditData: AuditDataSettingsService,
     private readonly authSettings: AuthSettingsService,
@@ -473,7 +476,44 @@ export class SettingsController {
     @Body() dto: UpdateDataSubjectRequestDto,
     @CurrentUser() admin: CurrentUserData,
   ) {
-    return this.privacy.updateRequest(id, dto, admin.id);
+    return this.privacy.updateRequest(id, dto, admin.id).then(async request => {
+      await this.personalData.afterRequestUpdated(request, admin.id);
+      return request;
+    });
+  }
+
+  @Post('privacy/requests/:id/execute')
+  @Roles(Role.ADMIN)
+  @ApiOperation({
+    summary: 'Executar o pedido: exporta (acesso/portabilidade) ou anonimiza (eliminação)',
+  })
+  executeDataSubjectRequest(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() admin: CurrentUserData,
+  ) {
+    return this.personalData.executeRequest(id, admin.id);
+  }
+
+  @Post('privacy/erasures/reapply')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Após restaurar um backup: reaplicar as eliminações já concluídas' })
+  reapplyErasures(@CurrentUser() admin: CurrentUserData) {
+    return this.personalData.reapplyCompletedErasures(admin.id);
+  }
+
+  // Autoatendimento do titular (LPDP): qualquer utilizador autenticado, só sobre os seus dados.
+  @Get('privacy/me/export')
+  @AnyAuthenticated()
+  @ApiOperation({ summary: 'Exportar os meus dados pessoais (JSON)' })
+  exportMyData(@CurrentUser() user: CurrentUserData) {
+    return this.personalData.exportUserData(user.id, user.id);
+  }
+
+  @Post('privacy/me/requests')
+  @AnyAuthenticated()
+  @ApiOperation({ summary: 'Pedir acesso, rectificação, eliminação ou oposição aos meus dados' })
+  createMyDataRequest(@Body() dto: CreateOwnDataRequestDto, @CurrentUser() user: CurrentUserData) {
+    return this.personalData.createOwnRequest(user.id, dto.type, dto.details);
   }
 
   // ─── §9 Licença e Módulos ─────────────────────────────────────────────────

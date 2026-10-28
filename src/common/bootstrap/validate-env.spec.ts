@@ -76,6 +76,44 @@ describe('validateEnv', () => {
     });
   });
 
+  describe('valores de teste/defeito em produção', () => {
+    const PROD = { ...BASE, NODE_ENV: 'production', APP_URL: 'https://innova.ao' };
+
+    it.each([
+      ['JWT_SECRET', 'test-secret-key-innova-2024-must-be-long'],
+      ['JWT_REFRESH_SECRET', 'test-refresh-secret-innova-2024-long'],
+      ['DATABASE_URL', 'postgresql://postgres:postgres@db:5432/innova'],
+      ['ALLOWED_ORIGINS', 'https://innova.ao,http://localhost:3000'],
+      ['SEED_ADMIN_PASSWORD', 'Admin@1234'],
+    ])('lança com %s de teste/defeito', (name, value) => {
+      expect(() => validateEnv({ ...PROD, [name]: value })).toThrow(name);
+    });
+
+    it.each([
+      ['DATABASE_URL', 'postgresql://postgres:S3nhaForte@db:5432/innova'],
+      ['DATABASE_URL', 'postgresql://root:S3nhaForte@db:5432/innova'],
+      ['DATABASE_APP_URL', 'postgresql://admin:S3nhaForte@db:5432/innova'],
+    ])('lança quando %s usa a conta administrativa', (name, value) => {
+      expect(() => validateEnv({ ...PROD, [name]: value })).toThrow('utilizador administrativo');
+    });
+
+    it('aceita uma role dedicada com permissões mínimas', () => {
+      expect(() =>
+        validateEnv({
+          ...PROD,
+          DATABASE_URL: 'postgresql://innova_owner:S3nhaForte@db:5432/innova',
+          DATABASE_APP_URL: 'postgresql://innova_app:S3nhaForte@db:5432/innova',
+        }),
+      ).not.toThrow();
+    });
+
+    it('fora de produção não bloqueia', () => {
+      expect(() =>
+        validateEnv({ ...BASE, DATABASE_URL: 'postgresql://postgres:postgres@localhost/x' }),
+      ).not.toThrow();
+    });
+  });
+
   describe('UPLOAD_VALIDATION_MODE', () => {
     const captured = (env: NodeJS.ProcessEnv): string => {
       const write = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);

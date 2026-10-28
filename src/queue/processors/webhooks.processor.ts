@@ -1,7 +1,9 @@
 import { Process, Processor } from '@nestjs/bull';
 import { Logger, Optional } from '@nestjs/common';
 import { Job } from 'bull';
+import { lookup } from 'dns/promises';
 import { PrismaService } from '../../prisma/prisma.service';
+import { isInternalHostname } from '../../common/validators/safe-file-url';
 
 /**
  * Payload de um job `webhooks:deliver`. O corpo (`body`) e a assinatura
@@ -63,6 +65,19 @@ export class WebhooksProcessor {
       );
   }
 
+  private async internalTargetProblem(url: string): Promise<string | null> {
+    try {
+      const { hostname } = new URL(url);
+      if (isInternalHostname(hostname)) return 'destino interno';
+      const addrs = await lookup(hostname, { all: true });
+      if (addrs.some(a => isInternalHostname(a.address)))
+        return 'o domínio resolve para um IP interno';
+      return null;
+    } catch {
+      return 'URL inválido ou domínio não resolvível';
+    }
+  }
+
   @Process('deliver')
   async deliver(job: Job<WebhookDeliverJob>): Promise<void> {
     const { url, event, body, signature, webhookId } = job.data;
@@ -74,6 +89,18 @@ export class WebhooksProcessor {
       'X-Innova-Delivery': String(job.id),
     };
     if (signature) headers['X-Innova-Signature'] = signature;
+
+    // Defesa em profundidade contra SSRF (o URL pode ter sido gravado antes da validação
+    // ou o DNS pode apontar para um IP interno): em produção resolve e recusa destinos internos.
+    // Falha sem retry — repetir não muda o destino.
+    if (process.env.NODE_ENV === 'production') {
+      const problem = await this.internalTargetProblem(url);
+      if (problem) {
+        await this.recordDelivery(job, 'FAILED');
+        await job.discard();
+        throw new Error(`webhook ${webhookId} recusado: ${problem}`);
+      }
+    }
 
     let res: Response;
     try {
