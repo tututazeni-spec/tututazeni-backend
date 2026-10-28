@@ -22,6 +22,9 @@ const OPEN_ALLOWLIST = new Set([
   'settings/settings.controller.ts#mySessions',
   'settings/settings.controller.ts#revokeMySession',
   'settings/settings.controller.ts#myLoginHistory',
+  // LPDP: o titular exporta/pede os seus próprios dados (o serviço restringe ao próprio user.id).
+  'settings/settings.controller.ts#exportMyData',
+  'settings/settings.controller.ts#createMyDataRequest',
   'scalability/scalability-infra.controller.ts#recordFrontendPerf',
 ]);
 
