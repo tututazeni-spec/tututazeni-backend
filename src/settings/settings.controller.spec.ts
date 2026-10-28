@@ -25,7 +25,7 @@ describe('SettingsController — controlo de acesso', () => {
   // Rotas sem @Roles de propósito: branding é para qualquer utilizador autenticado
   // (cabeçalho/formatos) e security/me/* é autosserviço sobre o próprio utilizador.
   const isOpenToAuthenticated = (path: string) =>
-    path === 'branding' || path.startsWith('security/me/');
+    path === 'branding' || path.startsWith('security/me/') || path.startsWith('privacy/me/');
 
   it('exige JwtAuthGuard e RolesGuard ao nível da classe', () => {
     expect(Reflect.getMetadata(GUARDS_METADATA, SettingsController)).toEqual([
@@ -38,7 +38,7 @@ describe('SettingsController — controlo de acesso', () => {
     expect(routes().length).toBeGreaterThan(60);
   });
 
-  it('toda a rota exige ADMIN, excepto branding e security/me/*', () => {
+  it('toda a rota exige ADMIN, excepto branding, security/me/* e privacy/me/*', () => {
     const unprotected = routes()
       .filter(r => !isOpenToAuthenticated(r.path) && !r.roles?.includes('ADMIN'))
       .map(r => `${r.method} ${r.path}`);
@@ -60,6 +60,8 @@ describe('SettingsController — controlo de acesso', () => {
         'GET security/me/sessions',
         'DELETE security/me/sessions/:id',
         'GET security/me/login-history',
+        'GET privacy/me/export',
+        'POST privacy/me/requests',
       ].sort(),
     );
   });
@@ -119,6 +121,7 @@ describe('SettingsController — delegação e lógica própria', () => {
       integrations as never,
       fn() as never,
       privacy as never,
+      fn() as never,
       fn() as never,
       fn() as never,
       fn() as never,
