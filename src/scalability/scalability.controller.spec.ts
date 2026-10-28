@@ -92,15 +92,42 @@ describe('ScalabilityController', () => {
     expect(mockSvc.getContentDeliveryConfig).toHaveBeenCalledWith('tenant-1');
   });
 
-  it('createTenant → createTenant(dto, userId)', async () => {
+  const superAdmin = { ...mockUser, isSuperAdmin: true } as CurrentUserData;
+
+  it('createTenant → createTenant(dto, userId) para o super administrador', async () => {
     const dto = {} as any;
-    await controller.createTenant(dto, mockUser);
+    await controller.createTenant(dto, superAdmin);
     expect(mockSvc.createTenant).toHaveBeenCalledWith(dto, '1');
   });
 
-  it('updateTenant → updateTenant(id, dto, userId)', async () => {
-    const dto = {} as any;
+  it('createTenant recusa um ADMIN que não é super administrador', async () => {
+    mockSvc.createTenant.mockClear();
+    await expect(controller.createTenant({} as any, mockUser)).rejects.toThrow(
+      'super administrador',
+    );
+    expect(mockSvc.createTenant).not.toHaveBeenCalled();
+  });
+
+  it('updateTenant → updateTenant(id, dto, userId) sem campos de licença', async () => {
+    const dto = { tenantName: 'Nova' } as any;
     await controller.updateTenant('tenant-1', dto, mockUser);
+    expect(mockSvc.updateTenant).toHaveBeenCalledWith('tenant-1', dto, '1');
+  });
+
+  it.each(['plan', 'maxUsers', 'maxStorageGb', 'isActive', 'contractEndDate'])(
+    'updateTenant recusa alterar %s a um ADMIN que não é super administrador',
+    async field => {
+      mockSvc.updateTenant.mockClear();
+      await expect(
+        controller.updateTenant('tenant-1', { [field]: 1 } as any, mockUser),
+      ).rejects.toThrow('super administrador');
+      expect(mockSvc.updateTenant).not.toHaveBeenCalled();
+    },
+  );
+
+  it('updateTenant permite campos de licença ao super administrador', async () => {
+    const dto = { plan: 'ENTERPRISE', maxUsers: 6000 } as any;
+    await controller.updateTenant('tenant-1', dto, superAdmin);
     expect(mockSvc.updateTenant).toHaveBeenCalledWith('tenant-1', dto, '1');
   });
 

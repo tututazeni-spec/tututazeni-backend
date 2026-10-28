@@ -11,6 +11,8 @@ export interface CurrentUserData {
   email: string;
   active: boolean;
   roleId: number | null;
+  /** Único super administrador da plataforma (ver User.isSuperAdmin). */
+  isSuperAdmin?: boolean;
   role: { id: number; name: string; permissions?: { name: string }[] } | null;
 
   // ⚠️ LEGADO — A REVER: campos acedidos em alguns controllers

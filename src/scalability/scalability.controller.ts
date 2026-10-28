@@ -5,6 +5,7 @@
 
 import {
   Controller,
+  ForbiddenException,
   Get,
   Post,
   Patch,
@@ -46,6 +47,23 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CurrentUserData } from '../common/types/current-user';
 import { Role } from '../auth/enums/role.enum';
+
+/** Campos de licença do tenant: só o super administrador os altera. */
+const LICENSE_FIELDS = [
+  'plan',
+  'maxUsers',
+  'maxStorageGb',
+  'isActive',
+  'trialEndsAt',
+  'contractStartDate',
+  'contractEndDate',
+] as const;
+
+function assertSuperAdmin(user: CurrentUserData): void {
+  if (user.isSuperAdmin !== true) {
+    throw new ForbiddenException('Apenas o super administrador pode gerir a licença do inquilino.');
+  }
+}
 
 @ApiTags('Escalabilidade')
 @ApiBearerAuth()
@@ -102,20 +120,25 @@ export class ScalabilityController {
 
   @Post('tenants')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Criar novo tenant (empresa)' })
+  @ApiOperation({ summary: 'Criar novo tenant (empresa) — só o super administrador' })
   @ApiResponse({ status: 201, description: 'Tenant criado com sucesso' })
   async createTenant(@Body() dto: CreateTenantConfigDto, @CurrentUser() user: CurrentUserData) {
+    assertSuperAdmin(user);
     return this.service.createTenant(dto, String(user.id));
   }
 
   @Patch('tenants/:id')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Actualizar configuração do tenant' })
+  @ApiOperation({
+    summary: 'Actualizar configuração do tenant (licença: só o super administrador)',
+  })
   async updateTenant(
     @Param('id') id: string,
     @Body() dto: UpdateTenantConfigDto,
     @CurrentUser() user: CurrentUserData,
   ) {
+    // Renomear/personalizar continua a ser ADMIN; plano, limites e validade só o super admin.
+    if (LICENSE_FIELDS.some(f => dto[f] !== undefined)) assertSuperAdmin(user);
     return this.service.updateTenant(id, dto, String(user.id));
   }
 

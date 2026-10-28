@@ -161,6 +161,7 @@ export class CreateTenantConfigDto {
   @ApiPropertyOptional({ enum: TenantPlan }) @IsOptional() @IsEnum(TenantPlan) plan?: TenantPlan;
   @ApiPropertyOptional() @IsOptional() @IsInt() @IsPositive() maxUsers?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @IsPositive() maxStorageGb?: number;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() isActive?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsDateString() trialEndsAt?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() contractStartDate?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() contractEndDate?: string;

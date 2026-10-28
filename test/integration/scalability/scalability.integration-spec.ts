@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../../../src/app.module';
-import { getToken } from '../helpers/auth.helper';
+import { getToken, INT_CREDENTIALS } from '../helpers/auth.helper';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
@@ -42,6 +42,13 @@ describe('Scalability Integration', () => {
     );
     await app.init();
 
+    // POST /tenants e os campos de licença do PATCH exigem o super administrador
+    // (índice único parcial: no máximo um) — o ADMIN de teste assume esse papel.
+    await prisma.user.updateMany({
+      where: { email: INT_CREDENTIALS.admin.email },
+      data: { isSuperAdmin: true },
+    });
+
     employeeToken = await getToken(app.getHttpServer(), 'employee');
     managerToken = await getToken(app.getHttpServer(), 'manager');
     rhToken = await getToken(app.getHttpServer(), 'rh');
@@ -50,6 +57,9 @@ describe('Scalability Integration', () => {
   });
 
   afterAll(async () => {
+    await prisma.user
+      .updateMany({ where: { email: INT_CREDENTIALS.admin.email }, data: { isSuperAdmin: false } })
+      .catch((): undefined => undefined);
     if (alertId) await prisma.systemAlert.deleteMany({ where: { id: alertId } }).catch(() => {});
     if (ruleId) {
       await prisma.automationExecution
