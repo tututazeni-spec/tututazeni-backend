@@ -24,6 +24,8 @@ concurrency:
 
 jobs:
   probe:
+    # Sem STATUS_TARGETS configurado não há nada a sondar nem a publicar.
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.STATUS_TARGETS != '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
