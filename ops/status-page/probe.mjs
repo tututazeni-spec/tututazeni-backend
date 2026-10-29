@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 const file = process.argv[2];
 if (!file) throw new Error('Uso: node probe.mjs <status.json>');
 
-const targets = JSON.parse(process.env.STATUS_TARGETS ?? '[]');
+const targets = JSON.parse(process.env.STATUS_TARGETS || '[]');
 if (!Array.isArray(targets) || targets.length === 0) {
   console.log('STATUS_TARGETS vazio — nada a sondar.');
   process.exit(0);
