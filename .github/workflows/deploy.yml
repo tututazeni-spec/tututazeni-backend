@@ -85,7 +85,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Buildx
         uses: docker/setup-buildx-action@v3
@@ -135,7 +135,7 @@ jobs:
       contents: read
       packages: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Copiar artefactos para o staging
         uses: appleboy/scp-action@v0.1.7
@@ -198,7 +198,7 @@ jobs:
       contents: read
       packages: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: ${{ needs.preflight.outputs.mode == 'ssh' }}
 
       - name: Copiar artefactos de deploy para o VPS
@@ -281,7 +281,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
