@@ -130,6 +130,15 @@ export class EvaluationController {
     return this.svc.reopenCycle(id);
   }
 
+  @Delete('cycles/:id')
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({
+    summary: 'Eliminar ciclo sem avaliações atribuídas (eliminação lógica; senão, encerrar)',
+  })
+  deleteCycle(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.deleteCycle(id);
+  }
+
   @Post('cycles/:id/remind')
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Enviar lembrete a todos os participantes pendentes do ciclo' })

@@ -292,6 +292,26 @@ export class EvaluationService {
     return this.toPublicCampaign(campaign);
   }
 
+  /**
+   * Elimina (eliminação lógica) um ciclo que ainda não tem avaliações atribuídas.
+   * Com avaliações já lançadas o ciclo não se elimina — os pedidos ficariam órfãos
+   * e os resultados perdidos; nesse caso encerra-se.
+   */
+  async deleteCycle(id: number) {
+    await this.assertCampaignExists(id);
+    const assigned = await this.prisma.evaluationRequest.count({ where: { cycleId: id } });
+    if (assigned > 0) {
+      throw new ConflictException(
+        'Este ciclo já tem avaliações atribuídas e não pode ser eliminado. Encerre-o em vez disso.',
+      );
+    }
+    await this.prisma.evaluationCampaign.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+    return { id, deleted: true };
+  }
+
   async reopenCycle(id: number) {
     await this.assertCampaignExists(id);
     const campaign = await this.prisma.evaluationCampaign.update({
