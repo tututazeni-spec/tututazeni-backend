@@ -177,7 +177,7 @@ jobs:
         # Só corre se o segredo SONAR_TOKEN estiver configurado no repositório.
         # Sem isto, o passo falharia em repositórios sem SonarCloud ligado.
         if: ${{ env.SONAR_TOKEN != '' }}
-        uses: SonarSource/sonarqube-scan-action@v7
+        uses: SonarSource/sonarqube-scan-action@v8
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
