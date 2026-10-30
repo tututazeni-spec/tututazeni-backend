@@ -299,7 +299,8 @@ export class AssessmentsAnswerDto {
   textAnswer?: string;
 
   @ApiPropertyOptional({
-    description: 'Ficheiro da resposta (FILE_UPLOAD): ligação https ou data URL base64 (PDF/imagem, até 4 MB)',
+    description:
+      'Ficheiro da resposta (FILE_UPLOAD): ligação https ou data URL base64 (PDF/imagem, até 4 MB)',
   })
   @IsOptional()
   @IsAllowedFileUrl(undefined, { inline: FILE_POLICIES.ATTACHMENT })

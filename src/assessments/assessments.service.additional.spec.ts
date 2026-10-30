@@ -284,7 +284,9 @@ describe('AssessmentsService (additional)', () => {
         attemptId: 5,
         answers: [{ questionId: 1, selectedIndices: [1] }],
       } as any);
-      const saved = JSON.parse(mockPrisma.assessmentAttempt.update.mock.calls.at(-1)[0].data.savedAnswers);
+      const saved = JSON.parse(
+        mockPrisma.assessmentAttempt.update.mock.calls.at(-1)[0].data.savedAnswers,
+      );
       expect(saved).toEqual([
         { questionId: 1, selectedIndices: [1] },
         { questionId: 2, fileUrl: 'data:application/pdf;base64,AAAA' },
@@ -296,8 +298,13 @@ describe('AssessmentsService (additional)', () => {
     it('lida com savedAnswers vazio ("{}" por omissão)', async () => {
       mockPrisma.assessmentAttempt.findFirst.mockResolvedValue({ id: 5, savedAnswers: '{}' });
       mockPrisma.assessmentAttempt.update.mockResolvedValue({ id: 5 });
-      await service.autoSave(2, { attemptId: 5, answers: [{ questionId: 3, textAnswer: 'x' }] } as any);
-      const saved = JSON.parse(mockPrisma.assessmentAttempt.update.mock.calls.at(-1)[0].data.savedAnswers);
+      await service.autoSave(2, {
+        attemptId: 5,
+        answers: [{ questionId: 3, textAnswer: 'x' }],
+      } as any);
+      const saved = JSON.parse(
+        mockPrisma.assessmentAttempt.update.mock.calls.at(-1)[0].data.savedAnswers,
+      );
       expect(saved).toEqual([{ questionId: 3, textAnswer: 'x' }]);
     });
   });

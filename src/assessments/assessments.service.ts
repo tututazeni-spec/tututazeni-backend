@@ -175,7 +175,14 @@ export class AssessmentsService {
           where: { userId, status: { not: 'IN_PROGRESS' } },
           orderBy: { startedAt: 'desc' },
           take: 1,
-          select: { id: true, status: true, score: true, passed: true, needsManualReview: true, submittedAt: true },
+          select: {
+            id: true,
+            status: true,
+            score: true,
+            passed: true,
+            needsManualReview: true,
+            submittedAt: true,
+          },
         },
       },
       orderBy: { availableUntil: 'asc' },
@@ -781,19 +788,28 @@ export class AssessmentsService {
       const isOpen = q.type === 'OPEN_TEXT' || q.type === 'FILE_UPLOAD';
       const correctOrder = isOrdering ? (parse<number[]>(q.correctAnswer) ?? []) : [];
       const sequence = (idx: number[]) =>
-        idx.map(i => opts[i]?.text).filter(Boolean).join(' → ') || null;
+        idx
+          .map(i => opts[i]?.text)
+          .filter(Boolean)
+          .join(' → ') || null;
       return {
         questionId: q.id,
         questionText: q.questionText,
         isCorrect: a.isCorrect,
         earnedPoints: a.earnedPoints,
         yourAnswer: isChoice
-          ? selected.map(i => opts[i]?.text).filter(Boolean).join(', ') || null
+          ? selected
+              .map(i => opts[i]?.text)
+              .filter(Boolean)
+              .join(', ') || null
           : isOrdering
             ? sequence(selected)
             : (a.textAnswer ?? null),
         correctAnswer: isChoice
-          ? opts.filter(o => o.isCorrect).map(o => o.text).join(', ') || null
+          ? opts
+              .filter(o => o.isCorrect)
+              .map(o => o.text)
+              .join(', ') || null
           : isOrdering
             ? sequence(correctOrder)
             : isOpen
