@@ -252,6 +252,22 @@ describe('AssessmentsService (additional)', () => {
         BadRequestException,
       );
     });
+
+    it('avaliação formal (EXAM) já submetida não pode ser repetida', async () => {
+      mockPrisma.assessment.findUnique.mockResolvedValue({
+        ...baseAssessment,
+        type: 'EXAM',
+        maxAttempts: 0,
+        feedbackMode: 'ON_SUBMIT',
+        _count: { attempts: 1 },
+        availableFrom: null,
+        availableUntil: null,
+      });
+      mockPrisma.assessmentAttempt.findFirst.mockResolvedValue({ id: 7 });
+      await expect(service.startAttempt(2, { assessmentId: 1 } as any)).rejects.toThrow(
+        'Não é possível repetir',
+      );
+    });
   });
 
   // ─── submitAttempt ────────────────────────────────────────────

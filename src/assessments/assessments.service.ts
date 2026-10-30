@@ -143,6 +143,8 @@ export class AssessmentsService {
       where: {
         type: 'EXAM',
         status: 'PUBLISHED',
+        // Já submetidas pelo utilizador deixam de estar disponíveis (sem repetição).
+        attempts: { none: { userId, status: { not: 'IN_PROGRESS' } } },
         OR: [
           { targetDepartmentIds: { isEmpty: true } },
           ...(user?.departmentId != null
@@ -354,6 +356,24 @@ export class AssessmentsService {
     }
     if (assessment.availableUntil && now > new Date(assessment.availableUntil)) {
       throw new BadRequestException('Avaliação encerrada. O prazo de disponibilidade terminou.');
+    }
+
+    // Avaliação formal (EXAM): uma única tentativa. Depois de submetida (ou
+    // expirada) e com nota, o colaborador já não pode repetir.
+    if (assessment.type === 'EXAM') {
+      const finished = await this.prisma.read.assessmentAttempt.findFirst({
+        where: {
+          assessmentId: dto.assessmentId,
+          userId,
+          status: { not: 'IN_PROGRESS' },
+        },
+        select: { id: true },
+      });
+      if (finished) {
+        throw new ForbiddenException(
+          'Já submeteste esta avaliação formal. Não é possível repetir.',
+        );
+      }
     }
 
     // Verificar tentativas máximas
