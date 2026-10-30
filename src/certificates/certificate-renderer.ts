@@ -25,8 +25,15 @@ export interface CertificateSnapshot {
   template?: SnapshotTemplate;
 }
 
+/**
+ * Endereço do QR/link de verificação. A página /verify/:code é do frontend, por isso
+ * usa o endereço público do frontend (FRONTEND_URL, primeiro valor se houver vários);
+ * sem ele, APP_URL; em desenvolvimento, localhost:3000. Em produção ambos são o
+ * domínio real, pelo que o QR aponta sempre para o sítio certo.
+ */
 export function buildVerifyUrl(code: string): string {
-  const base = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
+  const frontend = process.env.FRONTEND_URL?.split(',')[0]?.trim();
+  const base = (frontend || process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
   return `${base}/verify/${code}`;
 }
 

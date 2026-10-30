@@ -112,18 +112,37 @@ describe('snapshotToTemplateInput', () => {
 });
 
 describe('buildVerifyUrl', () => {
-  const OLD = process.env.APP_URL;
+  const OLD = { app: process.env.APP_URL, front: process.env.FRONTEND_URL };
+  const restore = (key: 'APP_URL' | 'FRONTEND_URL', v: string | undefined) => {
+    if (v === undefined) delete process.env[key];
+    else process.env[key] = v;
+  };
+  beforeEach(() => {
+    delete process.env.APP_URL;
+    delete process.env.FRONTEND_URL;
+  });
   afterEach(() => {
-    process.env.APP_URL = OLD;
+    restore('APP_URL', OLD.app);
+    restore('FRONTEND_URL', OLD.front);
   });
 
-  it('usa APP_URL sem barra final', () => {
+  it('usa APP_URL sem barra final quando não há FRONTEND_URL', () => {
     process.env.APP_URL = 'https://academia.example.com/';
     expect(buildVerifyUrl('ABC')).toBe('https://academia.example.com/verify/ABC');
   });
 
+  it('prefere o endereço do frontend: a página /verify não existe no backend', () => {
+    process.env.APP_URL = 'http://localhost:4000';
+    process.env.FRONTEND_URL = 'http://localhost:3000';
+    expect(buildVerifyUrl('ABC')).toBe('http://localhost:3000/verify/ABC');
+  });
+
+  it('com vários FRONTEND_URL usa o primeiro, sem espaços nem barra final', () => {
+    process.env.FRONTEND_URL = ' https://app.exemplo.ao/ , https://www.exemplo.ao';
+    expect(buildVerifyUrl('ABC')).toBe('https://app.exemplo.ao/verify/ABC');
+  });
+
   it('em desenvolvimento cai para localhost:3000', () => {
-    delete process.env.APP_URL;
     expect(buildVerifyUrl('ABC')).toBe('http://localhost:3000/verify/ABC');
   });
 });
