@@ -15,6 +15,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { FILE_POLICIES } from '../common/files/file-policies';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 import {
   AssessmentType,
@@ -24,6 +25,7 @@ import {
   AttemptStatus,
 } from '@prisma/client';
 import { IsWebLinkOrInlineFile } from '../common/validators/is-web-link-or-inline-file.decorator';
+import { IsOptionalImageRef } from '../common/validators/optional-image-ref.decorator';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -121,6 +123,13 @@ export class CreateAssessmentDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  // Imagem do cartão: data URL base64 (upload no modal) ou URL normal.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @IsOptionalImageRef()
+  imageUrl?: string;
 
   @ApiProperty({ enum: AssessmentType })
   @IsEnum(AssessmentType)
@@ -289,9 +298,12 @@ export class AssessmentsAnswerDto {
   @IsString()
   textAnswer?: string;
 
-  @ApiPropertyOptional({ description: 'URL do ficheiro (FILE_UPLOAD)' })
+  @ApiPropertyOptional({
+    description:
+      'Ficheiro da resposta (FILE_UPLOAD): ligação https ou data URL base64 (PDF/imagem, até 4 MB)',
+  })
   @IsOptional()
-  @IsAllowedFileUrl()
+  @IsAllowedFileUrl(undefined, { inline: FILE_POLICIES.ATTACHMENT })
   fileUrl?: string;
 }
 

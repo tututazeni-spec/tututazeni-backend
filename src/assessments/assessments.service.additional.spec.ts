@@ -153,8 +153,8 @@ describe('AssessmentsService (additional)', () => {
   // ─── update ───────────────────────────────────────────────────
 
   describe('update', () => {
-    it('deve actualizar assessment', async () => {
-      mockPrisma.assessment.findUnique.mockResolvedValue(baseAssessment);
+    it('deve actualizar assessment em rascunho', async () => {
+      mockPrisma.assessment.findUnique.mockResolvedValue({ ...baseAssessment, status: 'DRAFT' });
       mockPrisma.assessment.update.mockResolvedValue({ ...baseAssessment, title: 'Actualizado' });
       const result = await service.update(1, { title: 'Actualizado' } as any);
       expect(result).toBeDefined();
@@ -252,6 +252,61 @@ describe('AssessmentsService (additional)', () => {
         BadRequestException,
       );
     });
+
+    it('avaliação formal (EXAM) já submetida não pode ser repetida', async () => {
+      mockPrisma.assessment.findUnique.mockResolvedValue({
+        ...baseAssessment,
+        type: 'EXAM',
+        maxAttempts: 0,
+        feedbackMode: 'ON_SUBMIT',
+        _count: { attempts: 1 },
+        availableFrom: null,
+        availableUntil: null,
+      });
+      mockPrisma.assessmentAttempt.findFirst.mockResolvedValue({ id: 7 });
+      await expect(service.startAttempt(2, { assessmentId: 1 } as any)).rejects.toThrow(
+        'Não é possível repetir',
+      );
+    });
+  });
+
+  describe('autoSave', () => {
+    it('funde só as respostas alteradas com as já guardadas e devolve o mínimo', async () => {
+      mockPrisma.assessmentAttempt.findFirst.mockResolvedValue({
+        id: 5,
+        savedAnswers: JSON.stringify([
+          { questionId: 1, selectedIndices: [0] },
+          { questionId: 2, fileUrl: 'data:application/pdf;base64,AAAA' },
+        ]),
+      });
+      mockPrisma.assessmentAttempt.update.mockResolvedValue({ id: 5 });
+      const r = await service.autoSave(2, {
+        attemptId: 5,
+        answers: [{ questionId: 1, selectedIndices: [1] }],
+      } as any);
+      const saved = JSON.parse(
+        mockPrisma.assessmentAttempt.update.mock.calls.at(-1)[0].data.savedAnswers,
+      );
+      expect(saved).toEqual([
+        { questionId: 1, selectedIndices: [1] },
+        { questionId: 2, fileUrl: 'data:application/pdf;base64,AAAA' },
+      ]);
+      expect(r).toMatchObject({ saved: true });
+      expect(r).not.toHaveProperty('savedAnswers');
+    });
+
+    it('lida com savedAnswers vazio ("{}" por omissão)', async () => {
+      mockPrisma.assessmentAttempt.findFirst.mockResolvedValue({ id: 5, savedAnswers: '{}' });
+      mockPrisma.assessmentAttempt.update.mockResolvedValue({ id: 5 });
+      await service.autoSave(2, {
+        attemptId: 5,
+        answers: [{ questionId: 3, textAnswer: 'x' }],
+      } as any);
+      const saved = JSON.parse(
+        mockPrisma.assessmentAttempt.update.mock.calls.at(-1)[0].data.savedAnswers,
+      );
+      expect(saved).toEqual([{ questionId: 3, textAnswer: 'x' }]);
+    });
   });
 
   // ─── submitAttempt ────────────────────────────────────────────
@@ -326,15 +381,168 @@ describe('AssessmentsService (additional)', () => {
     it('inclui avaliações sem departamento-alvo e do departamento do utilizador', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ departmentId: 5 });
       mockPrisma.assessment.findMany.mockResolvedValue([
-        { ...baseAssessment, type: 'EXAM', targetDepartmentIds: [] },
+        { ...baseAssessment, type: 'EXAM', targetDepartmentIds: [], attempts: [] },
       ]);
       const result = await service.getAvailableForUser(2);
       expect(result).toHaveLength(1);
+      expect(result[0].myAttempt).toBeNull();
       expect(mockPrisma.assessment.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ type: 'EXAM', status: 'PUBLISHED' }),
         }),
       );
+    });
+  });
+
+  describe('getAvailableForUser — tentativa já feita', () => {
+    it('mantém a avaliação listada com a nota do próprio utilizador', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ departmentId: 5 });
+      mockPrisma.assessment.findMany.mockResolvedValue([
+        {
+          ...baseAssessment,
+          type: 'EXAM',
+          maxGrade: 20,
+          targetDepartmentIds: [],
+          attempts: [{ id: 9, status: 'PASSED', score: 90, passed: true }],
+        },
+      ]);
+      const result = await service.getAvailableForUser(2);
+      expect(result[0]).not.toHaveProperty('attempts');
+      expect(result[0].myAttempt).toMatchObject({ id: 9, score: 90, displayGrade: 18 });
+    });
+  });
+
+  describe('getMyAttemptReview', () => {
+    const attempt = (over: object = {}) => ({
+      id: 9,
+      status: 'PASSED',
+      assessment: { allowReview: true, feedbackMode: 'ON_SUBMIT' },
+      answers: [
+        {
+          isCorrect: false,
+          earnedPoints: 0,
+          selectedIndices: '[0]',
+          textAnswer: null,
+          reviewComment: null,
+          question: {
+            id: 1,
+            type: 'MULTIPLE_CHOICE_SINGLE',
+            questionText: 'Qual?',
+            explanation: 'Porque sim',
+            options: JSON.stringify([
+              { text: 'A', isCorrect: false },
+              { text: 'B', isCorrect: true },
+            ]),
+          },
+        },
+      ],
+      ...over,
+    });
+
+    it('devolve a resposta dada e a certa por pergunta', async () => {
+      mockPrisma.assessmentAttempt.findFirst.mockResolvedValue(attempt());
+      const r = await service.getMyAttemptReview(9, 2);
+      expect(r.items[0]).toMatchObject({
+        isCorrect: false,
+        yourAnswer: 'A',
+        correctAnswer: 'B',
+        explanation: 'Porque sim',
+      });
+    });
+
+    it('ORDERING mostra a ordem dada e a certa', async () => {
+      mockPrisma.assessmentAttempt.findFirst.mockResolvedValue(
+        attempt({
+          answers: [
+            {
+              isCorrect: false,
+              earnedPoints: 0,
+              selectedIndices: '[1,0,2]',
+              textAnswer: null,
+              reviewComment: null,
+              question: {
+                id: 2,
+                type: 'ORDERING',
+                questionText: 'Ordena',
+                explanation: null,
+                correctAnswer: '[0,1,2]',
+                options: JSON.stringify([{ text: 'A' }, { text: 'B' }, { text: 'C' }]),
+              },
+            },
+          ],
+        }),
+      );
+      const r = await service.getMyAttemptReview(9, 2);
+      expect(r.items[0]).toMatchObject({ yourAnswer: 'B → A → C', correctAnswer: 'A → B → C' });
+    });
+
+    it('resposta aberta mostra o texto, a nota atribuída e o comentário', async () => {
+      mockPrisma.assessmentAttempt.findFirst.mockResolvedValue(
+        attempt({
+          answers: [
+            {
+              isCorrect: true,
+              earnedPoints: 0,
+              selectedIndices: null,
+              textAnswer: 'A minha resposta',
+              reviewComment: 'Bom trabalho',
+              manualScore: 80,
+              reviewedAt: new Date(),
+              question: {
+                id: 3,
+                type: 'OPEN_TEXT',
+                questionText: 'Explica',
+                explanation: null,
+                correctAnswer: 'Resposta modelo',
+                options: null,
+              },
+            },
+          ],
+        }),
+      );
+      const r = await service.getMyAttemptReview(9, 2);
+      expect(r.items[0]).toMatchObject({
+        open: true,
+        yourAnswer: 'A minha resposta',
+        correctAnswer: 'Resposta modelo',
+        manualScore: 80,
+        reviewComment: 'Bom trabalho',
+      });
+    });
+
+    it('resposta aberta ainda por rever não tem nota', async () => {
+      mockPrisma.assessmentAttempt.findFirst.mockResolvedValue(
+        attempt({
+          answers: [
+            {
+              isCorrect: null,
+              earnedPoints: 0,
+              selectedIndices: null,
+              textAnswer: 'x',
+              reviewComment: null,
+              manualScore: null,
+              reviewedAt: null,
+              question: { id: 3, type: 'OPEN_TEXT', questionText: 'q', options: null },
+            },
+          ],
+        }),
+      );
+      const r = await service.getMyAttemptReview(9, 2);
+      expect(r.items[0]).toMatchObject({ open: true, manualScore: null, isCorrect: null });
+    });
+
+    it('RESULT_ONLY não revela correcção', async () => {
+      mockPrisma.assessmentAttempt.findFirst.mockResolvedValue(
+        attempt({ assessment: { allowReview: true, feedbackMode: 'RESULT_ONLY' } }),
+      );
+      expect((await service.getMyAttemptReview(9, 2)).items).toEqual([]);
+    });
+
+    it('recusa quando a revisão não é permitida', async () => {
+      mockPrisma.assessmentAttempt.findFirst.mockResolvedValue(
+        attempt({ assessment: { allowReview: false, feedbackMode: 'ON_SUBMIT' } }),
+      );
+      await expect(service.getMyAttemptReview(9, 2)).rejects.toThrow('Revisão não permitida');
     });
   });
 

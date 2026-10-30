@@ -83,6 +83,13 @@ export class AssessmentsController {
     return this.svc.getAvailableForUser(user.id);
   }
 
+  @Get(':id/edit')
+  @Roles(...EVAL_CREATOR_ROLES)
+  @ApiOperation({ summary: 'Avaliação em rascunho com respostas correctas, para editar' })
+  findForEdit(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.findForEdit(id);
+  }
+
   @Get(':id')
   @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Detalhe da avaliação (sem respostas correctas para colaborador)' })
@@ -114,6 +121,16 @@ export class AssessmentsController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.getAttemptDetail(attemptId, user.id);
+  }
+
+  @Get('attempts/:attemptId/my-review')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Correcção pergunta a pergunta da minha tentativa' })
+  myAttemptReview(
+    @Param('attemptId', ParseIntPipe) attemptId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.getMyAttemptReview(attemptId, user.id);
   }
 
   @Get('attempts/:attemptId/review')

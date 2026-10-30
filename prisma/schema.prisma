@@ -3167,6 +3167,8 @@ model Assessment {
   id                  Int                        @id @default(autoincrement())
   title               String
   description         String?
+  /// Imagem do cartão (data URL base64 ou URL), opcional.
+  imageUrl            String?
   type                AssessmentType             @default(QUIZ)
   status              AssessmentStatus           @default(DRAFT)
   courseId            Int?
@@ -14217,6 +14219,8 @@ model EvaluationCampaign {
   code                    String?             @unique
   name                    String
   description             String?             @db.Text
+  /// Imagem do cartão (data URL base64 ou URL), opcional.
+  imageUrl                String?             @db.Text
   category                String?
   model                   EvalCampaignModel   @default(DEG_360)
   status                  EvalCampaignStatus  @default(DRAFT)

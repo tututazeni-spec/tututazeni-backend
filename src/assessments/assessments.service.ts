@@ -35,6 +35,10 @@ export interface GradedResult {
   options?: QuestionOption[] | null;
 }
 
+interface AttemptAnswerLike {
+  questionId: number;
+}
+
 @Injectable()
 export class AssessmentsService {
   private readonly logger = new Logger(AssessmentsService.name);
@@ -70,6 +74,7 @@ export class AssessmentsService {
       data: {
         title: data.title,
         description: data.description,
+        imageUrl: data.imageUrl || null,
         type: data.type,
         status: data.status ?? 'DRAFT',
         courseId: data.courseId,
@@ -138,7 +143,7 @@ export class AssessmentsService {
     });
     const now = new Date();
 
-    return this.prisma.read.assessment.findMany({
+    const assessments = await this.prisma.read.assessment.findMany({
       where: {
         type: 'EXAM',
         status: 'PUBLISHED',
@@ -148,15 +153,54 @@ export class AssessmentsService {
             ? [{ targetDepartmentIds: { has: user.departmentId } }]
             : []),
         ],
+        // Dentro da janela de disponibilidade, ou já feita pelo utilizador
+        // (continua listada para ele ver a nota; não pode repetir).
         AND: [
-          { OR: [{ availableFrom: null }, { availableFrom: { lte: now } }] },
-          { OR: [{ availableUntil: null }, { availableUntil: { gte: now } }] },
+          {
+            OR: [
+              {
+                AND: [
+                  { OR: [{ availableFrom: null }, { availableFrom: { lte: now } }] },
+                  { OR: [{ availableUntil: null }, { availableUntil: { gte: now } }] },
+                ],
+              },
+              { attempts: { some: { userId, status: { not: 'IN_PROGRESS' } } } },
+            ],
+          },
         ],
       },
       include: {
         _count: { select: { questions: true, attempts: true } },
+        attempts: {
+          where: { userId, status: { not: 'IN_PROGRESS' } },
+          orderBy: { startedAt: 'desc' },
+          take: 1,
+          select: {
+            id: true,
+            status: true,
+            score: true,
+            passed: true,
+            needsManualReview: true,
+            submittedAt: true,
+          },
+        },
       },
       orderBy: { availableUntil: 'asc' },
+    });
+
+    return assessments.map(({ attempts, ...a }) => {
+      const mine = attempts[0];
+      return {
+        ...a,
+        // Tentativa já submetida pelo próprio utilizador (nota escalada + rótulo).
+        myAttempt: mine
+          ? {
+              ...mine,
+              displayGrade: this.toDisplayGrade(mine.score, a.maxGrade),
+              qualitativeLabel: this.qualitativeLabel(mine.score),
+            }
+          : null,
+      };
     });
   }
 
@@ -190,8 +234,23 @@ export class AssessmentsService {
     return a;
   }
 
+  /**
+   * Avaliação completa para editar (com as respostas correctas). Só em rascunho:
+   * depois de publicada há tentativas e as respostas não se expõem nem se alteram.
+   */
+  async findForEdit(id: number) {
+    const a = await this.findOne(id);
+    if (a.status !== 'DRAFT') {
+      throw new ConflictException('Só é possível editar uma avaliação antes de a publicar');
+    }
+    return a;
+  }
+
   async update(id: number, dto: UpdateAssessmentDto) {
-    await this.findOne(id);
+    const current = await this.findOne(id);
+    if (current.status !== 'DRAFT') {
+      throw new ConflictException('Só é possível editar uma avaliação antes de a publicar');
+    }
     const { questions, availableFrom, availableUntil, ...data } = dto;
     this.assertValidAvailabilityWindow(availableFrom, availableUntil);
 
@@ -340,6 +399,24 @@ export class AssessmentsService {
       throw new BadRequestException('Avaliação encerrada. O prazo de disponibilidade terminou.');
     }
 
+    // Avaliação formal (EXAM): uma única tentativa. Depois de submetida (ou
+    // expirada) e com nota, o colaborador já não pode repetir.
+    if (assessment.type === 'EXAM') {
+      const finished = await this.prisma.read.assessmentAttempt.findFirst({
+        where: {
+          assessmentId: dto.assessmentId,
+          userId,
+          status: { not: 'IN_PROGRESS' },
+        },
+        select: { id: true },
+      });
+      if (finished) {
+        throw new ForbiddenException(
+          'Já submeteste esta avaliação formal. Não é possível repetir.',
+        );
+      }
+    }
+
     // Verificar tentativas máximas
     if (assessment.maxAttempts > 0) {
       const totalAttempts = await this.prisma.read.assessmentAttempt.count({
@@ -418,10 +495,27 @@ export class AssessmentsService {
     });
     if (!attempt) throw new NotFoundException('Tentativa não encontrada ou já submetida');
 
-    return this.prisma.assessmentAttempt.update({
+    // As respostas recebidas são só as que mudaram desde o último guardar (o
+    // ficheiro de uma pergunta de upload pode ter vários MB): fundem-se por
+    // pergunta com o que já estava guardado, em vez de o substituir.
+    let saved: AttemptAnswerLike[] = [];
+    try {
+      const parsed: unknown = JSON.parse(attempt.savedAnswers || '[]');
+      if (Array.isArray(parsed)) saved = parsed as AttemptAnswerLike[];
+    } catch {
+      saved = [];
+    }
+    const byQuestion = new Map<number, AttemptAnswerLike>(saved.map(a => [a.questionId, a]));
+    for (const a of dto.answers) byQuestion.set(a.questionId, a);
+    const lastSavedAt = new Date();
+
+    // Devolve só o essencial: a resposta antiga repetia o savedAnswers inteiro.
+    await this.prisma.assessmentAttempt.update({
       where: { id: dto.attemptId },
-      data: { savedAnswers: JSON.stringify(dto.answers), lastSavedAt: new Date() },
+      data: { savedAnswers: JSON.stringify([...byQuestion.values()]), lastSavedAt },
+      select: { id: true },
     });
+    return { saved: true, lastSavedAt };
   }
 
   async submitAttempt(userId: number, dto: SubmitAttemptDto) {
@@ -644,6 +738,92 @@ export class AssessmentsService {
       qualitativeLabel: this.qualitativeLabel(attempt.score),
       displayGrade: this.toDisplayGrade(attempt.score, attempt.assessment.maxGrade),
     };
+  }
+
+  // Correcção pergunta a pergunta da tentativa do PRÓPRIO utilizador (Ver
+  // resultado). Respeita `allowReview` e o `feedbackMode`: em RESULT_ONLY não
+  // revela correcção nem respostas certas (devolve a lista vazia).
+  async getMyAttemptReview(attemptId: number, userId: number) {
+    const attempt = await this.prisma.read.assessmentAttempt.findFirst({
+      where: { id: attemptId, userId },
+      include: {
+        assessment: { select: { allowReview: true, feedbackMode: true } },
+        answers: {
+          include: { question: true },
+          orderBy: { question: { seq: 'asc' } },
+        },
+      },
+    });
+    if (!attempt) throw new NotFoundException('Tentativa não encontrada');
+    if (attempt.status === 'IN_PROGRESS') {
+      throw new ForbiddenException('A tentativa ainda está em curso');
+    }
+    if (!attempt.assessment.allowReview) {
+      throw new ForbiddenException('Revisão não permitida para esta avaliação');
+    }
+    if (attempt.assessment.feedbackMode === 'RESULT_ONLY') {
+      return { items: [] };
+    }
+
+    const parse = <T>(raw: string | null): T | null => {
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw) as T;
+      } catch {
+        return null;
+      }
+    };
+
+    const items = attempt.answers.map(a => {
+      const q = a.question;
+      const opts = parse<QuestionOption[]>(q.options) ?? [];
+      const selected = parse<number[]>(a.selectedIndices) ?? [];
+      const isChoice =
+        q.type === 'MULTIPLE_CHOICE_SINGLE' ||
+        q.type === 'MULTIPLE_CHOICE_MULTI' ||
+        q.type === 'TRUE_FALSE';
+      // ORDERING: selectedIndices e correctAnswer são a ordem das opções.
+      const isOrdering = q.type === 'ORDERING';
+      // Resposta aberta/ficheiro: correcção manual (nota 0-100 + comentário).
+      const isOpen = q.type === 'OPEN_TEXT' || q.type === 'FILE_UPLOAD';
+      const correctOrder = isOrdering ? (parse<number[]>(q.correctAnswer) ?? []) : [];
+      const sequence = (idx: number[]) =>
+        idx
+          .map(i => opts[i]?.text)
+          .filter(Boolean)
+          .join(' → ') || null;
+      return {
+        questionId: q.id,
+        questionText: q.questionText,
+        isCorrect: a.isCorrect,
+        earnedPoints: a.earnedPoints,
+        yourAnswer: isChoice
+          ? selected
+              .map(i => opts[i]?.text)
+              .filter(Boolean)
+              .join(', ') || null
+          : isOrdering
+            ? sequence(selected)
+            : (a.textAnswer ?? null),
+        correctAnswer: isChoice
+          ? opts
+              .filter(o => o.isCorrect)
+              .map(o => o.text)
+              .join(', ') || null
+          : isOrdering
+            ? sequence(correctOrder)
+            : isOpen
+              ? (q.correctAnswer ?? null)
+              : null,
+        open: isOpen,
+        // Só há nota atribuída depois de a resposta ser revista.
+        manualScore: isOpen && a.reviewedAt ? a.manualScore : null,
+        fileUrl: q.type === 'FILE_UPLOAD' ? (a.fileUrl ?? null) : null,
+        explanation: q.explanation ?? null,
+        reviewComment: a.reviewComment ?? null,
+      };
+    });
+    return { items };
   }
 
   // Variante privilegiada de getAttemptDetail para os criadores de

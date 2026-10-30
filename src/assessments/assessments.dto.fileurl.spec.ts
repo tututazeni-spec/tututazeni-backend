@@ -23,4 +23,11 @@ describe('AssessmentsAnswerDto.fileUrl — IsAllowedFileUrl (opcional)', () => {
   it('recusa host não autorizado quando presente', async () => {
     expect((await errorsFor('https://evil.com/r.jpg')).length).toBeGreaterThan(0);
   });
+  it('aceita um PDF inline (data URL) e recusa um tipo não permitido', async () => {
+    const pdf =
+      'data:application/pdf;base64,' + Buffer.from('%PDF-1.4\n%%EOF\n').toString('base64');
+    expect(await errorsFor(pdf)).toHaveLength(0);
+    const exe = 'data:application/x-msdownload;base64,' + Buffer.from('MZ').toString('base64');
+    expect((await errorsFor(exe)).length).toBeGreaterThan(0);
+  });
 });

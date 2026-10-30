@@ -889,8 +889,14 @@ export class DevelopmentPlansService {
         id: p.id,
         name: p.name,
         status: p.status,
+        priority: p.priority,
+        goal: p.goal,
+        period: p.period,
+        imageUrl: p.imageUrl,
         user: p.user,
         endDate: p.endDate,
+        actionCount: actions.length,
+        goalCount: goals.length,
         progress: actions.length > 0 ? Math.round((completed / actions.length) * 100) : 0,
         avgGoal:
           goals.length > 0

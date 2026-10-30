@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { AssessmentsService } from './assessments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AssessmentType, QuestionType } from './assessments.dto';
@@ -188,6 +188,33 @@ describe('AssessmentsService', () => {
     it('deve lançar NotFoundException se não encontrada', async () => {
       mockPrisma.assessment.findUnique.mockResolvedValue(null);
       await expect(service.update(99, { title: 'X' })).rejects.toThrow(NotFoundException);
+    });
+
+    it('recusa editar uma avaliação já publicada', async () => {
+      mockPrisma.assessment.findUnique.mockResolvedValue({
+        ...baseAssessment,
+        status: 'PUBLISHED',
+      });
+      mockPrisma.assessment.update.mockClear();
+      await expect(service.update(1, { title: 'X' })).rejects.toThrow(ConflictException);
+      expect(mockPrisma.assessment.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findForEdit', () => {
+    it('devolve a avaliação em rascunho com as respostas correctas', async () => {
+      mockPrisma.assessment.findUnique.mockResolvedValue({
+        ...baseAssessment,
+        status: 'DRAFT',
+        questions: [{ id: 1, options: JSON.stringify([{ text: 'A', isCorrect: true }]) }],
+      });
+      const r = await service.findForEdit(1);
+      expect(JSON.parse(r.questions[0].options)[0].isCorrect).toBe(true);
+    });
+
+    it('recusa avaliações já publicadas ou arquivadas', async () => {
+      mockPrisma.assessment.findUnique.mockResolvedValue({ ...baseAssessment, status: 'ARCHIVED' });
+      await expect(service.findForEdit(1)).rejects.toThrow(ConflictException);
     });
 
     it('deve substituir questões se fornecidas', async () => {
