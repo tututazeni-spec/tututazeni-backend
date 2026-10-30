@@ -24,6 +24,7 @@ import {
   EvalStage,
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
+import { IsOptionalImageRef } from '../common/validators/optional-image-ref.decorator';
 
 // ─── Enums ────────────────────────────────────────────────────────
 // CycleStatus/QuestionType são os enums reais do Prisma (EvalCampaignStatus/
@@ -67,6 +68,8 @@ export class CreateCycleDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) code?: string;
   @ApiProperty() @IsString() @MaxLength(200) name!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
+  // Imagem do cartão: data URL base64 (upload no modal) ou URL normal.
+  @ApiPropertyOptional() @IsOptional() @IsString() @IsOptionalImageRef() imageUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) category?: string;
   @ApiProperty({ enum: EvalModel }) @IsEnum(EvalModel) model!: EvalModel;
   @ApiProperty() @IsDateString() startDate!: string;
@@ -120,6 +123,7 @@ export class CreateCycleDto {
 export class UpdateCycleDto {
   @ApiPropertyOptional() @IsOptional() @IsString() name?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @IsOptionalImageRef() imageUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() category?: string;
   @ApiPropertyOptional({ enum: CycleStatus })
   @IsOptional()

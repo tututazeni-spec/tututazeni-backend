@@ -70,6 +70,7 @@ export class AssessmentsService {
       data: {
         title: data.title,
         description: data.description,
+        imageUrl: data.imageUrl || null,
         type: data.type,
         status: data.status ?? 'DRAFT',
         courseId: data.courseId,

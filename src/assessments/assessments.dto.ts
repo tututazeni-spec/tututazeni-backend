@@ -24,6 +24,7 @@ import {
   AttemptStatus,
 } from '@prisma/client';
 import { IsWebLinkOrInlineFile } from '../common/validators/is-web-link-or-inline-file.decorator';
+import { IsOptionalImageRef } from '../common/validators/optional-image-ref.decorator';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -121,6 +122,13 @@ export class CreateAssessmentDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  // Imagem do cartão: data URL base64 (upload no modal) ou URL normal.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @IsOptionalImageRef()
+  imageUrl?: string;
 
   @ApiProperty({ enum: AssessmentType })
   @IsEnum(AssessmentType)

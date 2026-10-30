@@ -116,6 +116,7 @@ export class EvaluationService {
         code: dto.code,
         name: dto.name,
         description: dto.description,
+        imageUrl: dto.imageUrl || null,
         category: dto.category,
         model: MODEL_TO_PRISMA[dto.model],
         status: CycleStatus.DRAFT,
