@@ -23,6 +23,8 @@ export interface TemplateSummary {
   currentVersion: number;
   colors: TemplateConfig['colors'];
   updatedAt: Date;
+  /** Modelo em uso na plataforma: usado nas emissões sem modelo próprio na regra. */
+  inUse: boolean;
 }
 
 export interface TemplateDetail extends TemplateSummary {
@@ -43,6 +45,7 @@ interface TemplateRow {
   config: string | null;
   currentVersion: number;
   updatedAt: Date;
+  isDefault?: boolean;
 }
 
 const ASSET_FIELDS: [keyof TemplateConfig['assets'], CertificateAssetKind][] = [
@@ -117,7 +120,7 @@ export class CertificateTemplatesService {
     }
   }
 
-  private summary(row: TemplateRow): TemplateSummary {
+  private summary(row: TemplateRow, inUseId: string): TemplateSummary {
     const config = this.configOf(row);
     return {
       id: row.id,
@@ -127,7 +130,17 @@ export class CertificateTemplatesService {
       currentVersion: row.currentVersion,
       colors: config.colors,
       updatedAt: row.updatedAt,
+      inUse: row.id === inUseId,
     };
+  }
+
+  /** Modelo em uso: o marcado como predefinido; sem marca, o corporativo clássico. */
+  private async inUseId(): Promise<string> {
+    const row = await this.prisma.certificateTemplate.findFirst({
+      where: { isSystem: true, isDefault: true, deletedAt: null },
+      select: { id: true },
+    });
+    return row?.id ?? DEFAULT_TEMPLATE_ID;
   }
 
   private async findSystem(id: string): Promise<TemplateRow> {
@@ -144,10 +157,32 @@ export class CertificateTemplatesService {
       where: { isSystem: true, deletedAt: null },
     });
     const order = new Map(BUILTIN_TEMPLATES.map((t, i) => [t.id, i]));
+    const inUse = rows.find(r => r.isDefault)?.id ?? DEFAULT_TEMPLATE_ID;
     return rows
       .filter(r => order.has(r.id))
       .sort((a, b) => order.get(a.id) - order.get(b.id))
-      .map(r => this.summary(r));
+      .map(r => this.summary(r, inUse));
+  }
+
+  /** Define o modelo em uso na plataforma; pode trocar-se a qualquer momento. */
+  async setInUse(id: string, actorId: number): Promise<TemplateSummary[]> {
+    await this.ensureSystem();
+    await this.findSystem(id);
+    await this.prisma.$transaction(async tx => {
+      await tx.certificateTemplate.updateMany({
+        where: { isSystem: true, isDefault: true },
+        data: { isDefault: false },
+      });
+      await tx.certificateTemplate.update({ where: { id }, data: { isDefault: true } });
+    });
+    await this.audit.log({
+      action: 'CERTIFICATE_TEMPLATE_SET_IN_USE',
+      entity: 'CertificateTemplate',
+      userId: actorId,
+      metadata: { templateId: id },
+      strict: true,
+    });
+    return this.list();
   }
 
   async get(id: string): Promise<TemplateDetail> {
@@ -169,7 +204,7 @@ export class CertificateTemplatesService {
       : [];
     const names = new Map(authors.map(a => [a.id, a.fullName]));
     return {
-      ...this.summary(row),
+      ...this.summary(row, await this.inUseId()),
       config: this.configOf(row),
       versions: versions.map(v => ({
         version: v.version,
@@ -301,12 +336,12 @@ export class CertificateTemplatesService {
     );
   }
 
-  /** Template (e versão) a usar numa emissão; sem id → corporativo clássico. */
+  /** Template (e versão) a usar numa emissão; sem id → o modelo em uso na plataforma. */
   async resolveForIssuance(
     templateId?: string | null,
   ): Promise<{ id: string; version: number; config: TemplateConfig }> {
     await this.ensureSystem();
-    const row = await this.findSystem(templateId ?? DEFAULT_TEMPLATE_ID);
+    const row = await this.findSystem(templateId ?? (await this.inUseId()));
     return { id: row.id, version: row.currentVersion, config: this.configOf(row) };
   }
 }
