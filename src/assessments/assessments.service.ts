@@ -754,6 +754,11 @@ export class AssessmentsService {
         q.type === 'MULTIPLE_CHOICE_SINGLE' ||
         q.type === 'MULTIPLE_CHOICE_MULTI' ||
         q.type === 'TRUE_FALSE';
+      // ORDERING: selectedIndices e correctAnswer são a ordem das opções.
+      const isOrdering = q.type === 'ORDERING';
+      const correctOrder = isOrdering ? (parse<number[]>(q.correctAnswer) ?? []) : [];
+      const sequence = (idx: number[]) =>
+        idx.map(i => opts[i]?.text).filter(Boolean).join(' → ') || null;
       return {
         questionId: q.id,
         questionText: q.questionText,
@@ -761,10 +766,14 @@ export class AssessmentsService {
         earnedPoints: a.earnedPoints,
         yourAnswer: isChoice
           ? selected.map(i => opts[i]?.text).filter(Boolean).join(', ') || null
-          : (a.textAnswer ?? null),
+          : isOrdering
+            ? sequence(selected)
+            : (a.textAnswer ?? null),
         correctAnswer: isChoice
           ? opts.filter(o => o.isCorrect).map(o => o.text).join(', ') || null
-          : null,
+          : isOrdering
+            ? sequence(correctOrder)
+            : null,
         explanation: q.explanation ?? null,
         reviewComment: a.reviewComment ?? null,
       };

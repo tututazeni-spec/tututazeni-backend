@@ -411,6 +411,32 @@ describe('AssessmentsService (additional)', () => {
       });
     });
 
+    it('ORDERING mostra a ordem dada e a certa', async () => {
+      mockPrisma.assessmentAttempt.findFirst.mockResolvedValue(
+        attempt({
+          answers: [
+            {
+              isCorrect: false,
+              earnedPoints: 0,
+              selectedIndices: '[1,0,2]',
+              textAnswer: null,
+              reviewComment: null,
+              question: {
+                id: 2,
+                type: 'ORDERING',
+                questionText: 'Ordena',
+                explanation: null,
+                correctAnswer: '[0,1,2]',
+                options: JSON.stringify([{ text: 'A' }, { text: 'B' }, { text: 'C' }]),
+              },
+            },
+          ],
+        }),
+      );
+      const r = await service.getMyAttemptReview(9, 2);
+      expect(r.items[0]).toMatchObject({ yourAnswer: 'B → A → C', correctAnswer: 'A → B → C' });
+    });
+
     it('RESULT_ONLY não revela correcção', async () => {
       mockPrisma.assessmentAttempt.findFirst.mockResolvedValue(
         attempt({ assessment: { allowReview: true, feedbackMode: 'RESULT_ONLY' } }),
