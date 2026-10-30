@@ -342,15 +342,34 @@ describe('AssessmentsService (additional)', () => {
     it('inclui avaliações sem departamento-alvo e do departamento do utilizador', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ departmentId: 5 });
       mockPrisma.assessment.findMany.mockResolvedValue([
-        { ...baseAssessment, type: 'EXAM', targetDepartmentIds: [] },
+        { ...baseAssessment, type: 'EXAM', targetDepartmentIds: [], attempts: [] },
       ]);
       const result = await service.getAvailableForUser(2);
       expect(result).toHaveLength(1);
+      expect(result[0].myAttempt).toBeNull();
       expect(mockPrisma.assessment.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ type: 'EXAM', status: 'PUBLISHED' }),
         }),
       );
+    });
+  });
+
+  describe('getAvailableForUser — tentativa já feita', () => {
+    it('mantém a avaliação listada com a nota do próprio utilizador', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ departmentId: 5 });
+      mockPrisma.assessment.findMany.mockResolvedValue([
+        {
+          ...baseAssessment,
+          type: 'EXAM',
+          maxGrade: 20,
+          targetDepartmentIds: [],
+          attempts: [{ id: 9, status: 'PASSED', score: 90, passed: true }],
+        },
+      ]);
+      const result = await service.getAvailableForUser(2);
+      expect(result[0]).not.toHaveProperty('attempts');
+      expect(result[0].myAttempt).toMatchObject({ id: 9, score: 90, displayGrade: 18 });
     });
   });
 

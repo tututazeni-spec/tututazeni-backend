@@ -139,27 +139,57 @@ export class AssessmentsService {
     });
     const now = new Date();
 
-    return this.prisma.read.assessment.findMany({
+    const assessments = await this.prisma.read.assessment.findMany({
       where: {
         type: 'EXAM',
         status: 'PUBLISHED',
-        // Já submetidas pelo utilizador deixam de estar disponíveis (sem repetição).
-        attempts: { none: { userId, status: { not: 'IN_PROGRESS' } } },
         OR: [
           { targetDepartmentIds: { isEmpty: true } },
           ...(user?.departmentId != null
             ? [{ targetDepartmentIds: { has: user.departmentId } }]
             : []),
         ],
+        // Dentro da janela de disponibilidade, ou já feita pelo utilizador
+        // (continua listada para ele ver a nota; não pode repetir).
         AND: [
-          { OR: [{ availableFrom: null }, { availableFrom: { lte: now } }] },
-          { OR: [{ availableUntil: null }, { availableUntil: { gte: now } }] },
+          {
+            OR: [
+              {
+                AND: [
+                  { OR: [{ availableFrom: null }, { availableFrom: { lte: now } }] },
+                  { OR: [{ availableUntil: null }, { availableUntil: { gte: now } }] },
+                ],
+              },
+              { attempts: { some: { userId, status: { not: 'IN_PROGRESS' } } } },
+            ],
+          },
         ],
       },
       include: {
         _count: { select: { questions: true, attempts: true } },
+        attempts: {
+          where: { userId, status: { not: 'IN_PROGRESS' } },
+          orderBy: { startedAt: 'desc' },
+          take: 1,
+          select: { id: true, status: true, score: true, passed: true, needsManualReview: true, submittedAt: true },
+        },
       },
       orderBy: { availableUntil: 'asc' },
+    });
+
+    return assessments.map(({ attempts, ...a }) => {
+      const mine = attempts[0];
+      return {
+        ...a,
+        // Tentativa já submetida pelo próprio utilizador (nota escalada + rótulo).
+        myAttempt: mine
+          ? {
+              ...mine,
+              displayGrade: this.toDisplayGrade(mine.score, a.maxGrade),
+              qualitativeLabel: this.qualitativeLabel(mine.score),
+            }
+          : null,
+      };
     });
   }
 
