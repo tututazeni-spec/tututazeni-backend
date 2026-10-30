@@ -181,6 +181,35 @@ describe('EvaluationService', () => {
     });
   });
 
+  // ─── deleteCycle ──────────────────────────────────────────────────────────
+
+  describe('deleteCycle', () => {
+    it('elimina logicamente um ciclo sem avaliações atribuídas', async () => {
+      mockPrisma.evaluationCampaign.findFirst.mockResolvedValue({ id: 1, name: 'Ciclo 2024' });
+      mockPrisma.evaluationRequest.count.mockResolvedValue(0);
+      mockPrisma.evaluationCampaign.update.mockClear();
+      const result = await service.deleteCycle(1);
+      expect(result).toEqual({ id: 1, deleted: true });
+      expect(mockPrisma.evaluationCampaign.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { deletedAt: expect.any(Date) },
+      });
+    });
+
+    it('recusa eliminar um ciclo que já tem avaliações atribuídas', async () => {
+      mockPrisma.evaluationCampaign.findFirst.mockResolvedValue({ id: 1, name: 'Ciclo 2024' });
+      mockPrisma.evaluationRequest.count.mockResolvedValue(3);
+      mockPrisma.evaluationCampaign.update.mockClear();
+      await expect(service.deleteCycle(1)).rejects.toThrow(/já tem avaliações atribuídas/);
+      expect(mockPrisma.evaluationCampaign.update).not.toHaveBeenCalled();
+    });
+
+    it('ciclo inexistente ou já eliminado → 404', async () => {
+      mockPrisma.evaluationCampaign.findFirst.mockResolvedValue(null);
+      await expect(service.deleteCycle(99)).rejects.toThrow('Ciclo não encontrado');
+    });
+  });
+
   // ─── activateCycle ────────────────────────────────────────────────────────
 
   describe('activateCycle', () => {
