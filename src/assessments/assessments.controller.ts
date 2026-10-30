@@ -83,6 +83,13 @@ export class AssessmentsController {
     return this.svc.getAvailableForUser(user.id);
   }
 
+  @Get(':id/edit')
+  @Roles(...EVAL_CREATOR_ROLES)
+  @ApiOperation({ summary: 'Avaliação em rascunho com respostas correctas, para editar' })
+  findForEdit(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.findForEdit(id);
+  }
+
   @Get(':id')
   @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Detalhe da avaliação (sem respostas correctas para colaborador)' })

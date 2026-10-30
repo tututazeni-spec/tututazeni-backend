@@ -153,8 +153,8 @@ describe('AssessmentsService (additional)', () => {
   // ─── update ───────────────────────────────────────────────────
 
   describe('update', () => {
-    it('deve actualizar assessment', async () => {
-      mockPrisma.assessment.findUnique.mockResolvedValue(baseAssessment);
+    it('deve actualizar assessment em rascunho', async () => {
+      mockPrisma.assessment.findUnique.mockResolvedValue({ ...baseAssessment, status: 'DRAFT' });
       mockPrisma.assessment.update.mockResolvedValue({ ...baseAssessment, title: 'Actualizado' });
       const result = await service.update(1, { title: 'Actualizado' } as any);
       expect(result).toBeDefined();

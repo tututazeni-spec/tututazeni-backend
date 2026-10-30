@@ -190,8 +190,23 @@ export class AssessmentsService {
     return a;
   }
 
+  /**
+   * Avaliação completa para editar (com as respostas correctas). Só em rascunho:
+   * depois de publicada há tentativas e as respostas não se expõem nem se alteram.
+   */
+  async findForEdit(id: number) {
+    const a = await this.findOne(id);
+    if (a.status !== 'DRAFT') {
+      throw new ConflictException('Só é possível editar uma avaliação antes de a publicar');
+    }
+    return a;
+  }
+
   async update(id: number, dto: UpdateAssessmentDto) {
-    await this.findOne(id);
+    const current = await this.findOne(id);
+    if (current.status !== 'DRAFT') {
+      throw new ConflictException('Só é possível editar uma avaliação antes de a publicar');
+    }
     const { questions, availableFrom, availableUntil, ...data } = dto;
     this.assertValidAvailabilityWindow(availableFrom, availableUntil);
 
