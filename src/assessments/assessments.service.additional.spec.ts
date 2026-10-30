@@ -373,6 +373,59 @@ describe('AssessmentsService (additional)', () => {
     });
   });
 
+  describe('getMyAttemptReview', () => {
+    const attempt = (over: object = {}) => ({
+      id: 9,
+      status: 'PASSED',
+      assessment: { allowReview: true, feedbackMode: 'ON_SUBMIT' },
+      answers: [
+        {
+          isCorrect: false,
+          earnedPoints: 0,
+          selectedIndices: '[0]',
+          textAnswer: null,
+          reviewComment: null,
+          question: {
+            id: 1,
+            type: 'MULTIPLE_CHOICE_SINGLE',
+            questionText: 'Qual?',
+            explanation: 'Porque sim',
+            options: JSON.stringify([
+              { text: 'A', isCorrect: false },
+              { text: 'B', isCorrect: true },
+            ]),
+          },
+        },
+      ],
+      ...over,
+    });
+
+    it('devolve a resposta dada e a certa por pergunta', async () => {
+      mockPrisma.assessmentAttempt.findFirst.mockResolvedValue(attempt());
+      const r = await service.getMyAttemptReview(9, 2);
+      expect(r.items[0]).toMatchObject({
+        isCorrect: false,
+        yourAnswer: 'A',
+        correctAnswer: 'B',
+        explanation: 'Porque sim',
+      });
+    });
+
+    it('RESULT_ONLY não revela correcção', async () => {
+      mockPrisma.assessmentAttempt.findFirst.mockResolvedValue(
+        attempt({ assessment: { allowReview: true, feedbackMode: 'RESULT_ONLY' } }),
+      );
+      expect((await service.getMyAttemptReview(9, 2)).items).toEqual([]);
+    });
+
+    it('recusa quando a revisão não é permitida', async () => {
+      mockPrisma.assessmentAttempt.findFirst.mockResolvedValue(
+        attempt({ assessment: { allowReview: false, feedbackMode: 'ON_SUBMIT' } }),
+      );
+      await expect(service.getMyAttemptReview(9, 2)).rejects.toThrow('Revisão não permitida');
+    });
+  });
+
   // ─── getResultsRoster ───────────────────────────────────────────
 
   describe('getResultsRoster', () => {

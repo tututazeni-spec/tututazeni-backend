@@ -123,6 +123,16 @@ export class AssessmentsController {
     return this.svc.getAttemptDetail(attemptId, user.id);
   }
 
+  @Get('attempts/:attemptId/my-review')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Correcção pergunta a pergunta da minha tentativa' })
+  myAttemptReview(
+    @Param('attemptId', ParseIntPipe) attemptId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.getMyAttemptReview(attemptId, user.id);
+  }
+
   @Get('attempts/:attemptId/review')
   @Roles(...EVAL_CREATOR_ROLES)
   @ApiOperation({ summary: 'Detalhe completo das respostas de qualquer utilizador (criador)' })

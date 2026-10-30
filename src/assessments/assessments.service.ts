@@ -712,6 +712,66 @@ export class AssessmentsService {
     };
   }
 
+  // Correcção pergunta a pergunta da tentativa do PRÓPRIO utilizador (Ver
+  // resultado). Respeita `allowReview` e o `feedbackMode`: em RESULT_ONLY não
+  // revela correcção nem respostas certas (devolve a lista vazia).
+  async getMyAttemptReview(attemptId: number, userId: number) {
+    const attempt = await this.prisma.read.assessmentAttempt.findFirst({
+      where: { id: attemptId, userId },
+      include: {
+        assessment: { select: { allowReview: true, feedbackMode: true } },
+        answers: {
+          include: { question: true },
+          orderBy: { question: { seq: 'asc' } },
+        },
+      },
+    });
+    if (!attempt) throw new NotFoundException('Tentativa não encontrada');
+    if (attempt.status === 'IN_PROGRESS') {
+      throw new ForbiddenException('A tentativa ainda está em curso');
+    }
+    if (!attempt.assessment.allowReview) {
+      throw new ForbiddenException('Revisão não permitida para esta avaliação');
+    }
+    if (attempt.assessment.feedbackMode === 'RESULT_ONLY') {
+      return { items: [] };
+    }
+
+    const parse = <T>(raw: string | null): T | null => {
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw) as T;
+      } catch {
+        return null;
+      }
+    };
+
+    const items = attempt.answers.map(a => {
+      const q = a.question;
+      const opts = parse<QuestionOption[]>(q.options) ?? [];
+      const selected = parse<number[]>(a.selectedIndices) ?? [];
+      const isChoice =
+        q.type === 'MULTIPLE_CHOICE_SINGLE' ||
+        q.type === 'MULTIPLE_CHOICE_MULTI' ||
+        q.type === 'TRUE_FALSE';
+      return {
+        questionId: q.id,
+        questionText: q.questionText,
+        isCorrect: a.isCorrect,
+        earnedPoints: a.earnedPoints,
+        yourAnswer: isChoice
+          ? selected.map(i => opts[i]?.text).filter(Boolean).join(', ') || null
+          : (a.textAnswer ?? null),
+        correctAnswer: isChoice
+          ? opts.filter(o => o.isCorrect).map(o => o.text).join(', ') || null
+          : null,
+        explanation: q.explanation ?? null,
+        reviewComment: a.reviewComment ?? null,
+      };
+    });
+    return { items };
+  }
+
   // Variante privilegiada de getAttemptDetail para os criadores de
   // avaliações formais: vê a tentativa de QUALQUER utilizador (sem filtro
   // userId) e ignora o gate `allowReview` (esse protege a experiência do
