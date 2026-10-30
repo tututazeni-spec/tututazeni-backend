@@ -35,6 +35,10 @@ export interface GradedResult {
   options?: QuestionOption[] | null;
 }
 
+interface AttemptAnswerLike {
+  questionId: number;
+}
+
 @Injectable()
 export class AssessmentsService {
   private readonly logger = new Logger(AssessmentsService.name);
@@ -484,10 +488,27 @@ export class AssessmentsService {
     });
     if (!attempt) throw new NotFoundException('Tentativa não encontrada ou já submetida');
 
-    return this.prisma.assessmentAttempt.update({
+    // As respostas recebidas são só as que mudaram desde o último guardar (o
+    // ficheiro de uma pergunta de upload pode ter vários MB): fundem-se por
+    // pergunta com o que já estava guardado, em vez de o substituir.
+    let saved: AttemptAnswerLike[] = [];
+    try {
+      const parsed: unknown = JSON.parse(attempt.savedAnswers || '[]');
+      if (Array.isArray(parsed)) saved = parsed as AttemptAnswerLike[];
+    } catch {
+      saved = [];
+    }
+    const byQuestion = new Map<number, AttemptAnswerLike>(saved.map(a => [a.questionId, a]));
+    for (const a of dto.answers) byQuestion.set(a.questionId, a);
+    const lastSavedAt = new Date();
+
+    // Devolve só o essencial: a resposta antiga repetia o savedAnswers inteiro.
+    await this.prisma.assessmentAttempt.update({
       where: { id: dto.attemptId },
-      data: { savedAnswers: JSON.stringify(dto.answers), lastSavedAt: new Date() },
+      data: { savedAnswers: JSON.stringify([...byQuestion.values()]), lastSavedAt },
+      select: { id: true },
     });
+    return { saved: true, lastSavedAt };
   }
 
   async submitAttempt(userId: number, dto: SubmitAttemptDto) {
