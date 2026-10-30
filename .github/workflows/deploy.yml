@@ -149,7 +149,7 @@ jobs:
           overwrite: true
 
       - name: Deploy no staging (deploy.sh)
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
@@ -215,7 +215,7 @@ jobs:
 
       - name: Deploy no VPS (deploy.sh, rolling com health gate)
         if: ${{ needs.preflight.outputs.mode == 'ssh' }}
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
@@ -338,7 +338,7 @@ jobs:
     steps:
       - name: Rollback automático (rollback.sh no VPS)
         if: ${{ needs.preflight.outputs.mode == 'ssh' }}
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
