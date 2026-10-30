@@ -21,7 +21,7 @@ const row = (i: number, over: Record<string, unknown> = {}) => ({
 
 describe('CertificateTemplatesService', () => {
   const tx = {
-    certificateTemplate: { findUnique: jest.fn(), update: jest.fn() },
+    certificateTemplate: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
     certificateTemplateVersion: { create: jest.fn() },
   };
   const prisma = {
@@ -297,15 +297,57 @@ describe('CertificateTemplatesService', () => {
     );
   });
 
+  describe('setInUse', () => {
+    it('marca só o escolhido como em uso e regista a auditoria', async () => {
+      prisma.certificateTemplate.findMany.mockResolvedValue(
+        BUILTIN_TEMPLATES.map((_t, i) => ({ ...row(i), isDefault: i === 3 })),
+      );
+      const list = await svc.setInUse(BUILTIN_TEMPLATES[3].id, 7);
+      expect(tx.certificateTemplate.updateMany).toHaveBeenCalledWith({
+        where: { isSystem: true, isDefault: true },
+        data: { isDefault: false },
+      });
+      expect(tx.certificateTemplate.update).toHaveBeenCalledWith({
+        where: { id: BUILTIN_TEMPLATES[3].id },
+        data: { isDefault: true },
+      });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'CERTIFICATE_TEMPLATE_SET_IN_USE', userId: 7 }),
+      );
+      expect(list.filter(t => t.inUse).map(t => t.id)).toEqual([BUILTIN_TEMPLATES[3].id]);
+    });
+
+    it('modelo desconhecido → 404 e nada é alterado', async () => {
+      prisma.certificateTemplate.findFirst.mockResolvedValue(null);
+      await expect(svc.setInUse('legado-1', 7)).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
   describe('resolveForIssuance', () => {
-    it('sem id usa o corporativo clássico e devolve a versão actual', async () => {
+    it('sem id e sem modelo marcado usa o corporativo clássico e devolve a versão actual', async () => {
+      prisma.certificateTemplate.findFirst
+        .mockResolvedValueOnce(null) // nenhum modelo em uso marcado
+        .mockResolvedValueOnce(row(0));
       const r = await svc.resolveForIssuance(undefined);
-      expect(prisma.certificateTemplate.findFirst.mock.calls[0][0].where).toMatchObject({
+      expect(prisma.certificateTemplate.findFirst.mock.calls[1][0].where).toMatchObject({
         id: 'tpl-1-corporativo-classico',
         isSystem: true,
       });
       expect(r).toMatchObject({ id: 'tpl-1-corporativo-classico', version: 1 });
       expect(r.config.layoutKey).toBe('corporativo-classico');
+    });
+
+    it('sem id usa o modelo em uso na plataforma', async () => {
+      prisma.certificateTemplate.findFirst
+        .mockResolvedValueOnce({ id: BUILTIN_TEMPLATES[2].id })
+        .mockResolvedValueOnce(row(2));
+      const r = await svc.resolveForIssuance(undefined);
+      expect(prisma.certificateTemplate.findFirst.mock.calls[1][0].where).toMatchObject({
+        id: BUILTIN_TEMPLATES[2].id,
+        isSystem: true,
+      });
+      expect(r.id).toBe(BUILTIN_TEMPLATES[2].id);
     });
 
     it('id desconhecido ou legado → 404', async () => {

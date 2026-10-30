@@ -217,6 +217,15 @@ export class CertificatesController {
     return this.templateService.saveVersion(id, body, user.id);
   }
 
+  @Post('templates/:id/in-use')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary: 'Definir o modelo em uso na plataforma (pode trocar-se a qualquer momento)',
+  })
+  setTemplateInUse(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.templateService.setInUse(id, user.id);
+  }
+
   @Post('templates/:id/versions/:version/restore')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({
