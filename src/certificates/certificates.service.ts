@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Optional } from '@nestjs/common';
 import { CertificateAssetsService } from './templates/certificate-assets.service';
+import { CertificateTemplatesService } from './templates/certificate-templates.service';
 import { normalizeVerificationCode } from './certificate-code';
 import { buildVerifyUrl, CertificateSnapshot, renderCertificatePdf } from './certificate-renderer';
 import { buildLinkedInUrl } from './certificate-share';
@@ -48,6 +49,7 @@ export class CertificatesService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly assets?: CertificateAssetsService,
+    @Optional() private readonly templates?: CertificateTemplatesService,
   ) {}
 
   async listMine(userId: number) {
@@ -185,8 +187,11 @@ export class CertificatesService {
       return external;
     }
 
-    const snapshot = this.snapshotOf(cert);
-    // Imagens do template EMBUTIDO no snapshot (a versão com que foi emitido), não do actual.
+    // Os dados impressos vêm do snapshot; o desenho segue o modelo actual (o da regra
+    // ou o em uso na plataforma). Sem modelo actual disponível, usa o do snapshot.
+    const stored = this.snapshotOf(cert);
+    const current = await this.currentTemplate(cert);
+    const snapshot: CertificateSnapshot = current ? { ...stored, template: current } : stored;
     const images = (await this.assets?.loadForRender(snapshot.template?.config.assets ?? {})) ?? {};
     const buffer = await renderCertificatePdf(
       snapshot,
@@ -198,6 +203,37 @@ export class CertificatesService {
       data: { downloadCount: { increment: 1 } },
     });
     return buffer;
+  }
+
+  /** Modelo a aplicar hoje: o da regra da actividade; sem ele, o em uso na plataforma. */
+  private async currentTemplate(cert: {
+    activityKind: string | null;
+    activityId: number | null;
+  }): Promise<CertificateSnapshot['template'] | null> {
+    if (!this.templates) return null;
+    try {
+      const rule =
+        cert.activityKind && typeof cert.activityId === 'number'
+          ? await this.prisma.certificateRule.findUnique({
+              where: {
+                activityKind_activityId: {
+                  activityKind: cert.activityKind as never,
+                  activityId: cert.activityId,
+                },
+              },
+              select: { templateId: true },
+            })
+          : null;
+      try {
+        return await this.templates.resolveForIssuance(rule?.templateId ?? undefined);
+      } catch (e) {
+        if (!rule?.templateId) throw e;
+        // Modelo da regra indisponível: cai para o modelo em uso.
+        return await this.templates.resolveForIssuance(undefined);
+      }
+    } catch {
+      return null;
+    }
   }
 
   private loadForPdf(id: number) {

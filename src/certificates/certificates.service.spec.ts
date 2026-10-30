@@ -42,6 +42,7 @@ describe('CertificatesService', () => {
       findMany: jest.fn(),
       update: jest.fn(),
     },
+    certificateRule: { findUnique: jest.fn() },
   };
   const assets = { loadForRender: jest.fn() };
   const svc = new CertificatesService(prisma as never, assets as never);
@@ -244,7 +245,7 @@ describe('CertificatesService', () => {
     });
   });
 
-  describe('PDF com o template do snapshot', () => {
+  describe('PDF com o template do snapshot (sem serviço de modelos)', () => {
     const owner = { id: 1, role: { name: 'COLABORADOR' } };
 
     it('carrega as imagens referidas pelo snapshot (nunca pelo template actual)', async () => {
@@ -269,6 +270,77 @@ describe('CertificatesService', () => {
       expect(assets.loadForRender).toHaveBeenCalledWith({
         logoId: 'logo-id-0001',
         signatureId: 'sign-id-0001',
+      });
+    });
+
+    describe('modelo actual', () => {
+      const templates = { resolveForIssuance: jest.fn() };
+      const withTemplates = new CertificatesService(
+        prisma as never,
+        assets as never,
+        templates as never,
+      );
+      const current = {
+        id: BUILTIN_TEMPLATES[2].id,
+        version: 4,
+        config: {
+          ...BUILTIN_TEMPLATES[2].config,
+          assets: { logoId: 'logo-novo-0001' },
+        },
+      };
+      const oldSnapshot = () =>
+        row({
+          activityId: 9,
+          snapshot: JSON.stringify({
+            code: 'ABCD1234EFGH5678',
+            recipientName: 'Ana',
+            title: 'Segurança',
+            issuedAt: '2026-10-01T00:00:00.000Z',
+            issuerName: 'INNOVA',
+            template: {
+              id: BUILTIN_TEMPLATES[0].id,
+              version: 1,
+              config: { ...BUILTIN_TEMPLATES[0].config, assets: { logoId: 'logo-antigo-01' } },
+            },
+          }),
+        });
+
+      it('sem modelo na regra usa o modelo em uso, não o do snapshot', async () => {
+        prisma.certificate.findUnique.mockResolvedValue(oldSnapshot());
+        prisma.certificateRule.findUnique.mockResolvedValue({ templateId: null });
+        templates.resolveForIssuance.mockResolvedValue(current);
+        const buf = await withTemplates.getPdfFor(5, owner);
+        expect(buf.subarray(0, 5).toString()).toBe('%PDF-');
+        expect(templates.resolveForIssuance).toHaveBeenCalledWith(undefined);
+        expect(assets.loadForRender).toHaveBeenCalledWith({ logoId: 'logo-novo-0001' });
+      });
+
+      it('a regra com modelo próprio mantém esse modelo', async () => {
+        prisma.certificate.findUnique.mockResolvedValue(oldSnapshot());
+        prisma.certificateRule.findUnique.mockResolvedValue({ templateId: 'tpl-regra' });
+        templates.resolveForIssuance.mockResolvedValue(current);
+        await withTemplates.getPdfFor(5, owner);
+        expect(templates.resolveForIssuance).toHaveBeenCalledWith('tpl-regra');
+      });
+
+      it('modelo da regra indisponível cai para o modelo em uso', async () => {
+        prisma.certificate.findUnique.mockResolvedValue(oldSnapshot());
+        prisma.certificateRule.findUnique.mockResolvedValue({ templateId: 'apagado' });
+        templates.resolveForIssuance
+          .mockRejectedValueOnce(new NotFoundException())
+          .mockResolvedValueOnce(current);
+        await withTemplates.getPdfFor(5, owner);
+        expect(templates.resolveForIssuance).toHaveBeenLastCalledWith(undefined);
+        expect(assets.loadForRender).toHaveBeenCalledWith({ logoId: 'logo-novo-0001' });
+      });
+
+      it('se o modelo actual falhar, gera com o do snapshot', async () => {
+        prisma.certificate.findUnique.mockResolvedValue(oldSnapshot());
+        prisma.certificateRule.findUnique.mockResolvedValue(null);
+        templates.resolveForIssuance.mockRejectedValue(new Error('indisponível'));
+        const buf = await withTemplates.getPdfFor(5, owner);
+        expect(buf.subarray(0, 5).toString()).toBe('%PDF-');
+        expect(assets.loadForRender).toHaveBeenCalledWith({ logoId: 'logo-antigo-01' });
       });
     });
 

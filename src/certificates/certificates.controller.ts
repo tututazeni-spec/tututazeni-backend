@@ -207,7 +207,8 @@ export class CertificatesController {
   @Put('templates/:id')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({
-    summary: 'Guardar uma nova versão do modelo (os certificados já emitidos não mudam)',
+    summary:
+      'Guardar uma nova versão do modelo (ao descarregar, os certificados usam a versão actual)',
   })
   saveTemplate(
     @Param('id') id: string,

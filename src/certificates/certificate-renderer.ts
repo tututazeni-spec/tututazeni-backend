@@ -33,9 +33,9 @@ export function buildVerifyUrl(code: string): string {
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('pt-PT');
 
 /**
- * Configuração e valores das variáveis a partir do snapshot. O template vem SEMPRE do
- * snapshot (nunca do template actual), por isso editar um modelo não altera os
- * certificados já emitidos.
+ * Configuração e valores das variáveis a partir do snapshot. O template é o que o
+ * snapshot trouxer; ao descarregar, CertificatesService substitui-o pelo modelo actual
+ * (o da regra ou o em uso na plataforma), mantendo os dados impressos do snapshot.
  */
 export function snapshotToTemplateInput(snapshot: CertificateSnapshot): {
   config: TemplateConfig;
