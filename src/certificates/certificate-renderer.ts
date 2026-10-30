@@ -25,17 +25,24 @@ export interface CertificateSnapshot {
   template?: SnapshotTemplate;
 }
 
+/**
+ * Endereço do QR/link de verificação. A página /verify/:code é do frontend, por isso
+ * usa o endereço público do frontend (FRONTEND_URL, primeiro valor se houver vários);
+ * sem ele, APP_URL; em desenvolvimento, localhost:3000. Em produção ambos são o
+ * domínio real, pelo que o QR aponta sempre para o sítio certo.
+ */
 export function buildVerifyUrl(code: string): string {
-  const base = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
+  const frontend = process.env.FRONTEND_URL?.split(',')[0]?.trim();
+  const base = (frontend || process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
   return `${base}/verify/${code}`;
 }
 
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('pt-PT');
 
 /**
- * Configuração e valores das variáveis a partir do snapshot. O template vem SEMPRE do
- * snapshot (nunca do template actual), por isso editar um modelo não altera os
- * certificados já emitidos.
+ * Configuração e valores das variáveis a partir do snapshot. O template é o que o
+ * snapshot trouxer; ao descarregar, CertificatesService substitui-o pelo modelo actual
+ * (o da regra ou o em uso na plataforma), mantendo os dados impressos do snapshot.
  */
 export function snapshotToTemplateInput(snapshot: CertificateSnapshot): {
   config: TemplateConfig;

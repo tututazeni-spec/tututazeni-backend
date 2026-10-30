@@ -18,7 +18,7 @@ Legenda — **Obrigatória**: a app não arranca sem ela. **Aviso**: arranca, ma
 | `JWT_REFRESH_SECRET` | Obrigatória (≥ 32 car.) | idem | **Tem de ser diferente** de `JWT_SECRET` (aviso se igual) |
 | `ALLOWED_FILE_HOST` | Obrigatória | `storage.innova.ao,cdn.innova.ao` | Domínios autorizados para `fileUrl` |
 | `ALLOWED_ORIGINS` | Obrigatória | `https://app.exemplo.ao` | Lista CORS separada por vírgulas; em produção só `https://` e nunca `localhost` |
-| `APP_URL` | Obrigatória | `https://innova.exemplo.ao` | Base dos links de certificados, QR, reset de senha. Em produção tem de começar por `https://` |
+| `APP_URL` | Obrigatória | `https://innova.exemplo.ao` | Base dos links de reset de senha e de documentos; também do QR dos certificados quando `FRONTEND_URL` não está definido. Em produção tem de começar por `https://` |
 | `METRICS_TOKEN` | Obrigatória | `openssl rand -hex 32` | Protege `/metrics`; o `deploy.sh` reutiliza-o para o scrape do Prometheus |
 
 ## 2. Só em produção (`NODE_ENV=production`)
@@ -42,7 +42,7 @@ Legenda — **Obrigatória**: a app não arranca sem ela. **Aviso**: arranca, ma
 | `SESSION_IDLE_TIMEOUT_MS` | `1800000` (30 min) | Sessão inactiva é terminada no próximo refresh |
 | `AUTH_ALLOW_BEARER` | `false` em produção | `true` só para clientes legados/Swagger |
 | `JWT_USER_CACHE_TTL_MS` | `30000` | Cache do utilizador no guard JWT |
-| `FRONTEND_URL` | — | Links em e-mails; igual ao domínio público do frontend |
+| `FRONTEND_URL` | — | Links em e-mails e QR/link de verificação dos certificados (`/verify/:código` é uma página do frontend); igual ao domínio público do frontend |
 
 ## 4. Base de dados avançada
 
