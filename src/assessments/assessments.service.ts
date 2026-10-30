@@ -756,6 +756,8 @@ export class AssessmentsService {
         q.type === 'TRUE_FALSE';
       // ORDERING: selectedIndices e correctAnswer são a ordem das opções.
       const isOrdering = q.type === 'ORDERING';
+      // Resposta aberta/ficheiro: correcção manual (nota 0-100 + comentário).
+      const isOpen = q.type === 'OPEN_TEXT' || q.type === 'FILE_UPLOAD';
       const correctOrder = isOrdering ? (parse<number[]>(q.correctAnswer) ?? []) : [];
       const sequence = (idx: number[]) =>
         idx.map(i => opts[i]?.text).filter(Boolean).join(' → ') || null;
@@ -773,7 +775,13 @@ export class AssessmentsService {
           ? opts.filter(o => o.isCorrect).map(o => o.text).join(', ') || null
           : isOrdering
             ? sequence(correctOrder)
-            : null,
+            : isOpen
+              ? (q.correctAnswer ?? null)
+              : null,
+        open: isOpen,
+        // Só há nota atribuída depois de a resposta ser revista.
+        manualScore: isOpen && a.reviewedAt ? a.manualScore : null,
+        fileUrl: q.type === 'FILE_UPLOAD' ? (a.fileUrl ?? null) : null,
         explanation: q.explanation ?? null,
         reviewComment: a.reviewComment ?? null,
       };

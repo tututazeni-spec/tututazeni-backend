@@ -437,6 +437,61 @@ describe('AssessmentsService (additional)', () => {
       expect(r.items[0]).toMatchObject({ yourAnswer: 'B → A → C', correctAnswer: 'A → B → C' });
     });
 
+    it('resposta aberta mostra o texto, a nota atribuída e o comentário', async () => {
+      mockPrisma.assessmentAttempt.findFirst.mockResolvedValue(
+        attempt({
+          answers: [
+            {
+              isCorrect: true,
+              earnedPoints: 0,
+              selectedIndices: null,
+              textAnswer: 'A minha resposta',
+              reviewComment: 'Bom trabalho',
+              manualScore: 80,
+              reviewedAt: new Date(),
+              question: {
+                id: 3,
+                type: 'OPEN_TEXT',
+                questionText: 'Explica',
+                explanation: null,
+                correctAnswer: 'Resposta modelo',
+                options: null,
+              },
+            },
+          ],
+        }),
+      );
+      const r = await service.getMyAttemptReview(9, 2);
+      expect(r.items[0]).toMatchObject({
+        open: true,
+        yourAnswer: 'A minha resposta',
+        correctAnswer: 'Resposta modelo',
+        manualScore: 80,
+        reviewComment: 'Bom trabalho',
+      });
+    });
+
+    it('resposta aberta ainda por rever não tem nota', async () => {
+      mockPrisma.assessmentAttempt.findFirst.mockResolvedValue(
+        attempt({
+          answers: [
+            {
+              isCorrect: null,
+              earnedPoints: 0,
+              selectedIndices: null,
+              textAnswer: 'x',
+              reviewComment: null,
+              manualScore: null,
+              reviewedAt: null,
+              question: { id: 3, type: 'OPEN_TEXT', questionText: 'q', options: null },
+            },
+          ],
+        }),
+      );
+      const r = await service.getMyAttemptReview(9, 2);
+      expect(r.items[0]).toMatchObject({ open: true, manualScore: null, isCorrect: null });
+    });
+
     it('RESULT_ONLY não revela correcção', async () => {
       mockPrisma.assessmentAttempt.findFirst.mockResolvedValue(
         attempt({ assessment: { allowReview: true, feedbackMode: 'RESULT_ONLY' } }),
