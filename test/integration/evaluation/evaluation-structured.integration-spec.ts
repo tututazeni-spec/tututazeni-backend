@@ -588,6 +588,34 @@ describe('Evaluation structured (pontos fortes / melhorias / recomendações)', 
     await overview({ recommendationStatus: 'XPTO' }).expect(400);
   });
 
+  it('relatórios: a chefia só vê a sua equipa direta e não exporta', async () => {
+    const own = await overview({}, managerToken).expect(200);
+    expect(own.body.totalEvaluations).toBe(3);
+    expect(own.body.privacy.minGroupSize).toBe(3);
+
+    // O filtro de gestor vindo do cliente é ignorado: não dá para ver outra equipa.
+    const spoof = await overview({ managerId: 99999999 }, managerToken).expect(200);
+    expect(spoof.body.totalEvaluations).toBe(3);
+
+    // Sem subordinados diretos com avaliações, o relatório vem vazio.
+    await prisma.user.update({ where: { id: employeeId }, data: { managerId: null } });
+    try {
+      const empty = await overview({}, managerToken).expect(200);
+      expect(empty.body.totalEvaluations).toBe(0);
+      expect(empty.body.completionRate).toBe(0);
+    } finally {
+      await prisma.user.update({ where: { id: employeeId }, data: { managerId } });
+    }
+
+    // Exportações e o filtro de gestor continuam a ser de ADMIN/RH.
+    await request(app.getHttpServer())
+      .get('/evaluations/reports/export.csv')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(403);
+    const asRh = await overview({ managerId: 99999999 }, rhToken).expect(200);
+    expect(asRh.body.totalEvaluations).toBe(0);
+  });
+
   it('formulário com pesos explícitos que não somam 100% → 400', async () => {
     await request(app.getHttpServer())
       .post('/evaluations/forms')

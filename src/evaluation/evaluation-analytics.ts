@@ -359,6 +359,12 @@ export class EvaluationAnalyticsService {
     if (period) where.period = { contains: period };
     if (Object.keys(evaluatedFilter).length) where.evaluated = evaluatedFilter;
 
+    const requestScope: Prisma.EvaluationRequestWhereInput = {
+      ...(cycleId ? { cycleId } : {}),
+      ...(type ? { type } : {}),
+      ...(Object.keys(evaluatedFilter).length ? { evaluated: evaluatedFilter } : {}),
+    };
+
     type ReportEval = Prisma.PerformanceEvaluationGetPayload<{
       include: {
         evaluated: {
@@ -391,21 +397,15 @@ export class EvaluationAnalyticsService {
             },
           },
         }) as Promise<ReportEval[]>,
-        this.prisma.evaluationRequest
-          .count({ where: { ...(cycleId ? { cycleId } : {}), ...(type ? { type } : {}) } })
-          .catch(() => 0),
+        this.prisma.evaluationRequest.count({ where: { ...requestScope } }).catch(() => 0),
         this.prisma.evaluationRequest
           .count({
-            where: {
-              ...(cycleId ? { cycleId } : {}),
-              ...(type ? { type } : {}),
-              status: 'COMPLETED',
-            },
+            where: { ...requestScope, status: 'COMPLETED' },
           })
           .catch(() => 0),
         this.prisma.read.evaluationRequest
           .findMany({
-            where: { ...(cycleId ? { cycleId } : {}), ...(type ? { type } : {}) },
+            where: { ...requestScope },
             select: { objectives: true },
           })
           .catch(() => [] as { objectives: Prisma.JsonValue }[]),

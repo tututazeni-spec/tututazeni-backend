@@ -600,13 +600,20 @@ export class EvaluationController {
   // ─── Relatórios (docs/modulo_evaluation.md ponto 11) ──────────
 
   @Get('reports/overview')
-  @Roles(...ADMIN_ROLES)
+  @Roles(...MGMT_ROLES)
   @ApiOperation({
     summary:
       'Relatórios de avaliação para RH — por departamento/unidade/cargo/gestor, gaps de competências, objetivos, evolução',
   })
-  reportsOverview(@Query() filters: EvaluationReportFilterDto) {
-    return this.svc.getReportsOverview(filters);
+  reportsOverview(
+    @Query() filters: EvaluationReportFilterDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    // ADMIN/RH veem toda a organização; chefias (LIDER/GESTOR) só a sua equipa
+    // directa — o filtro de gestor é forçado aqui, nunca vem do cliente.
+    // As exportações continuam reservadas a ADMIN/RH.
+    const scoped = isPrivileged(user, ADMIN_ROLES) ? filters : { ...filters, managerId: user.id };
+    return this.svc.getReportsOverview(scoped);
   }
 
   @Get('reports/export.csv')
