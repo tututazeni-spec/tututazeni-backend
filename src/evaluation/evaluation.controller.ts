@@ -12,10 +12,12 @@ import {
   UseGuards,
   Header,
   StreamableFile,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { EvaluationService } from './evaluation.service';
 import { PdfService } from '../pdf/pdf.service';
+import { isEvalType, type SubmittedType } from './evaluation-insights';
 import { buildCsvString } from '../common/utils/csv-export.util';
 import { buildXlsxBuffer } from '../common/utils/xlsx-export.util';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -366,6 +368,32 @@ export class EvaluationController {
   })
   getItems(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.getStructuredItems(id, user);
+  }
+
+  @Post('performance/:id/pdi')
+  @Roles(...ALL_ROLES)
+  @ApiOperation({
+    summary:
+      'Gerar (ou completar) o PDI do avaliado a partir das recomendações da avaliação submetida',
+  })
+  generatePdi(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.generatePdiFromEvaluation(id, user);
+  }
+
+  @Get('performance/history/:userId')
+  @Roles(...ALL_ROLES)
+  @ApiOperation({
+    summary: 'Histórico de avaliações submetidas de um colaborador e comparação com a anterior',
+  })
+  performanceHistory(
+    @Param('userId', ParseIntPipe) userId: number,
+    @Query('type') type: string | undefined,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    if (type !== undefined && !isEvalType(type)) {
+      throw new BadRequestException('Tipo de avaliação inválido');
+    }
+    return this.svc.getPerformanceHistory(userId, user, type as SubmittedType | undefined);
   }
 
   @Patch('recommendations/:id')

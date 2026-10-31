@@ -2118,6 +2118,7 @@ model DevelopmentPlan {
   competencyGaps PdiCompetencyGap[]
 
   leadershipParticipantPlans LeadershipParticipantPlan[]
+  performanceEvaluations     PerformanceEvaluation[]     @relation("EvaluationPdiPlan")
 
   @@index([userId])
   @@index([status])
@@ -2197,7 +2198,8 @@ model DevelopmentPlanAction {
   plan          DevelopmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
   evidence      PdiEvidence[]
 
-  leadershipPlanActions LeadershipParticipantPlanAction[]
+  leadershipPlanActions    LeadershipParticipantPlanAction[]
+  evaluationRecommendation EvaluationRecommendation?         @relation("EvalRecommendationPdiAction")
 
   @@index([planId])
   @@index([status])
@@ -3916,6 +3918,9 @@ model PerformanceEvaluation {
   strengthItems       EvaluationStrength[]
   improvementItems    EvaluationImprovementArea[]
   recommendationItems EvaluationRecommendation[]
+  /// PDI gerado a partir desta avaliação (DevelopmentPlansService é o dono único do PDI).
+  pdiPlanId           Int?
+  pdiPlan             DevelopmentPlan?            @relation("EvaluationPdiPlan", fields: [pdiPlanId], references: [id], onDelete: SetNull)
 
   @@index([evaluatedId])
   @@index([evaluatorId])
@@ -3992,11 +3997,18 @@ model EvaluationRecommendation {
   evaluation      PerformanceEvaluation      @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
   improvementArea EvaluationImprovementArea? @relation(fields: [improvementAreaId], references: [id], onDelete: SetNull)
   responsible     User?                      @relation("EvalRecommendationResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
+  /// Formação real (módulo trainings) recomendada — o estado vem sempre dela, nunca é copiado.
+  trainingId      Int?
+  /// Ação do PDI gerada desta recomendação; depois de ligada, o estado vive no PDI.
+  pdiActionId     Int?                       @unique
+  training        Training?                  @relation("EvalRecommendationTraining", fields: [trainingId], references: [id], onDelete: SetNull)
+  pdiAction       DevelopmentPlanAction?     @relation("EvalRecommendationPdiAction", fields: [pdiActionId], references: [id], onDelete: SetNull)
 
   @@index([evaluationId])
   @@index([improvementAreaId])
   @@index([responsibleId])
   @@index([status])
+  @@index([trainingId])
 }
 
 enum EvaluationRequestStatus {
@@ -5608,21 +5620,22 @@ model Training {
   createdAt              DateTime               @default(now())
   updatedAt              DateTime               @updatedAt
 
-  instructor         User?                      @relation("TrainingInstructor", fields: [instructorId], references: [id])
-  externalInstructor TrainingInstructorProfile? @relation("TrainingExternalInstructor", fields: [externalInstructorId], references: [id])
-  responsible        User?                      @relation("TrainingResponsible", fields: [responsibleId], references: [id])
-  createdBy          User?                      @relation("TrainingCreatedBy", fields: [createdById], references: [id])
-  trainingPlan       TrainingPlan?              @relation(fields: [trainingPlanId], references: [id])
-  sessions           TrainingSession[]
-  participants       TrainingParticipant[]
-  ratings            TrainingRating[]
-  competencies       TrainingCompetency[]
-  coInstructors      TrainingCoInstructor[]
-  documents          TrainingDocument[]
-  assessmentLinks    TrainingAssessment[]
-  resourceBookings   TrainingResourceBooking[]
-  aiTutorSessions    AiTutorSession[]
-  learningPathLinks  LearningPathTraining[]
+  instructor                User?                      @relation("TrainingInstructor", fields: [instructorId], references: [id])
+  externalInstructor        TrainingInstructorProfile? @relation("TrainingExternalInstructor", fields: [externalInstructorId], references: [id])
+  responsible               User?                      @relation("TrainingResponsible", fields: [responsibleId], references: [id])
+  createdBy                 User?                      @relation("TrainingCreatedBy", fields: [createdById], references: [id])
+  trainingPlan              TrainingPlan?              @relation(fields: [trainingPlanId], references: [id])
+  sessions                  TrainingSession[]
+  participants              TrainingParticipant[]
+  ratings                   TrainingRating[]
+  competencies              TrainingCompetency[]
+  coInstructors             TrainingCoInstructor[]
+  documents                 TrainingDocument[]
+  assessmentLinks           TrainingAssessment[]
+  resourceBookings          TrainingResourceBooking[]
+  aiTutorSessions           AiTutorSession[]
+  learningPathLinks         LearningPathTraining[]
+  evaluationRecommendations EvaluationRecommendation[] @relation("EvalRecommendationTraining")
 
   @@index([status])
   @@index([type])

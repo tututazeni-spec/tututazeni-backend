@@ -9,6 +9,7 @@ import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { EvaluationAnalyticsFilterDto, EvaluationReportFilterDto } from './evaluation.dto';
 import { percentile } from './evaluation-scoring';
+import { EvaluationInsightsService } from './evaluation-insights';
 import type { PrismaService } from '../prisma/prisma.service';
 
 export interface EvaluationAnalyticsServiceDeps {
@@ -338,7 +339,8 @@ export class EvaluationAnalyticsService {
     if (positionId) evaluatedFilter.positionId = positionId;
     if (managerId) evaluatedFilter.managerId = managerId;
 
-    const where: Prisma.PerformanceEvaluationWhereInput = {};
+    // Rascunhos não entram em relatórios: ainda não são avaliações concluídas.
+    const where: Prisma.PerformanceEvaluationWhereInput = { isDraft: false };
     if (cycleId) where.cycleId = cycleId;
     if (period) where.period = { contains: period };
     if (Object.keys(evaluatedFilter).length) where.evaluated = evaluatedFilter;
@@ -358,33 +360,36 @@ export class EvaluationAnalyticsService {
       };
     }>;
 
-    const [evals, totalRequests, completedRequests, objectiveRows] = await Promise.all([
-      this.prisma.read.performanceEvaluation.findMany({
-        where,
-        include: {
-          evaluated: {
-            select: {
-              id: true,
-              fullName: true,
-              department: { select: { id: true, name: true } },
-              position: { select: { id: true, name: true } },
-              unit: { select: { id: true, name: true } },
-              manager: { select: { id: true, fullName: true } },
+    const [evals, totalRequests, completedRequests, objectiveRows, performance] = await Promise.all(
+      [
+        this.prisma.read.performanceEvaluation.findMany({
+          where,
+          include: {
+            evaluated: {
+              select: {
+                id: true,
+                fullName: true,
+                department: { select: { id: true, name: true } },
+                position: { select: { id: true, name: true } },
+                unit: { select: { id: true, name: true } },
+                manager: { select: { id: true, fullName: true } },
+              },
             },
           },
-        },
-      }) as Promise<ReportEval[]>,
-      this.prisma.evaluationRequest.count({ where: cycleId ? { cycleId } : {} }).catch(() => 0),
-      this.prisma.evaluationRequest
-        .count({ where: { ...(cycleId ? { cycleId } : {}), status: 'COMPLETED' } })
-        .catch(() => 0),
-      this.prisma.read.evaluationRequest
-        .findMany({
-          where: { ...(cycleId ? { cycleId } : {}) },
-          select: { objectives: true },
-        })
-        .catch(() => [] as { objectives: Prisma.JsonValue }[]),
-    ]);
+        }) as Promise<ReportEval[]>,
+        this.prisma.evaluationRequest.count({ where: cycleId ? { cycleId } : {} }).catch(() => 0),
+        this.prisma.evaluationRequest
+          .count({ where: { ...(cycleId ? { cycleId } : {}), status: 'COMPLETED' } })
+          .catch(() => 0),
+        this.prisma.read.evaluationRequest
+          .findMany({
+            where: { ...(cycleId ? { cycleId } : {}) },
+            select: { objectives: true },
+          })
+          .catch(() => [] as { objectives: Prisma.JsonValue }[]),
+        new EvaluationInsightsService(this.prisma).getPerformanceIndicators(where),
+      ],
+    );
 
     const groupBy = (keyFn: (e: ReportEval) => { id: number; name: string } | null | undefined) => {
       const map = new Map<number, { name: string; scores: number[] }>();
@@ -502,6 +507,7 @@ export class EvaluationAnalyticsService {
       evolution,
       competencyGaps,
       objectivesAchieved,
+      performance,
     };
   }
 }

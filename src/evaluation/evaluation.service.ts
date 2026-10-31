@@ -5,6 +5,7 @@ import {
   BadRequestException,
   ConflictException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { Prisma, EvalCampaignModel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -55,6 +56,8 @@ import {
   type RatedQuestion,
 } from './evaluation-scoring';
 import { EvaluationStructuredService, validateStructuredItems } from './evaluation-structured';
+import { EvaluationInsightsService, type SubmittedType } from './evaluation-insights';
+import { DevelopmentPlansService } from '../development-plans/development-plans.service';
 import { EvaluationCalibrationService } from './evaluation-calibration';
 import { EvaluationAnalyticsService } from './evaluation-analytics';
 
@@ -92,17 +95,20 @@ export class EvaluationService {
   private readonly calibration: EvaluationCalibrationService;
   private readonly analytics: EvaluationAnalyticsService;
   private readonly structured: EvaluationStructuredService;
+  private readonly insights: EvaluationInsightsService;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly oneOnOne: OneOnOneService,
+    @Optional() plans?: DevelopmentPlansService,
   ) {
     this.calibration = new EvaluationCalibrationService(prisma, this.logger, {
       toPublicCampaign: c => this.toPublicCampaign(c),
       assertCampaignExists: id => this.assertCampaignExists(id),
       advanceStage: id => this.advanceStage(id),
     });
-    this.structured = new EvaluationStructuredService(prisma, this.logger);
+    this.structured = new EvaluationStructuredService(prisma, this.logger, plans);
+    this.insights = new EvaluationInsightsService(prisma);
     this.analytics = new EvaluationAnalyticsService(prisma, this.logger, {
       getPendingEvaluations: id => this.getPendingEvaluations(id),
       getMyProgress: id => this.getMyProgress(id),
@@ -1185,6 +1191,7 @@ export class EvaluationService {
 
     validateStructuredItems(dto, { requireEvidence: request.cycle?.requireEvidence ?? false });
     await this.structured.assertResponsiblesExist(dto.recommendationItems);
+    await this.structured.assertTrainingsExist(dto.recommendationItems);
 
     const numericAnswers = dto.answers.filter(a => !a.notApplicable && a.score !== undefined);
     const avgScore = numericAnswers.length
@@ -1415,6 +1422,14 @@ export class EvaluationService {
 
   getRatingScale() {
     return { levels: RATING_SCALE, bands: DEFAULT_RATING_BANDS };
+  }
+
+  generatePdiFromEvaluation(evaluationId: number, user: CurrentUserData) {
+    return this.structured.generatePdi(evaluationId, user);
+  }
+
+  getPerformanceHistory(userId: number, user: CurrentUserData, type?: SubmittedType) {
+    return this.insights.getHistory(userId, user, type);
   }
 
   getStructuredItems(evaluationId: number, user: CurrentUserData) {

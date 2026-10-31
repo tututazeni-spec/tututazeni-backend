@@ -245,6 +245,8 @@ export class RecommendationItemDto {
   @IsIn(RECOMMENDATION_ACTION_TYPES)
   actionType!: (typeof RECOMMENDATION_ACTION_TYPES)[number];
   @ApiPropertyOptional() @IsOptional() @IsInt() responsibleId?: number;
+  /** Formação real (módulo de Formações). Não cria inscrição. */
+  @ApiPropertyOptional() @IsOptional() @IsInt() trainingId?: number;
   @ApiPropertyOptional() @IsOptional() @IsDateString() dueDate?: string;
   @ApiProperty() @IsString() @MinLength(3) @MaxLength(1000) successIndicator!: string;
   @ApiProperty({ description: '1 = baixa … 5 = crítica' })
