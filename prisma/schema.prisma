@@ -2846,6 +2846,9 @@ model Certificate {
   templateId         String?
   metadata           String?
   deletedAt          DateTime?
+  // O titular "apagou" um certificado revogado da sua lista: continua nos
+  // relatórios, na lista de administração e na auditoria.
+  holderHiddenAt     DateTime?
   legacyType         CertificateTemplateType?
   legacyIssuedCertId String?                  @unique
 

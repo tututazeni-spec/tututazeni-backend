@@ -41,7 +41,7 @@ export class CertificatesMeService {
     const soon = now.getTime() + EXPIRING_SOON_DAYS * DAY_MS;
     const [certs, enrollments, emailEnabled] = await Promise.all([
       this.prisma.certificate.findMany({
-        where: { userId, deletedAt: null },
+        where: { userId, deletedAt: null, holderHiddenAt: null },
         select: {
           id: true,
           title: true,
@@ -93,6 +93,38 @@ export class CertificatesMeService {
         status: e.status,
       })),
     };
+  }
+
+  /**
+   * "Apagar" um certificado revogado da lista do titular. Não elimina nada: marca-o
+   * como oculto para o titular (`holderHiddenAt`); o registo continua nos relatórios,
+   * na lista de administração e na auditoria.
+   */
+  async hideRevoked(id: number, user: { id: number }): Promise<{ hidden: true }> {
+    const cert = await this.prisma.certificate.findFirst({
+      where: { id, userId: user.id, deletedAt: null },
+      select: { id: true, status: true, revoked: true, holderHiddenAt: true },
+    });
+    if (!cert) throw new NotFoundException('Certificado não encontrado');
+    if (!cert.revoked && cert.status !== 'REVOKED') {
+      throw new ConflictException('Só é possível apagar certificados revogados');
+    }
+    if (cert.holderHiddenAt) return { hidden: true };
+
+    await this.prisma.certificate.update({
+      where: { id },
+      data: { holderHiddenAt: new Date() },
+    });
+    await this.audit.log({
+      action: 'CERTIFICATE_HIDDEN_BY_HOLDER',
+      entity: 'Certificate',
+      entityId: id,
+      userId: user.id,
+      before: { status: 'REVOKED', visibleToHolder: true },
+      after: { status: 'REVOKED', visibleToHolder: false },
+      strict: true,
+    });
+    return { hidden: true };
   }
 
   /** O endereço de destino é sempre o do próprio titular, lido da BD (nunca do pedido). */

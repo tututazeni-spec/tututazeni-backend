@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   NotFoundException,
   Param,
@@ -386,6 +387,15 @@ export class CertificatesController {
     await this.team.assertCanApprove(user, id);
     const cert = await this.issuance.approve(id, user.id);
     return { id: cert.id, status: cert.status };
+  }
+
+  @Delete('my/:id')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({
+    summary: 'Apagar da minha lista um certificado revogado (fica nos relatórios e na auditoria)',
+  })
+  hideMine(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.me.hideRevoked(id, user);
   }
 
   @Post(':id/email-me')
