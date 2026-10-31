@@ -1971,6 +1971,23 @@ export class CoursesService {
     await this.prisma.courseCohortParticipant.createMany({
       data: newUserIds.map(userId => ({ cohortId, userId })),
     });
+
+    // Avisa cada colaborador adicionado (melhor esforço — nunca falha a operação).
+    const course = await this.prisma.read.course.findUnique({
+      where: { id: cohort.courseId },
+      select: { title: true },
+    });
+    await Promise.all(
+      newUserIds.map(userId =>
+        createNotificationSafe(this.prisma, this.logger, {
+          userId,
+          type: 'COHORT_PARTICIPANT_ADDED',
+          title: 'Adicionado a uma turma',
+          message: `Foi adicionado à turma "${cohort.name}"${course ? ` do curso "${course.title}"` : ''}.`,
+          metadata: { cohortId, courseId: cohort.courseId },
+        }),
+      ),
+    );
     return { added: newUserIds.length, alreadyIn: alreadyInIds.size };
   }
 
