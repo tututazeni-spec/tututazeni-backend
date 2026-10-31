@@ -33,6 +33,7 @@ const mockPrisma = {
     findUnique: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
   },
   courseCohortParticipant: {
     findMany: jest.fn(),
@@ -97,6 +98,27 @@ describe('CoursesService — Turmas/Categorias/Relatórios', () => {
   });
 
   // ─── Turmas ────────────────────────────────────────────────────────────
+
+  describe('syncCohortStatuses', () => {
+    it('encerra primeiro (OPEN/ACTIVE com endDate passada) e depois activa OPEN com startDate passada', async () => {
+      const now = new Date('2026-11-01T09:00:00Z');
+      mockPrisma.courseCohort.updateMany
+        .mockResolvedValueOnce({ count: 2 })
+        .mockResolvedValueOnce({ count: 3 });
+
+      const result = await service.syncCohortStatuses(now);
+
+      expect(result).toEqual({ activated: 3, closed: 2 });
+      expect(mockPrisma.courseCohort.updateMany).toHaveBeenNthCalledWith(1, {
+        where: { status: { in: ['OPEN', 'ACTIVE'] }, endDate: { lte: now } },
+        data: { status: 'CLOSED' },
+      });
+      expect(mockPrisma.courseCohort.updateMany).toHaveBeenNthCalledWith(2, {
+        where: { status: 'OPEN', startDate: { lte: now } },
+        data: { status: 'ACTIVE' },
+      });
+    });
+  });
 
   describe('listCohorts', () => {
     it('calcula inscritos e vagas disponíveis', async () => {
