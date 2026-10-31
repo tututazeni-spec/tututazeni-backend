@@ -19,6 +19,7 @@ import {
 import type { Response } from 'express';
 import { safeDownloadHeaders } from '../common/files/safe-download';
 import { CohortsExportService } from './cohorts-export.service';
+import { CohortSessionsService } from './cohort-sessions.service';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CoursesService } from './courses.service';
 import {
@@ -46,6 +47,12 @@ import {
   UpdateCourseCohortDto,
   AddCohortParticipantsDto,
   MarkCohortAttendanceDto,
+  CreateCohortSessionDto,
+  UpdateCohortSessionDto,
+  CancelCohortSessionDto,
+  SaveCohortSessionAttendanceDto,
+  ClearCohortSessionAttendanceDto,
+  UpdateCohortAttendancePolicyDto,
   CreateCourseCategoryDto,
   UpdateCourseCategoryDto,
   SetCategoryCoursesDto,
@@ -65,6 +72,7 @@ export class CoursesController {
   constructor(
     private readonly svc: CoursesService,
     private readonly cohortsExport: CohortsExportService,
+    private readonly sessions: CohortSessionsService,
   ) {}
 
   // ── Catálogo & Descoberta ─────────────────────────────────────────────────
@@ -737,6 +745,153 @@ export class CoursesController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.getCohortAttendance(cohortId, date, user);
+  }
+
+  // ── Sessões e presenças da turma (docs/innova-gestao-presencas-claude-code.md) ──
+
+  @Get('cohorts/:cohortId/sessions')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Sessões da turma' })
+  listCohortSessions(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.sessions.listSessions(cohortId, user);
+  }
+
+  @Post('cohorts/:cohortId/sessions')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Criar sessão da turma' })
+  createCohortSession(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @Body() dto: CreateCohortSessionDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.sessions.createSession(cohortId, dto, user);
+  }
+
+  @Patch('cohorts/:cohortId/sessions/:sessionId')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Editar sessão da turma' })
+  updateCohortSession(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+    @Body() dto: UpdateCohortSessionDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.sessions.updateSession(cohortId, sessionId, dto, user);
+  }
+
+  @Post('cohorts/:cohortId/sessions/:sessionId/cancel')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Cancelar sessão (preserva as presenças já registadas)' })
+  cancelCohortSession(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+    @Body() dto: CancelCohortSessionDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.sessions.cancelSession(cohortId, sessionId, dto, user);
+  }
+
+  @Get('cohorts/:cohortId/sessions/:sessionId/attendance')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Participantes inscritos e presenças de uma sessão' })
+  getCohortSessionAttendance(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.sessions.getSessionAttendance(cohortId, sessionId, user);
+  }
+
+  @Put('cohorts/:cohortId/sessions/:sessionId/attendance')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Guardar presenças de uma sessão' })
+  saveCohortSessionAttendance(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+    @Body() dto: SaveCohortSessionAttendanceDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.sessions.saveSessionAttendance(cohortId, sessionId, dto, user);
+  }
+
+  @Post('cohorts/:cohortId/sessions/:sessionId/attendance/clear')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Limpar marcações da sessão (fica no histórico)' })
+  clearCohortSessionAttendance(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+    @Body() dto: ClearCohortSessionAttendanceDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.sessions.clearSessionAttendance(cohortId, sessionId, dto, user);
+  }
+
+  @Get('cohorts/:cohortId/sessions/:sessionId/attendance/history')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Histórico de alterações de presença da sessão' })
+  getCohortSessionAttendanceHistory(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.sessions.getSessionAttendanceHistory(cohortId, sessionId, user);
+  }
+
+  @Patch('cohorts/:cohortId/attendance-policy')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Critério de assiduidade da turma (mínimo % e justificadas)' })
+  updateCohortAttendancePolicy(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @Body() dto: UpdateCohortAttendancePolicyDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.sessions.updatePolicy(cohortId, dto, user);
+  }
+
+  @Get('cohorts/:cohortId/attendance-report')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Relatório de assiduidade da turma (geral e individual)' })
+  getCohortAttendanceReport(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.sessions.getReport(cohortId, user);
+  }
+
+  @Get('cohorts/:cohortId/attendance-report/export')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Relatório de assiduidade em Excel, CSV ou PDF' })
+  async exportCohortAttendanceReport(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @CurrentUser() user: CurrentUserData,
+    @Res() res: Response,
+    @Query('format') format?: string,
+  ) {
+    if (format !== 'xlsx' && format !== 'pdf' && format !== 'csv') {
+      throw new BadRequestException('format deve ser xlsx, csv ou pdf');
+    }
+    const file = await this.cohortsExport.exportAttendanceReport(cohortId, format, user);
+    res.set(
+      safeDownloadHeaders({
+        filename: file.filename,
+        mime: file.contentType,
+        extra: { 'Content-Length': String(file.buffer.length) },
+      }),
+    );
+    res.end(file.buffer);
+  }
+
+  @Get('cohorts/:cohortId/attendance-mine')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'A minha assiduidade numa turma em que estou inscrito' })
+  getMyCohortAttendance(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.sessions.getMine(cohortId, user);
   }
 
   // ── Categorias (docs/modulo_courses.md secção 6) — gestão ADMIN/RH ────────

@@ -4,6 +4,7 @@ import { CurrentUserData } from '../common/decorators';
 import { AuditService } from '../common/services/audit.service';
 import { buildXlsxBuffer } from '../common/utils/xlsx-export.util';
 import { CoursesService } from './courses.service';
+import { CohortSessionsService } from './cohort-sessions.service';
 
 export type CohortExportFormat = 'xlsx' | 'pdf';
 export type CohortExportStatus = 'OPEN' | 'ACTIVE' | 'CLOSED';
@@ -54,6 +55,7 @@ export class CohortsExportService {
   constructor(
     private readonly courses: CoursesService,
     private readonly audit: AuditService,
+    private readonly sessions: CohortSessionsService,
   ) {}
 
   async export(
@@ -332,6 +334,209 @@ export class CohortsExportService {
       .fillColor('#555555')
       .text(`Total: ${rows.length} turma(s)`, left, Math.min(y + 8, bottom() + 8));
 
+    doc.end();
+    return done;
+  }
+
+  /** Relatório de assiduidade (geral + individual) em Excel, CSV ou PDF. */
+  async exportAttendanceReport(
+    cohortId: number,
+    format: CohortExportFormat | 'csv',
+    user: CurrentUserData,
+  ): Promise<{ buffer: Buffer; contentType: string; filename: string }> {
+    const report = await this.sessions.getReport(cohortId, user);
+    const now = new Date();
+    const pct = (r: number | null) => (r === null ? 'Ainda sem dados' : `${r}%`);
+    const situation = (m: boolean | null) =>
+      m === null ? 'Ainda sem dados' : m ? 'Cumpre o mínimo' : 'Abaixo do mínimo';
+    const headers = [
+      'Participante',
+      'Identificador',
+      'Curso',
+      'Turma',
+      'Sessões elegíveis',
+      'Presenças',
+      'Atrasos',
+      'Faltas',
+      'Justificadas',
+      'Sem registo',
+      '% presença',
+      'Situação',
+    ];
+    const rows = report.participants.map((p): Record<string, string | number> => ({
+      Participante: p.fullName,
+      Identificador: p.identifier,
+      Curso: report.cohort.courseTitle,
+      Turma: report.cohort.name,
+      'Sessões elegíveis': p.eligibleSessions,
+      Presenças: p.present,
+      Atrasos: p.late,
+      Faltas: p.absent,
+      Justificadas: p.justified,
+      'Sem registo': p.unmarked,
+      '% presença': pct(p.rate),
+      Situação: situation(p.meetsMinimum),
+    }));
+    const criteria =
+      `Mínimo de ${report.criteria.minAttendancePercent}%; Presente e Atrasado contam como presença; ` +
+      report.criteria.note;
+    const period = report.period.from
+      ? `${report.period.from} a ${report.period.to}`
+      : 'sem sessões concluídas';
+
+    let buffer: Buffer;
+    if (format === 'xlsx') {
+      buffer = await buildXlsxBuffer(rows, headers, 'Assiduidade');
+    } else if (format === 'csv') {
+      const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+      const meta = [
+        `Turma;${esc(report.cohort.name)}`,
+        `Curso;${esc(report.cohort.courseTitle)}`,
+        `Período;${esc(period)}`,
+        `Emitido em;${esc(now.toISOString().slice(0, 10))}`,
+        `Critérios;${esc(criteria)}`,
+        '',
+      ];
+      const body = rows.map(r => headers.map(h => esc(r[h])).join(';'));
+      buffer = Buffer.from(
+        `﻿${[...meta, headers.map(esc).join(';'), ...body].join('\r\n')}`,
+        'utf8',
+      );
+    } else {
+      buffer = await this.renderReportPdf(report, headers, rows, period, criteria, now);
+    }
+
+    await this.audit.log({
+      action: 'COHORT_ATTENDANCE_REPORT_EXPORTED',
+      entity: 'CourseCohort',
+      entityId: cohortId,
+      userId: user.id,
+      metadata: { format, participants: rows.length },
+      strict: true,
+    });
+
+    const slug = report.cohort.name
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .toLowerCase();
+    return {
+      buffer,
+      contentType: format === 'csv' ? 'text/csv; charset=utf-8' : CONTENT_TYPE[format],
+      filename: `assiduidade-${slug || cohortId}-${now.toISOString().slice(0, 10)}.${format}`,
+    };
+  }
+
+  private renderReportPdf(
+    report: Awaited<ReturnType<CohortSessionsService['getReport']>>,
+    headers: string[],
+    rows: Array<Record<string, string | number>>,
+    period: string,
+    criteria: string,
+    now: Date,
+  ): Promise<Buffer> {
+    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 40 });
+    const chunks: Buffer[] = [];
+    const done = new Promise<Buffer>((resolve, reject) => {
+      doc.on('data', (c: Buffer) => chunks.push(c));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+    });
+    const left = doc.page.margins.left;
+    const usable = doc.page.width - left - doc.page.margins.right;
+    const cols = [
+      'Participante',
+      'Sessões elegíveis',
+      'Presenças',
+      'Atrasos',
+      'Faltas',
+      'Justificadas',
+      '% presença',
+      'Situação',
+    ];
+    const widths = [210, 70, 60, 50, 50, 70, 80, 0];
+    widths[7] = usable - widths.slice(0, 7).reduce((a, b) => a + b, 0);
+    const rowH = 16;
+    const bottom = () => doc.page.height - doc.page.margins.bottom - 20;
+    const cell = (t: string, x: number, y: number, w: number, bold = false) =>
+      doc
+        .font(bold ? 'Helvetica-Bold' : 'Helvetica')
+        .fontSize(8)
+        .fillColor('#0F1F3D')
+        .text(printable(t), x, y, {
+          width: w - 4,
+          height: rowH - 4,
+          ellipsis: true,
+          lineBreak: false,
+        });
+
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(14)
+      .fillColor('#0F1F3D')
+      .text(printable(`Relatório de assiduidade — ${report.cohort.name}`), left, 40);
+    doc
+      .font('Helvetica')
+      .fontSize(8)
+      .fillColor('#555555')
+      .text(
+        printable(
+          `${report.cohort.courseTitle} • Período: ${period} • Emitido em ${now.toLocaleString('pt-PT')}`,
+        ),
+        left,
+        58,
+      )
+      .text(printable(`Critérios: ${criteria}`), left, 70, { width: usable });
+    const g = report.general;
+    doc
+      .font('Helvetica')
+      .fontSize(9)
+      .fillColor('#0F1F3D')
+      .text(
+        printable(
+          `Inscritos: ${g.enrolled}   Sessões realizadas: ${g.sessionsCompleted}   Presenças: ${g.present}   Atrasos: ${g.late}   Faltas: ${g.absent}   Justificadas: ${g.justified}   Taxa média: ${g.averageRate === null ? 'Ainda sem dados' : g.averageRate + '%'}   Abaixo do mínimo: ${g.belowMinimum}`,
+        ),
+        left,
+        96,
+        { width: usable },
+      );
+
+    const header = (y: number) => {
+      let x = left;
+      cols.forEach((c, i) => {
+        cell(c, x, y, widths[i], true);
+        x += widths[i];
+      });
+      doc
+        .moveTo(left, y + rowH - 3)
+        .lineTo(left + usable, y + rowH - 3)
+        .lineWidth(0.3)
+        .stroke('#BBBBBB');
+    };
+    let y = 126;
+    header(y);
+    y += rowH;
+    for (const r of rows) {
+      if (y + rowH > bottom()) {
+        doc.addPage();
+        y = 40;
+        header(y);
+        y += rowH;
+      }
+      let x = left;
+      cols.forEach((c, i) => {
+        cell(String(r[c]), x, y, widths[i]);
+        x += widths[i];
+      });
+      doc
+        .moveTo(left, y + rowH - 3)
+        .lineTo(left + usable, y + rowH - 3)
+        .lineWidth(0.3)
+        .stroke('#BBBBBB');
+      y += rowH;
+    }
+    void headers;
     doc.end();
     return done;
   }
