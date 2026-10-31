@@ -2098,6 +2098,7 @@ export class CoursesService {
     const cohort = await this.prisma.read.courseCohort.findUnique({
       where: { id: cohortId },
       include: {
+        course: { select: { title: true } },
         participants: {
           include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
           orderBy: { enrolledAt: 'asc' },
@@ -2133,7 +2134,11 @@ export class CoursesService {
         total: days.length,
       };
     });
-    return { days, participants };
+    return {
+      cohort: { id: cohort.id, name: cohort.name, courseTitle: cohort.course.title },
+      days,
+      participants,
+    };
   }
 
   async getCohortAttendance(cohortId: number, date: string, user: CurrentUserData) {

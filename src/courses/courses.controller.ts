@@ -695,6 +695,29 @@ export class CoursesController {
     return this.svc.markCohortAttendance(cohortId, dto, user);
   }
 
+  @Get('cohorts/:cohortId/attendance/export')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Folha de presenças da turma em Excel ou PDF' })
+  async exportCohortAttendance(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @CurrentUser() user: CurrentUserData,
+    @Res() res: Response,
+    @Query('format') format?: string,
+  ) {
+    if (format !== 'xlsx' && format !== 'pdf') {
+      throw new BadRequestException('format deve ser xlsx ou pdf');
+    }
+    const file = await this.cohortsExport.exportAttendance(cohortId, format, user);
+    res.set(
+      safeDownloadHeaders({
+        filename: file.filename,
+        mime: file.contentType,
+        extra: { 'Content-Length': String(file.buffer.length) },
+      }),
+    );
+    res.end(file.buffer);
+  }
+
   @Get('cohorts/:cohortId/attendance/sheet')
   @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
   @ApiOperation({ summary: 'Folha de presenças da turma: todos os dias de aula × participantes' })
