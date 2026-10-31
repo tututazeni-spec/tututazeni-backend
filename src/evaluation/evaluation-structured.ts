@@ -495,7 +495,7 @@ export class EvaluationStructuredService {
           type: (PDI_ACTION_TYPE[r.actionType] ?? 'PROJECT') as never,
           dueDate: r.dueDate?.toISOString(),
           seq: i,
-        } as never,
+        },
         actor,
       );
       await this.prisma.evaluationRecommendation.update({

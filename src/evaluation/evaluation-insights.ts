@@ -263,7 +263,7 @@ export class EvaluationInsightsService {
     const plans = pdiPlans.map(p => p.pdiPlan).filter((p): p is NonNullable<typeof p> => !!p);
 
     return {
-      byRating: byRating.map(r => ({ label: r.ratingLabel as string, count: r._count._all })),
+      byRating: byRating.map(r => ({ label: r.ratingLabel, count: r._count._all })),
       topStrengths: top(strengths),
       recurringImprovements: top(improvements),
       recommendations: {
