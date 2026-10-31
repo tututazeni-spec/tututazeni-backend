@@ -126,6 +126,7 @@ export class CreateCycleDto {
 export class UpdateCycleDto {
   @ApiPropertyOptional() @IsOptional() @IsString() name?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() formId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() @IsOptionalImageRef() imageUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() category?: string;
   @ApiPropertyOptional({ enum: CycleStatus })

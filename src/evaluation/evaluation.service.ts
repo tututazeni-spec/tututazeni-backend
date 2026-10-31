@@ -30,6 +30,7 @@ import {
   UpdateTemplateDto,
   EvaluatorWeightDto,
   EvalType,
+  QuestionType,
   EvalModel,
   CycleStatus,
   RequestStatus,
@@ -63,6 +64,15 @@ import { EvaluationAnalyticsService } from './evaluation-analytics';
 
 // EvalModel usa códigos curtos ('90'/'360', contrato da API) — EvalCampaignModel
 // é o enum real do Prisma ('DEG_90'/'DEG_360'). Mapeados nos dois sentidos aqui.
+const DEFAULT_FORM_TITLE = 'Avaliação de Desempenho (padrão)';
+const DEFAULT_FORM_CRITERIA = [
+  'Foco em Resultados',
+  'Trabalho em Equipa',
+  'Inovação',
+  'Resiliência',
+  'Pensamento Estratégico',
+];
+
 const MODEL_TO_PRISMA: Record<EvalModel, EvalCampaignModel> = {
   [EvalModel.DEG_90]: EvalCampaignModel.DEG_90,
   [EvalModel.DEG_180]: EvalCampaignModel.DEG_180,
@@ -131,6 +141,9 @@ export class EvaluationService {
       throw new BadRequestException(`A soma dos pesos deve ser 100% (actual: ${totalWeight}%)`);
     }
 
+    // Sem formulário escolhido, usa-se o formulário padrão de desempenho.
+    const formId = dto.formId ?? (await this.ensureDefaultForm(createdById)).id;
+
     const campaign = await this.prisma.evaluationCampaign.create({
       data: {
         code: dto.code,
@@ -143,7 +156,7 @@ export class EvaluationService {
         templateId: dto.templateId,
         startDate: new Date(dto.startDate),
         endDate: new Date(dto.endDate),
-        formId: dto.formId,
+        formId,
         createdById,
         targetDeptIds: dto.targetDeptIds ?? [],
         mandatory: dto.mandatory ?? false,
@@ -517,6 +530,30 @@ export class EvaluationService {
       },
       include: { questions: { orderBy: { order: 'asc' } } },
     });
+  }
+
+  /** Formulário padrão de avaliação de desempenho (escala 1–5, pesos iguais); criado uma só vez. */
+  async ensureDefaultForm(createdById: number) {
+    const existing = await this.prisma.evaluationCampaignForm.findFirst({
+      where: { title: DEFAULT_FORM_TITLE, deletedAt: null },
+      orderBy: { id: 'asc' },
+    });
+    if (existing) return existing;
+    return this.createForm(
+      {
+        title: DEFAULT_FORM_TITLE,
+        description: 'Formulário padrão: critérios avaliados numa escala de 1 a 5.',
+        isTemplate: true,
+        questions: DEFAULT_FORM_CRITERIA.map((text, i) => ({
+          text,
+          type: QuestionType.SCALE,
+          order: i + 1,
+          required: true,
+          scaleMax: 5,
+        })),
+      },
+      createdById,
+    );
   }
 
   async getForms() {
@@ -1239,6 +1276,16 @@ export class EvaluationService {
         ).filter(isRateableQuestion)
       : [];
     const rating = computeWeightedRating(ratedQuestions, dto.answers);
+    // Ciclo sem formulário (ou sem perguntas avaliáveis) e sem respostas com nota:
+    // a classificação vem da média das notas dos pontos fortes e das áreas de
+    // melhoria, em vez de ficar a 0 e sem classificação.
+    const itemScores = [...(dto.strengthItems ?? []), ...(dto.improvementItems ?? [])].map(
+      i => i.score,
+    );
+    const itemsAvg = itemScores.length
+      ? +(itemScores.reduce((a, b) => a + b, 0) / itemScores.length).toFixed(2)
+      : null;
+    const scoreFromItems = !ratedQuestions.length && !numericAnswers.length && itemsAvg !== null;
     if (!ratedQuestions.length) {
       const bad = dto.answers.find(
         a => !a.notApplicable && a.score !== undefined && (a.score < 1 || a.score > 5),
@@ -1272,9 +1319,19 @@ export class EvaluationService {
       period:
         request.cycle?.startDate?.getFullYear().toString() ?? new Date().getFullYear().toString(),
       criteria: toJson(dto.answers),
-      overallScore: ratedQuestions.length ? (rating.weightedScore ?? 0) : avgScore,
-      completionPct: ratedQuestions.length ? rating.completionPct : 0,
-      ratingLabel: rating.weightedScore !== null ? classifyRating(rating.weightedScore) : null,
+      overallScore: ratedQuestions.length
+        ? (rating.weightedScore ?? 0)
+        : scoreFromItems
+          ? itemsAvg
+          : avgScore,
+      completionPct: ratedQuestions.length ? rating.completionPct : scoreFromItems ? 100 : 0,
+      ratingLabel: ratedQuestions.length
+        ? rating.weightedScore !== null
+          ? classifyRating(rating.weightedScore)
+          : null
+        : scoreFromItems
+          ? classifyRating(itemsAvg)
+          : null,
       competencyScores: JSON.stringify(compAvg),
       strengths: dto.strengths,
       improvements: dto.improvements,
