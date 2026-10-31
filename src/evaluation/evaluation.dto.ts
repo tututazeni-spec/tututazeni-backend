@@ -517,6 +517,13 @@ export class EvaluationReportFilterDto extends EvaluationAnalyticsFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) unitId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) positionId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) managerId?: number;
+  /** Tipo de avaliação (autoavaliação, chefia, colegas…). */
+  @ApiPropertyOptional({ enum: EvalType }) @IsOptional() @IsEnum(EvalType) type?: EvalType;
+  /** Estado das recomendações (indicadores de plano de ação). */
+  @ApiPropertyOptional({ enum: RECOMMENDATION_STATUSES })
+  @IsOptional()
+  @IsIn(RECOMMENDATION_STATUSES)
+  recommendationStatus?: (typeof RECOMMENDATION_STATUSES)[number];
 }
 
 // ─── Legacy DTO (keep backward compat) ───────────────────────────

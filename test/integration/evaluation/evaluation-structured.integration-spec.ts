@@ -507,29 +507,85 @@ describe('Evaluation structured (pontos fortes / melhorias / recomendações)', 
       .expect(400);
   });
 
-  it('relatórios: indicadores de desempenho só com avaliações submetidas', async () => {
-    const res = await request(app.getHttpServer())
+  const overview = (query: Record<string, unknown>, token = rhToken) =>
+    request(app.getHttpServer())
       .get('/evaluations/reports/overview')
-      .query({ cycleId: campaignId })
-      .set('Authorization', `Bearer ${rhToken}`)
-      .expect(200);
+      .query({ cycleId: campaignId, ...query })
+      .set('Authorization', `Bearer ${token}`);
+
+  it('relatórios: com menos de 3 avaliações os agregados identificáveis ficam ocultos', async () => {
+    const res = await overview({}).expect(200);
     expect(res.body.totalEvaluations).toBe(1);
-    expect(res.body.performance.byRating).toEqual([{ label: 'Muito bom', count: 1 }]);
-    expect(res.body.performance.topStrengths[0]).toMatchObject({
-      competency: 'Qualidade do Trabalho',
-      count: 1,
+    expect(res.body.privacy).toMatchObject({ minGroupSize: 3, restricted: true });
+    expect(res.body.byDepartment).toEqual([]);
+    expect(res.body.competencyGaps).toEqual([]);
+    expect(res.body.performance).toMatchObject({
+      restricted: true,
+      byRating: [],
+      topStrengths: [],
+      recurringImprovements: [],
     });
-    expect(res.body.performance.recurringImprovements[0].competency).toBe('Cumprimento de prazos');
+    // Totais de recomendações continuam disponíveis (não identificam pessoas).
     expect(res.body.performance.recommendations).toMatchObject({
       total: 1,
       trainingNeeds: 1,
       byStatus: { CONCLUIDA: 1 },
     });
     expect(res.body.performance.pdi.plans).toBe(1);
-    await request(app.getHttpServer())
-      .get('/evaluations/reports/overview')
-      .set('Authorization', `Bearer ${employeeToken}`)
-      .expect(403);
+    await overview({}, employeeToken).expect(403);
+  });
+
+  it('relatórios: com 3 ou mais avaliações mostra indicadores; filtros por tipo e estado', async () => {
+    for (const period of ['2026-A', '2026-B']) {
+      await prisma.performanceEvaluation.create({
+        data: {
+          evaluatorId: managerId,
+          evaluatedId: employeeId,
+          type: 'PEER',
+          period,
+          criteria: [],
+          cycleId: campaignId,
+          isDraft: false,
+          overallScore: 3,
+          ratingLabel: 'Bom',
+          completionPct: 100,
+          strengthItems: {
+            create: [{ competency: 'Qualidade do Trabalho', score: 4, description: 'Rigor' }],
+          },
+        },
+      });
+    }
+    const all = await overview({}).expect(200);
+    expect(all.body.totalEvaluations).toBe(3);
+    expect(all.body.privacy.restricted).toBe(false);
+    expect(all.body.performance.byRating).toEqual(
+      expect.arrayContaining([
+        { label: 'Muito bom', count: 1 },
+        { label: 'Bom', count: 2 },
+      ]),
+    );
+    expect(all.body.performance.topStrengths[0]).toMatchObject({
+      competency: 'Qualidade do Trabalho',
+      count: 3,
+    });
+    expect(all.body.performance.recurringImprovements[0].competency).toBe('Cumprimento de prazos');
+
+    // Um único colaborador avaliado 3 vezes forma um grupo de 3 avaliações: aparece.
+    // O filtro por tipo reduz-se a 1 avaliação → volta a ficar restrito.
+    const manager = await overview({ type: 'MANAGER' }).expect(200);
+    expect(manager.body.totalEvaluations).toBe(1);
+    expect(manager.body.performance.restricted).toBe(true);
+    const peer = await overview({ type: 'PEER' }).expect(200);
+    expect(peer.body.totalEvaluations).toBe(2);
+
+    // Filtro de estado das recomendações (efectivo, vindo do PDI).
+    const done = await overview({ recommendationStatus: 'CONCLUIDA' }).expect(200);
+    expect(done.body.performance.recommendations.total).toBe(1);
+    const pending = await overview({ recommendationStatus: 'PENDENTE' }).expect(200);
+    expect(pending.body.performance.recommendations.total).toBe(0);
+
+    await overview({ type: 'XPTO' }).expect(400);
+    await overview({ recommendationStatus: 'XPTO' }).expect(400);
   });
 
   it('formulário com pesos explícitos que não somam 100% → 400', async () => {

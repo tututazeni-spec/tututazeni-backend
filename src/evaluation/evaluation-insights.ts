@@ -13,6 +13,21 @@ import { ADMIN_RH_ROLES } from '../auth/enums/role-groups';
 import type { Actor } from './evaluation-structured';
 import { effectiveRecommendationState } from './evaluation-structured';
 
+/**
+ * Dimensão mínima de um grupo (departamento, cargo, período…) para aparecer
+ * num relatório agregado: abaixo disto a média identificaria pessoas.
+ */
+export const MIN_REPORT_GROUP_SIZE = 3;
+
+/** Separa os grupos com dimensão suficiente dos que têm de ficar ocultos. */
+export function suppressSmallGroups<T extends { count: number }>(
+  groups: T[],
+  min: number = MIN_REPORT_GROUP_SIZE,
+): { kept: T[]; suppressed: number } {
+  const kept = groups.filter(g => g.count >= min);
+  return { kept, suppressed: groups.length - kept.length };
+}
+
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
 
 export interface HistoryItem {
@@ -200,7 +215,10 @@ export class EvaluationInsightsService {
    * Indicadores agregados de desempenho (acrescentam-se aos de getReportsOverview).
    * Só contam avaliações submetidas; nunca expõem texto individual.
    */
-  async getPerformanceIndicators(where: Prisma.PerformanceEvaluationWhereInput) {
+  async getPerformanceIndicators(
+    where: Prisma.PerformanceEvaluationWhereInput,
+    opts: { recommendationStatus?: string; restricted?: boolean } = {},
+  ) {
     const submitted: Prisma.PerformanceEvaluationWhereInput = { ...where, isDraft: false };
     const [byRating, strengths, improvements, recs, pdiPlans] = await Promise.all([
       this.prisma.read.performanceEvaluation.groupBy({
@@ -251,10 +269,9 @@ export class EvaluationInsightsService {
         }));
 
     const now = new Date();
-    const states = recs.map(r => ({
-      rec: r,
-      ...effectiveRecommendationState(r, r.pdiAction, now),
-    }));
+    const states = recs
+      .map(r => ({ rec: r, ...effectiveRecommendationState(r, r.pdiAction, now) }))
+      .filter(s => !opts.recommendationStatus || s.status === opts.recommendationStatus);
     const countBy = <K extends string | number>(key: (s: (typeof states)[number]) => K) => {
       const m: Record<string, number> = {};
       for (const s of states) m[String(key(s))] = (m[String(key(s))] ?? 0) + 1;
@@ -263,9 +280,13 @@ export class EvaluationInsightsService {
     const plans = pdiPlans.map(p => p.pdiPlan).filter((p): p is NonNullable<typeof p> => !!p);
 
     return {
-      byRating: byRating.map(r => ({ label: r.ratingLabel, count: r._count._all })),
-      topStrengths: top(strengths),
-      recurringImprovements: top(improvements),
+      // Com poucas avaliações, médias e contagens por competência identificariam pessoas.
+      restricted: !!opts.restricted,
+      byRating: opts.restricted
+        ? []
+        : byRating.map(r => ({ label: r.ratingLabel as string, count: r._count._all })),
+      topStrengths: opts.restricted ? [] : top(strengths),
+      recurringImprovements: opts.restricted ? [] : top(improvements),
       recommendations: {
         total: states.length,
         byStatus: countBy(s => s.status),

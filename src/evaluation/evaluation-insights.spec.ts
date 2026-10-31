@@ -4,6 +4,8 @@ import {
   EvaluationInsightsService,
   HistoryEntry,
   isEvalType,
+  MIN_REPORT_GROUP_SIZE,
+  suppressSmallGroups,
 } from './evaluation-insights';
 import { EvaluationStructuredService, effectiveRecommendationState } from './evaluation-structured';
 
@@ -283,5 +285,81 @@ describe('EvaluationStructuredService.generatePdi', () => {
       svc.generatePdi(1, { id: 77, role: { name: 'COLABORADOR' } } as never),
     ).rejects.toThrow(NotFoundException);
     expect(plans.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('suppressSmallGroups', () => {
+  it('oculta grupos abaixo do mínimo e conta quantos foram ocultados', () => {
+    const r = suppressSmallGroups([
+      { name: 'A', count: 5 },
+      { name: 'B', count: 2 },
+      { name: 'C', count: 3 },
+      { name: 'D', count: 1 },
+    ]);
+    expect(r.kept.map(g => g.name)).toEqual(['A', 'C']);
+    expect(r.suppressed).toBe(2);
+  });
+
+  it('mínimo por omissão é 3 e é configurável', () => {
+    expect(MIN_REPORT_GROUP_SIZE).toBe(3);
+    expect(suppressSmallGroups([{ count: 2 }], 2).suppressed).toBe(0);
+    expect(suppressSmallGroups([], 3)).toEqual({ kept: [], suppressed: 0 });
+  });
+});
+
+describe('getPerformanceIndicators — privacidade e filtro de estado', () => {
+  const prisma = {
+    read: {
+      performanceEvaluation: {
+        groupBy: jest.fn().mockResolvedValue([{ ratingLabel: 'Bom', _count: { _all: 1 } }]),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      evaluationStrength: {
+        groupBy: jest
+          .fn()
+          .mockResolvedValue([{ competency: 'Equipa', _count: { _all: 1 }, _avg: { score: 4 } }]),
+      },
+      evaluationImprovementArea: { groupBy: jest.fn().mockResolvedValue([]) },
+      evaluationRecommendation: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            status: 'PENDENTE',
+            priority: 3,
+            actionType: 'FORMACAO',
+            dueDate: null,
+            pdiAction: null,
+          },
+          {
+            status: 'CONCLUIDA',
+            priority: 2,
+            actionType: 'MENTORIA',
+            dueDate: null,
+            pdiAction: null,
+          },
+        ]),
+      },
+    },
+  };
+  const svc = new EvaluationInsightsService(prisma as never);
+
+  it('com poucas avaliações (restricted) não expõe competências nem classificações', async () => {
+    const r = await svc.getPerformanceIndicators({}, { restricted: true });
+    expect(r.restricted).toBe(true);
+    expect(r.topStrengths).toEqual([]);
+    expect(r.byRating).toEqual([]);
+    expect(r.recommendations.total).toBe(2);
+  });
+
+  it('sem restrição devolve os agregados', async () => {
+    const r = await svc.getPerformanceIndicators({});
+    expect(r.restricted).toBe(false);
+    expect(r.topStrengths[0]).toMatchObject({ competency: 'Equipa', count: 1, avgScore: 4 });
+  });
+
+  it('filtra recomendações pelo estado efectivo', async () => {
+    const r = await svc.getPerformanceIndicators({}, { recommendationStatus: 'CONCLUIDA' });
+    expect(r.recommendations.total).toBe(1);
+    expect(r.recommendations.byStatus).toEqual({ CONCLUIDA: 1 });
+    expect(r.recommendations.trainingNeeds).toBe(0);
   });
 });
