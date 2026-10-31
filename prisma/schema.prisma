@@ -1107,15 +1107,16 @@ model User {
   refreshTokens       RefreshToken[]
 
   // ─── ROI & Impact ─────────────────────────────────────────────
-  createdRoiAnalyses         RoiAnalysis[]
-  impactRecords              ImpactRecord[]       @relation("ImpactRecordSubject")
-  createdImpactRecords       ImpactRecord[]       @relation("ImpactRecordCreatedBy")
-  createdRoiEvaluationModels RoiEvaluationModel[]
-  createdCostEntries         CostEntry[]
-  createdKpiDefinitions      KpiDefinition[]
-  createdCorrelations        Correlation[]
-  createdScenarios           Scenario[]
-  createdBenchmarks          Benchmark[]
+  createdRoiAnalyses             RoiAnalysis[]
+  impactRecords                  ImpactRecord[]             @relation("ImpactRecordSubject")
+  createdImpactRecords           ImpactRecord[]             @relation("ImpactRecordCreatedBy")
+  createdRoiEvaluationModels     RoiEvaluationModel[]
+  createdCostEntries             CostEntry[]
+  createdKpiDefinitions          KpiDefinition[]
+  createdCorrelations            Correlation[]
+  createdScenarios               Scenario[]
+  createdBenchmarks              Benchmark[]
+  evalRecommendationsResponsible EvaluationRecommendation[] @relation("EvalRecommendationResponsible")
 
   @@index([accountStatus])
   @@index([departmentId])
@@ -3371,6 +3372,9 @@ model Competency {
   evaluationCriteria            EvaluationCriteria[]
   evaluationCampaignQuestions   EvaluationCampaignQuestion[]
 
+  evalStrengths    EvaluationStrength[]        @relation("EvalStrengthCompetency")
+  evalImprovements EvaluationImprovementArea[] @relation("EvalImprovementCompetency")
+
   @@index([category])
   @@index([status])
   @@index([isActive])
@@ -3887,29 +3891,112 @@ model NineBoxPlacement {
 }
 
 model PerformanceEvaluation {
-  id               Int                 @id @default(autoincrement())
-  evaluatorId      Int
-  evaluatedId      Int
-  type             EvalType
-  period           String
-  criteria         Json
-  generalComment   String?             @db.Text
-  overallScore     Float               @default(0)
-  cycleId          Int?
-  competencyScores String?             @db.Text
-  strengths        String?             @db.Text
-  improvements     String?             @db.Text
-  recommendations  String?             @db.Text
-  isDraft          Boolean             @default(false)
-  createdAt        DateTime            @default(now())
-  evaluator        User                @relation("EvaluatorRelation", fields: [evaluatorId], references: [id])
-  evaluated        User                @relation("EvaluatedRelation", fields: [evaluatedId], references: [id])
-  cycle            EvaluationCampaign? @relation(fields: [cycleId], references: [id])
+  id                  Int                         @id @default(autoincrement())
+  evaluatorId         Int
+  evaluatedId         Int
+  type                EvalType
+  period              String
+  criteria            Json
+  generalComment      String?                     @db.Text
+  overallScore        Float                       @default(0)
+  cycleId             Int?
+  competencyScores    String?                     @db.Text
+  strengths           String?                     @db.Text
+  improvements        String?                     @db.Text
+  recommendations     String?                     @db.Text
+  isDraft             Boolean                     @default(false)
+  createdAt           DateTime                    @default(now())
+  // Avaliação de desempenho robusta (docs/avaliacao_desempenho_robusta_claude_code.md):
+  // preenchimento 0-100 e classificação ponderada só existem com a avaliação completa.
+  completionPct       Int                         @default(0)
+  ratingLabel         String?
+  evaluator           User                        @relation("EvaluatorRelation", fields: [evaluatorId], references: [id])
+  evaluated           User                        @relation("EvaluatedRelation", fields: [evaluatedId], references: [id])
+  cycle               EvaluationCampaign?         @relation(fields: [cycleId], references: [id])
+  strengthItems       EvaluationStrength[]
+  improvementItems    EvaluationImprovementArea[]
+  recommendationItems EvaluationRecommendation[]
 
   @@index([evaluatedId])
   @@index([evaluatorId])
   @@index([period])
   @@index([cycleId])
+}
+
+model EvaluationStrength {
+  id           Int      @id @default(autoincrement())
+  evaluationId Int
+  competencyId Int?
+  competency   String
+  score        Int
+  description  String   @db.Text
+  evidence     String?  @db.Text
+  impact       String?  @db.Text
+  comment      String?  @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  evaluation      PerformanceEvaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  competencyModel Competency?           @relation("EvalStrengthCompetency", fields: [competencyId], references: [id], onDelete: SetNull)
+
+  @@index([evaluationId])
+  @@index([competencyId])
+}
+
+model EvaluationImprovementArea {
+  id           Int      @id @default(autoincrement())
+  evaluationId Int
+  competencyId Int?
+  competency   String
+  score        Int
+  description  String   @db.Text
+  evidence     String?  @db.Text
+  impact       String?  @db.Text
+  /// BAIXA | MEDIA | ALTA | CRITICA — independente da nota de desempenho.
+  priority     String
+  comment      String?  @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  evaluation      PerformanceEvaluation      @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  competencyModel Competency?                @relation("EvalImprovementCompetency", fields: [competencyId], references: [id], onDelete: SetNull)
+  recommendations EvaluationRecommendation[]
+
+  @@index([evaluationId])
+  @@index([competencyId])
+}
+
+model EvaluationRecommendation {
+  id                Int       @id @default(autoincrement())
+  evaluationId      Int
+  improvementAreaId Int?
+  action            String    @db.Text
+  objective         String    @db.Text
+  /// FORMACAO | MENTORIA | ACOMPANHAMENTO | COACHING | PROJETO_PRATICO | ALTERACAO_PROCESSO | OUTRA
+  actionType        String
+  responsibleId     Int?
+  dueDate           DateTime?
+  successIndicator  String    @db.Text
+  /// 1 (baixa) a 5 (crítica)
+  priority          Int
+  /// PENDENTE | EM_CURSO | CONCLUIDA | CANCELADA
+  status            String    @default("PENDENTE")
+  progressPct       Int       @default(0)
+  notes             String?   @db.Text
+  completedAt       DateTime?
+  createdById       Int
+  updatedById       Int?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  evaluation      PerformanceEvaluation      @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  improvementArea EvaluationImprovementArea? @relation(fields: [improvementAreaId], references: [id], onDelete: SetNull)
+  responsible     User?                      @relation("EvalRecommendationResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
+
+  @@index([evaluationId])
+  @@index([improvementAreaId])
+  @@index([responsibleId])
+  @@index([status])
 }
 
 enum EvaluationRequestStatus {

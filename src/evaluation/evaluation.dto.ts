@@ -11,6 +11,9 @@ import {
   Min,
   Max,
   MaxLength,
+  MinLength,
+  ArrayMaxSize,
+  IsIn,
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -191,6 +194,79 @@ export class AnswerDto {
   @ApiPropertyOptional() @IsOptional() @IsBoolean() notApplicable?: boolean;
 }
 
+// ─── Avaliação de desempenho estruturada ──────────────────────────
+// docs/avaliacao_desempenho_robusta_claude_code.md §4-6.
+
+export const IMPROVEMENT_PRIORITIES = ['BAIXA', 'MEDIA', 'ALTA', 'CRITICA'] as const;
+export const RECOMMENDATION_ACTION_TYPES = [
+  'FORMACAO',
+  'MENTORIA',
+  'ACOMPANHAMENTO',
+  'COACHING',
+  'PROJETO_PRATICO',
+  'ALTERACAO_PROCESSO',
+  'OUTRA',
+] as const;
+export const RECOMMENDATION_STATUSES = ['PENDENTE', 'EM_CURSO', 'CONCLUIDA', 'CANCELADA'] as const;
+
+/** Ponto forte: nota 1–5 = desempenho demonstrado naquela competência. */
+export class StrengthItemDto {
+  @ApiPropertyOptional() @IsOptional() @IsInt() competencyId?: number;
+  @ApiProperty() @IsString() @MinLength(2) @MaxLength(200) competency!: string;
+  @ApiProperty() @IsInt() @Min(1) @Max(5) score!: number;
+  @ApiProperty() @IsString() @MinLength(3) @MaxLength(2000) description!: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) evidence?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) impact?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) comment?: string;
+}
+
+/** Área de melhoria: a nota é desempenho actual; a prioridade é um campo separado. */
+export class ImprovementItemDto {
+  /** Identificador local (cliente) usado pelas recomendações para referenciar esta área. */
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(60) ref?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() competencyId?: number;
+  @ApiProperty() @IsString() @MinLength(2) @MaxLength(200) competency!: string;
+  @ApiProperty() @IsInt() @Min(1) @Max(5) score!: number;
+  @ApiProperty() @IsString() @MinLength(3) @MaxLength(2000) description!: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) evidence?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) impact?: string;
+  @ApiProperty({ enum: IMPROVEMENT_PRIORITIES })
+  @IsIn(IMPROVEMENT_PRIORITIES)
+  priority!: (typeof IMPROVEMENT_PRIORITIES)[number];
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) comment?: string;
+}
+
+export class RecommendationItemDto {
+  /** `ref` de uma área de melhoria enviada no mesmo pedido. */
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(60) improvementRef?: string;
+  @ApiProperty() @IsString() @MinLength(3) @MaxLength(2000) action!: string;
+  @ApiProperty() @IsString() @MinLength(3) @MaxLength(2000) objective!: string;
+  @ApiProperty({ enum: RECOMMENDATION_ACTION_TYPES })
+  @IsIn(RECOMMENDATION_ACTION_TYPES)
+  actionType!: (typeof RECOMMENDATION_ACTION_TYPES)[number];
+  @ApiPropertyOptional() @IsOptional() @IsInt() responsibleId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() dueDate?: string;
+  @ApiProperty() @IsString() @MinLength(3) @MaxLength(1000) successIndicator!: string;
+  @ApiProperty({ description: '1 = baixa … 5 = crítica' })
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  priority!: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) notes?: string;
+}
+
+export class UpdateRecommendationDto {
+  @ApiPropertyOptional({ enum: RECOMMENDATION_STATUSES })
+  @IsOptional()
+  @IsIn(RECOMMENDATION_STATUSES)
+  status?: (typeof RECOMMENDATION_STATUSES)[number];
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) @Max(100) progressPct?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) successIndicator?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) notes?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() dueDate?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() responsibleId?: number;
+}
+
 export class SubmitEvaluationDto {
   @ApiProperty() @IsInt() requestId!: number;
   @ApiProperty({ type: [AnswerDto] })
@@ -201,6 +277,27 @@ export class SubmitEvaluationDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) strengths?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) improvements?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) recommendations?: string;
+  @ApiPropertyOptional({ type: [StrengthItemDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(30)
+  @ValidateNested({ each: true })
+  @Type(() => StrengthItemDto)
+  strengthItems?: StrengthItemDto[];
+  @ApiPropertyOptional({ type: [ImprovementItemDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(30)
+  @ValidateNested({ each: true })
+  @Type(() => ImprovementItemDto)
+  improvementItems?: ImprovementItemDto[];
+  @ApiPropertyOptional({ type: [RecommendationItemDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => RecommendationItemDto)
+  recommendationItems?: RecommendationItemDto[];
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isDraft?: boolean;
 }
 

@@ -45,6 +45,7 @@ import {
   ScheduleOneOnOneDto,
   RegisterOneOnOneDto,
   EvaluationReportFilterDto,
+  UpdateRecommendationDto,
 } from './evaluation.dto';
 
 import { ADMIN_RH_LIDER_GESTOR_ROLES, ADMIN_RH_ROLES } from '../auth/enums/role-groups';
@@ -346,6 +347,36 @@ export class EvaluationController {
   @ApiOperation({ summary: 'Submeter avaliação (ou guardar rascunho)' })
   submit(@CurrentUser() user: CurrentUserData, @Body() dto: SubmitEvaluationDto) {
     return this.svc.submitEvaluation(user.id, dto);
+  }
+
+  // ─── Avaliação estruturada (escala 1–5, pontos fortes, melhorias, recomendações) ───
+
+  @Get('rating-scale')
+  @Roles(...ALL_ROLES)
+  @ApiOperation({ summary: 'Escala de desempenho 1–5 e faixas de classificação' })
+  getRatingScale() {
+    return this.svc.getRatingScale();
+  }
+
+  @Get('performance/:id/items')
+  @Roles(...ALL_ROLES)
+  @ApiOperation({
+    summary:
+      'Pontos fortes, áreas de melhoria e recomendações de uma avaliação (avaliador, avaliado, RH)',
+  })
+  getItems(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.getStructuredItems(id, user);
+  }
+
+  @Patch('recommendations/:id')
+  @Roles(...ALL_ROLES)
+  @ApiOperation({ summary: 'Acompanhar uma recomendação (estado, progresso, evidências)' })
+  updateRecommendation(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateRecommendationDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.updateRecommendation(id, dto, user);
   }
 
   // ─── Legacy endpoint (backward compat) ───────────────────────
