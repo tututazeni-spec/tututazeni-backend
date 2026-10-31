@@ -33,6 +33,7 @@ const mockPrisma = {
     findUnique: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
   },
   courseCohortParticipant: {
     findMany: jest.fn(),
@@ -50,6 +51,7 @@ const mockPrisma = {
   attendanceRecord: {
     upsert: jest.fn(),
     findMany: jest.fn(),
+    findFirst: jest.fn(),
   },
   evaluationAttempt: {
     findMany: jest.fn(),
@@ -97,6 +99,27 @@ describe('CoursesService — Turmas/Categorias/Relatórios', () => {
   });
 
   // ─── Turmas ────────────────────────────────────────────────────────────
+
+  describe('syncCohortStatuses', () => {
+    it('encerra primeiro (OPEN/ACTIVE com endDate passada) e depois activa OPEN com startDate passada', async () => {
+      const now = new Date('2026-11-01T09:00:00Z');
+      mockPrisma.courseCohort.updateMany
+        .mockResolvedValueOnce({ count: 2 })
+        .mockResolvedValueOnce({ count: 3 });
+
+      const result = await service.syncCohortStatuses(now);
+
+      expect(result).toEqual({ activated: 3, closed: 2 });
+      expect(mockPrisma.courseCohort.updateMany).toHaveBeenNthCalledWith(1, {
+        where: { status: { in: ['OPEN', 'ACTIVE'] }, endDate: { lte: now } },
+        data: { status: 'CLOSED' },
+      });
+      expect(mockPrisma.courseCohort.updateMany).toHaveBeenNthCalledWith(2, {
+        where: { status: 'OPEN', startDate: { lte: now } },
+        data: { status: 'ACTIVE' },
+      });
+    });
+  });
 
   describe('listCohorts', () => {
     it('calcula inscritos e vagas disponíveis', async () => {
@@ -311,7 +334,12 @@ describe('CoursesService — Turmas/Categorias/Relatórios', () => {
         id: 7,
         courseId: 3,
         instructorId: null,
+        schedule: null,
+        startDate: new Date('2026-09-18T00:00:00.000Z'),
+        endDate: new Date('2026-09-20T00:00:00.000Z'),
       });
+      mockPrisma.courseCohortParticipant.findMany.mockResolvedValue([{ userId: 1 }, { userId: 2 }]);
+      mockPrisma.attendanceRecord.findFirst.mockResolvedValue(null);
       mockPrisma.attendanceRecord.upsert.mockResolvedValue({});
       await service.markCohortAttendance(
         7,
@@ -335,6 +363,43 @@ describe('CoursesService — Turmas/Categorias/Relatórios', () => {
       });
       const secondCall = mockPrisma.attendanceRecord.upsert.mock.calls[1][0];
       expect(secondCall.create.status).toBe('ABSENT');
+    });
+
+    const cohort = {
+      id: 7,
+      courseId: 3,
+      instructorId: null,
+      schedule: 'Seg/Qua 18:00-20:00',
+      startDate: new Date('2026-11-02T00:00:00.000Z'),
+      endDate: new Date('2026-11-11T00:00:00.000Z'),
+    };
+    const dto = (date: string) => ({ date, records: [{ userId: 1, present: true }] }) as any;
+
+    it('recusa uma data que não é dia de aula da turma', async () => {
+      mockPrisma.courseCohort.findUnique.mockResolvedValue(cohort);
+      // 2026-11-03 é terça-feira: o horário só tem segunda e quarta
+      await expect(service.markCohortAttendance(7, dto('2026-11-03'), admin)).rejects.toThrow(
+        'dia de aula',
+      );
+      expect(mockPrisma.attendanceRecord.upsert).not.toHaveBeenCalled();
+    });
+
+    it('recusa utilizadores que não são participantes da turma', async () => {
+      mockPrisma.courseCohort.findUnique.mockResolvedValue(cohort);
+      mockPrisma.courseCohortParticipant.findMany.mockResolvedValue([]);
+      await expect(service.markCohortAttendance(7, dto('2026-11-02'), admin)).rejects.toThrow(
+        'não são participantes',
+      );
+    });
+
+    it('recusa quando o participante já tem presença noutra turma no mesmo dia', async () => {
+      mockPrisma.courseCohort.findUnique.mockResolvedValue(cohort);
+      mockPrisma.courseCohortParticipant.findMany.mockResolvedValue([{ userId: 1 }]);
+      mockPrisma.attendanceRecord.findFirst.mockResolvedValue({ userId: 1 });
+      await expect(service.markCohortAttendance(7, dto('2026-11-02'), admin)).rejects.toThrow(
+        'outra turma',
+      );
+      expect(mockPrisma.attendanceRecord.upsert).not.toHaveBeenCalled();
     });
   });
 
