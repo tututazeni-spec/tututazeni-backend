@@ -793,6 +793,8 @@ model User {
   courseInstructorships      CourseInstructor[]        @relation("CourseCoInstructor")
   courseCohortsAsInstructor  CourseCohort[]            @relation("CourseCohortInstructor")
   courseCohortParticipations CourseCohortParticipant[] @relation("CourseCohortParticipantUser")
+  cohortSessionsInstructed   CourseCohortSession[]     @relation("CohortSessionInstructor")
+  cohortAttendances          CourseCohortAttendance[]  @relation("CohortAttendanceUser")
   liveLessonsInstructed      Lesson[]                  @relation("LessonLiveInstructor")
 
   // ─── Micro-Learning ───────────────────────────────────────────
@@ -7802,22 +7804,27 @@ enum CourseCohortStatus {
 }
 
 model CourseCohort {
-  id           Int                       @id @default(autoincrement())
-  courseId     Int
-  instructorId Int?
-  name         String
-  location     String?
-  room         String?
-  schedule     String?
-  capacity     Int                       @default(30)
-  status       CourseCohortStatus        @default(DRAFT)
-  startDate    DateTime
-  endDate      DateTime?
-  createdAt    DateTime                  @default(now())
-  updatedAt    DateTime                  @updatedAt
-  course       Course                    @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  instructor   User?                     @relation("CourseCohortInstructor", fields: [instructorId], references: [id], onDelete: SetNull)
-  participants CourseCohortParticipant[]
+  id                      Int                       @id @default(autoincrement())
+  courseId                Int
+  instructorId            Int?
+  name                    String
+  location                String?
+  room                    String?
+  schedule                String?
+  capacity                Int                       @default(30)
+  status                  CourseCohortStatus        @default(DRAFT)
+  startDate               DateTime
+  endDate                 DateTime?
+  // Assiduidade mínima (%) para conclusão/certificação. 75 é só a predefinição.
+  minAttendancePercent    Int                       @default(75)
+  // true: faltas justificadas saem do denominador; false: contam como falta.
+  excludeExcusedFromTotal Boolean                   @default(true)
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+  course                  Course                    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  instructor              User?                     @relation("CourseCohortInstructor", fields: [instructorId], references: [id], onDelete: SetNull)
+  participants            CourseCohortParticipant[]
+  sessions                CourseCohortSession[]
 
   @@index([courseId])
   @@index([instructorId])
@@ -7834,6 +7841,91 @@ model CourseCohortParticipant {
 
   @@unique([cohortId, userId])
   @@index([cohortId])
+  @@index([userId])
+}
+
+enum CohortSessionModality {
+  IN_PERSON
+  ONLINE
+  HYBRID
+}
+
+enum CohortSessionStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum CohortAttendanceState {
+  PRESENT
+  ABSENT
+  LATE
+  JUSTIFIED
+}
+
+enum CohortCheckInMethod {
+  MANUAL
+  QR_CODE
+  ONLINE
+}
+
+// Sessão (aula) de uma turma. "Em curso" não é guardado: deriva-se da hora.
+model CourseCohortSession {
+  id           Int                         @id @default(autoincrement())
+  cohortId     Int
+  title        String
+  date         DateTime                    @db.Date
+  startTime    String
+  endTime      String
+  instructorId Int?
+  modality     CohortSessionModality       @default(IN_PERSON)
+  status       CohortSessionStatus         @default(SCHEDULED)
+  notes        String?
+  cancelReason String?
+  createdAt    DateTime                    @default(now())
+  updatedAt    DateTime                    @updatedAt
+  cohort       CourseCohort                @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  instructor   User?                       @relation("CohortSessionInstructor", fields: [instructorId], references: [id], onDelete: SetNull)
+  attendances  CourseCohortAttendance[]
+  logs         CourseCohortAttendanceLog[]
+
+  @@index([cohortId, date])
+  @@index([instructorId])
+}
+
+// Um registo por participante e sessão.
+model CourseCohortAttendance {
+  id           Int                   @id @default(autoincrement())
+  sessionId    Int
+  userId       Int
+  status       CohortAttendanceState
+  checkInTime  String?
+  checkOutTime String?
+  note         String?
+  method       CohortCheckInMethod   @default(MANUAL)
+  recordedById Int?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  session      CourseCohortSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user         User                  @relation("CohortAttendanceUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, userId])
+  @@index([userId])
+}
+
+// Histórico append-only das alterações de presença (nunca se apaga).
+model CourseCohortAttendanceLog {
+  id             Int                    @id @default(autoincrement())
+  sessionId      Int
+  userId         Int
+  previousStatus CohortAttendanceState?
+  newStatus      CohortAttendanceState?
+  reason         String?
+  changedById    Int
+  createdAt      DateTime               @default(now())
+  session        CourseCohortSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
   @@index([userId])
 }
 

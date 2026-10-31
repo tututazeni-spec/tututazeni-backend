@@ -12,6 +12,7 @@ import {
   MaxLength,
   ValidateNested,
   ArrayMinSize,
+  Matches,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
@@ -930,3 +931,120 @@ export class SetCategoryCoursesDto {
 }
 
 export class UpdateCourseAudienceGroupDto extends PartialType(CreateCourseAudienceGroupDto) {}
+
+// ── Sessões e presenças da turma ────────────────────────────────────────
+const SESSION_MODALITIES = ['IN_PERSON', 'ONLINE', 'HYBRID'] as const;
+const ATTENDANCE_STATES = ['PRESENT', 'ABSENT', 'LATE', 'JUSTIFIED'] as const;
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export class CreateCohortSessionDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(200)
+  title!: string;
+
+  @ApiProperty({ description: 'YYYY-MM-DD' })
+  @IsDateString()
+  date!: string;
+
+  @ApiProperty({ example: '09:00' })
+  @Matches(HHMM)
+  startTime!: string;
+
+  @ApiProperty({ example: '12:00' })
+  @Matches(HHMM)
+  endTime!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  instructorId?: number;
+
+  @ApiPropertyOptional({ enum: SESSION_MODALITIES })
+  @IsOptional()
+  @IsIn(SESSION_MODALITIES)
+  modality?: (typeof SESSION_MODALITIES)[number];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  notes?: string;
+}
+
+export class UpdateCohortSessionDto extends PartialType(CreateCohortSessionDto) {
+  @ApiPropertyOptional({ enum: ['SCHEDULED', 'COMPLETED'] })
+  @IsOptional()
+  @IsIn(['SCHEDULED', 'COMPLETED'])
+  status?: 'SCHEDULED' | 'COMPLETED';
+}
+
+export class CancelCohortSessionDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}
+
+export class CohortSessionAttendanceEntryDto {
+  @ApiProperty()
+  @IsInt()
+  userId!: number;
+
+  @ApiProperty({ enum: ATTENDANCE_STATES })
+  @IsIn(ATTENDANCE_STATES)
+  status!: (typeof ATTENDANCE_STATES)[number];
+
+  @ApiPropertyOptional({ example: '09:05' })
+  @IsOptional()
+  @Matches(HHMM)
+  checkInTime?: string;
+
+  @ApiPropertyOptional({ example: '12:00' })
+  @IsOptional()
+  @Matches(HHMM)
+  checkOutTime?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
+}
+
+export class SaveCohortSessionAttendanceDto {
+  @ApiProperty({ type: [CohortSessionAttendanceEntryDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => CohortSessionAttendanceEntryDto)
+  records!: CohortSessionAttendanceEntryDto[];
+
+  @ApiPropertyOptional({ description: 'Motivo da alteração, guardado no histórico' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}
+
+export class ClearCohortSessionAttendanceDto {
+  @ApiProperty({ description: 'Motivo obrigatório; fica no histórico' })
+  @IsString()
+  @MaxLength(500)
+  reason!: string;
+}
+
+export class UpdateCohortAttendancePolicyDto {
+  @ApiPropertyOptional({ minimum: 0, maximum: 100 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  minAttendancePercent?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  excludeExcusedFromTotal?: boolean;
+}
