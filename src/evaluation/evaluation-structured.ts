@@ -72,7 +72,6 @@ export function validateStructuredItems(
   });
 
   improvements.forEach((a, i) => {
-    if (blank(a.description)) errors.push(`Área de melhoria ${i + 1}: a descrição é obrigatória`);
     // Nota 4–5 só é "lacuna" com justificação específica (§5.1).
     if (a.score >= 4 && blank(a.evidence) && blank(a.comment)) {
       errors.push(
@@ -254,7 +253,7 @@ export class EvaluationStructuredService {
           competencyId: a.competencyId ?? null,
           competency: a.competency.trim(),
           score: a.score,
-          description: a.description.trim(),
+          description: a.description?.trim() ?? '',
           evidence: a.evidence?.trim() || null,
           impact: a.impact?.trim() || null,
           priority: a.priority,
