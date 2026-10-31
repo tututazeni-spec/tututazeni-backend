@@ -7494,6 +7494,7 @@ model LiveClass {
   // Etapa 1 — Informações gerais
   code           String?         @unique
   description    String?         @db.Text
+  thumbnailUrl   String?         @db.Text // Imagem do cartão (data URL ou URL)
   type           LiveClassType   @default(AULA)
   status         LiveClassStatus @default(AGENDADA)
   moduleId       Int?
