@@ -374,6 +374,23 @@ describe('EvaluationService', () => {
     });
     afterEach(() => mockPrisma.evaluationCampaignQuestion.findMany.mockResolvedValue([]));
 
+    it('sem formulário, classifica pela média das notas dos pontos fortes e melhorias', async () => {
+      mockPrisma.evaluationCampaignQuestion.findMany.mockResolvedValue([]);
+      mockPrisma.evaluationRequest.findUnique.mockResolvedValue({
+        ...request(),
+        cycle: { id: 1, formId: null, startDate: new Date('2026-01-01'), requireEvidence: false },
+      });
+      const r: any = await service.submitEvaluation(1, {
+        requestId: 1,
+        answers: [],
+        strengthItems: [{ competency: 'Foco em Resultados', score: 4 }],
+        improvementItems: [{ competency: 'Resiliência', score: 2, priority: 'MEDIA' }],
+      } as any);
+      expect(r.overallScore).toBe(3);
+      expect(r.completionPct).toBe(100);
+      expect(r.ratingLabel).toBe('Bom');
+    });
+
     it('persiste média ponderada, preenchimento e classificação quando completa', async () => {
       mockPrisma.evaluationRequest.findUnique.mockResolvedValue(request());
       const r: any = await service.submitEvaluation(1, {
