@@ -1796,10 +1796,10 @@ export class CoursesService {
     }));
   }
 
-  /** Turmas OPEN (default) ou ACTIVE de todos os cursos. INSTRUCTOR vê só as suas. */
+  /** Turmas OPEN (default), ACTIVE ou CLOSED de todos os cursos. INSTRUCTOR vê só as suas. */
   async listOpenCohorts(user: CurrentUserData, status = 'OPEN') {
-    if (status !== 'OPEN' && status !== 'ACTIVE') {
-      throw new BadRequestException('status deve ser OPEN ou ACTIVE');
+    if (status !== 'OPEN' && status !== 'ACTIVE' && status !== 'CLOSED') {
+      throw new BadRequestException('status deve ser OPEN, ACTIVE ou CLOSED');
     }
     const cohorts = await this.prisma.read.courseCohort.findMany({
       where: {

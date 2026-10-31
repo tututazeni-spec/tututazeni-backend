@@ -13,7 +13,12 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  BadRequestException,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import { safeDownloadHeaders } from '../common/files/safe-download';
+import { CohortsExportService } from './cohorts-export.service';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CoursesService } from './courses.service';
 import {
@@ -57,7 +62,10 @@ import { UploadThrottle } from '../common/security/upload-throttle';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('courses')
 export class CoursesController {
-  constructor(private readonly svc: CoursesService) {}
+  constructor(
+    private readonly svc: CoursesService,
+    private readonly cohortsExport: CohortsExportService,
+  ) {}
 
   // ── Catálogo & Descoberta ─────────────────────────────────────────────────
 
@@ -576,6 +584,33 @@ export class CoursesController {
   })
   listOpenCohorts(@CurrentUser() user: CurrentUserData, @Query('status') status?: string) {
     return this.svc.listOpenCohorts(user, status);
+  }
+
+  // Declarada antes de 'cohorts/:cohortId' para não ser apanhada por esse parâmetro.
+  @Get('cohorts/export')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Relatório de turmas abertas/activas/encerradas em Excel ou PDF' })
+  async exportCohorts(
+    @CurrentUser() user: CurrentUserData,
+    @Res() res: Response,
+    @Query('status') status?: string,
+    @Query('format') format?: string,
+  ) {
+    if (status !== 'OPEN' && status !== 'ACTIVE' && status !== 'CLOSED') {
+      throw new BadRequestException('status deve ser OPEN, ACTIVE ou CLOSED');
+    }
+    if (format !== 'xlsx' && format !== 'pdf') {
+      throw new BadRequestException('format deve ser xlsx ou pdf');
+    }
+    const file = await this.cohortsExport.export(status, format, user);
+    res.set(
+      safeDownloadHeaders({
+        filename: file.filename,
+        mime: file.contentType,
+        extra: { 'Content-Length': String(file.buffer.length) },
+      }),
+    );
+    res.end(file.buffer);
   }
 
   @Get('cohorts/:cohortId')
