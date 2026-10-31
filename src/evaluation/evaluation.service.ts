@@ -271,7 +271,9 @@ export class EvaluationService {
       `Ciclo de avaliação "${campaign.name}" foi iniciado — tens avaliações pendentes`,
     );
 
-    return this.toPublicCampaign(updated);
+    // requestsCount permite ao cliente avisar quando a activação não gerou
+    // nenhum pedido (ex.: modelo só-gestor e colaboradores sem managerId).
+    return { ...this.toPublicCampaign(updated), requestsCount: requests.length };
   }
 
   // docs/modulo_evaluation.md ponto 3 — Pausar/Encerrar/Reabrir/Enviar lembretes.
