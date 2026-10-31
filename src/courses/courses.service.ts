@@ -1820,6 +1820,24 @@ export class CoursesService {
     }));
   }
 
+  /** Turmas em que o utilizador é participante (só os dados da turma, nunca os outros participantes). */
+  async listMyCohorts(userId: number) {
+    const cohorts = await this.prisma.read.courseCohort.findMany({
+      where: { participants: { some: { userId } }, status: { not: 'DRAFT' } },
+      include: {
+        course: { select: { id: true, title: true } },
+        instructor: { select: { id: true, fullName: true, avatarUrl: true } },
+        _count: { select: { participants: true } },
+      },
+      orderBy: { startDate: 'asc' },
+    });
+    return cohorts.map(c => ({
+      ...c,
+      enrolled: c._count.participants,
+      availableSlots: Math.max(0, c.capacity - c._count.participants),
+    }));
+  }
+
   async getCohort(id: number, user: CurrentUserData) {
     const cohort = await this.prisma.read.courseCohort.findUnique({
       where: { id },
