@@ -695,6 +695,16 @@ export class CoursesController {
     return this.svc.markCohortAttendance(cohortId, dto, user);
   }
 
+  @Get('cohorts/:cohortId/attendance/sheet')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Folha de presenças da turma: todos os dias de aula × participantes' })
+  getCohortAttendanceSheet(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.getCohortAttendanceSheet(cohortId, user);
+  }
+
   @Get('cohorts/:cohortId/attendance')
   @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
   @ApiOperation({ summary: 'Ler presenças já marcadas da turma numa data' })

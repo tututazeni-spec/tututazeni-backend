@@ -13,6 +13,7 @@ import { CacheService } from '../cache/cache.service';
 import { assertLessonFileClean } from '../common/authz/lesson-files';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { cohortDays } from './cohort-days';
 import { CertificatesService } from '../certificates/certificates.service';
 import { CourseCompletionService } from '../course-completion/course-completion.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
@@ -2033,7 +2034,37 @@ export class CoursesService {
     if (!cohort) throw new NotFoundException('Turma não encontrada');
     this.assertCohortAccess(cohort, user);
 
-    const date = new Date(dto.date);
+    // Só se marca presença nos dias de aula da turma e só a quem está inscrito.
+    const day = dto.date.slice(0, 10);
+    if (!cohortDays(cohort.schedule, cohort.startDate, cohort.endDate).includes(day)) {
+      throw new BadRequestException('Esta data não é um dia de aula da turma');
+    }
+    const date = new Date(`${day}T00:00:00.000Z`);
+    const userIds = dto.records.map(r => r.userId);
+    const enrolled = await this.prisma.courseCohortParticipant.findMany({
+      where: { cohortId, userId: { in: userIds } },
+      select: { userId: true },
+    });
+    const enrolledIds = new Set(enrolled.map(e => e.userId));
+    if (userIds.some(id => !enrolledIds.has(id))) {
+      throw new BadRequestException('Há utilizadores que não são participantes desta turma');
+    }
+    // A chave única do registo é (utilizador, dia, contexto): sem esta verificação,
+    // a presença numa turma sobrescreveria a de outra turma no mesmo dia.
+    const clash = await this.prisma.attendanceRecord.findFirst({
+      where: {
+        userId: { in: userIds },
+        date,
+        context: 'LMS',
+        sessionId: { not: cohort.id },
+      },
+      select: { userId: true },
+    });
+    if (clash) {
+      throw new ConflictException(
+        'Um dos participantes já tem presença registada noutra turma neste dia',
+      );
+    }
     await Promise.all(
       dto.records.map(r =>
         this.prisma.attendanceRecord.upsert({
@@ -2049,12 +2080,60 @@ export class CoursesService {
           },
           update: {
             status: r.present ? 'PRESENT' : 'ABSENT',
+            courseId: cohort.courseId,
+            sessionId: cohort.id,
             notes: r.notes,
           },
         }),
       ),
     );
     return { marked: dto.records.length };
+  }
+
+  /**
+   * Folha de presenças: um dia por coluna (dias de aula da turma) e, por
+   * participante, presente/falta/sem registo em cada dia.
+   */
+  async getCohortAttendanceSheet(cohortId: number, user: CurrentUserData) {
+    const cohort = await this.prisma.read.courseCohort.findUnique({
+      where: { id: cohortId },
+      include: {
+        participants: {
+          include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
+          orderBy: { enrolledAt: 'asc' },
+        },
+      },
+    });
+    if (!cohort) throw new NotFoundException('Turma não encontrada');
+    this.assertCohortAccess(cohort, user);
+
+    const days = cohortDays(cohort.schedule, cohort.startDate, cohort.endDate);
+    const records = await this.prisma.read.attendanceRecord.findMany({
+      where: { courseId: cohort.courseId, sessionId: cohort.id, context: 'LMS' },
+      select: { userId: true, date: true, status: true },
+    });
+    const byUser = new Map<number, Record<string, string>>();
+    for (const r of records) {
+      const map = byUser.get(r.userId) ?? {};
+      map[r.date.toISOString().slice(0, 10)] = r.status;
+      byUser.set(r.userId, map);
+    }
+    const daySet = new Set(days);
+    const participants = cohort.participants.map(p => {
+      const all = byUser.get(p.userId) ?? {};
+      const marks = Object.fromEntries(Object.entries(all).filter(([d]) => daySet.has(d)));
+      const values = Object.values(marks);
+      return {
+        userId: p.userId,
+        fullName: p.user.fullName,
+        avatarUrl: p.user.avatarUrl,
+        marks,
+        present: values.filter(s => s === 'PRESENT').length,
+        absent: values.filter(s => s === 'ABSENT').length,
+        total: days.length,
+      };
+    });
+    return { days, participants };
   }
 
   async getCohortAttendance(cohortId: number, date: string, user: CurrentUserData) {
