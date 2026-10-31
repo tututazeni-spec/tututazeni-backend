@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { CurrentUserData } from '../common/decorators';
+import { AuditService } from '../common/services/audit.service';
 import { buildXlsxBuffer } from '../common/utils/xlsx-export.util';
 import { CoursesService } from './courses.service';
 
@@ -50,7 +51,10 @@ const day = (d: Date | string | null | undefined) =>
 /** Relatórios de turmas (abertas, activas, encerradas) em Excel e PDF. */
 @Injectable()
 export class CohortsExportService {
-  constructor(private readonly courses: CoursesService) {}
+  constructor(
+    private readonly courses: CoursesService,
+    private readonly audit: AuditService,
+  ) {}
 
   async export(
     status: CohortExportStatus,
@@ -82,6 +86,14 @@ export class CohortsExportService {
             'Turmas',
           )
         : await this.renderPdf(TITLE_PT[status], cells, now);
+
+    await this.audit.log({
+      action: 'COHORT_EXPORTED',
+      entity: 'CourseCohort',
+      userId: user.id,
+      metadata: { status, format, rows: cohorts.length },
+      strict: true,
+    });
 
     return {
       buffer,
