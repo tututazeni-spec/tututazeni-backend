@@ -214,7 +214,7 @@ export class StrengthItemDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() competencyId?: number;
   @ApiProperty() @IsString() @MinLength(2) @MaxLength(200) competency!: string;
   @ApiProperty() @IsInt() @Min(1) @Max(5) score!: number;
-  @ApiProperty() @IsString() @MinLength(3) @MaxLength(2000) description!: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) description?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) evidence?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) impact?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) comment?: string;

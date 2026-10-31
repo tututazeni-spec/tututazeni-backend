@@ -64,7 +64,6 @@ export function validateStructuredItems(
   if (dupI) errors.push(`Área de melhoria duplicada para a competência "${dupI}"`);
 
   strengths.forEach((s, i) => {
-    if (blank(s.description)) errors.push(`Ponto forte ${i + 1}: a descrição é obrigatória`);
     if (opts.requireEvidence && s.score >= 4 && blank(s.evidence)) {
       errors.push(
         `Ponto forte "${s.competency}": nota ${s.score} exige evidência ou exemplo concreto`,
@@ -239,7 +238,7 @@ export class EvaluationStructuredService {
           competencyId: s.competencyId ?? null,
           competency: s.competency.trim(),
           score: s.score,
-          description: s.description.trim(),
+          description: s.description?.trim() ?? '',
           evidence: s.evidence?.trim() || null,
           impact: s.impact?.trim() || null,
           comment: s.comment?.trim() || null,
