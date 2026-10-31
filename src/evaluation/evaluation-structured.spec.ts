@@ -93,10 +93,10 @@ describe('validateStructuredItems', () => {
     ).not.toThrow();
   });
 
-  it('área de melhoria com nota 4–5 exige justificação', () => {
+  it('área de melhoria com nota 4–5 não exige justificação', () => {
     expect(
       messagesOf(() => validateStructuredItems({ improvementItems: [area({ score: 4 })] })).join(),
-    ).toMatch(/justifique/);
+    ).toBe('');
     expect(() =>
       validateStructuredItems({ improvementItems: [area({ score: 4, comment: 'Meta futura' })] }),
     ).not.toThrow();

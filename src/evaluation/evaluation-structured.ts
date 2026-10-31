@@ -71,15 +71,6 @@ export function validateStructuredItems(
     }
   });
 
-  improvements.forEach((a, i) => {
-    // Nota 4–5 só é "lacuna" com justificação específica (§5.1).
-    if (a.score >= 4 && blank(a.evidence) && blank(a.comment)) {
-      errors.push(
-        `Área de melhoria "${a.competency}": nota ${a.score} só é aceite como lacuna com evidência ou comentário que a justifique`,
-      );
-    }
-  });
-
   const refs = new Set<string>();
   for (const a of improvements) {
     if (!a.ref) continue;
