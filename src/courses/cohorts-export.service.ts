@@ -102,6 +102,174 @@ export class CohortsExportService {
     };
   }
 
+  /** Folha de presenças de uma turma (dias de aula × participantes) em Excel ou PDF. */
+  async exportAttendance(
+    cohortId: number,
+    format: CohortExportFormat,
+    user: CurrentUserData,
+  ): Promise<{ buffer: Buffer; contentType: string; filename: string }> {
+    // Mesmo âmbito da folha: ADMIN/RH ou o instrutor da turma.
+    const sheet = await this.courses.getCohortAttendanceSheet(cohortId, user);
+    const now = new Date();
+    const dayLabel = (iso: string) => {
+      const [, m, d] = iso.split('-');
+      return `${d}/${m}`;
+    };
+    const mark = (s: string | undefined) =>
+      s === 'PRESENT' ? 'Presente' : s === 'ABSENT' ? 'Falta' : '';
+
+    const buffer =
+      format === 'xlsx'
+        ? await buildXlsxBuffer(
+            sheet.participants.map((p): Record<string, string | number> => ({
+              Participante: p.fullName,
+              ...Object.fromEntries(sheet.days.map(d => [dayLabel(d), mark(p.marks[d])])),
+              Presenças: p.present,
+              Faltas: p.absent,
+              'Total de dias': p.total,
+            })),
+            ['Participante', ...sheet.days.map(dayLabel), 'Presenças', 'Faltas', 'Total de dias'],
+            'Presenças',
+          )
+        : await this.renderAttendancePdf(sheet, now);
+
+    await this.audit.log({
+      action: 'COHORT_ATTENDANCE_EXPORTED',
+      entity: 'CourseCohort',
+      userId: user.id,
+      metadata: {
+        cohortId,
+        format,
+        participants: sheet.participants.length,
+        days: sheet.days.length,
+      },
+      strict: true,
+    });
+
+    const slug = sheet.cohort.name
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .toLowerCase();
+    return {
+      buffer,
+      contentType: CONTENT_TYPE[format],
+      filename: `presencas-${slug || cohortId}-${now.toISOString().slice(0, 10)}.${format}`,
+    };
+  }
+
+  private renderAttendancePdf(
+    sheet: Awaited<ReturnType<CoursesService['getCohortAttendanceSheet']>>,
+    now: Date,
+  ): Promise<Buffer> {
+    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 40 });
+    const chunks: Buffer[] = [];
+    const done = new Promise<Buffer>((resolve, reject) => {
+      doc.on('data', (c: Buffer) => chunks.push(c));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+    });
+
+    const left = doc.page.margins.left;
+    const rowH = 16;
+    const nameW = 150;
+    const dayW = 28;
+    const totalW = 80;
+    const usable = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    // Quantos dias cabem por bloco; os restantes passam para outro bloco por baixo.
+    const perBlock = Math.max(1, Math.floor((usable - nameW - totalW) / dayW));
+    const bottom = () => doc.page.height - doc.page.margins.bottom - 20;
+
+    const text = (t: string, x: number, y: number, w: number, bold = false, center = false) => {
+      doc
+        .font(bold ? 'Helvetica-Bold' : 'Helvetica')
+        .fontSize(7.5)
+        .fillColor('#0F1F3D')
+        .text(printable(t), x, y, {
+          width: w - 4,
+          height: rowH - 4,
+          ellipsis: true,
+          lineBreak: false,
+          align: center ? 'center' : 'left',
+        });
+    };
+
+    const title = () => {
+      doc
+        .font('Helvetica-Bold')
+        .fontSize(14)
+        .fillColor('#0F1F3D')
+        .text(`Folha de presenças — ${sheet.cohort.name}`, left, 40);
+      doc
+        .font('Helvetica')
+        .fontSize(8)
+        .fillColor('#555555')
+        .text(
+          `${sheet.cohort.courseTitle} • Gerado em ${now.toLocaleString('pt-PT')} • P = presente, F = falta, – = sem registo`,
+          left,
+          58,
+        );
+      return 76;
+    };
+
+    let y = title();
+    const daysAll = sheet.days;
+    for (let start = 0; start < Math.max(daysAll.length, 1); start += perBlock) {
+      const days = daysAll.slice(start, start + perBlock);
+      const need = rowH * (sheet.participants.length + 1) + 10;
+      if (y + Math.min(need, rowH * 4) > bottom()) {
+        doc.addPage();
+        y = title();
+      }
+      const header = (yy: number) => {
+        let x = left;
+        text('Participante', x, yy, nameW, true);
+        x += nameW;
+        for (const d of days) {
+          const [, m, dd] = d.split('-');
+          text(`${dd}/${m}`, x, yy, dayW, true, true);
+          x += dayW;
+        }
+        text('Presenças', x, yy, totalW, true, true);
+        doc
+          .moveTo(left, yy + rowH - 3)
+          .lineTo(x + totalW, yy + rowH - 3)
+          .lineWidth(0.3)
+          .stroke('#BBBBBB');
+      };
+      header(y);
+      y += rowH;
+      for (const p of sheet.participants) {
+        if (y + rowH > bottom()) {
+          doc.addPage();
+          y = title();
+          header(y);
+          y += rowH;
+        }
+        let x = left;
+        text(p.fullName, x, y, nameW);
+        x += nameW;
+        for (const d of days) {
+          const s = p.marks[d];
+          text(s === 'PRESENT' ? 'P' : s === 'ABSENT' ? 'F' : '–', x, y, dayW, false, true);
+          x += dayW;
+        }
+        text(`${p.present}/${p.total}`, x, y, totalW, false, true);
+        doc
+          .moveTo(left, y + rowH - 3)
+          .lineTo(x + totalW, y + rowH - 3)
+          .lineWidth(0.3)
+          .stroke('#BBBBBB');
+        y += rowH;
+      }
+      y += 14;
+    }
+
+    doc.end();
+    return done;
+  }
+
   private renderPdf(title: string, rows: string[][], now: Date): Promise<Buffer> {
     const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 40 });
     const chunks: Buffer[] = [];
