@@ -39,6 +39,13 @@ const mockEvalCycleProxy = {
 };
 
 const mockPrisma: any = {
+  $transaction: jest.fn(async (cb: (tx: unknown) => unknown) => cb(mockPrisma)),
+  evaluationStrength: { deleteMany: jest.fn(), create: jest.fn() },
+  evaluationImprovementArea: {
+    deleteMany: jest.fn(),
+    create: jest.fn().mockResolvedValue({ id: 1 }),
+  },
+  evaluationRecommendation: { deleteMany: jest.fn(), create: jest.fn() },
   evaluationCampaign: mockEvalCycleProxy,
   evaluationCampaignForm: { ...mockEvalCycleProxy },
   evaluationCampaignQuestion: { ...mockEvalCycleProxy },

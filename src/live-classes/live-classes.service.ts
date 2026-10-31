@@ -318,6 +318,7 @@ export class LiveClassesService {
         topic: `${lc.topic} (cópia)`,
         code: this.generateCode(lc.type),
         description: lc.description,
+        thumbnailUrl: lc.thumbnailUrl,
         type: lc.type,
         status: LiveClassStatus.AGENDADA,
         moduleId: lc.moduleId,

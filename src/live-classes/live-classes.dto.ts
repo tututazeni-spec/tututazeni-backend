@@ -22,6 +22,7 @@ import {
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 import { IsWebLink } from '../common/validators/is-web-link.decorator';
+import { IsOptionalImageRef } from '../common/validators/optional-image-ref.decorator';
 
 export {
   LiveClassType,
@@ -101,6 +102,9 @@ export class CreateLiveClassDto {
   @IsArray()
   @IsInt({ each: true })
   targetPositionIds?: number[];
+
+  // Imagem do cartão: data URL (upload) ou URL normal
+  @ApiPropertyOptional() @IsOptional() @IsString() @IsOptionalImageRef() thumbnailUrl?: string;
 
   // Etapa 5 — Conteúdo
   @ApiPropertyOptional() @IsOptional() @IsString() objectives?: string;

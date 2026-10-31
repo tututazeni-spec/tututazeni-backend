@@ -9,6 +9,11 @@ import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { EvaluationAnalyticsFilterDto, EvaluationReportFilterDto } from './evaluation.dto';
 import { percentile } from './evaluation-scoring';
+import {
+  EvaluationInsightsService,
+  MIN_REPORT_GROUP_SIZE,
+  suppressSmallGroups,
+} from './evaluation-insights';
 import type { PrismaService } from '../prisma/prisma.service';
 
 export interface EvaluationAnalyticsServiceDeps {
@@ -330,7 +335,16 @@ export class EvaluationAnalyticsService {
   }
 
   async getReportsOverview(filters: EvaluationReportFilterDto = {}) {
-    const { cycleId, departmentId, unitId, positionId, managerId, period } = filters;
+    const {
+      cycleId,
+      departmentId,
+      unitId,
+      positionId,
+      managerId,
+      period,
+      type,
+      recommendationStatus,
+    } = filters;
 
     const evaluatedFilter: Prisma.UserWhereInput = {};
     if (departmentId) evaluatedFilter.departmentId = departmentId;
@@ -338,10 +352,18 @@ export class EvaluationAnalyticsService {
     if (positionId) evaluatedFilter.positionId = positionId;
     if (managerId) evaluatedFilter.managerId = managerId;
 
-    const where: Prisma.PerformanceEvaluationWhereInput = {};
+    // Rascunhos não entram em relatórios: ainda não são avaliações concluídas.
+    const where: Prisma.PerformanceEvaluationWhereInput = { isDraft: false };
     if (cycleId) where.cycleId = cycleId;
+    if (type) where.type = type;
     if (period) where.period = { contains: period };
     if (Object.keys(evaluatedFilter).length) where.evaluated = evaluatedFilter;
+
+    const requestScope: Prisma.EvaluationRequestWhereInput = {
+      ...(cycleId ? { cycleId } : {}),
+      ...(type ? { type } : {}),
+      ...(Object.keys(evaluatedFilter).length ? { evaluated: evaluatedFilter } : {}),
+    };
 
     type ReportEval = Prisma.PerformanceEvaluationGetPayload<{
       include: {
@@ -358,33 +380,42 @@ export class EvaluationAnalyticsService {
       };
     }>;
 
-    const [evals, totalRequests, completedRequests, objectiveRows] = await Promise.all([
-      this.prisma.read.performanceEvaluation.findMany({
-        where,
-        include: {
-          evaluated: {
-            select: {
-              id: true,
-              fullName: true,
-              department: { select: { id: true, name: true } },
-              position: { select: { id: true, name: true } },
-              unit: { select: { id: true, name: true } },
-              manager: { select: { id: true, fullName: true } },
+    const [evals, totalRequests, completedRequests, objectiveRows, performanceCount] =
+      await Promise.all([
+        this.prisma.read.performanceEvaluation.findMany({
+          where,
+          include: {
+            evaluated: {
+              select: {
+                id: true,
+                fullName: true,
+                department: { select: { id: true, name: true } },
+                position: { select: { id: true, name: true } },
+                unit: { select: { id: true, name: true } },
+                manager: { select: { id: true, fullName: true } },
+              },
             },
           },
-        },
-      }) as Promise<ReportEval[]>,
-      this.prisma.evaluationRequest.count({ where: cycleId ? { cycleId } : {} }).catch(() => 0),
-      this.prisma.evaluationRequest
-        .count({ where: { ...(cycleId ? { cycleId } : {}), status: 'COMPLETED' } })
-        .catch(() => 0),
-      this.prisma.read.evaluationRequest
-        .findMany({
-          where: { ...(cycleId ? { cycleId } : {}) },
-          select: { objectives: true },
-        })
-        .catch(() => [] as { objectives: Prisma.JsonValue }[]),
-    ]);
+        }) as Promise<ReportEval[]>,
+        this.prisma.evaluationRequest.count({ where: { ...requestScope } }).catch(() => 0),
+        this.prisma.evaluationRequest
+          .count({
+            where: { ...requestScope, status: 'COMPLETED' },
+          })
+          .catch(() => 0),
+        this.prisma.read.evaluationRequest
+          .findMany({
+            where: { ...requestScope },
+            select: { objectives: true },
+          })
+          .catch(() => [] as { objectives: Prisma.JsonValue }[]),
+        this.prisma.read.performanceEvaluation.count({ where }),
+      ]);
+    const restricted = performanceCount < MIN_REPORT_GROUP_SIZE;
+    const performance = await new EvaluationInsightsService(this.prisma).getPerformanceIndicators(
+      where,
+      { recommendationStatus, restricted },
+    );
 
     const groupBy = (keyFn: (e: ReportEval) => { id: number; name: string } | null | undefined) => {
       const map = new Map<number, { name: string; scores: number[] }>();
@@ -405,14 +436,26 @@ export class EvaluationAnalyticsService {
         .sort((a, b) => b.avgScore - a.avgScore);
     };
 
-    const byDepartment = groupBy(e => (e.evaluated?.department ? e.evaluated.department : null));
-    const byUnit = groupBy(e => (e.evaluated?.unit ? e.evaluated.unit : null));
-    const byPosition = groupBy(e => (e.evaluated?.position ? e.evaluated.position : null));
-    const byManager = groupBy(e =>
-      e.evaluated?.manager
-        ? { id: e.evaluated.manager.id, name: e.evaluated.manager.fullName }
-        : null,
+    // Grupos com menos de MIN_REPORT_GROUP_SIZE avaliações ficam ocultos: a média
+    // de 1–2 pessoas identificaria-as. Exports CSV/Excel/PDF herdam esta regra.
+    const dep = suppressSmallGroups(
+      groupBy(e => (e.evaluated?.department ? e.evaluated.department : null)),
     );
+    const unit = suppressSmallGroups(groupBy(e => (e.evaluated?.unit ? e.evaluated.unit : null)));
+    const pos = suppressSmallGroups(
+      groupBy(e => (e.evaluated?.position ? e.evaluated.position : null)),
+    );
+    const mgr = suppressSmallGroups(
+      groupBy(e =>
+        e.evaluated?.manager
+          ? { id: e.evaluated.manager.id, name: e.evaluated.manager.fullName }
+          : null,
+      ),
+    );
+    const byDepartment = dep.kept;
+    const byUnit = unit.kept;
+    const byPosition = pos.kept;
+    const byManager = mgr.kept;
 
     // Distribuição das classificações (docs pt.11)
     const distribution = { exceptional: 0, above: 0, expected: 0, below: 0 };
@@ -429,13 +472,15 @@ export class EvaluationAnalyticsService {
       if (!byPeriod[e.period]) byPeriod[e.period] = [];
       byPeriod[e.period].push(e.overallScore ?? 0);
     }
-    const evolution = Object.entries(byPeriod)
+    const evolutionAll = Object.entries(byPeriod)
       .map(([evalPeriod, scores]) => ({
         period: evalPeriod,
         avgScore: +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2),
         count: scores.length,
       }))
       .sort((a, b) => a.period.localeCompare(b.period));
+    const evo = suppressSmallGroups(evolutionAll);
+    const evolution = evo.kept;
 
     // Gaps de competências (docs pt.11) — média por competência sobre o
     // conjunto filtrado; mesmo threshold (<3) usado em triggerPDIFromResults.
@@ -456,7 +501,7 @@ export class EvaluationAnalyticsService {
           select: { id: true, name: true },
         })
       : [];
-    const competencyGaps = competencyIds
+    const competencyGapsAll = competencyIds
       .map(id => {
         const scores = compScores[id];
         const avg = +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2);
@@ -469,6 +514,8 @@ export class EvaluationAnalyticsService {
       })
       .filter(c => c.avgScore < 3)
       .sort((a, b) => b.gap - a.gap);
+    // Com poucas avaliações a média por competência é praticamente individual.
+    const competencyGaps = restricted ? [] : competencyGapsAll;
 
     // Objetivos alcançados (docs pt.11) — % médio de realização das metas
     // definidas na etapa 6, através das EvaluationRequest.objectives.
@@ -502,6 +549,18 @@ export class EvaluationAnalyticsService {
       evolution,
       competencyGaps,
       objectivesAchieved,
+      performance,
+      privacy: {
+        minGroupSize: MIN_REPORT_GROUP_SIZE,
+        restricted,
+        suppressed: {
+          byDepartment: dep.suppressed,
+          byUnit: unit.suppressed,
+          byPosition: pos.suppressed,
+          byManager: mgr.suppressed,
+          evolution: evo.suppressed,
+        },
+      },
     };
   }
 }
