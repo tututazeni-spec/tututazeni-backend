@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { EvaluationService } from './evaluation.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { OneOnOneService } from '../one-on-one/one-on-one.service';
@@ -12,6 +12,13 @@ const mockOneOnOne = {
 };
 
 const mockPrisma = {
+  $transaction: jest.fn(async (cb: (tx: unknown) => unknown) => cb(mockPrisma)),
+  evaluationStrength: { deleteMany: jest.fn(), create: jest.fn() },
+  evaluationImprovementArea: {
+    deleteMany: jest.fn(),
+    create: jest.fn().mockResolvedValue({ id: 1 }),
+  },
+  evaluationRecommendation: { deleteMany: jest.fn(), create: jest.fn() },
   user: { findUnique: jest.fn(), findMany: jest.fn() },
   performanceEvaluation: {
     findUnique: jest.fn(),
@@ -339,6 +346,100 @@ describe('EvaluationService', () => {
         answers: [{ criterionId: 1, score: 4, comment: 'Bom' }],
       } as any);
       expect(result).toBeDefined();
+    });
+  });
+
+  describe('submitEvaluation — classificação ponderada e estados', () => {
+    const questions = [
+      { id: 1, type: 'SCALE', required: true, weight: 30, scaleMax: 5, competencyId: null },
+      { id: 2, type: 'SCALE', required: true, weight: 70, scaleMax: 5, competencyId: null },
+    ];
+    const request = (status = 'PENDING') => ({
+      id: 1,
+      evaluatorId: 1,
+      evaluatedId: 2,
+      status,
+      cycleId: 1,
+      cycle: { id: 1, formId: 9, startDate: new Date('2026-01-01'), requireEvidence: false },
+    });
+
+    beforeEach(() => {
+      mockPrisma.evaluationCampaignQuestion.findMany.mockResolvedValue(questions);
+      mockPrisma.performanceEvaluation.findFirst.mockResolvedValue(null);
+      mockPrisma.performanceEvaluation.create.mockImplementation(async ({ data }: any) => ({
+        id: 7,
+        ...data,
+      }));
+      mockPrisma.evaluationRequest.update.mockResolvedValue({});
+    });
+    afterEach(() => mockPrisma.evaluationCampaignQuestion.findMany.mockResolvedValue([]));
+
+    it('persiste média ponderada, preenchimento e classificação quando completa', async () => {
+      mockPrisma.evaluationRequest.findUnique.mockResolvedValue(request());
+      const r: any = await service.submitEvaluation(1, {
+        requestId: 1,
+        answers: [
+          { questionId: 1, score: 5 },
+          { questionId: 2, score: 3 },
+        ],
+      } as any);
+      expect(r.overallScore).toBe(3.6);
+      expect(r.completionPct).toBe(100);
+      expect(r.ratingLabel).toBe('Muito bom');
+    });
+
+    it('recusa submissão final incompleta mas aceita rascunho sem nota final', async () => {
+      mockPrisma.evaluationRequest.findUnique.mockResolvedValue(request());
+      const dto = { requestId: 1, answers: [{ questionId: 1, score: 5 }] };
+      await expect(service.submitEvaluation(1, dto as any)).rejects.toThrow(/incompleta/);
+      const r: any = await service.submitEvaluation(1, { ...dto, isDraft: true } as any);
+      expect(r.overallScore).toBe(0);
+      expect(r.ratingLabel).toBeNull();
+      expect(r.completionPct).toBe(50);
+    });
+
+    it('recusa notas fora de 1–5', async () => {
+      mockPrisma.evaluationRequest.findUnique.mockResolvedValue(request());
+      await expect(
+        service.submitEvaluation(1, {
+          requestId: 1,
+          answers: [
+            { questionId: 1, score: 0 },
+            { questionId: 2, score: 6 },
+          ],
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('avaliação já submetida é imutável, também como rascunho', async () => {
+      mockPrisma.evaluationRequest.findUnique.mockResolvedValue(request('COMPLETED'));
+      await expect(
+        service.submitEvaluation(1, { requestId: 1, answers: [], isDraft: true } as any),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('avaliador diferente do atribuído não submete', async () => {
+      mockPrisma.evaluationRequest.findUnique.mockResolvedValue(request());
+      await expect(
+        service.submitEvaluation(55, { requestId: 1, answers: [] } as any),
+      ).rejects.toThrow(/permissão/);
+    });
+  });
+
+  describe('createForm — soma de pesos', () => {
+    const q = (weight?: number) => ({ text: 'Q', type: 'SCALE', weight }) as any;
+    it('rejeita pesos explícitos que não somam 100%', async () => {
+      await expect(
+        service.createForm({ title: 'F', questions: [q(60), q(30)] } as any, 1),
+      ).rejects.toThrow(/100%/);
+    });
+    it('aceita 100% e aceita ausência de pesos (peso igual por omissão)', async () => {
+      await expect(
+        service.createForm({ title: 'F', questions: [q(60), q(40)] } as any, 1),
+      ).resolves.toBeDefined();
+      await expect(
+        service.createForm({ title: 'F', questions: [q(), q()] } as any, 1),
+      ).resolves.toBeDefined();
     });
   });
 

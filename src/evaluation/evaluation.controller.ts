@@ -12,10 +12,12 @@ import {
   UseGuards,
   Header,
   StreamableFile,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { EvaluationService } from './evaluation.service';
 import { PdfService } from '../pdf/pdf.service';
+import { isEvalType, type SubmittedType } from './evaluation-insights';
 import { buildCsvString } from '../common/utils/csv-export.util';
 import { buildXlsxBuffer } from '../common/utils/xlsx-export.util';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -45,6 +47,7 @@ import {
   ScheduleOneOnOneDto,
   RegisterOneOnOneDto,
   EvaluationReportFilterDto,
+  UpdateRecommendationDto,
 } from './evaluation.dto';
 
 import { ADMIN_RH_LIDER_GESTOR_ROLES, ADMIN_RH_ROLES } from '../auth/enums/role-groups';
@@ -348,6 +351,62 @@ export class EvaluationController {
     return this.svc.submitEvaluation(user.id, dto);
   }
 
+  // ─── Avaliação estruturada (escala 1–5, pontos fortes, melhorias, recomendações) ───
+
+  @Get('rating-scale')
+  @Roles(...ALL_ROLES)
+  @ApiOperation({ summary: 'Escala de desempenho 1–5 e faixas de classificação' })
+  getRatingScale() {
+    return this.svc.getRatingScale();
+  }
+
+  @Get('performance/:id/items')
+  @Roles(...ALL_ROLES)
+  @ApiOperation({
+    summary:
+      'Pontos fortes, áreas de melhoria e recomendações de uma avaliação (avaliador, avaliado, RH)',
+  })
+  getItems(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.getStructuredItems(id, user);
+  }
+
+  @Post('performance/:id/pdi')
+  @Roles(...ALL_ROLES)
+  @ApiOperation({
+    summary:
+      'Gerar (ou completar) o PDI do avaliado a partir das recomendações da avaliação submetida',
+  })
+  generatePdi(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.generatePdiFromEvaluation(id, user);
+  }
+
+  @Get('performance/history/:userId')
+  @Roles(...ALL_ROLES)
+  @ApiOperation({
+    summary: 'Histórico de avaliações submetidas de um colaborador e comparação com a anterior',
+  })
+  performanceHistory(
+    @Param('userId', ParseIntPipe) userId: number,
+    @Query('type') type: string | undefined,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    if (type !== undefined && !isEvalType(type)) {
+      throw new BadRequestException('Tipo de avaliação inválido');
+    }
+    return this.svc.getPerformanceHistory(userId, user, type as SubmittedType | undefined);
+  }
+
+  @Patch('recommendations/:id')
+  @Roles(...ALL_ROLES)
+  @ApiOperation({ summary: 'Acompanhar uma recomendação (estado, progresso, evidências)' })
+  updateRecommendation(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateRecommendationDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.updateRecommendation(id, dto, user);
+  }
+
   // ─── Legacy endpoint (backward compat) ───────────────────────
 
   @Post()
@@ -541,13 +600,20 @@ export class EvaluationController {
   // ─── Relatórios (docs/modulo_evaluation.md ponto 11) ──────────
 
   @Get('reports/overview')
-  @Roles(...ADMIN_ROLES)
+  @Roles(...MGMT_ROLES)
   @ApiOperation({
     summary:
       'Relatórios de avaliação para RH — por departamento/unidade/cargo/gestor, gaps de competências, objetivos, evolução',
   })
-  reportsOverview(@Query() filters: EvaluationReportFilterDto) {
-    return this.svc.getReportsOverview(filters);
+  reportsOverview(
+    @Query() filters: EvaluationReportFilterDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    // ADMIN/RH veem toda a organização; chefias (LIDER/GESTOR) só a sua equipa
+    // directa — o filtro de gestor é forçado aqui, nunca vem do cliente.
+    // As exportações continuam reservadas a ADMIN/RH.
+    const scoped = isPrivileged(user, ADMIN_ROLES) ? filters : { ...filters, managerId: user.id };
+    return this.svc.getReportsOverview(scoped);
   }
 
   @Get('reports/export.csv')

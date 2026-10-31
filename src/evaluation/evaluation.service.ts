@@ -5,6 +5,7 @@ import {
   BadRequestException,
   ConflictException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { Prisma, EvalCampaignModel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -39,10 +40,24 @@ import {
   UpdateEvaluationRequestDto,
   ScheduleOneOnOneDto,
   RegisterOneOnOneDto,
+  UpdateRecommendationDto,
 } from './evaluation.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { toJson } from '../common/helpers/prisma-json';
-import { weightedScore, removeOutliers } from './evaluation-scoring';
+import {
+  weightedScore,
+  removeOutliers,
+  computeWeightedRating,
+  classifyRating,
+  isRateableQuestion,
+  weightsSumIssue,
+  RATING_SCALE,
+  DEFAULT_RATING_BANDS,
+  type RatedQuestion,
+} from './evaluation-scoring';
+import { EvaluationStructuredService, validateStructuredItems } from './evaluation-structured';
+import { EvaluationInsightsService, type SubmittedType } from './evaluation-insights';
+import { DevelopmentPlansService } from '../development-plans/development-plans.service';
 import { EvaluationCalibrationService } from './evaluation-calibration';
 import { EvaluationAnalyticsService } from './evaluation-analytics';
 
@@ -79,16 +94,21 @@ export class EvaluationService {
   // Calibração e analytics/relatórios extraídos para ficheiros próprios (mesmo prisma/logger).
   private readonly calibration: EvaluationCalibrationService;
   private readonly analytics: EvaluationAnalyticsService;
+  private readonly structured: EvaluationStructuredService;
+  private readonly insights: EvaluationInsightsService;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly oneOnOne: OneOnOneService,
+    @Optional() plans?: DevelopmentPlansService,
   ) {
     this.calibration = new EvaluationCalibrationService(prisma, this.logger, {
       toPublicCampaign: c => this.toPublicCampaign(c),
       assertCampaignExists: id => this.assertCampaignExists(id),
       advanceStage: id => this.advanceStage(id),
     });
+    this.structured = new EvaluationStructuredService(prisma, this.logger, plans);
+    this.insights = new EvaluationInsightsService(prisma);
     this.analytics = new EvaluationAnalyticsService(prisma, this.logger, {
       getPendingEvaluations: id => this.getPendingEvaluations(id),
       getMyProgress: id => this.getMyProgress(id),
@@ -468,6 +488,15 @@ export class EvaluationService {
   // ══════════════════════════════════════════════════════
 
   async createForm(dto: CreateFormDto, createdById: number) {
+    // Pesos explícitos em todos os critérios avaliáveis têm de somar 100%.
+    // Sem pesos explícitos aplica-se o peso igual por omissão (nada a validar).
+    const rateable = dto.questions.filter(isRateableQuestion);
+    if (rateable.length && rateable.every(q => q.weight !== undefined)) {
+      const issue = weightsSumIssue(
+        rateable.map(q => ({ type: q.type, weight: q.weight ?? null })),
+      );
+      if (issue) throw new BadRequestException(issue);
+    }
     return this.prisma.evaluationCampaignForm.create({
       data: {
         title: dto.title,
@@ -1155,9 +1184,14 @@ export class EvaluationService {
     if (request.evaluatorId !== evaluatorId) {
       throw new BadRequestException('Não tens permissão para submeter esta avaliação');
     }
-    if (request.status === RequestStatus.COMPLETED && !dto.isDraft) {
+    // Avaliação submetida é imutável: nem rascunhos nem nova submissão (§9/§15).
+    if (request.status === RequestStatus.COMPLETED) {
       throw new ConflictException('Avaliação já submetida');
     }
+
+    validateStructuredItems(dto, { requireEvidence: request.cycle?.requireEvidence ?? false });
+    await this.structured.assertResponsiblesExist(dto.recommendationItems);
+    await this.structured.assertTrainingsExist(dto.recommendationItems);
 
     const numericAnswers = dto.answers.filter(a => !a.notApplicable && a.score !== undefined);
     const avgScore = numericAnswers.length
@@ -1193,6 +1227,36 @@ export class EvaluationService {
       }
     }
 
+    // Classificação ponderada (escala 1–5): só com o formulário do ciclo e só se completa.
+    const ratedQuestions: RatedQuestion[] = cycleFormId
+      ? (
+          await this.prisma.evaluationCampaignQuestion
+            .findMany({
+              where: { formId: cycleFormId },
+              select: { id: true, type: true, required: true, weight: true, scaleMax: true },
+            })
+            .catch((): RatedQuestion[] => [])
+        ).filter(isRateableQuestion)
+      : [];
+    const rating = computeWeightedRating(ratedQuestions, dto.answers);
+    if (!ratedQuestions.length) {
+      const bad = dto.answers.find(
+        a => !a.notApplicable && a.score !== undefined && (a.score < 1 || a.score > 5),
+      );
+      if (bad) throw new BadRequestException('A nota deve estar entre 1 e 5');
+    }
+    if (rating.invalid.length) {
+      throw new BadRequestException({
+        message: rating.invalid.map(i => i.reason),
+        error: 'Bad Request',
+      });
+    }
+    if (!dto.isDraft && ratedQuestions.length && !rating.complete) {
+      throw new BadRequestException(
+        `Avaliação incompleta (${rating.completionPct}% preenchida): responda aos critérios obrigatórios antes de submeter`,
+      );
+    }
+
     const compAvg = Object.fromEntries(
       Object.entries(competencyScores).map(([cid, scores]) => [
         cid,
@@ -1208,7 +1272,9 @@ export class EvaluationService {
       period:
         request.cycle?.startDate?.getFullYear().toString() ?? new Date().getFullYear().toString(),
       criteria: toJson(dto.answers),
-      overallScore: avgScore,
+      overallScore: ratedQuestions.length ? (rating.weightedScore ?? 0) : avgScore,
+      completionPct: ratedQuestions.length ? rating.completionPct : 0,
+      ratingLabel: rating.weightedScore !== null ? classifyRating(rating.weightedScore) : null,
       competencyScores: JSON.stringify(compAvg),
       strengths: dto.strengths,
       improvements: dto.improvements,
@@ -1222,30 +1288,34 @@ export class EvaluationService {
 
     // PerformanceEvaluation não tem @@unique([evaluatorId, evaluatedId, type, period]) —
     // upsert por essa chave composta rebentava sempre ("Unknown argument").
-    const existingEval = await this.prisma.performanceEvaluation.findFirst({
-      where: {
-        evaluatorId,
-        evaluatedId: request.evaluatedId,
-        type: request.type,
-        period: evalData.period,
-      },
+    const evaluation = await this.prisma.$transaction(async tx => {
+      const existingEval = await tx.performanceEvaluation.findFirst({
+        where: {
+          evaluatorId,
+          evaluatedId: request.evaluatedId,
+          type: request.type,
+          period: evalData.period,
+        },
+      });
+      const saved = existingEval
+        ? await tx.performanceEvaluation.update({
+            where: { id: existingEval.id },
+            data: evalData,
+            include: {
+              evaluator: { select: { id: true, fullName: true } },
+              evaluated: { select: { id: true, fullName: true } },
+            },
+          })
+        : await tx.performanceEvaluation.create({
+            data: evalData,
+            include: {
+              evaluator: { select: { id: true, fullName: true } },
+              evaluated: { select: { id: true, fullName: true } },
+            },
+          });
+      await this.structured.replaceItems(tx, saved.id, evaluatorId, dto);
+      return saved;
     });
-    const evaluation = existingEval
-      ? await this.prisma.performanceEvaluation.update({
-          where: { id: existingEval.id },
-          data: evalData,
-          include: {
-            evaluator: { select: { id: true, fullName: true } },
-            evaluated: { select: { id: true, fullName: true } },
-          },
-        })
-      : await this.prisma.performanceEvaluation.create({
-          data: evalData,
-          include: {
-            evaluator: { select: { id: true, fullName: true } },
-            evaluated: { select: { id: true, fullName: true } },
-          },
-        });
 
     // Mark request as completed
     if (!dto.isDraft) {
@@ -1349,6 +1419,26 @@ export class EvaluationService {
   // ══════════════════════════════════════════════════════
   // QUERY — PENDING / MY EVALUATIONS
   // ══════════════════════════════════════════════════════
+
+  getRatingScale() {
+    return { levels: RATING_SCALE, bands: DEFAULT_RATING_BANDS };
+  }
+
+  generatePdiFromEvaluation(evaluationId: number, user: CurrentUserData) {
+    return this.structured.generatePdi(evaluationId, user);
+  }
+
+  getPerformanceHistory(userId: number, user: CurrentUserData, type?: SubmittedType) {
+    return this.insights.getHistory(userId, user, type);
+  }
+
+  getStructuredItems(evaluationId: number, user: CurrentUserData) {
+    return this.structured.getItems(evaluationId, user);
+  }
+
+  updateRecommendation(id: number, dto: UpdateRecommendationDto, user: CurrentUserData) {
+    return this.structured.updateRecommendation(id, dto, user);
+  }
 
   async getPendingEvaluations(evaluatorId: number) {
     // EvaluationRequest não tem relação `cycle` (só o escalar cycleId) — este
