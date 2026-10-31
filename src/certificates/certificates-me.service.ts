@@ -96,7 +96,7 @@ export class CertificatesMeService {
   }
 
   /**
-   * "Apagar" um certificado revogado da lista do titular. Não elimina nada: marca-o
+   * "Remover da lista" um certificado revogado da lista do titular. Não elimina nada: marca-o
    * como oculto para o titular (`holderHiddenAt`); o registo continua nos relatórios,
    * na lista de administração e na auditoria.
    */
@@ -107,7 +107,7 @@ export class CertificatesMeService {
     });
     if (!cert) throw new NotFoundException('Certificado não encontrado');
     if (!cert.revoked && cert.status !== 'REVOKED') {
-      throw new ConflictException('Só é possível apagar certificados revogados');
+      throw new ConflictException('Só é possível remover da lista certificados revogados');
     }
     if (cert.holderHiddenAt) return { hidden: true };
 

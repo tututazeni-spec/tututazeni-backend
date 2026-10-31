@@ -315,6 +315,16 @@ export class CertificatesController {
     return { id: cert.id, status: cert.status, revokedAt: cert.revokedAt };
   }
 
+  @Delete(':id')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary:
+      'Remover da lista de administração um certificado revogado (fica nos relatórios e na auditoria)',
+  })
+  hideRevoked(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.lifecycle.hideRevoked(id, user.id);
+  }
+
   @Post(':id/reissue')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Reemitir um certificado, ligado ao original' })
@@ -392,7 +402,7 @@ export class CertificatesController {
   @Delete('my/:id')
   @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({
-    summary: 'Apagar da minha lista um certificado revogado (fica nos relatórios e na auditoria)',
+    summary: 'Remover da minha lista um certificado revogado (fica nos relatórios e na auditoria)',
   })
   hideMine(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.me.hideRevoked(id, user);
