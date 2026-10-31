@@ -1922,6 +1922,30 @@ export class CoursesService {
     });
   }
 
+  /**
+   * Ciclo de vida automático das turmas, a cada minuto (idempotente):
+   *  - OPEN/ACTIVE com `endDate` atingida → CLOSED (cobre também turmas que
+   *    nunca chegaram a ser activadas, p.ex. app em baixo durante a janela);
+   *  - OPEN com `startDate` atingida → ACTIVE.
+   * Fecha-se primeiro para que uma turma já terminada não passe por ACTIVE.
+   * DRAFT e CANCELLED nunca são tocadas.
+   */
+  @Cron('* * * * *')
+  async syncCohortStatuses(now: Date = new Date()) {
+    const closed = await this.prisma.courseCohort.updateMany({
+      where: { status: { in: ['OPEN', 'ACTIVE'] }, endDate: { lte: now } },
+      data: { status: 'CLOSED' },
+    });
+    const activated = await this.prisma.courseCohort.updateMany({
+      where: { status: 'OPEN', startDate: { lte: now } },
+      data: { status: 'ACTIVE' },
+    });
+    if (closed.count || activated.count) {
+      this.logger.log(`Turmas: ${activated.count} activada(s), ${closed.count} encerrada(s)`);
+    }
+    return { activated: activated.count, closed: closed.count };
+  }
+
   async closeCohort(id: number, user: CurrentUserData) {
     const cohort = await this.prisma.courseCohort.findUnique({ where: { id } });
     if (!cohort) throw new NotFoundException('Turma não encontrada');
