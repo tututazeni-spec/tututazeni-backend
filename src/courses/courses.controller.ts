@@ -587,6 +587,13 @@ export class CoursesController {
   }
 
   // Declarada antes de 'cohorts/:cohortId' para não ser apanhada por esse parâmetro.
+  @Get('cohorts/mine')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Turmas em que o utilizador autenticado está inscrito' })
+  listMyCohorts(@CurrentUser() user: CurrentUserData) {
+    return this.svc.listMyCohorts(user.id);
+  }
+
   @Get('cohorts/export')
   @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
   @ApiOperation({ summary: 'Relatório de turmas abertas/activas/encerradas em Excel ou PDF' })
