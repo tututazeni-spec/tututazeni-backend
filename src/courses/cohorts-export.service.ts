@@ -399,7 +399,7 @@ export class CohortsExportService {
       ];
       const body = rows.map(r => headers.map(h => esc(r[h])).join(';'));
       buffer = Buffer.from(
-        `﻿${[...meta, headers.map(esc).join(';'), ...body].join('\r\n')}`,
+        `\uFEFF${[...meta, headers.map(esc).join(';'), ...body].join('\r\n')}`,
         'utf8',
       );
     } else {
