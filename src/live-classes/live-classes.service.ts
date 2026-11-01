@@ -15,6 +15,7 @@ import {
   LiveClassEnrollmentMode,
   SessionModality,
   LiveAttendanceStatus,
+  MeetingProvider,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CourseCompletionService } from '../course-completion/course-completion.service';
@@ -36,6 +37,7 @@ import {
   LiveClassReportFilterDto,
 } from './live-classes.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { normalizeMeeting } from './meeting-link.util';
 import { buildCsvString } from '../common/utils/csv-export.util';
 
 // Limite de segurança para a expansão de sessões recorrentes — evita um
@@ -128,14 +130,31 @@ export class LiveClassesService {
   async getRoomAccess(
     id: number,
     user: { id: number; email: string; fullName?: string | null; role?: { name: string } | null },
-  ): Promise<{ roomName: string; domain: string; jwt?: string; appId?: string }> {
-    const secret = process.env.JWT_SECRET;
-    if (!secret) throw new Error('JWT_SECRET em falta — impossível gerar a sala');
+  ): Promise<
+    | { roomName: string; domain: string; jwt?: string; appId?: string }
+    | { provider: 'ZOOM' | 'TEAMS'; joinUrl: string; passcode: string | null }
+  > {
     const lc = await this.prisma.read.liveClass.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, meetingProvider: true, meetingUrl: true, meetingPasscode: true },
     });
     if (!lc) throw new NotFoundException('Aula ao vivo não encontrada');
+
+    // Zoom/Teams: o organizador colou o link; o participante só o abre (estas
+    // plataformas não se embebem em iframe). Sem JWT_SECRET nem sala Jitsi.
+    if (lc.meetingProvider && lc.meetingProvider !== MeetingProvider.JITSI) {
+      if (!lc.meetingUrl) {
+        throw new ConflictException('A aula não tem link de reunião definido.');
+      }
+      return {
+        provider: lc.meetingProvider,
+        joinUrl: lc.meetingUrl,
+        passcode: lc.meetingPasscode ?? null,
+      };
+    }
+
+    const secret = process.env.JWT_SECRET;
+    if (!secret) throw new Error('JWT_SECRET em falta — impossível gerar a sala');
 
     const digest = createHmac('sha256', secret).update(`jitsi-room:${id}`).digest('hex');
     const baseRoom = `innova-live-${id}-${digest.slice(0, 24)}`;
@@ -198,6 +217,35 @@ export class LiveClassesService {
       { algorithm: 'HS256' },
     );
     return { roomName, domain, jwt };
+  }
+
+  /** Valida/normaliza a plataforma+link da aula. PRESENTIAL nunca usa reunião online. */
+  private resolveMeeting(
+    provider: MeetingProvider,
+    rawUrl: string | null | undefined,
+    modality?: SessionModality,
+  ) {
+    const effective = modality === SessionModality.PRESENTIAL ? MeetingProvider.JITSI : provider;
+    const m = normalizeMeeting(effective, rawUrl);
+    return {
+      meetingProvider: effective,
+      meetingUrl: m.url,
+      ...(m.zoomId ? { zoomMeetingId: m.zoomId } : {}),
+    };
+  }
+
+  /** Plataforma/link de uma sessão: sem plataforma, mantém-se só um link web simples. */
+  private resolveSessionMeeting(dto: { meetingProvider?: MeetingProvider; meetingUrl?: string }) {
+    if (dto.meetingProvider) {
+      const m = normalizeMeeting(dto.meetingProvider, dto.meetingUrl);
+      return { meetingProvider: dto.meetingProvider, meetingUrl: m.url };
+    }
+    if (dto.meetingUrl === undefined) return {};
+    const url = dto.meetingUrl.trim();
+    if (url && !/^https?:\/\//i.test(url)) {
+      throw new BadRequestException('O link da reunião tem de começar por http:// ou https://.');
+    }
+    return { meetingUrl: url || null };
   }
 
   /** Validade do JWT da sala (omissão 2h; JITSI_JWT_TTL_MINUTES, entre 15 e 240). */
@@ -267,11 +315,21 @@ export class LiveClassesService {
 
     const { recurrenceEndDate, recurrenceDaysOfWeek, recordingExpiresAt, notifySettings, ...rest } =
       dto;
+    const meeting = this.resolveMeeting(
+      dto.meetingProvider ?? MeetingProvider.JITSI,
+      dto.meetingUrl,
+      dto.modality,
+    );
 
     const lc = await this.prisma.liveClass
       .create({
         data: {
           ...rest,
+          ...meeting,
+          meetingPasscode:
+            meeting.meetingProvider === MeetingProvider.JITSI
+              ? null
+              : dto.meetingPasscode?.trim() || null,
           code: dto.code ?? this.generateCode(dto.type ?? 'AULA'),
           scheduledAt,
           recurrenceEndDate: recurrenceEndDate ? new Date(recurrenceEndDate) : undefined,
@@ -286,7 +344,8 @@ export class LiveClassesService {
                   durationMinutes: dto.duration,
                   instructorId: dto.instructorId,
                   location: dto.location,
-                  meetingUrl: dto.zoomMeetingId,
+                  meetingUrl: meeting.meetingUrl ?? dto.zoomMeetingId,
+                  meetingProvider: meeting.meetingProvider,
                 })),
               }
             : undefined,
@@ -298,9 +357,26 @@ export class LiveClassesService {
   }
 
   async update(id: number, dto: UpdateLiveClassDto) {
-    await this.findOne(id);
+    const current = await this.findOne(id);
     const { recurrenceEndDate, recordingExpiresAt, notifySettings, ...rest } = dto;
     const data: Prisma.LiveClassUpdateInput = { ...rest };
+    if (
+      dto.meetingProvider !== undefined ||
+      dto.meetingUrl !== undefined ||
+      dto.modality !== undefined
+    ) {
+      const provider = dto.meetingProvider ?? current.meetingProvider;
+      const meeting = this.resolveMeeting(
+        provider,
+        dto.meetingUrl ?? current.meetingUrl,
+        dto.modality ?? current.modality,
+      );
+      Object.assign(data, meeting);
+      if (meeting.meetingProvider === MeetingProvider.JITSI) data.meetingPasscode = null;
+    }
+    if (dto.meetingPasscode !== undefined && data.meetingPasscode === undefined) {
+      data.meetingPasscode = dto.meetingPasscode.trim() || null;
+    }
     if (dto.scheduledAt) data.scheduledAt = new Date(dto.scheduledAt);
     if (recurrenceEndDate) data.recurrenceEndDate = new Date(recurrenceEndDate);
     if (recordingExpiresAt) data.recordingExpiresAt = new Date(recordingExpiresAt);
@@ -380,6 +456,9 @@ export class LiveClassesService {
         recurrence: LiveClassRecurrence.ONCE,
         modality: lc.modality,
         zoomMeetingId: lc.zoomMeetingId,
+        meetingProvider: lc.meetingProvider,
+        meetingUrl: lc.meetingUrl,
+        meetingPasscode: lc.meetingPasscode,
         location: lc.location,
         building: lc.building,
         room: lc.room,
@@ -474,7 +553,7 @@ export class LiveClassesService {
         durationMinutes: dto.durationMinutes,
         instructorId: dto.instructorId,
         location: dto.location,
-        meetingUrl: dto.meetingUrl,
+        ...this.resolveSessionMeeting(dto),
         notes: dto.notes,
       },
       include: { instructor: { select: { id: true, name: true } } },
@@ -488,10 +567,14 @@ export class LiveClassesService {
     if (!session || session.liveClassId !== liveClassId) {
       throw new NotFoundException('Sessão não encontrada');
     }
-    const { sessionDate, ...rest } = dto;
+    const { sessionDate, meetingProvider: _p, meetingUrl: _u, ...rest } = dto;
     return this.prisma.liveClassSession.update({
       where: { id: sessionId },
-      data: { ...rest, ...(sessionDate ? { sessionDate: new Date(sessionDate) } : {}) },
+      data: {
+        ...rest,
+        ...this.resolveSessionMeeting(dto),
+        ...(sessionDate ? { sessionDate: new Date(sessionDate) } : {}),
+      },
       include: { instructor: { select: { id: true, name: true } } },
     });
   }
@@ -944,6 +1027,8 @@ export class LiveClassesService {
           id: true,
           topic: true,
           zoomMeetingId: true,
+          meetingProvider: true,
+          meetingUrl: true,
           status: true,
           scheduledAt: true,
           course: { select: { id: true, title: true } },
@@ -964,13 +1049,18 @@ export class LiveClassesService {
       instructor: lc.instructor,
       status: lc.status,
       scheduledAt: lc.scheduledAt,
-      platform: lc.zoomMeetingId
-        ? 'Zoom'
-        : lc.sessions.some(s => s.meetingUrl)
-          ? 'Personalizada'
-          : '—',
+      platform:
+        lc.meetingProvider === MeetingProvider.ZOOM
+          ? 'Zoom'
+          : lc.meetingProvider === MeetingProvider.TEAMS
+            ? 'Teams'
+            : lc.zoomMeetingId
+              ? 'Zoom'
+              : lc.sessions.some(s => s.meetingUrl)
+                ? 'Personalizada'
+                : 'Jitsi',
       meetingId: lc.zoomMeetingId,
-      link: lc.sessions.find(s => s.meetingUrl)?.meetingUrl ?? null,
+      link: lc.meetingUrl ?? lc.sessions.find(s => s.meetingUrl)?.meetingUrl ?? null,
       sessions: lc.sessions,
     }));
     return buildPaginatedResponse(rooms, total, page, limit);

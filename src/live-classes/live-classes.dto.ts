@@ -9,6 +9,7 @@ import {
   IsObject,
   Min,
   Max,
+  MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -18,6 +19,7 @@ import {
   LiveClassRecurrence,
   LiveClassEnrollmentMode,
   LiveAttendanceStatus,
+  MeetingProvider,
   SessionModality,
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
@@ -75,6 +77,20 @@ export class CreateLiveClassDto {
   @IsEnum(SessionModality)
   modality?: SessionModality;
   @ApiPropertyOptional() @IsOptional() @IsString() zoomMeetingId?: string;
+  @ApiPropertyOptional({ enum: MeetingProvider, description: 'Plataforma da reunião online' })
+  @IsOptional()
+  @IsEnum(MeetingProvider)
+  meetingProvider?: MeetingProvider;
+  @ApiPropertyOptional({ description: 'Link (Zoom/Teams) ou ID da reunião (Zoom)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  meetingUrl?: string;
+  @ApiPropertyOptional({ description: 'Código de acesso da reunião' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  meetingPasscode?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() location?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() building?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() room?: string;
@@ -157,7 +173,15 @@ export class CreateLiveClassSessionDto {
   @ApiProperty() @IsInt() durationMinutes!: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() instructorId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() location?: string;
-  @ApiPropertyOptional() @IsOptional() @IsWebLink() meetingUrl?: string;
+  @ApiPropertyOptional({ enum: MeetingProvider })
+  @IsOptional()
+  @IsEnum(MeetingProvider)
+  meetingProvider?: MeetingProvider;
+  @ApiPropertyOptional({ description: 'Link ou ID da reunião' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  meetingUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
   @ApiPropertyOptional({
     type: [Number],

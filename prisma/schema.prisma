@@ -5541,6 +5541,14 @@ enum SessionModality {
   HYBRID
 }
 
+// Plataforma da reunião online de uma aula ao vivo. JITSI = sala própria
+// (JaaS/meet.jit.si); ZOOM/TEAMS = link externo colado pelo organizador.
+enum MeetingProvider {
+  JITSI
+  ZOOM
+  TEAMS
+}
+
 model Training {
   id                     Int                    @id @default(autoincrement())
   title                  String
@@ -7493,6 +7501,10 @@ model LiveClass {
   id            Int      @id @default(autoincrement())
   courseId      Int?
   zoomMeetingId String?  @db.Text
+  // Plataforma + link da reunião (Zoom/Teams). JITSI não precisa de link.
+  meetingProvider MeetingProvider @default(JITSI)
+  meetingUrl      String?         @db.Text
+  meetingPasscode String?
   topic         String   @db.Text
   scheduledAt   DateTime
   duration      Int
@@ -7600,6 +7612,8 @@ model LiveClassSession {
   instructorId         Int?
   location             String?
   meetingUrl           String?
+  // null = herda a plataforma da aula
+  meetingProvider      MeetingProvider?
   status               LiveClassStatus @default(AGENDADA)
   notes                String?
   recordingUrl         String?
