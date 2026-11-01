@@ -121,6 +121,46 @@ describe('CertificateLifecycleService', () => {
     });
   });
 
+  describe('hideRevoked', () => {
+    it('só revogados: um certificado válido não pode ser apagado (409)', async () => {
+      prisma.certificate.findUnique.mockResolvedValue(cert());
+      await expect(svc.hideRevoked(5, 99)).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.certificate.update).not.toHaveBeenCalled();
+    });
+
+    it('revogado: oculta da lista (sem apagar o registo) e audita', async () => {
+      prisma.certificate.findUnique.mockResolvedValue(
+        cert({ status: 'REVOKED', revoked: true, adminHiddenAt: null }),
+      );
+      expect(await svc.hideRevoked(5, 99)).toEqual({ hidden: true });
+      expect(prisma.certificate.update).toHaveBeenCalledWith({
+        where: { id: 5 },
+        data: { adminHiddenAt: expect.any(Date) },
+      });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'CERTIFICATE_HIDDEN_BY_ADMIN',
+          entityId: 5,
+          userId: 99,
+        }),
+      );
+    });
+
+    it('já oculto: idempotente, sem nova auditoria', async () => {
+      prisma.certificate.findUnique.mockResolvedValue(
+        cert({ status: 'REVOKED', revoked: true, adminHiddenAt: new Date() }),
+      );
+      expect(await svc.hideRevoked(5, 99)).toEqual({ hidden: true });
+      expect(prisma.certificate.update).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+
+    it('certificado inexistente → 404', async () => {
+      prisma.certificate.findUnique.mockResolvedValue(null);
+      await expect(svc.hideRevoked(5, 99)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
   describe('reissue', () => {
     it.each([
       ['externo', cert({ origin: 'EXTERNAL' })],
