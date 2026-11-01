@@ -25,13 +25,28 @@ export class AllExceptionsFilter implements ExceptionFilter {
       res.setHeader('x-request-id', requestId);
     }
 
+    // Erros 4xx vindos de middlewares (ex.: body-parser -> 413 "entity.too.large") não são
+    // HttpException do Nest; sem isto seriam reportados como 500.
+    const rawStatus = (exception as { status?: unknown } | null)?.status;
+    const clientStatus =
+      !(exception instanceof HttpException) &&
+      typeof rawStatus === 'number' &&
+      rawStatus >= 400 &&
+      rawStatus < 500
+        ? rawStatus
+        : undefined;
     const status =
-      exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+      exception instanceof HttpException
+        ? exception.getStatus()
+        : (clientStatus ?? HttpStatus.INTERNAL_SERVER_ERROR);
 
     // Preserva o payload estruturado das HttpException (ex.: o array de mensagens
     // do ValidationPipe). Usar exception.message colapsaria isso para a string
     // genérica "Bad Request Exception" e perderia os detalhes por campo.
-    let message: unknown = 'Internal server error';
+    let message: unknown = clientStatus ? 'Pedido inválido' : 'Internal server error';
+    if (clientStatus === 413) {
+      message = 'O pedido é demasiado grande (por exemplo, uma imagem pesada).';
+    }
     if (exception instanceof HttpException) {
       const response = exception.getResponse();
       message =
