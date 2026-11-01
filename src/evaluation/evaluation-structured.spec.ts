@@ -158,6 +158,40 @@ describe('EvaluationStructuredService', () => {
     svc = new EvaluationStructuredService(prisma as never, new Logger('t'));
   });
 
+  describe('getExportData (PDF de uma avaliação)', () => {
+    const evalRow = {
+      type: 'MANAGER',
+      period: '2026',
+      overallScore: 3.5,
+      ratingLabel: 'Cumpre',
+      generalComment: null,
+      createdAt: new Date(),
+      isDraft: false,
+      evaluated: { fullName: 'Ana', position: null, department: null },
+      evaluator: { fullName: 'Rui' },
+      cycle: null,
+    };
+
+    it('devolve os dados à chefia/RH e nega a quem não vê a avaliação (404)', async () => {
+      prisma.performanceEvaluation.findUnique
+        .mockResolvedValueOnce({ id: 1, evaluatorId: 10, evaluatedId: 5, isDraft: false })
+        .mockResolvedValueOnce(evalRow);
+      const out = await svc.getExportData(1, { id: 10 });
+      expect(out.ev.evaluated.fullName).toBe('Ana');
+      expect(out.items.strengths).toEqual([]);
+
+      prisma.performanceEvaluation.findUnique.mockResolvedValueOnce({
+        id: 1,
+        evaluatorId: 10,
+        evaluatedId: 5,
+        isDraft: false,
+      });
+      await expect(svc.getExportData(1, { id: 77, role: { name: 'COLABORADOR' } })).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
   describe('getItems (permissões)', () => {
     it('avaliador vê sempre; avaliado só depois de submetida; outro colaborador não vê', async () => {
       prisma.performanceEvaluation.findUnique.mockResolvedValue({
