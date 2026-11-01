@@ -135,11 +135,29 @@ export class LiveClassesService {
     user: { id: number; email: string; fullName?: string | null; role?: { name: string } | null },
   ): Promise<
     | { roomName: string; domain: string; jwt?: string; appId?: string }
-    | { provider: 'ZOOM' | 'TEAMS'; joinUrl: string; passcode: string | null }
+    | {
+        provider: 'ZOOM' | 'TEAMS';
+        joinUrl: string;
+        passcode: string | null;
+        /** Só Zoom com Meeting SDK configurado: permite embeber a reunião na página. */
+        sdk?: {
+          signature: string;
+          sdkKey: string;
+          meetingNumber: string;
+          userName: string;
+          userEmail: string;
+        };
+      }
   > {
     const lc = await this.prisma.read.liveClass.findUnique({
       where: { id },
-      select: { id: true, meetingProvider: true, meetingUrl: true, meetingPasscode: true },
+      select: {
+        id: true,
+        meetingProvider: true,
+        meetingUrl: true,
+        meetingPasscode: true,
+        zoomMeetingId: true,
+      },
     });
     if (!lc) throw new NotFoundException('Aula ao vivo não encontrada');
 
@@ -149,10 +167,24 @@ export class LiveClassesService {
       if (!lc.meetingUrl) {
         throw new ConflictException('A aula não tem link de reunião definido.');
       }
+      const meetingNumber =
+        lc.meetingProvider === MeetingProvider.ZOOM
+          ? (lc.zoomMeetingId ?? lc.meetingUrl.match(/\/j\/(\d{9,11})/)?.[1] ?? null)
+          : null;
+      const sdk =
+        meetingNumber && this.zoom?.isSdkConfigured()
+          ? {
+              ...this.zoom.buildSdkSignature(meetingNumber, 0),
+              meetingNumber,
+              userName: user.fullName || user.email,
+              userEmail: user.email,
+            }
+          : undefined;
       return {
         provider: lc.meetingProvider,
         joinUrl: lc.meetingUrl,
         passcode: lc.meetingPasscode ?? null,
+        ...(sdk ? { sdk } : {}),
       };
     }
 
