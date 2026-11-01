@@ -50,15 +50,24 @@ describe('ZoomService', () => {
     process.env.ZOOM_ACCOUNT_ID = 'a';
     process.env.ZOOM_CLIENT_ID = 'b';
     process.env.ZOOM_CLIENT_SECRET = 'c';
-    global.fetch = jest
-      .fn()
-      .mockResolvedValue({
-        ok: false,
-        status: 401,
-        text: async () => 'x',
-      }) as unknown as typeof fetch;
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => 'x',
+    }) as unknown as typeof fetch;
     await expect(
       new ZoomService().createMeeting({ topic: 't', startTime: new Date(), durationMinutes: 30 }),
     ).rejects.toThrow('autenticar no Zoom');
+  });
+
+  it('assina o JWT do Meeting SDK com o número da reunião', () => {
+    process.env.ZOOM_SDK_KEY = 'k';
+    process.env.ZOOM_SDK_SECRET = 's';
+    const z = new ZoomService();
+    expect(z.isSdkConfigured()).toBe(true);
+    const { signature, sdkKey } = z.buildSdkSignature('123456789', 0);
+    const payload = JSON.parse(Buffer.from(signature.split('.')[1], 'base64url').toString());
+    expect(sdkKey).toBe('k');
+    expect(payload).toMatchObject({ sdkKey: 'k', appKey: 'k', mn: '123456789', role: 0 });
   });
 });

@@ -1,4 +1,5 @@
 import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
+import { sign } from 'jsonwebtoken';
 
 export interface ZoomMeetingInput {
   topic: string;
@@ -28,6 +29,24 @@ export class ZoomService {
       process.env.ZOOM_CLIENT_ID &&
       process.env.ZOOM_CLIENT_SECRET
     );
+  }
+
+  /** Meeting SDK (embeber a reunião na página): app própria, com SDK Key/Secret. */
+  isSdkConfigured(): boolean {
+    return !!(process.env.ZOOM_SDK_KEY && process.env.ZOOM_SDK_SECRET);
+  }
+
+  /** Assinatura (JWT HS256) que o Meeting SDK para Web exige para entrar na reunião. */
+  buildSdkSignature(meetingNumber: string, role: 0 | 1 = 0): { signature: string; sdkKey: string } {
+    const sdkKey = process.env.ZOOM_SDK_KEY ?? '';
+    const iat = Math.floor(Date.now() / 1000) - 30;
+    const exp = iat + 60 * 60 * 2;
+    const signature = sign(
+      { appKey: sdkKey, sdkKey, mn: meetingNumber, role, iat, exp, tokenExp: exp },
+      process.env.ZOOM_SDK_SECRET ?? '',
+      { algorithm: 'HS256' },
+    );
+    return { signature, sdkKey };
   }
 
   private async getToken(): Promise<string> {
@@ -63,7 +82,7 @@ export class ZoomService {
         start_time: input.startTime.toISOString(),
         duration: input.durationMinutes,
         timezone: input.timezone ?? 'UTC',
-        settings: { join_before_host: false, waiting_room: true },
+        settings: { join_before_host: true, waiting_room: false },
       }),
     });
     if (!res.ok) {
