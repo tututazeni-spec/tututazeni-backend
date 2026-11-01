@@ -128,7 +128,7 @@ export class LiveClassesService {
   async getRoomAccess(
     id: number,
     user: { id: number; email: string; fullName?: string | null; role?: { name: string } | null },
-  ): Promise<{ roomName: string; domain: string; jwt?: string }> {
+  ): Promise<{ roomName: string; domain: string; jwt?: string; appId?: string }> {
     const secret = process.env.JWT_SECRET;
     if (!secret) throw new Error('JWT_SECRET em falta — impossível gerar a sala');
     const lc = await this.prisma.read.liveClass.findUnique({
@@ -138,16 +138,45 @@ export class LiveClassesService {
     if (!lc) throw new NotFoundException('Aula ao vivo não encontrada');
 
     const digest = createHmac('sha256', secret).update(`jitsi-room:${id}`).digest('hex');
-    const roomName = `innova-live-${id}-${digest.slice(0, 24)}`;
+    const baseRoom = `innova-live-${id}-${digest.slice(0, 24)}`;
     const domain = process.env.JITSI_DOMAIN || 'meet.jit.si';
+    const roleName = user.role?.name ?? '';
+    const moderator = ['ADMIN', 'RH', 'INSTRUCTOR'].includes(roleName);
+    const now = Math.floor(Date.now() / 1000);
+    const displayName = user.fullName || user.email;
 
+    // JaaS (8x8.vc): sala com prefixo `<appId>/`, JWT RS256 com `kid`, iss "chat"
+    // e sub = appId. Activa-se com JITSI_PRIVATE_KEY (PEM) + JITSI_KEY_ID.
+    const privateKey = process.env.JITSI_PRIVATE_KEY?.replace(/\\n/g, '\n');
+    const jaasAppId = process.env.JITSI_APP_ID;
+    const keyId = process.env.JITSI_KEY_ID;
+    if (privateKey && jaasAppId && keyId) {
+      const roomName = `${jaasAppId}/${baseRoom}`;
+      const jwt = sign(
+        {
+          aud: 'jitsi',
+          iss: 'chat',
+          sub: jaasAppId,
+          room: baseRoom,
+          iat: now,
+          nbf: now - 5,
+          exp: now + this.jitsiTokenTtlSeconds(),
+          context: {
+            user: { id: String(user.id), name: displayName, moderator },
+            features: { recording: false, livestreaming: false, transcription: false },
+          },
+        },
+        privateKey,
+        { algorithm: 'RS256', keyid: keyId.includes('/') ? keyId : `${jaasAppId}/${keyId}` },
+      );
+      return { roomName, domain, jwt, appId: jaasAppId };
+    }
+
+    const roomName = baseRoom;
     const appSecret = process.env.JITSI_APP_SECRET;
     if (!appSecret) return { roomName, domain };
 
     const appId = process.env.JITSI_APP_ID || 'innova';
-    const roleName = user.role?.name ?? '';
-    const moderator = ['ADMIN', 'RH', 'INSTRUCTOR'].includes(roleName);
-    const now = Math.floor(Date.now() / 1000);
     const jwt = sign(
       {
         aud: 'jitsi',
