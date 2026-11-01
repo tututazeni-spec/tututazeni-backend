@@ -1091,7 +1091,9 @@ export class EvaluationService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return { ...request, siblings, result };
+    // `result` é a nota global (número ou null), como na lista de avaliações —
+    // devolver o registo inteiro fazia `result.toFixed` rebentar no modal de detalhe.
+    return { ...request, siblings, result: result?.overallScore ?? null };
   }
 
   async updateEvaluationRequest(id: number, dto: UpdateEvaluationRequestDto) {
@@ -1487,6 +1489,10 @@ export class EvaluationService {
 
   getPerformanceHistory(userId: number, user: CurrentUserData, type?: SubmittedType) {
     return this.insights.getHistory(userId, user, type);
+  }
+
+  getEvaluationExportData(evaluationId: number, user: CurrentUserData) {
+    return this.structured.getExportData(evaluationId, user);
   }
 
   getStructuredItems(evaluationId: number, user: CurrentUserData) {
