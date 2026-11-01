@@ -3,6 +3,7 @@ import { sign } from 'jsonwebtoken';
 import {
   Injectable,
   Logger,
+  Optional,
   NotFoundException,
   ConflictException,
   BadRequestException,
@@ -18,6 +19,7 @@ import {
   MeetingProvider,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ZoomService } from './zoom.service';
 import { CourseCompletionService } from '../course-completion/course-completion.service';
 import {
   CreateLiveClassDto,
@@ -62,6 +64,7 @@ export class LiveClassesService {
   constructor(
     private prisma: PrismaService,
     private readonly courseCompletion: CourseCompletionService,
+    @Optional() private readonly zoom?: ZoomService,
   ) {}
 
   async findAll(filters: LiveClassFilterDto) {
@@ -309,15 +312,49 @@ export class LiveClassesService {
     throw e;
   }
 
+  /**
+   * Zoom sem link/ID colado e com credenciais configuradas: cria a reunião via API
+   * e devolve o link (e código de acesso) a guardar. Sem credenciais, mantém-se o
+   * comportamento antigo (pede ao organizador que cole o link).
+   */
+  private async autoCreateZoom(
+    provider: MeetingProvider,
+    modality: SessionModality | undefined,
+    rawUrl: string | null | undefined,
+    topic: string,
+    scheduledAt: Date,
+    durationMinutes: number,
+    timezone?: string,
+  ): Promise<{ meetingUrl: string; passcode: string | null } | null> {
+    if (provider !== MeetingProvider.ZOOM || modality === SessionModality.PRESENTIAL) return null;
+    if ((rawUrl ?? '').trim() || !this.zoom?.isConfigured()) return null;
+    const m = await this.zoom.createMeeting({
+      topic,
+      startTime: scheduledAt,
+      durationMinutes,
+      timezone,
+    });
+    return { meetingUrl: m.joinUrl, passcode: m.passcode };
+  }
+
   async create(dto: CreateLiveClassDto) {
     const scheduledAt = new Date(dto.scheduledAt);
     const sessionDates = this.buildSessionDates(dto, scheduledAt);
 
     const { recurrenceEndDate, recurrenceDaysOfWeek, recordingExpiresAt, notifySettings, ...rest } =
       dto;
+    const auto = await this.autoCreateZoom(
+      dto.meetingProvider ?? MeetingProvider.JITSI,
+      dto.modality,
+      dto.meetingUrl,
+      dto.topic,
+      scheduledAt,
+      dto.duration,
+      dto.timezone,
+    );
     const meeting = this.resolveMeeting(
       dto.meetingProvider ?? MeetingProvider.JITSI,
-      dto.meetingUrl,
+      auto?.meetingUrl ?? dto.meetingUrl,
       dto.modality,
     );
 
@@ -329,7 +366,7 @@ export class LiveClassesService {
           meetingPasscode:
             meeting.meetingProvider === MeetingProvider.JITSI
               ? null
-              : dto.meetingPasscode?.trim() || null,
+              : dto.meetingPasscode?.trim() || auto?.passcode || null,
           code: dto.code ?? this.generateCode(dto.type ?? 'AULA'),
           scheduledAt,
           recurrenceEndDate: recurrenceEndDate ? new Date(recurrenceEndDate) : undefined,
@@ -366,13 +403,23 @@ export class LiveClassesService {
       dto.modality !== undefined
     ) {
       const provider = dto.meetingProvider ?? current.meetingProvider;
-      const meeting = this.resolveMeeting(
+      const modality = dto.modality ?? current.modality;
+      const rawUrl = dto.meetingUrl ?? current.meetingUrl;
+      const auto = await this.autoCreateZoom(
         provider,
-        dto.meetingUrl ?? current.meetingUrl,
-        dto.modality ?? current.modality,
+        modality,
+        rawUrl,
+        dto.topic ?? current.topic,
+        dto.scheduledAt ? new Date(dto.scheduledAt) : current.scheduledAt,
+        dto.duration ?? current.duration,
+        dto.timezone ?? current.timezone ?? undefined,
       );
+      const meeting = this.resolveMeeting(provider, auto?.meetingUrl ?? rawUrl, modality);
       Object.assign(data, meeting);
       if (meeting.meetingProvider === MeetingProvider.JITSI) data.meetingPasscode = null;
+      else if (auto?.passcode && dto.meetingPasscode === undefined) {
+        data.meetingPasscode = auto.passcode;
+      }
     }
     if (dto.meetingPasscode !== undefined && data.meetingPasscode === undefined) {
       data.meetingPasscode = dto.meetingPasscode.trim() || null;
