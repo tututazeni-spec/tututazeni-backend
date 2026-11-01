@@ -44,7 +44,12 @@ describe('buildLinkedInUrl', () => {
 
 describe('CertificatesMeService', () => {
   const prisma = {
-    certificate: { findMany: jest.fn(), findUnique: jest.fn() },
+    certificate: {
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+      findFirst: jest.fn(),
+      update: jest.fn(),
+    },
     enrollment: { findMany: jest.fn() },
     user: { findUnique: jest.fn() },
   };
@@ -178,6 +183,62 @@ describe('CertificatesMeService', () => {
       prisma.user.findUnique.mockResolvedValue({ email: 'ana@innova.com', fullName: 'Ana' });
       mail.sendCertificateLink.mockRejectedValue(new Error('smtp'));
       await expect(svc.emailMe(5, { id: 42 })).rejects.toBeInstanceOf(BadGatewayException);
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('hideRevoked', () => {
+    it('só o titular: certificado de outra pessoa → 404', async () => {
+      prisma.certificate.findFirst.mockResolvedValue(null);
+      await expect(svc.hideRevoked(5, { id: 42 })).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.certificate.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 5, userId: 42, deletedAt: null } }),
+      );
+      expect(prisma.certificate.update).not.toHaveBeenCalled();
+    });
+
+    it('certificado válido não pode ser apagado (409)', async () => {
+      prisma.certificate.findFirst.mockResolvedValue({
+        id: 5,
+        status: 'ACTIVE',
+        revoked: false,
+        holderHiddenAt: null,
+      });
+      await expect(svc.hideRevoked(5, { id: 42 })).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.certificate.update).not.toHaveBeenCalled();
+    });
+
+    it('revogado: oculta ao titular (sem apagar o registo) e audita', async () => {
+      prisma.certificate.findFirst.mockResolvedValue({
+        id: 5,
+        status: 'REVOKED',
+        revoked: true,
+        holderHiddenAt: null,
+      });
+      expect(await svc.hideRevoked(5, { id: 42 })).toEqual({ hidden: true });
+      expect(prisma.certificate.update).toHaveBeenCalledWith({
+        where: { id: 5 },
+        data: { holderHiddenAt: expect.any(Date) },
+      });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'CERTIFICATE_HIDDEN_BY_HOLDER',
+          entity: 'Certificate',
+          entityId: 5,
+          userId: 42,
+        }),
+      );
+    });
+
+    it('já oculto: idempotente, sem nova auditoria', async () => {
+      prisma.certificate.findFirst.mockResolvedValue({
+        id: 5,
+        status: 'REVOKED',
+        revoked: true,
+        holderHiddenAt: new Date(),
+      });
+      expect(await svc.hideRevoked(5, { id: 42 })).toEqual({ hidden: true });
+      expect(prisma.certificate.update).not.toHaveBeenCalled();
       expect(audit.log).not.toHaveBeenCalled();
     });
   });

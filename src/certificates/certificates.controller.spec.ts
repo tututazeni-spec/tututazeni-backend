@@ -35,8 +35,8 @@ describe('CertificatesController — controlo de acesso', () => {
 
   it('AUDITOR lê mas nunca altera: nenhuma rota de escrita o inclui', () => {
     const writers = routes().filter(r => /^(POST|PUT|DELETE|PATCH)/.test(r.key));
-    // Excepções: preview/pdf são só de leitura/renderização; email-me é do próprio titular.
-    const readOnlyPosts = ['POST templates/preview', 'POST :id/email-me'];
+    // Excepções: preview/pdf são só de leitura/renderização; email-me e DELETE my/:id são do próprio titular.
+    const readOnlyPosts = ['POST templates/preview', 'POST :id/email-me', 'DELETE my/:id'];
     const offenders = writers
       .filter(r => !readOnlyPosts.includes(r.key) && r.roles!.includes('AUDITOR'))
       .map(r => r.key);

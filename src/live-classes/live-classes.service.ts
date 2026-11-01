@@ -216,6 +216,22 @@ export class LiveClassesService {
     return dates;
   }
 
+  /** Converte violações de restrição do Prisma (código repetido, curso/módulo/lição/formador
+   *  inexistentes) em erros 4xx com mensagem útil, em vez de um 500 genérico. */
+  private mapWriteError(e: unknown): never {
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      if (e.code === 'P2002') {
+        throw new ConflictException('Já existe uma aula com este código. Escolha outro código.');
+      }
+      if (e.code === 'P2003') {
+        throw new BadRequestException(
+          'Curso, módulo, lição ou formador inexistente. Escolha valores da lista.',
+        );
+      }
+    }
+    throw e;
+  }
+
   async create(dto: CreateLiveClassDto) {
     const scheduledAt = new Date(dto.scheduledAt);
     const sessionDates = this.buildSessionDates(dto, scheduledAt);
@@ -223,30 +239,32 @@ export class LiveClassesService {
     const { recurrenceEndDate, recurrenceDaysOfWeek, recordingExpiresAt, notifySettings, ...rest } =
       dto;
 
-    const lc = await this.prisma.liveClass.create({
-      data: {
-        ...rest,
-        code: dto.code ?? this.generateCode(dto.type ?? 'AULA'),
-        scheduledAt,
-        recurrenceEndDate: recurrenceEndDate ? new Date(recurrenceEndDate) : undefined,
-        recurrenceDaysOfWeek: recurrenceDaysOfWeek ?? [],
-        recordingExpiresAt: recordingExpiresAt ? new Date(recordingExpiresAt) : undefined,
-        notifySettings: notifySettings ?? undefined,
-        sessions: sessionDates.length
-          ? {
-              create: sessionDates.map((sessionDate, i) => ({
-                seq: i + 1,
-                sessionDate,
-                durationMinutes: dto.duration,
-                instructorId: dto.instructorId,
-                location: dto.location,
-                meetingUrl: dto.zoomMeetingId,
-              })),
-            }
-          : undefined,
-      },
-      include: CLASS_INCLUDE,
-    });
+    const lc = await this.prisma.liveClass
+      .create({
+        data: {
+          ...rest,
+          code: dto.code ?? this.generateCode(dto.type ?? 'AULA'),
+          scheduledAt,
+          recurrenceEndDate: recurrenceEndDate ? new Date(recurrenceEndDate) : undefined,
+          recurrenceDaysOfWeek: recurrenceDaysOfWeek ?? [],
+          recordingExpiresAt: recordingExpiresAt ? new Date(recordingExpiresAt) : undefined,
+          notifySettings: notifySettings ?? undefined,
+          sessions: sessionDates.length
+            ? {
+                create: sessionDates.map((sessionDate, i) => ({
+                  seq: i + 1,
+                  sessionDate,
+                  durationMinutes: dto.duration,
+                  instructorId: dto.instructorId,
+                  location: dto.location,
+                  meetingUrl: dto.zoomMeetingId,
+                })),
+              }
+            : undefined,
+        },
+        include: CLASS_INCLUDE,
+      })
+      .catch((e: unknown) => this.mapWriteError(e));
     return lc;
   }
 
@@ -258,7 +276,9 @@ export class LiveClassesService {
     if (recurrenceEndDate) data.recurrenceEndDate = new Date(recurrenceEndDate);
     if (recordingExpiresAt) data.recordingExpiresAt = new Date(recordingExpiresAt);
     if (notifySettings) data.notifySettings = notifySettings;
-    return this.prisma.liveClass.update({ where: { id }, data, include: CLASS_INCLUDE });
+    return this.prisma.liveClass
+      .update({ where: { id }, data, include: CLASS_INCLUDE })
+      .catch((e: unknown) => this.mapWriteError(e));
   }
 
   async remove(id: number) {
