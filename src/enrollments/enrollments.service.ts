@@ -653,9 +653,10 @@ export class EnrollmentsService {
   // aceitável à escala local (dezenas de departamentos, não milhares).
 
   async getProgressByDepartment() {
-    const [departments, units] = await Promise.all([
+    const [departments, units, positions] = await Promise.all([
       this.prisma.read.department.findMany({ select: { id: true, name: true } }),
       this.prisma.read.unit.findMany({ select: { id: true, name: true } }),
+      this.prisma.read.position.findMany({ select: { id: true, name: true } }),
     ]);
 
     // Sequencial de propósito: o fan-out anterior (4 counts × cada departamento/
@@ -698,9 +699,20 @@ export class EnrollmentsService {
       byUnit.push({ id: u.id, name: u.name, ...(await statsFor({ user: { unitId: u.id } })) });
     }
 
+    const byPosition: Array<{ id: number; name: string } & Awaited<ReturnType<typeof statsFor>>> =
+      [];
+    for (const p of positions) {
+      byPosition.push({
+        id: p.id,
+        name: p.name,
+        ...(await statsFor({ user: { positionId: p.id } })),
+      });
+    }
+
     return {
       byDepartment: byDepartment.filter(d => d.total > 0),
       byUnit: byUnit.filter(u => u.total > 0),
+      byPosition: byPosition.filter(p => p.total > 0),
     };
   }
 

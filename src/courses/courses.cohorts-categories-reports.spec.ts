@@ -21,6 +21,7 @@ import type { CurrentUserData } from '../common/types/current-user';
 const mockPrisma = {
   $transaction: jest.fn(),
   user: { findMany: jest.fn() },
+  notificationLog: { create: jest.fn() },
   course: {
     findUnique: jest.fn(),
     findMany: jest.fn(),
@@ -226,6 +227,29 @@ describe('CoursesService — Turmas/Categorias/Relatórios', () => {
       expect(result).toEqual({ added: 1, alreadyIn: 1 });
       expect(mockPrisma.courseCohortParticipant.createMany).toHaveBeenCalledWith({
         data: [{ cohortId: 1, userId: 2 }],
+      });
+    });
+
+    it('notifica só os colaboradores acabados de adicionar à turma', async () => {
+      mockPrisma.courseCohort.findUnique.mockResolvedValue({
+        id: 1,
+        courseId: 7,
+        name: 'Turma A',
+        instructorId: null,
+        capacity: 30,
+        _count: { participants: 0 },
+      });
+      mockPrisma.courseCohortParticipant.findMany.mockResolvedValue([{ userId: 1 }]);
+      mockPrisma.course.findUnique.mockResolvedValue({ title: 'Segurança' });
+      mockPrisma.notificationLog.create.mockClear();
+      await service.addCohortParticipants(1, { userIds: [1, 2] } as any, admin);
+      expect(mockPrisma.notificationLog.create).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: 2,
+          type: 'COHORT_PARTICIPANT_ADDED',
+          message: expect.stringContaining('Turma A'),
+        }),
       });
     });
   });
