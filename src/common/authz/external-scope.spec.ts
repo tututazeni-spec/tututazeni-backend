@@ -5,6 +5,7 @@ import {
   assertOwnLiveClass,
   ensureOwnInstructorProfile,
   isExternalInstructor,
+  omitForExternal,
   ownInstructorProfileId,
 } from './external-scope';
 
@@ -154,5 +155,24 @@ describe('assertCanManageCourse', () => {
     const p = prismaMock();
     await expect(assertCanManageCourse(p as never, ADMIN, 4)).resolves.toBeUndefined();
     expect(p.course.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe('omitForExternal', () => {
+  const dto = { title: 't', courseId: 5, moduleId: 7 };
+
+  it('para o externo retira os campos indicados, sem alterar o original', () => {
+    const out = omitForExternal(EXT, dto, ['courseId', 'moduleId']);
+    expect(out).toEqual({ title: 't' });
+    expect(dto).toEqual({ title: 't', courseId: 5, moduleId: 7 });
+  });
+
+  it('para os restantes papéis (e sem utilizador) devolve o mesmo objeto', () => {
+    expect(omitForExternal(ADMIN, dto, ['courseId'])).toBe(dto);
+    expect(omitForExternal(undefined, dto, ['courseId'])).toBe(dto);
+  });
+
+  it('campos em falta não dão erro', () => {
+    expect(omitForExternal(EXT, { title: 't' }, ['courseId'])).toEqual({ title: 't' });
   });
 });

@@ -131,8 +131,8 @@ describe('LiveClassesController', () => {
 
   it('update → update(id, dto)', async () => {
     const dto = {} as any;
-    await controller.update(1, dto);
-    expect(mockSvc.update).toHaveBeenCalledWith(1, dto);
+    await controller.update(1, dto, mockUser as any);
+    expect(mockSvc.update).toHaveBeenCalledWith(1, dto, mockUser);
   });
 
   it('remove → remove(id)', async () => {

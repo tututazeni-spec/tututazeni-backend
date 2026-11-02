@@ -30,6 +30,7 @@ import {
 } from './course-modules.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { omitForExternal } from '../common/authz/external-scope';
 import {
   ExternalCourseScope,
   ExternalCourseScopeGuard,
@@ -78,8 +79,13 @@ export class CourseModulesController {
   @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
   @ExternalCourseScope({ kind: 'module', key: 'id' })
   @ApiOperation({ summary: 'Actualizar módulo' })
-  updateModule(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateModuleDto) {
-    return this.svc.updateModule(id, dto);
+  updateModule(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateModuleDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    // O externo não muda o curso de um módulo (mover conteúdo para outro curso é ADMIN/RH).
+    return this.svc.updateModule(id, omitForExternal(user, dto, ['courseId']));
   }
 
   @Patch('modules/:id/publish')
@@ -152,8 +158,13 @@ export class CourseModulesController {
   @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
   @ExternalCourseScope({ kind: 'lesson', key: 'id' })
   @ApiOperation({ summary: 'Actualizar aula' })
-  updateLesson(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateModuleLessonDto) {
-    return this.svc.updateLesson(id, dto);
+  updateLesson(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateModuleLessonDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    // Mover aula entre módulos só por PATCH lessons/:id/move (que valida os dois lados).
+    return this.svc.updateLesson(id, omitForExternal(user, dto, ['moduleId']));
   }
 
   @Patch('lessons/:id/move')

@@ -25,6 +25,7 @@ import {
   assertCanManageCourse,
   ensureOwnInstructorProfile,
   isExternalInstructor,
+  omitForExternal,
   ownInstructorProfileId,
 } from '../common/authz/external-scope';
 import { ZoomService } from './zoom.service';
@@ -66,6 +67,20 @@ const CLASS_INCLUDE = {
   postEvaluation: true,
 } satisfies Prisma.LiveClassInclude;
 
+/**
+ * Campos do corpo que o instrutor externo não pode definir numa aula: quem a dá, a gravação
+ * (publicar é ADMIN/RH) e os documentos da biblioteca da empresa.
+ */
+const EXTERNAL_LIVE_BLOCKED = [
+  'instructorId',
+  'coInstructorId',
+  'recordingUrl',
+  'recordingExpiresAt',
+  'allowRecordingDownload',
+  'recordingPublishedAt',
+  'materialDocumentIds',
+] as const;
+
 @Injectable()
 export class LiveClassesService {
   private readonly logger = new Logger(LiveClassesService.name);
@@ -91,6 +106,30 @@ export class LiveClassesService {
   private redactAttendeeForExternal<T extends { user?: unknown }>(row: T): T {
     const u = row.user as { id?: number; fullName?: string } | null | undefined;
     return { ...row, user: u ? { id: u.id, fullName: u.fullName } : u } as T;
+  }
+
+  /** Curso, módulo e lição indicados têm de ser de cursos onde o externo é instrutor. */
+  private async assertExternalContentRefs(
+    user: CurrentUserData,
+    dto: { courseId?: number | null; moduleId?: number | null; lessonId?: number | null },
+  ): Promise<void> {
+    if (dto.courseId) await assertCanManageCourse(this.prisma, user, dto.courseId);
+    if (dto.moduleId) {
+      const mod = await this.prisma.courseModule.findUnique({
+        where: { id: dto.moduleId },
+        select: { courseId: true },
+      });
+      if (!mod) throw new NotFoundException('Recurso não encontrado');
+      await assertCanManageCourse(this.prisma, user, mod.courseId);
+    }
+    if (dto.lessonId) {
+      const lesson = await this.prisma.lesson.findUnique({
+        where: { id: dto.lessonId },
+        select: { module: { select: { courseId: true } } },
+      });
+      if (!lesson) throw new NotFoundException('Recurso não encontrado');
+      await assertCanManageCourse(this.prisma, user, lesson.module.courseId);
+    }
   }
 
   /** Resolve o âmbito do utilizador: `undefined` (sem restrição) ou o perfil do externo (-1 se não tem). */
@@ -229,7 +268,8 @@ export class LiveClassesService {
     const baseRoom = `innova-live-${id}-${digest.slice(0, 24)}`;
     const domain = process.env.JITSI_DOMAIN || 'meet.jit.si';
     const roleName = user.role?.name ?? '';
-    const moderator = ['ADMIN', 'RH', 'INSTRUCTOR'].includes(roleName);
+    // O externo só chega aqui para a sua própria aula (ExternalLiveClassScopeGuard).
+    const moderator = ['ADMIN', 'RH', 'INSTRUCTOR', 'INSTRUCTOR_EXTERNO'].includes(roleName);
     const now = Math.floor(Date.now() / 1000);
     const displayName = user.fullName || user.email;
 
@@ -408,24 +448,8 @@ export class LiveClassesService {
       // Instrutor externo: a aula é sempre dele (perfil criado na primeira aula); o co-instrutor e
       // o instrutor vindos do cliente são ignorados, e o curso/módulo/lição têm de ser seus.
       const profileId = await ensureOwnInstructorProfile(this.prisma, user);
-      dto = { ...dto, instructorId: profileId, coInstructorId: undefined };
-      if (dto.courseId) await assertCanManageCourse(this.prisma, user, dto.courseId);
-      if (dto.moduleId) {
-        const mod = await this.prisma.courseModule.findUnique({
-          where: { id: dto.moduleId },
-          select: { courseId: true },
-        });
-        if (!mod) throw new NotFoundException('Recurso não encontrado');
-        await assertCanManageCourse(this.prisma, user, mod.courseId);
-      }
-      if (dto.lessonId) {
-        const lesson = await this.prisma.lesson.findUnique({
-          where: { id: dto.lessonId },
-          select: { module: { select: { courseId: true } } },
-        });
-        if (!lesson) throw new NotFoundException('Recurso não encontrado');
-        await assertCanManageCourse(this.prisma, user, lesson.module.courseId);
-      }
+      dto = { ...omitForExternal(user, dto, EXTERNAL_LIVE_BLOCKED), instructorId: profileId };
+      await this.assertExternalContentRefs(user, dto);
     }
     const scheduledAt = new Date(dto.scheduledAt);
     const sessionDates = this.buildSessionDates(dto, scheduledAt);
@@ -482,7 +506,13 @@ export class LiveClassesService {
     return lc;
   }
 
-  async update(id: number, dto: UpdateLiveClassDto) {
+  async update(id: number, dto: UpdateLiveClassDto, user?: CurrentUserData) {
+    if (user && isExternalInstructor(user)) {
+      // O corpo não pode apontar a aula para fora do âmbito (curso/módulo/lição alheios, outro
+      // instrutor, gravação ou documentos da biblioteca).
+      dto = omitForExternal(user, dto, EXTERNAL_LIVE_BLOCKED);
+      await this.assertExternalContentRefs(user, dto);
+    }
     const current = await this.findOne(id);
     const { recurrenceEndDate, recordingExpiresAt, notifySettings, ...rest } = dto;
     const data: Prisma.LiveClassUpdateInput = { ...rest };
@@ -985,12 +1015,16 @@ export class LiveClassesService {
     const { page = 1, limit = 20 } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const userWhere: Prisma.UserWhereInput = {};
-    if (filters.departmentId) userWhere.departmentId = filters.departmentId;
-    if (filters.unitId) userWhere.unitId = filters.unitId;
+    // O externo não filtra por departamento/unidade nem procura por nº de colaborador.
+    const external = ownerProfileId !== undefined;
+    if (filters.departmentId && !external) userWhere.departmentId = filters.departmentId;
+    if (filters.unitId && !external) userWhere.unitId = filters.unitId;
     if (filters.search) {
       userWhere.OR = [
         { fullName: { contains: filters.search, mode: 'insensitive' } },
-        { employeeNumber: { contains: filters.search, mode: 'insensitive' } },
+        ...(external
+          ? []
+          : [{ employeeNumber: { contains: filters.search, mode: 'insensitive' as const } }]),
       ];
     }
 
@@ -1752,25 +1786,39 @@ export class LiveClassesService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const rows = documents.map(document => ({
-      document,
-      referencedBy: refs.get(document.id) ?? [],
-    }));
+    const rows = documents.map(document => {
+      // O externo vê o material sem o conteúdo do ficheiro (documentos inline vêm como data URL).
+      const { fileUrl: _file, ...meta } = document;
+      return {
+        document: ownerProfileId === undefined ? document : meta,
+        referencedBy: refs.get(document.id) ?? [],
+      };
+    });
     const total = rows.length;
     const start = (page - 1) * limit;
     return buildPaginatedResponse(rows.slice(start, start + limit), total, page, limit);
   }
 
-  private async assertDocumentExists(documentId: number) {
+  private async assertDocumentExists(documentId: number, user?: CurrentUserData) {
     const doc = await this.prisma.read.document.findUnique({ where: { id: documentId } });
     if (!doc || doc.deletedAt)
       throw new NotFoundException('Documento não encontrado na Biblioteca');
+    // O externo só anexa documentos que ele próprio carregou: a biblioteca da empresa (RH,
+    // confidenciais) não é dele.
+    if (
+      user &&
+      isExternalInstructor(user) &&
+      doc.createdById !== user.id &&
+      doc.ownerId !== user.id
+    ) {
+      throw new NotFoundException('Documento não encontrado na Biblioteca');
+    }
     return doc;
   }
 
-  async addClassMaterial(liveClassId: number, documentId: number) {
+  async addClassMaterial(liveClassId: number, documentId: number, user?: CurrentUserData) {
     const lc = await this.findOne(liveClassId);
-    await this.assertDocumentExists(documentId);
+    await this.assertDocumentExists(documentId, user);
     if (lc.materialDocumentIds.includes(documentId)) return lc;
     return this.prisma.liveClass.update({
       where: { id: liveClassId },
@@ -1788,13 +1836,18 @@ export class LiveClassesService {
     });
   }
 
-  async addSessionMaterial(liveClassId: number, sessionId: number, documentId: number) {
+  async addSessionMaterial(
+    liveClassId: number,
+    sessionId: number,
+    documentId: number,
+    user?: CurrentUserData,
+  ) {
     const session = await this.prisma.read.liveClassSession.findUnique({
       where: { id: sessionId },
     });
     if (!session || session.liveClassId !== liveClassId)
       throw new NotFoundException('Sessão não encontrada');
-    await this.assertDocumentExists(documentId);
+    await this.assertDocumentExists(documentId, user);
     if (session.materialDocumentIds.includes(documentId)) return session;
     return this.prisma.liveClassSession.update({
       where: { id: sessionId },

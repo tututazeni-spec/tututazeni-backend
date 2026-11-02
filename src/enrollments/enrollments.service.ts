@@ -200,7 +200,8 @@ export class EnrollmentsService {
     where.status = status ? status : { not: 'CANCELLED' };
     if (origin) where.origin = origin;
     if (mandatory !== undefined) where.mandatory = mandatory;
-    if (departmentId || unitId) {
+    // O externo não filtra por departamento/unidade (denunciaria a que departamento pertence cada inscrito).
+    if ((departmentId || unitId) && !isExternalInstructor(requestingUser)) {
       where.user = { ...(departmentId ? { departmentId } : {}), ...(unitId ? { unitId } : {}) };
     }
     if (overdue) {

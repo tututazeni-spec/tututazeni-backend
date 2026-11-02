@@ -305,7 +305,7 @@ export class CohortSessionsService {
         return {
           userId: p.userId,
           fullName: p.user.fullName,
-          identifier: p.user.employeeNumber ?? p.user.email,
+          identifier: p.user.employeeNumber ?? p.user.email ?? '',
           status: r?.status ?? null,
           checkInTime: r?.checkInTime ?? null,
           checkOutTime: r?.checkOutTime ?? null,
@@ -536,7 +536,7 @@ export class CohortSessionsService {
       .map(p => ({
         userId: p.userId,
         fullName: p.user.fullName,
-        identifier: p.user.employeeNumber ?? p.user.email,
+        identifier: p.user.employeeNumber ?? p.user.email ?? '',
         ...summarizeAttendance(completedIds, marksByUser.get(p.userId) ?? new Map(), policy),
       }))
       .sort((a, b) => a.fullName.localeCompare(b.fullName, 'pt'));

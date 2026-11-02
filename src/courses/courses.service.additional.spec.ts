@@ -389,7 +389,17 @@ describe('CoursesService (additional)', () => {
   // ─── reorderModules ───────────────────────────────────────────
 
   describe('reorderModules', () => {
+    it('recusa módulos que não são do curso', async () => {
+      mockPrisma.courseModule.update.mockClear();
+      mockPrisma.courseModule.count.mockResolvedValueOnce(2); // 3 ids pedidos, 2 do curso
+      await expect(service.reorderModules(1, [3, 1, 99])).rejects.toThrow(
+        'Há módulos que não pertencem a este curso',
+      );
+      expect(mockPrisma.courseModule.update).not.toHaveBeenCalled();
+    });
+
     it('deve reordenar módulos', async () => {
+      mockPrisma.courseModule.count.mockResolvedValueOnce(3);
       mockPrisma.courseModule.update.mockResolvedValue({});
       const result = await service.reorderModules(1, [3, 1, 2]);
       expect(result.message).toBe('Módulos reordenados');
@@ -483,7 +493,17 @@ describe('CoursesService (additional)', () => {
   // ─── reorderLessons ───────────────────────────────────────────
 
   describe('reorderLessons', () => {
+    it('recusa aulas que não são do módulo', async () => {
+      mockPrisma.lesson.update.mockClear();
+      mockPrisma.lesson.count.mockResolvedValueOnce(2);
+      await expect(service.reorderLessons(1, [2, 1, 99])).rejects.toThrow(
+        'Há aulas que não pertencem a este módulo',
+      );
+      expect(mockPrisma.lesson.update).not.toHaveBeenCalled();
+    });
+
     it('deve reordenar aulas', async () => {
+      mockPrisma.lesson.count.mockResolvedValueOnce(3);
       mockPrisma.lesson.update.mockResolvedValue({});
       const result = await service.reorderLessons(1, [2, 1, 3]);
       expect(result.message).toBe('Aulas reordenadas');

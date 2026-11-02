@@ -658,6 +658,14 @@ export class CoursesService {
   }
 
   async reorderModules(courseId: number, orderedIds: number[]) {
+    // Cada módulo tem de ser deste curso: o guard valida o curso da rota, não os ids do corpo.
+    const wanted = new Set(orderedIds);
+    const own = await this.prisma.courseModule.count({
+      where: { id: { in: [...wanted] }, courseId },
+    });
+    if (own !== wanted.size) {
+      throw new BadRequestException('Há módulos que não pertencem a este curso');
+    }
     await Promise.all(
       orderedIds.map((id, idx) =>
         this.prisma.courseModule.update({ where: { id }, data: { seq: idx } }),
@@ -822,6 +830,12 @@ export class CoursesService {
   }
 
   async reorderLessons(moduleId: number, orderedIds: number[]) {
+    // Cada aula tem de ser deste módulo: o guard valida o módulo da rota, não os ids do corpo.
+    const wanted = new Set(orderedIds);
+    const own = await this.prisma.lesson.count({ where: { id: { in: [...wanted] }, moduleId } });
+    if (own !== wanted.size) {
+      throw new BadRequestException('Há aulas que não pertencem a este módulo');
+    }
     await Promise.all(
       orderedIds.map((id, idx) => this.prisma.lesson.update({ where: { id }, data: { seq: idx } })),
     );
