@@ -272,7 +272,7 @@ export class ContentLibraryService {
     };
   }
 
-  async create(createdById: number, dto: CreateContentDto) {
+  async create(createdById: number, dto: CreateContentDto, autoPublish = false) {
     const asset = await this.prisma.contentAsset.create({
       data: {
         title: dto.title,
@@ -293,7 +293,7 @@ export class ContentLibraryService {
         ...(dto.tags && { tags: dto.tags }),
         ...(dto.externalSource && { externalSource: dto.externalSource }),
         createdById,
-        status: ContentStatus.DRAFT,
+        status: autoPublish ? ContentStatus.ACTIVE : ContentStatus.DRAFT,
       },
     });
 
@@ -302,7 +302,9 @@ export class ContentLibraryService {
         data: {
           userId: createdById,
           type: 'CONTENT_CREATED',
-          message: `Conteúdo "${dto.title}" criado e aguarda revisão`,
+          message: autoPublish
+            ? `Conteúdo "${dto.title}" publicado`
+            : `Conteúdo "${dto.title}" criado e aguarda revisão`,
           metadata: JSON.stringify({}),
         },
       })
