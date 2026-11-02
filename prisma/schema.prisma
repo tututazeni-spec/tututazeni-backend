@@ -7610,6 +7610,8 @@ model LiveClassSession {
   meetingProvider      MeetingProvider?
   status               LiveClassStatus @default(AGENDADA)
   notes                String?
+  // Imagem da sessão (URL https ou data URL), mostrada no cartão
+  thumbnailUrl         String?
   recordingUrl         String?
   recordingPublishedAt DateTime?
   createdAt            DateTime        @default(now())

@@ -183,6 +183,11 @@ export class CreateLiveClassSessionDto {
   @MaxLength(2000)
   meetingUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
+  @ApiPropertyOptional({ description: 'Imagem da sessão (URL ou data URL)' })
+  @IsOptional()
+  @IsString()
+  @IsOptionalImageRef()
+  thumbnailUrl?: string;
   @ApiPropertyOptional({
     type: [Number],
     description: 'IDs de documentos da Biblioteca (secção 11)',
@@ -286,6 +291,30 @@ export class RegisterAttendanceDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString() joinedAt?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() leftAt?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() justification?: string;
+}
+
+export class BulkAttendanceDto {
+  @ApiPropertyOptional({ description: 'Sessão de uma aula recorrente' })
+  @IsOptional()
+  @IsInt()
+  sessionId?: number;
+  @ApiPropertyOptional({ type: [Number] })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  userIds?: number[];
+  @ApiPropertyOptional({
+    type: [Number],
+    description: 'Todos os colaboradores activos destes departamentos',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  departmentIds?: number[];
+  @ApiPropertyOptional({ description: 'Todos os colaboradores activos' })
+  @IsOptional()
+  @IsBoolean()
+  all?: boolean;
 }
 
 export class UpdateAttendanceDto {
