@@ -15,6 +15,13 @@ import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
+/** Troca um fileUrl inline (data URL) por '' e marca `hasInlineFile`, para não arrastar megabytes. */
+function stripInlineFileUrl<T extends { fileUrl?: string | null }>(
+  item: T,
+): T & { hasInlineFile?: boolean } {
+  return item.fileUrl?.startsWith('data:') ? { ...item, fileUrl: '', hasInlineFile: true } : item;
+}
+
 @Injectable()
 export class LibraryService {
   constructor(
@@ -77,7 +84,7 @@ export class LibraryService {
       code,
       type: dto.type,
     });
-    return item;
+    return stripInlineFileUrl(item);
   }
 
   async findAllItems(filters: FilterItemDto) {
@@ -124,7 +131,8 @@ export class LibraryService {
       }),
       this.prisma.read.libraryItem.count({ where }),
     ]);
-    return buildPaginatedResponse(data, total, page, limit);
+    // Ficheiros inline (data URL, até 5 MB) não viajam nas listas: o detalhe devolve o completo.
+    return buildPaginatedResponse(data.map(stripInlineFileUrl), total, page, limit);
   }
 
   async findItemById(id: string) {

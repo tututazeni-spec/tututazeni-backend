@@ -15,6 +15,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { LibraryItemType } from '@prisma/client';
 import { IsAllowedFileUrl } from '../../common/validators/is-allowed-file-url.validator';
 import { ALLOWED_MIME_TYPES } from '../../common/validators/allowed-mime-types';
+import { FILE_POLICIES } from '../../common/files/file-policies';
 import { IsFileSizeWithinLimit } from '../../common/files/is-file-size-within-limit.decorator';
 
 import { IsOptionalImageRef } from '../../common/validators/optional-image-ref.decorator';
@@ -38,8 +39,11 @@ export class CreateItemDto {
   @IsString()
   description?: string;
 
-  @ApiProperty({ example: 'https://storage.innova.ao/docs/manual.pdf' })
-  @IsAllowedFileUrl()
+  @ApiProperty({
+    example: 'https://storage.innova.ao/docs/manual.pdf',
+    description: 'URL https do ficheiro OU ficheiro inline em data URL base64 (máx. 5 MB)',
+  })
+  @IsAllowedFileUrl({}, { inline: FILE_POLICIES.DOCUMENT })
   fileUrl: string;
 
   @ApiPropertyOptional()
