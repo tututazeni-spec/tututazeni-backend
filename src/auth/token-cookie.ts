@@ -4,6 +4,7 @@
 // frontend e a API são servidos no MESMO domínio atrás da borda Caddy
 // (spec 2026-07-11-a1-headers-remediacao-design.md) — 'none' era necessário
 // apenas no antigo layout cross-site e alargava a superfície CSRF.
+import { randomUUID } from 'crypto';
 import { CookieOptions } from 'express';
 
 export const TOKEN_COOKIE = 'token';
@@ -41,4 +42,33 @@ export function buildRefreshCookieOptions(isProd: boolean): CookieOptions {
     path: '/api/auth',
     maxAge: 7 * 24 * 60 * 60 * 1000,
   };
+}
+
+// Identificador do dispositivo do instrutor externo: UUID v4 gerado PELO SERVIDOR e guardado
+// num cookie httpOnly (o JS do browser não o lê nem o copia por XSS). Só o hash chega à BD.
+// Mesmo path do cookie de refresh: tem de acompanhar login, refresh e aceitação do convite.
+export const DEVICE_COOKIE = 'innova_device';
+
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+export function buildDeviceCookieOptions(isProd: boolean): CookieOptions {
+  return {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: 'lax',
+    path: '/api/auth',
+    maxAge: 365 * 24 * 60 * 60 * 1000,
+  };
+}
+
+/** Lê o identificador do cookie; se faltar ou for inválido gera um novo (`isNew`). */
+export function resolveDeviceId(cookies: Record<string, unknown> | undefined): {
+  deviceId: string;
+  isNew: boolean;
+} {
+  const current = cookies?.[DEVICE_COOKIE];
+  if (typeof current === 'string' && UUID_V4.test(current)) {
+    return { deviceId: current, isNew: false };
+  }
+  return { deviceId: randomUUID(), isNew: true };
 }

@@ -39,9 +39,13 @@ import { writeChainedAuditLog } from '../common/helpers/audit-chain';
 // frontend/lib/sessionActivity.ts.
 // Contexto de rede do pedido, registado nos eventos de auditoria de acesso
 // (docs/modulo_audit.md §6). Opcional: chamadores internos/testes omitem-no.
+const sha256Hex = (v: string): string => crypto.createHash('sha256').update(v).digest('hex');
+
 export interface AuthRequestContext {
   ip?: string;
   userAgent?: string;
+  /** Identificador do dispositivo (cookie httpOnly definido pelo servidor). */
+  deviceId?: string;
 }
 
 export function sessionIdleTimeoutMs(
@@ -240,9 +244,10 @@ export class AuthService {
       const who = { id: user.id, email: user.email, fullName: user.fullName };
       const loginCtx = ctx ?? {};
       // Sem identificador de dispositivo não há registo, alerta nem auditoria: exige-se sempre.
-      if (!dto.deviceId) throw new BadRequestException('Dispositivo não identificado');
+      const deviceId = loginCtx.deviceId;
+      if (!deviceId) throw new BadRequestException('Dispositivo não identificado');
       if (!dto.emailCode) {
-        const { purpose } = await this.externalLogin.challenge(who, dto.deviceId, loginCtx);
+        const { purpose } = await this.externalLogin.challenge(who, deviceId, loginCtx);
         throw new UnauthorizedException({
           message: 'Introduza o código enviado para o seu email',
           code: 'EMAIL_CODE_REQUIRED',
@@ -256,7 +261,7 @@ export class AuthService {
           code: 'TWO_FACTOR_REQUIRED',
         });
       }
-      if (!(await this.externalLogin.verify(who, dto.emailCode, dto.deviceId, loginCtx))) {
+      if (!(await this.externalLogin.verify(who, dto.emailCode, deviceId, loginCtx))) {
         await this.security
           ?.registerFailedAttempt(user.id)
           .catch(err => this.logLockoutFailure(user.id, err));
@@ -335,7 +340,7 @@ export class AuthService {
 
     // Só aqui, com todas as verificações feitas, o dispositivo passa a confiável.
     if (this.externalLogin?.isExternal(user)) {
-      await this.externalLogin.registerDevice(user.id, dto.deviceId, ctx ?? {});
+      await this.externalLogin.registerDevice(user.id, ctx?.deviceId, ctx ?? {});
     }
 
     return this.issueSessionForUser(user, ctx, {
@@ -343,6 +348,7 @@ export class AuthService {
       twoFactorSetupRequired,
       accessTokenMinutes: securityPolicy?.accessTokenMinutes,
       refreshTokenDays: securityPolicy?.refreshTokenDays,
+      bindDevice: !!this.externalLogin?.isExternal(user),
     });
   }
 
@@ -361,10 +367,18 @@ export class AuthService {
       accessTokenMinutes?: number;
       refreshTokenDays?: number;
       method?: 'SSO' | 'LDAP';
+      /** Liga a sessão ao dispositivo do cookie (instrutor externo). */
+      bindDevice?: boolean;
     } = {},
   ) {
     const tokens = await this.generateTokens(user.id, user.email, opts.accessTokenMinutes);
-    await this.persistRefreshToken(user.id, tokens.refreshToken, ctx, opts.refreshTokenDays);
+    await this.persistRefreshToken(
+      user.id,
+      tokens.refreshToken,
+      ctx,
+      opts.refreshTokenDays,
+      opts.bindDevice && ctx?.deviceId ? sha256Hex(ctx.deviceId) : undefined,
+    );
 
     // fire-and-forget — não bloqueia a resposta de login
     writeChainedAuditLog(this.prisma, {
@@ -513,11 +527,14 @@ export class AuthService {
     refreshToken: string,
     ctx?: AuthRequestContext,
     refreshDays = 7,
+    deviceIdHash?: string,
   ): Promise<void> {
     await this.prisma.refreshToken.create({
       data: {
         userId,
         tokenHash: crypto.createHash('sha256').update(refreshToken).digest('hex'),
+        // Instrutor externo: a sessão só se renova a partir do dispositivo que a abriu.
+        deviceIdHash,
         expiresAt: new Date(Date.now() + refreshDays * 24 * 60 * 60 * 1000),
         // Sessões activas (Definições §4): de onde veio esta sessão.
         ip: ctx?.ip,
@@ -526,7 +543,12 @@ export class AuthService {
     });
   }
 
-  async rotateRefreshToken(userId: number, email: string, presented: string) {
+  async rotateRefreshToken(
+    userId: number,
+    email: string,
+    presented: string,
+    ctx?: AuthRequestContext,
+  ) {
     const hash = crypto.createHash('sha256').update(presented).digest('hex');
     const record = await this.prisma.refreshToken.findUnique({ where: { tokenHash: hash } });
 
@@ -553,6 +575,19 @@ export class AuthService {
 
     // Token já revogado => reutilização detectada, revoga a cadeia completa.
     if (record.revokedAt) {
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: authorizedUserId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException('Refresh token inválido');
+    }
+
+    // Sessão de instrutor externo ligada a um dispositivo: cookie ausente ou diferente =
+    // token copiado para outra máquina → a cadeia inteira morre.
+    if (
+      record.deviceIdHash &&
+      (!ctx?.deviceId || sha256Hex(ctx.deviceId) !== record.deviceIdHash)
+    ) {
       await this.prisma.refreshToken.updateMany({
         where: { userId: authorizedUserId, revokedAt: null },
         data: { revokedAt: new Date() },
@@ -614,6 +649,7 @@ export class AuthService {
       tokens.refreshToken,
       { ip: record.ip ?? undefined, userAgent: record.userAgent ?? undefined },
       policy?.refreshTokenDays,
+      record.deviceIdHash ?? undefined,
     );
     return tokens;
   }

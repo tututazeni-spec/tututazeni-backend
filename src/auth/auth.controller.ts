@@ -22,6 +22,9 @@ import {
   REFRESH_COOKIE,
   buildRefreshCookieOptions,
   LEGACY_REFRESH_COOKIE_PATH,
+  DEVICE_COOKIE,
+  buildDeviceCookieOptions,
+  resolveDeviceId,
 } from './token-cookie';
 
 // JwtStrategy.validate() devolve a entidade User (tem `id`, não `sub`).
@@ -49,6 +52,22 @@ function requestContext(req: Request): { ip?: string; userAgent?: string } {
   return { ip: req.ip, userAgent: Array.isArray(ua) ? ua[0] : ua };
 }
 
+const deviceCookieOptions = buildDeviceCookieOptions(process.env.NODE_ENV === 'production');
+
+/**
+ * Identificador do dispositivo para o login/refresh: lido do cookie httpOnly ou gerado aqui.
+ * O cookie é definido ANTES de chamar o serviço para seguir também nas respostas 401
+ * (ex.: EMAIL_CODE_REQUIRED), senão o código pedido ficaria ligado a um id que o browser nunca guarda.
+ */
+export function deviceContext(
+  req: Request,
+  res: Response,
+): { ip?: string; userAgent?: string; deviceId: string } {
+  const { deviceId, isNew } = resolveDeviceId(req.cookies as Record<string, unknown> | undefined);
+  if (isNew) res.cookie(DEVICE_COOKIE, deviceId, deviceCookieOptions);
+  return { ...requestContext(req), deviceId };
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -64,7 +83,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.authService.login(dto, requestContext(req));
+    const result = await this.authService.login(dto, deviceContext(req, res));
     res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
     setCsrfCookie(res, result.accessToken);
     res.cookie(REFRESH_COOKIE, result.refreshToken, refreshCookieOptions);
@@ -92,6 +111,7 @@ export class AuthController {
       req.user.id,
       req.user.email,
       req.user.refreshToken,
+      deviceContext(req, res),
     );
     res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
     setCsrfCookie(res, result.accessToken);

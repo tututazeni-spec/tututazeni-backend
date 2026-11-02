@@ -60,3 +60,31 @@ describe('refresh cookie', () => {
     expect(buildRefreshCookieOptions(false).secure).toBe(false);
   });
 });
+
+import { DEVICE_COOKIE, buildDeviceCookieOptions, resolveDeviceId } from './token-cookie';
+
+describe('cookie do dispositivo', () => {
+  const GOOD = '3f0c1b0e-6a5d-4a6e-9a47-2f1d6c1c0a11';
+
+  it('chama-se innova_device, é httpOnly, dura 1 ano e usa o mesmo path do refresh', () => {
+    const o = buildDeviceCookieOptions(true);
+    expect(DEVICE_COOKIE).toBe('innova_device');
+    expect(o).toMatchObject({ httpOnly: true, secure: true, sameSite: 'lax', path: '/api/auth' });
+    expect(o.maxAge).toBe(365 * 24 * 60 * 60 * 1000);
+    expect(buildDeviceCookieOptions(false).secure).toBe(false);
+  });
+
+  it('reaproveita um UUID v4 válido do cookie', () => {
+    expect(resolveDeviceId({ innova_device: GOOD })).toEqual({ deviceId: GOOD, isNew: false });
+  });
+
+  it('gera um novo UUID v4 quando o cookie falta ou é inválido', () => {
+    for (const cookies of [undefined, {}, { innova_device: 'lixo' }, { innova_device: '' }]) {
+      const out = resolveDeviceId(cookies as never);
+      expect(out.isNew).toBe(true);
+      expect(out.deviceId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+    }
+  });
+});

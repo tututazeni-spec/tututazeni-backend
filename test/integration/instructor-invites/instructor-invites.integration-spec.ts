@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
+import cookieParser from 'cookie-parser';
 import { AppModule } from '../../../src/app.module';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { MailService } from '../../../src/mail/mail.service';
@@ -46,13 +47,15 @@ describe('Instructor invites Integration', () => {
   const loginExternal = async (email: string, deviceId = DEVICE_A) => {
     const first = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ email, password: PASS, deviceId })
+      .set('Cookie', [`innova_device=${deviceId}`])
+      .send({ email, password: PASS })
       .expect(401);
     expect(JSON.stringify(first.body)).toContain('EMAIL_CODE_REQUIRED');
     const sent = codes.filter(c => c.email === email).at(-1)!;
     return request(app.getHttpServer())
       .post('/auth/login')
-      .send({ email, password: PASS, deviceId, emailCode: sent.code })
+      .set('Cookie', [`innova_device=${deviceId}`])
+      .send({ email, password: PASS, emailCode: sent.code })
       .expect(201);
   };
 
@@ -79,6 +82,7 @@ describe('Instructor invites Integration', () => {
       })
       .compile();
     app = module.createNestApplication();
+    app.use(cookieParser()); // como em main.ts: sem isto os cookies (dispositivo, refresh) não são lidos
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -293,10 +297,10 @@ describe('Instructor invites Integration', () => {
         .expect(401);
       const refreshRes = await request(app.getHttpServer())
         .post('/auth/refresh')
-        .set('Cookie', [`refresh_token=${refresh}`])
+        .set('Cookie', [`refresh_token=${refresh}`, `innova_device=${DEVICE_A}`])
         .set('Authorization', `Bearer ${refresh}`)
         .expect(401);
-      expect(JSON.stringify(refreshRes.body)).toMatch(/expirad|Unauthorized/i);
+      expect(JSON.stringify(refreshRes.body)).toContain('Acesso expirado');
     });
   });
 
@@ -410,7 +414,8 @@ describe('Instructor invites Integration', () => {
     const attempt = (email: string, extra: object = {}, deviceId = DEVICE_A) =>
       request(app.getHttpServer())
         .post('/auth/login')
-        .send({ email, password: PASS, deviceId, ...extra });
+        .set('Cookie', [`innova_device=${deviceId}`])
+        .send({ email, password: PASS, ...extra });
 
     it('login sem código → 401 EMAIL_CODE_REQUIRED, e o código só serve uma vez', async () => {
       const { email } = await activate('m');
@@ -481,7 +486,8 @@ describe('Instructor invites Integration', () => {
       const created = await invite(adminToken, { email, fullName: 'Quim Externo' }).expect(201);
       await request(app.getHttpServer())
         .post('/auth/instructor-invite/accept')
-        .send({ token: mailed.at(-1)!.token, password: PASS, deviceId: DEVICE_A })
+        .set('Cookie', [`innova_device=${DEVICE_A}`])
+        .send({ token: mailed.at(-1)!.token, password: PASS })
         .expect(201);
 
       // dispositivo já confiável desde o convite: código de login normal
@@ -515,10 +521,63 @@ describe('Instructor invites Integration', () => {
         .expect(403);
     });
 
+    it('sem cookie de dispositivo o servidor gera um (httpOnly) e é esse que fica registado', async () => {
+      const { email, userId } = await activate('r');
+      const first = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email, password: PASS })
+        .expect(401);
+      const setCookie = ([] as string[]).concat(first.headers['set-cookie'] ?? []);
+      const device = setCookie.find(c => c.startsWith('innova_device='));
+      expect(device).toBeDefined();
+      expect(device).toMatch(/HttpOnly/i);
+      const id = device!.split(';')[0].split('=')[1];
+      expect(id).toMatch(/^[0-9a-f-]{36}$/);
+
+      const code = codes.filter(c => c.email === email).at(-1)!.code;
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .set('Cookie', [`innova_device=${id}`])
+        .send({ email, password: PASS, emailCode: code })
+        .expect(201);
+      expect(await prisma.trustedDevice.count({ where: { userId, revokedAt: null } })).toBe(1);
+    });
+
+    it('o refresh só funciona a partir do dispositivo que abriu a sessão', async () => {
+      const { email } = await activate('s');
+      const res = await loginExternal(email, DEVICE_A);
+      const refresh = res.body.refreshToken as string;
+
+      // cookie copiado para outro dispositivo → recusado, e a sessão morre
+      await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', [`refresh_token=${refresh}`, `innova_device=${DEVICE_B}`])
+        .expect(401);
+      await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', [`refresh_token=${refresh}`, `innova_device=${DEVICE_A}`])
+        .expect(401);
+    });
+
+    it('o refresh do dispositivo certo renova e mantém a ligação', async () => {
+      const { email } = await activate('t');
+      const res = await loginExternal(email, DEVICE_A);
+      const renewed = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', [`refresh_token=${res.body.refreshToken}`, `innova_device=${DEVICE_A}`])
+        .expect(201);
+      expect(renewed.body.refreshToken).toBeDefined();
+      // o novo token continua preso ao mesmo dispositivo
+      await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', [`refresh_token=${renewed.body.refreshToken}`, `innova_device=${DEVICE_B}`])
+        .expect(401);
+    });
+
     it('utilizador que não é instrutor externo continua a entrar sem código', async () => {
       await request(app.getHttpServer())
         .post('/auth/login')
-        .send({ email: 'int.employee@innova-test.com', password: 'Test@1234', deviceId: DEVICE_A })
+        .send({ email: 'int.employee@innova-test.com', password: 'Test@1234' })
         .expect(201);
     });
   });

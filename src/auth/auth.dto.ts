@@ -4,7 +4,6 @@ import {
   MinLength,
   MaxLength,
   IsOptional,
-  IsUUID,
   Matches,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -30,13 +29,6 @@ export class LoginDto {
   @IsOptional()
   @Matches(/^\d{6}$/, { message: 'Código inválido' })
   emailCode?: string;
-
-  @ApiPropertyOptional({
-    description: 'Identificador do dispositivo (UUID v4 guardado no browser)',
-  })
-  @IsOptional()
-  @IsUUID(4)
-  deviceId?: string;
 }
 
 export class RegisterDto {

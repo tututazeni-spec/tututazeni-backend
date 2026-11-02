@@ -81,8 +81,39 @@ describe('AuthController', () => {
       { ip: '127.0.0.1', headers: { 'user-agent': 'jest' } } as any,
       mockRes as any,
     );
-    expect(mockSvc.login).toHaveBeenCalledWith(dto, { ip: '127.0.0.1', userAgent: 'jest' });
+    expect(mockSvc.login).toHaveBeenCalledWith(dto, {
+      ip: '127.0.0.1',
+      userAgent: 'jest',
+      deviceId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    });
     expect(result).toHaveProperty('accessToken');
+  });
+
+  it('login sem cookie de dispositivo: gera um e define-o httpOnly antes de chamar o serviço', async () => {
+    mockRes.cookie.mockClear();
+    mockSvc.login.mockClear();
+    await controller.login(
+      { email: 'a@b.com', password: '123' } as any,
+      { ip: '1', headers: {}, cookies: {} } as any,
+      mockRes as any,
+    );
+    const call = mockRes.cookie.mock.calls.find((c: any[]) => c[0] === 'innova_device');
+    expect(call).toBeDefined();
+    expect(call![2]).toMatchObject({ httpOnly: true, path: '/api/auth' });
+    expect(mockSvc.login.mock.calls[0][1].deviceId).toBe(call![1]);
+  });
+
+  it('login com cookie de dispositivo válido: reutiliza-o e não volta a defini-lo', async () => {
+    const id = '3f0c1b0e-6a5d-4a6e-9a47-2f1d6c1c0a11';
+    mockRes.cookie.mockClear();
+    mockSvc.login.mockClear();
+    await controller.login(
+      { email: 'a@b.com', password: '123' } as any,
+      { ip: '1', headers: {}, cookies: { innova_device: id } } as any,
+      mockRes as any,
+    );
+    expect(mockRes.cookie.mock.calls.some((c: any[]) => c[0] === 'innova_device')).toBe(false);
+    expect(mockSvc.login.mock.calls[0][1].deviceId).toBe(id);
   });
 
   it('logout → revoga refresh E access token (cookie ou Bearer) e limpa também o path legado', async () => {
@@ -118,7 +149,12 @@ describe('AuthController', () => {
   it('refresh → chama authService.rotateRefreshToken', async () => {
     const req = { user: { id: 1, email: 'a@b.com', refreshToken: 'ref-tok' } };
     await controller.refresh(req as any, mockRes as any);
-    expect(mockSvc.rotateRefreshToken).toHaveBeenCalledWith(1, 'a@b.com', 'ref-tok');
+    expect(mockSvc.rotateRefreshToken).toHaveBeenCalledWith(
+      1,
+      'a@b.com',
+      'ref-tok',
+      expect.objectContaining({ deviceId: expect.stringMatching(/^[0-9a-f-]{36}$/) }),
+    );
   });
 
   it('changePassword → chama authService.changePassword', async () => {
