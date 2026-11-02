@@ -14,6 +14,8 @@ const quiet = async (p: Promise<unknown>): Promise<void> => {
     /* limpeza best-effort */
   }
 };
+const codes: { email: string; code: string; purpose: string }[] = [];
+const alerts: string[] = [];
 const resets: { email: string; token: string }[] = [];
 const mailed: { email: string; token: string; days: number }[] = [];
 
@@ -36,6 +38,24 @@ describe('Instructor invites Integration', () => {
       .set('Authorization', `Bearer ${token}`)
       .send(body);
 
+  const DEVICE_A = '11111111-1111-4111-8111-111111111111';
+  const DEVICE_B = '22222222-2222-4222-8222-222222222222';
+  const PASS = 'Segura@1234';
+
+  /** Login completo de instrutor externo: 401 com pedido de código → repete com o código do e-mail. */
+  const loginExternal = async (email: string, deviceId = DEVICE_A) => {
+    const first = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password: PASS, deviceId })
+      .expect(401);
+    expect(JSON.stringify(first.body)).toContain('EMAIL_CODE_REQUIRED');
+    const sent = codes.filter(c => c.email === email).at(-1)!;
+    return request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password: PASS, deviceId, emailCode: sent.code })
+      .expect(201);
+  };
+
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(MailService)
@@ -45,6 +65,12 @@ describe('Instructor invites Integration', () => {
             mailed.push({ email, token, days });
           },
         ),
+        sendLoginCode: jest.fn(async (email: string, _n: string, code: string, purpose: string) => {
+          codes.push({ email, code, purpose });
+        }),
+        sendNewDeviceAlert: jest.fn(async (email: string) => {
+          alerts.push(email);
+        }),
         sendPasswordReset: jest.fn(async (email: string, token: string) => {
           resets.push({ email, token });
         }),
@@ -174,10 +200,7 @@ describe('Instructor invites Integration', () => {
       await accept(token).expect(201);
       const user = await prisma.user.findUnique({ where: { email } });
       expect(user?.accountStatus).toBe('ACTIVE');
-      await request(app.getHttpServer())
-        .post('/auth/login')
-        .send({ email, password: 'Segura@1234' })
-        .expect(201);
+      await loginExternal(email);
 
       const again = await accept(token).expect(400);
       expect(again.body.message).toBe('Convite inválido ou expirado');
@@ -245,10 +268,7 @@ describe('Instructor invites Integration', () => {
         .expect(201);
       // O iat do JWT tem resolução de 1 s; o JwtStrategy recusa tokens emitidos antes de passwordChangedAt.
       await new Promise(r => setTimeout(r, 1100));
-      const loginRes = await request(app.getHttpServer())
-        .post('/auth/login')
-        .send({ email, password: 'Segura@1234' })
-        .expect(201);
+      const loginRes = await loginExternal(email);
       const access = loginRes.body.accessToken as string;
       const refresh = loginRes.body.refreshToken as string;
 
@@ -288,10 +308,7 @@ describe('Instructor invites Integration', () => {
         .post('/auth/instructor-invite/accept')
         .send({ token: mailed.at(-1)!.token, password: 'Segura@1234' })
         .expect(201);
-      await request(app.getHttpServer())
-        .post('/auth/login')
-        .send({ email, password: 'Segura@1234' })
-        .expect(201);
+      await loginExternal(email);
       await prisma.user.update({
         where: { id: created.body.userId },
         data: { accessExpiresAt: new Date(Date.now() - 1000) },
@@ -334,10 +351,7 @@ describe('Instructor invites Integration', () => {
       const after = await prisma.user.findUnique({ where: { email } });
       expect(after).toMatchObject({ active: true, accountStatus: 'ACTIVE' });
       await new Promise(r => setTimeout(r, 1100));
-      await request(app.getHttpServer())
-        .post('/auth/login')
-        .send({ email, password: 'Segura@1234' })
-        .expect(201);
+      await loginExternal(email);
     });
 
     it('conta por aceitar cujo prazo passou: prolongar + reenviar permite aceitar e entrar', async () => {
@@ -366,10 +380,7 @@ describe('Instructor invites Integration', () => {
         .post('/auth/instructor-invite/accept')
         .send({ token: mailed.at(-1)!.token, password: 'Segura@1234' })
         .expect(201);
-      await request(app.getHttpServer())
-        .post('/auth/login')
-        .send({ email, password: 'Segura@1234' })
-        .expect(201);
+      await loginExternal(email);
     });
 
     it('extend e deactivate só aceitam instrutores externos (404 para outros utilizadores)', async () => {
@@ -383,6 +394,80 @@ describe('Instructor invites Integration', () => {
         .post(`/instructor-invites/users/${rh!.id}/deactivate`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
+    });
+  });
+
+  describe('código por e-mail e dispositivo', () => {
+    const activate = async (local: string) => {
+      const email = `${PREFIX}${local}@innova-test.com`;
+      const created = await invite(adminToken, { email, fullName: `Externo ${local}` }).expect(201);
+      await request(app.getHttpServer())
+        .post('/auth/instructor-invite/accept')
+        .send({ token: mailed.at(-1)!.token, password: PASS })
+        .expect(201);
+      return { email, userId: created.body.userId as number };
+    };
+    const attempt = (email: string, extra: object = {}, deviceId = DEVICE_A) =>
+      request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email, password: PASS, deviceId, ...extra });
+
+    it('login sem código → 401 EMAIL_CODE_REQUIRED, e o código só serve uma vez', async () => {
+      const { email } = await activate('m');
+      const first = await attempt(email).expect(401);
+      expect(first.body.code ?? JSON.stringify(first.body)).toContain('EMAIL_CODE_REQUIRED');
+      const code = codes.filter(c => c.email === email).at(-1)!.code;
+      expect(code).toMatch(/^\d{6}$/);
+
+      await attempt(email, { emailCode: code }).expect(201);
+      // mesmo código outra vez: já foi consumido
+      await attempt(email, { emailCode: code }).expect(401);
+    });
+
+    it('5 códigos errados queimam o desafio: o certo a seguir também falha', async () => {
+      const { email } = await activate('n');
+      await attempt(email).expect(401);
+      const good = codes.filter(c => c.email === email).at(-1)!.code;
+      const wrong = good === '000000' ? '111111' : '000000';
+      for (let i = 0; i < 5; i++) {
+        const r = await attempt(email, { emailCode: wrong }).expect(401);
+        expect(JSON.stringify(r.body)).toContain('Código inválido ou expirado');
+      }
+      await attempt(email, { emailCode: good }).expect(401);
+    });
+
+    it('pedido repetido em menos de 60 s não envia segundo e-mail', async () => {
+      const { email } = await activate('o');
+      await attempt(email).expect(401);
+      await attempt(email).expect(401);
+      expect(codes.filter(c => c.email === email)).toHaveLength(1);
+    });
+
+    it('dispositivo A registado; B pede código de dispositivo novo, regista-se e A deixa de ser confiável', async () => {
+      const { email, userId } = await activate('p');
+      await loginExternal(email, DEVICE_A); // regista A (NEW_DEVICE)
+      expect(codes.filter(c => c.email === email).at(-1)!.purpose).toBe('NEW_DEVICE');
+
+      // A é conhecido: pede código de login normal
+      const known = await attempt(email, {}, DEVICE_A).expect(401);
+      expect(JSON.stringify(known.body)).toContain('"purpose":"LOGIN"');
+      const codeA = codes.filter(c => c.email === email).at(-1)!.code;
+      await attempt(email, { emailCode: codeA }, DEVICE_A).expect(201);
+
+      // B é novo: NEW_DEVICE, regista-se, A é revogado e o instrutor é avisado
+      await loginExternal(email, DEVICE_B);
+      expect(alerts).toContain(email);
+      const active = await prisma.trustedDevice.findMany({ where: { userId, revokedAt: null } });
+      expect(active).toHaveLength(1);
+      const afterA = await attempt(email, {}, DEVICE_A).expect(401);
+      expect(JSON.stringify(afterA.body)).toContain('"purpose":"NEW_DEVICE"');
+    });
+
+    it('utilizador que não é instrutor externo continua a entrar sem código', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'int.employee@innova-test.com', password: 'Test@1234', deviceId: DEVICE_A })
+        .expect(201);
     });
   });
 });

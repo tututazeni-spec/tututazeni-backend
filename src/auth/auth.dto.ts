@@ -1,4 +1,12 @@
-import { IsEmail, IsString, MinLength, MaxLength, IsOptional } from 'class-validator';
+import {
+  IsEmail,
+  IsString,
+  MinLength,
+  MaxLength,
+  IsOptional,
+  IsUUID,
+  Matches,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsStrongPassword } from '../common/validators/strong-password.decorator';
 
@@ -17,6 +25,16 @@ export class LoginDto {
   @IsOptional()
   @IsString()
   totpCode?: string;
+
+  @ApiPropertyOptional({ description: 'Código de 6 dígitos enviado por email (instrutor externo)' })
+  @IsOptional()
+  @Matches(/^\d{6}$/, { message: 'Código inválido' })
+  emailCode?: string;
+
+  @ApiPropertyOptional({ description: 'Identificador do dispositivo (UUID v4 guardado no browser)' })
+  @IsOptional()
+  @IsUUID(4)
+  deviceId?: string;
 }
 
 export class RegisterDto {
