@@ -20,7 +20,12 @@ describe('RecycleBinService', () => {
       { id: 1, title: 'Curso A', type: 'PDF', deletedAt: new Date(now.getTime() - 10 * DAY) },
     ]);
     prisma.document.findMany.mockResolvedValue([
-      { id: 2, title: 'Política', mimeType: 'application/pdf', deletedAt: new Date(now.getTime() - 1 * DAY) },
+      {
+        id: 2,
+        title: 'Política',
+        mimeType: 'application/pdf',
+        deletedAt: new Date(now.getTime() - 1 * DAY),
+      },
     ]);
     const out = await svc.list(now);
     const since = prisma.contentAsset.findMany.mock.calls[0][0].where.deletedAt.gte as Date;

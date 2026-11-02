@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -373,7 +374,7 @@ describe('AuthService', () => {
   describe('rotateRefreshToken', () => {
     describe('ligação ao dispositivo (instrutor externo)', () => {
       const DEV = '3f0c1b0e-6a5d-4a6e-9a47-2f1d6c1c0a11';
-      const hash = (v: string) => require('crypto').createHash('sha256').update(v).digest('hex');
+      const hash = (v: string) => createHash('sha256').update(v).digest('hex');
       const record = (over: Record<string, unknown> = {}) => ({
         id: 3,
         userId: 1,
@@ -773,9 +774,7 @@ describe('AuthService.login — instrutor externo (código por e-mail)', () => {
     mockPrisma.refreshToken.create.mockClear();
     await login({ email: external.email, password: 'pass', emailCode: '123456', deviceId: DEVICE });
     const bound = mockPrisma.refreshToken.create.mock.calls[0][0].data.deviceIdHash;
-    expect(bound).toBe(
-      require('crypto').createHash('sha256').update(DEVICE).digest('hex'),
-    );
+    expect(bound).toBe(createHash('sha256').update(DEVICE).digest('hex'));
 
     mockPrisma.user.findUnique.mockResolvedValue(baseUser);
     mockPrisma.refreshToken.create.mockClear();
