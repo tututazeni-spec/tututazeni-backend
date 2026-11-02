@@ -3179,6 +3179,8 @@ model Assessment {
   description         String?
   /// Imagem do cartão (data URL base64 ou URL), opcional.
   imageUrl            String?
+  /// Origem: AI_TUTOR = exportada de exercícios gerados por IA (perguntas já geradas).
+  source              String?
   type                AssessmentType             @default(QUIZ)
   status              AssessmentStatus           @default(DRAFT)
   courseId            Int?

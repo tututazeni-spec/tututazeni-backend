@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsDateString,
   Min,
   Max,
@@ -130,6 +131,12 @@ export class CreateAssessmentDto {
   @IsString()
   @IsOptionalImageRef()
   imageUrl?: string;
+
+  // Origem da avaliação (só na criação): AI_TUTOR = exportada de exercícios gerados por IA.
+  @ApiPropertyOptional({ enum: ['AI_TUTOR'] })
+  @IsOptional()
+  @IsIn(['AI_TUTOR'])
+  source?: 'AI_TUTOR';
 
   @ApiProperty({ enum: AssessmentType })
   @IsEnum(AssessmentType)
