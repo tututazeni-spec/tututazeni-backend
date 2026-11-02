@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import { UnauthorizedException } from '@nestjs/common';
 import { ExternalLoginSecurityService } from './external-login-security.service';
 
 const sha256 = (v: string) => crypto.createHash('sha256').update(v).digest('hex');
@@ -107,6 +108,21 @@ describe('ExternalLoginSecurityService.challenge', () => {
     expect(mail.sendLoginCode).toHaveBeenCalledTimes(1);
   });
 
+  it('o desafio fica ligado ao dispositivo que o pediu (hash do cookie)', async () => {
+    const { svc, prisma } = build();
+    await svc.challenge(USER, DEVICE, CTX);
+    expect(prisma.loginChallenge.create.mock.calls[0][0].data.deviceIdHash).toBe(sha256(DEVICE));
+  });
+
+  it('desafio recente de OUTRO dispositivo não é reaproveitado: cria um novo para este', async () => {
+    const { svc, prisma, mail } = build({
+      recent: { id: 'c0', purpose: 'NEW_DEVICE', deviceIdHash: sha256('outro-dispositivo') },
+    });
+    await svc.challenge(USER, DEVICE, CTX);
+    expect(prisma.loginChallenge.create).toHaveBeenCalledTimes(1);
+    expect(mail.sendLoginCode).toHaveBeenCalledTimes(1);
+  });
+
   it('dispositivo conhecido → LOGIN', async () => {
     const { svc } = build({ device: { id: 'd1' } });
     expect((await svc.challenge(USER, DEVICE, CTX)).purpose).toBe('LOGIN');
@@ -119,7 +135,9 @@ describe('ExternalLoginSecurityService.challenge', () => {
   });
 
   it('pedido repetido em <60 s não cria desafio nem envia outro e-mail', async () => {
-    const { svc, prisma, mail } = build({ recent: { id: 'c0', purpose: 'NEW_DEVICE' } });
+    const { svc, prisma, mail } = build({
+      recent: { id: 'c0', purpose: 'NEW_DEVICE', deviceIdHash: sha256(DEVICE) },
+    });
     const out = await svc.challenge(USER, DEVICE, CTX);
     expect(out.purpose).toBe('NEW_DEVICE');
     expect(prisma.loginChallenge.create).not.toHaveBeenCalled();
@@ -154,6 +172,25 @@ describe('ExternalLoginSecurityService.verify', () => {
       (c: [{ where: { userId?: number } }]) => c[0].where.userId === 7,
     );
     expect(others![0].where).toMatchObject({ userId: 7, consumedAt: null });
+  });
+
+  it('código pedido por outro dispositivo → 401 explícito, sem gastar tentativa nem consumir o desafio', async () => {
+    const { svc, prisma } = build({ latest: live({ deviceIdHash: sha256('outro-dispositivo') }) });
+    await expect(svc.verify(USER, '123456', DEVICE, CTX)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(prisma.loginChallenge.update).not.toHaveBeenCalled();
+    expect(prisma.loginChallenge.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('mesmo dispositivo que pediu o código → passa', async () => {
+    const { svc } = build({ latest: live({ deviceIdHash: sha256(DEVICE) }) });
+    expect(await svc.verify(USER, '123456', DEVICE, CTX)).toBe(true);
+  });
+
+  it('desafio anterior à ligação (sem hash) continua a servir até expirar', async () => {
+    const { svc } = build({ latest: live({ deviceIdHash: null }) });
+    expect(await svc.verify(USER, '123456', DEVICE, CTX)).toBe(true);
   });
 
   it('sem desafio vivo (expirado/consumido/inexistente) → false', async () => {

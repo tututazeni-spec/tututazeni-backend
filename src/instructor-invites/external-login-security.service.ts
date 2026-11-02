@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger, Optional, UnauthorizedException } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
@@ -77,6 +77,7 @@ export class ExternalLoginSecurityService {
       : null;
     const purpose: LoginPurpose = known ? 'LOGIN' : 'NEW_DEVICE';
 
+    const requestingDevice = deviceId ? sha256(deviceId) : null;
     const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
     const created = await this.prisma.$transaction(async tx => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${user.id}::bigint)`;
@@ -91,9 +92,12 @@ export class ExternalLoginSecurityService {
           createdAt: { gt: new Date(now.getTime() - RESEND_MIN_MS) },
         },
         orderBy: { createdAt: 'desc' },
-        select: { id: true, purpose: true },
+        select: { id: true, purpose: true, deviceIdHash: true },
       });
-      if (recent && recent.purpose === purpose) return null;
+      // Só se reaproveita um código do mesmo propósito E pedido pelo mesmo dispositivo.
+      if (recent && recent.purpose === purpose && recent.deviceIdHash === requestingDevice) {
+        return null;
+      }
 
       await tx.loginChallenge.updateMany({
         where: { userId: user.id, consumedAt: null },
@@ -104,6 +108,7 @@ export class ExternalLoginSecurityService {
           userId: user.id,
           codeHash: codeHash(user.id, code),
           purpose,
+          deviceIdHash: requestingDevice,
           expiresAt: new Date(now.getTime() + CODE_TTL_MS),
         },
       });
@@ -127,7 +132,7 @@ export class ExternalLoginSecurityService {
   async verify(
     user: LoginUser,
     code: string,
-    _deviceId: string | undefined,
+    deviceId: string | undefined,
     _ctx: LoginCtx,
   ): Promise<boolean> {
     const now = new Date();
@@ -136,6 +141,15 @@ export class ExternalLoginSecurityService {
       orderBy: { createdAt: 'desc' },
     });
     if (!latest) return false;
+
+    // O código só serve no dispositivo que o pediu: um cliente sem cookies (cada pedido com um
+    // id novo) ou um atacante com a senha noutro dispositivo não o conseguem resgatar. Não gasta
+    // tentativa nem consome o desafio, e a mensagem diz o que fazer.
+    if (latest.deviceIdHash && (!deviceId || sha256(deviceId) !== latest.deviceIdHash)) {
+      throw new UnauthorizedException(
+        'O código foi pedido por outro dispositivo. Repita o início de sessão no mesmo navegador, com os cookies ativos',
+      );
+    }
 
     // Cada tentativa é contada de forma atómica ANTES de comparar: palpites em paralelo
     // não conseguem passar das 5 (o contador não perde actualizações).

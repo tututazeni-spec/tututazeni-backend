@@ -1,5 +1,6 @@
 import { setRequestUserId } from '../common/logging/request-context';
 import { ACCESS_EXPIRED_MESSAGE, isAccessExpired } from './access-expiry';
+import { INSTRUCTOR_EXTERNO_ROLE } from '../instructor-invites/constants';
 import { ExternalLoginSecurityService } from '../instructor-invites/external-login-security.service';
 import {
   Injectable,
@@ -607,8 +608,17 @@ export class AuthService {
     // Prazo de acesso (instrutor externo) esgotado: a cadeia de sessões morre aqui.
     const owner = await this.prisma.user.findUnique({
       where: { id: authorizedUserId },
-      select: { accessExpiresAt: true },
+      select: { accessExpiresAt: true, role: { select: { name: true } } },
     });
+    // Instrutor externo sem ligação ao dispositivo (sessão anterior à migração, mudança de
+    // papel, provisionamento): não se renova — tem de iniciar sessão de novo com o código.
+    if (owner?.role?.name === INSTRUCTOR_EXTERNO_ROLE && !record.deviceIdHash) {
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: authorizedUserId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException('Refresh token inválido');
+    }
     if (owner && isAccessExpired(owner)) {
       await this.prisma.refreshToken.updateMany({
         where: { userId: authorizedUserId, revokedAt: null },

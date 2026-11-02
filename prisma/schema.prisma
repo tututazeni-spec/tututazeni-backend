@@ -14703,6 +14703,8 @@ model LoginChallenge {
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   codeHash   String
   purpose    String
+  // Dispositivo que pediu o código: só esse o pode resgatar (null = desafio anterior à ligação)
+  deviceIdHash String?
   expiresAt  DateTime
   attempts   Int       @default(0)
   consumedAt DateTime?
