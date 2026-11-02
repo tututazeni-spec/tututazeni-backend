@@ -31,7 +31,9 @@ export class LoginDto {
   @Matches(/^\d{6}$/, { message: 'Código inválido' })
   emailCode?: string;
 
-  @ApiPropertyOptional({ description: 'Identificador do dispositivo (UUID v4 guardado no browser)' })
+  @ApiPropertyOptional({
+    description: 'Identificador do dispositivo (UUID v4 guardado no browser)',
+  })
   @IsOptional()
   @IsUUID(4)
   deviceId?: string;
