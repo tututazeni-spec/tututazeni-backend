@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
-import { AnyAuthenticated } from '../common/decorators/authz.decorators';
+import { AnyAuthenticated, AllowExternal } from '../common/decorators/authz.decorators';
 import { CurrentUser, CurrentUserData, Roles } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 import { AcceptLegalDto } from './legal.dto';
@@ -25,6 +25,7 @@ export class LegalController {
 
   @Get('status')
   @AnyAuthenticated()
+  @AllowExternal()
   @ApiOperation({
     summary: 'Versões em vigor dos termos e da política de privacidade e o que falta aceitar',
   })
@@ -35,6 +36,7 @@ export class LegalController {
   @Post('accept')
   @HttpCode(200)
   @AnyAuthenticated()
+  @AllowExternal()
   @ApiOperation({ summary: 'Registar a aceitação das versões em vigor' })
   accept(@CurrentUser() user: CurrentUserData, @Body() dto: AcceptLegalDto, @Req() req: Request) {
     return this.svc.accept(user.id, dto, req.ip, req.headers['user-agent']);

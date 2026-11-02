@@ -1,4 +1,4 @@
-import { AnyAuthenticated } from '../common/decorators/authz.decorators';
+import { AnyAuthenticated, AllowExternal } from '../common/decorators/authz.decorators';
 import { Controller, Post, Get, Body, Patch, UseGuards, Req, Res, HttpCode } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '../common/decorators/public.decorator';
@@ -144,6 +144,7 @@ export class AuthController {
 
   @Patch('change-password')
   @AnyAuthenticated()
+  @AllowExternal()
   changePassword(@Req() req: AuthenticatedRequest, @Body() dto: ChangePasswordDto) {
     return this.authService.changePassword(req.user.id, dto);
   }
@@ -165,6 +166,7 @@ export class AuthController {
 
   @Get('me')
   @AnyAuthenticated()
+  @AllowExternal()
   me(@Req() req: AuthenticatedRequest) {
     return this.authService.me(req.user.id);
   }
