@@ -147,4 +147,55 @@ describe('Instructor invites Integration', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(404);
   });
+
+  describe('aceitação do convite', () => {
+    const accept = (token: string, password = 'Segura@1234') =>
+      request(app.getHttpServer()).post('/auth/instructor-invite/accept').send({ token, password });
+
+    it('antes de aceitar o login falha; depois de aceitar funciona e o link fica inutilizado', async () => {
+      const email = `${PREFIX}d@innova-test.com`;
+      await invite(adminToken, { email, fullName: 'Duarte Externo' }).expect(201);
+      const { token } = mailed.at(-1)!;
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email, password: 'Segura@1234' })
+        .expect(401);
+
+      await accept(token).expect(201);
+      const user = await prisma.user.findUnique({ where: { email } });
+      expect(user?.accountStatus).toBe('ACTIVE');
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email, password: 'Segura@1234' })
+        .expect(201);
+
+      const again = await accept(token).expect(400);
+      expect(again.body.message).toBe('Convite inválido ou expirado');
+    });
+
+    it('token inexistente e token revogado dão exatamente a mesma resposta', async () => {
+      const unknown = await accept('f'.repeat(64)).expect(400);
+      const created = await invite(adminToken, {
+        email: `${PREFIX}e@innova-test.com`,
+        fullName: 'Eva Externa',
+      }).expect(201);
+      const { token } = mailed.at(-1)!;
+      await request(app.getHttpServer())
+        .post(`/instructor-invites/${created.body.inviteId}/revoke`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      const revoked = await accept(token).expect(400);
+      expect(revoked.body.message).toBe(unknown.body.message);
+    });
+
+    it('duas aceitações em paralelo: só uma vence', async () => {
+      await invite(adminToken, {
+        email: `${PREFIX}f@innova-test.com`,
+        fullName: 'Filipe Externo',
+      }).expect(201);
+      const { token } = mailed.at(-1)!;
+      const results = await Promise.all([accept(token), accept(token)]);
+      expect(results.map(r => r.status).sort()).toEqual([201, 400]);
+    });
+  });
 });

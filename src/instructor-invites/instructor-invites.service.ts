@@ -1,9 +1,17 @@
-import { ConflictException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { AuditService } from '../common/services/audit.service';
 import { SessionRevocationService } from '../auth/session-revocation.service';
+import { SecuritySettingsService } from '../settings/security-settings.service';
+import { hashPassword } from '../common/security/password-hasher';
 import { CreateInstructorInviteDto } from './instructor-invites.dto';
 
 export const INSTRUCTOR_EXTERNO_ROLE = 'INSTRUCTOR_EXTERNO';
@@ -33,6 +41,7 @@ export class InstructorInvitesService {
     private readonly mail: MailService,
     private readonly audit: AuditService,
     @Optional() private readonly revocation?: SessionRevocationService,
+    @Optional() private readonly security?: SecuritySettingsService,
   ) {}
 
   private newToken(): { token: string; tokenHash: string; expiresAt: Date } {
@@ -84,6 +93,58 @@ export class InstructorInvitesService {
       metadata: { email, accessDays },
     });
     return { inviteId, userId, expiresAt, accessExpiresAt };
+  }
+
+  /**
+   * Aceita o convite: define a palavra-passe e inutiliza o link. Qualquer falha de
+   * token (inexistente, usado, revogado, expirado) devolve a mesma mensagem.
+   */
+  async acceptInvite(token: string, password: string): Promise<{ message: string }> {
+    const invalid = () => new BadRequestException('Convite inválido ou expirado');
+    const now = new Date();
+    const invite = await this.prisma.instructorInvite.findUnique({
+      where: { tokenHash: sha256(token) },
+      include: { user: { select: { accessExpiresAt: true } } },
+    });
+    if (
+      !invite ||
+      invite.usedAt ||
+      invite.revokedAt ||
+      invite.expiresAt < now ||
+      (invite.user.accessExpiresAt && invite.user.accessExpiresAt < now)
+    ) {
+      throw invalid();
+    }
+
+    await this.security?.assertPasswordAllowed(password);
+    const hashed = await hashPassword(password);
+
+    await this.prisma.$transaction(async tx => {
+      // Reclamação atómica: só uma de várias aceitações simultâneas vence.
+      const claim = await tx.instructorInvite.updateMany({
+        where: { id: invite.id, usedAt: null, revokedAt: null, expiresAt: { gt: now } },
+        data: { usedAt: now },
+      });
+      if (claim.count !== 1) throw invalid();
+      await tx.user.update({
+        where: { id: invite.userId },
+        data: { password: hashed, passwordChangedAt: now, accountStatus: 'ACTIVE' },
+      });
+      await tx.refreshToken.updateMany({
+        where: { userId: invite.userId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+    });
+
+    await this.revocation?.revokeAllUserSessions(invite.userId);
+    await this.audit.log({
+      action: 'INSTRUCTOR_INVITE_ACCEPTED',
+      entity: 'User',
+      entityId: invite.userId,
+      userId: invite.userId,
+      metadata: { inviteId: invite.id },
+    });
+    return { message: 'Palavra-passe definida. Já pode iniciar sessão.' };
   }
 
   async list(): Promise<InviteListItem[]> {
