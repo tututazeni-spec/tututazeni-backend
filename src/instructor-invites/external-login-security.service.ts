@@ -3,7 +3,7 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { AuditService } from '../common/services/audit.service';
-import { INSTRUCTOR_EXTERNO_ROLE } from './instructor-invites.service';
+import { INSTRUCTOR_EXTERNO_ROLE } from './constants';
 
 export type LoginPurpose = 'LOGIN' | 'NEW_DEVICE';
 export interface LoginUser {

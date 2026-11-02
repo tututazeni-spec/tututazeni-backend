@@ -463,6 +463,45 @@ describe('Instructor invites Integration', () => {
       expect(JSON.stringify(afterA.body)).toContain('"purpose":"NEW_DEVICE"');
     });
 
+    it('aceitar o convite com deviceId regista o dispositivo; repor obriga a novo código de dispositivo', async () => {
+      const email = `${PREFIX}q@innova-test.com`;
+      const created = await invite(adminToken, { email, fullName: 'Quim Externo' }).expect(201);
+      await request(app.getHttpServer())
+        .post('/auth/instructor-invite/accept')
+        .send({ token: mailed.at(-1)!.token, password: PASS, deviceId: DEVICE_A })
+        .expect(201);
+
+      // dispositivo já confiável desde o convite: código de login normal
+      const known = await attempt(email, {}, DEVICE_A).expect(401);
+      expect(JSON.stringify(known.body)).toContain('"purpose":"LOGIN"');
+      await attempt(
+        email,
+        { emailCode: codes.filter(c => c.email === email).at(-1)!.code },
+        DEVICE_A,
+      ).expect(201);
+
+      const reset = await request(app.getHttpServer())
+        .post(`/instructor-invites/users/${created.body.userId}/devices/reset`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      expect(reset.body.revoked).toBe(1);
+
+      const after = await attempt(email, {}, DEVICE_A).expect(401);
+      expect(JSON.stringify(after.body)).toContain('"purpose":"NEW_DEVICE"');
+    });
+
+    it('repor dispositivos: 404 para quem não é instrutor externo e 403 para EMPLOYEE', async () => {
+      const rh = await prisma.user.findUnique({ where: { email: 'int.rh@innova-test.com' } });
+      await request(app.getHttpServer())
+        .post(`/instructor-invites/users/${rh!.id}/devices/reset`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(404);
+      await request(app.getHttpServer())
+        .post(`/instructor-invites/users/${rh!.id}/devices/reset`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
+    });
+
     it('utilizador que não é instrutor externo continua a entrar sem código', async () => {
       await request(app.getHttpServer())
         .post('/auth/login')

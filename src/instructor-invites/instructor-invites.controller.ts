@@ -60,6 +60,16 @@ export class InstructorInvitesController {
     return this.svc.extendAccess(userId, dto.accessDays, user.id);
   }
 
+  @Post('users/:userId/devices/reset')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Repor o dispositivo confiável do instrutor externo' })
+  resetDevices(
+    @Param('userId', ParseIntPipe) userId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.resetDevices(userId, user.id);
+  }
+
   @Post('users/:userId/deactivate')
   @HttpCode(200)
   async deactivate(

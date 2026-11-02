@@ -14,8 +14,10 @@ import { SessionRevocationService } from '../auth/session-revocation.service';
 import { SecuritySettingsService } from '../settings/security-settings.service';
 import { hashPassword } from '../common/security/password-hasher';
 import { CreateInstructorInviteDto } from './instructor-invites.dto';
+import { INSTRUCTOR_EXTERNO_ROLE } from './constants';
+import { ExternalLoginSecurityService, type LoginCtx } from './external-login-security.service';
 
-export const INSTRUCTOR_EXTERNO_ROLE = 'INSTRUCTOR_EXTERNO';
+export { INSTRUCTOR_EXTERNO_ROLE };
 export const INVITE_TTL_MS = 72 * 3_600_000;
 const DAY_MS = 86_400_000;
 const DEFAULT_ACCESS_DAYS = 30;
@@ -45,6 +47,7 @@ export class InstructorInvitesService {
     private readonly audit: AuditService,
     @Optional() private readonly revocation?: SessionRevocationService,
     private readonly security?: SecuritySettingsService,
+    private readonly externalLogin?: ExternalLoginSecurityService,
   ) {}
 
   private newToken(): { token: string; tokenHash: string; expiresAt: Date } {
@@ -115,7 +118,12 @@ export class InstructorInvitesService {
    * Aceita o convite: define a palavra-passe e inutiliza o link. Qualquer falha de
    * token (inexistente, usado, revogado, expirado) devolve a mesma mensagem.
    */
-  async acceptInvite(token: string, password: string): Promise<{ message: string }> {
+  async acceptInvite(
+    token: string,
+    password: string,
+    deviceId?: string,
+    ctx: LoginCtx = {},
+  ): Promise<{ message: string }> {
     const invalid = () => new BadRequestException('Convite inválido ou expirado');
     const now = new Date();
     const invite = await this.prisma.instructorInvite.findUnique({
@@ -153,6 +161,8 @@ export class InstructorInvitesService {
     });
 
     await this.revocation?.revokeAllUserSessions(invite.userId);
+    // O link provou a posse do e-mail: este dispositivo já nasce confiável (sem alerta).
+    await this.externalLogin?.registerDevice(invite.userId, deviceId, ctx, false);
     await this.audit.log({
       action: 'INSTRUCTOR_INVITE_ACCEPTED',
       entity: 'User',
@@ -264,6 +274,12 @@ export class InstructorInvitesService {
       metadata: { accessDays, accessExpiresAt },
     });
     return { accessExpiresAt };
+  }
+
+  async resetDevices(userId: number, actorId: number): Promise<{ revoked: number }> {
+    await this.findExternal(userId);
+    const revoked = (await this.externalLogin?.resetDevices(userId, actorId)) ?? 0;
+    return { revoked };
   }
 
   async deactivate(userId: number, actorId: number): Promise<void> {

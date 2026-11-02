@@ -149,3 +149,35 @@ describe('InstructorInvitesService.extendAccess (I3)', () => {
     });
   });
 });
+
+describe('InstructorInvitesService.resetDevices', () => {
+  function buildReset(found: unknown) {
+    const prisma = { user: { findFirst: jest.fn().mockResolvedValue(found) } };
+    const externalLogin = { resetDevices: jest.fn().mockResolvedValue(2) };
+    const svc = new InstructorInvitesService(
+      prisma as never,
+      {} as never,
+      {} as never,
+      undefined,
+      undefined,
+      externalLogin as never,
+    );
+    return { svc, externalLogin };
+  }
+
+  it('instrutor externo: delega e devolve quantos dispositivos foram revogados', async () => {
+    const { svc, externalLogin } = buildReset({
+      id: 7,
+      accountStatus: 'ACTIVE',
+      passwordChangedAt: new Date(),
+    });
+    expect(await svc.resetDevices(7, 5)).toEqual({ revoked: 2 });
+    expect(externalLogin.resetDevices).toHaveBeenCalledWith(7, 5);
+  });
+
+  it('utilizador que não é instrutor externo → 404 e nada é revogado', async () => {
+    const { svc, externalLogin } = buildReset(null);
+    await expect(svc.resetDevices(3, 5)).rejects.toThrow('Instrutor externo não encontrado');
+    expect(externalLogin.resetDevices).not.toHaveBeenCalled();
+  });
+});
