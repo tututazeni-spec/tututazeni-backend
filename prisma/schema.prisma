@@ -1110,6 +1110,8 @@ model User {
   // Instrutor externo: fim da validade do acesso (null = sem prazo) e convites emitidos
   accessExpiresAt     DateTime?
   instructorInvites   InstructorInvite[]
+  loginChallenges     LoginChallenge[]
+  trustedDevices      TrustedDevice[]
 
   // ─── ROI & Impact ─────────────────────────────────────────────
   createdRoiAnalyses             RoiAnalysis[]
@@ -14687,6 +14689,35 @@ model PasswordResetToken {
   usedAt    DateTime?
   createdAt DateTime  @default(now())
 
+  @@index([userId])
+}
+
+model LoginChallenge {
+  id         String    @id @default(uuid())
+  userId     Int
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash   String
+  purpose    String
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model TrustedDevice {
+  id           String    @id @default(uuid())
+  userId       Int
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceIdHash String
+  userAgent    String?
+  ip           String?
+  firstSeenAt  DateTime  @default(now())
+  lastSeenAt   DateTime  @default(now())
+  revokedAt    DateTime?
+
+  @@unique([userId, deviceIdHash])
   @@index([userId])
 }
 
