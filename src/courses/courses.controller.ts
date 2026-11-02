@@ -586,7 +586,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/open')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({
     summary: 'Listar turmas abertas (OPEN) ou activas (ACTIVE) de todos os cursos',
   })
@@ -603,7 +603,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/export')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Relatório de turmas abertas/activas/encerradas em Excel ou PDF' })
   async exportCohorts(
     @CurrentUser() user: CurrentUserData,
@@ -629,7 +629,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/:cohortId')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Detalhe da turma (com participantes)' })
   getCohort(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -639,7 +639,7 @@ export class CoursesController {
   }
 
   @Patch('cohorts/:cohortId')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Actualizar turma' })
   updateCohort(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -650,7 +650,7 @@ export class CoursesController {
   }
 
   @Patch('cohorts/:cohortId/close')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Encerrar turma' })
   @HttpCode(HttpStatus.OK)
   closeCohort(
@@ -671,7 +671,7 @@ export class CoursesController {
   }
 
   @Post('cohorts/:cohortId/participants')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Adicionar participantes à turma' })
   addCohortParticipants(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -682,7 +682,7 @@ export class CoursesController {
   }
 
   @Delete('cohorts/:cohortId/participants/:userId')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Remover participante da turma' })
   removeCohortParticipant(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -693,7 +693,7 @@ export class CoursesController {
   }
 
   @Post('cohorts/:cohortId/attendance')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Marcar presenças da turma numa data' })
   markCohortAttendance(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -704,7 +704,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/:cohortId/attendance/export')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Folha de presenças da turma em Excel ou PDF' })
   async exportCohortAttendance(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -727,7 +727,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/:cohortId/attendance/sheet')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Folha de presenças da turma: todos os dias de aula × participantes' })
   getCohortAttendanceSheet(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -737,7 +737,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/:cohortId/attendance')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Ler presenças já marcadas da turma numa data' })
   getCohortAttendance(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -750,7 +750,7 @@ export class CoursesController {
   // ── Sessões e presenças da turma (docs/innova-gestao-presencas-claude-code.md) ──
 
   @Get('cohorts/:cohortId/sessions')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Sessões da turma' })
   listCohortSessions(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -760,7 +760,7 @@ export class CoursesController {
   }
 
   @Post('cohorts/:cohortId/sessions')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Criar sessão da turma' })
   createCohortSession(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -771,7 +771,7 @@ export class CoursesController {
   }
 
   @Patch('cohorts/:cohortId/sessions/:sessionId')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Editar sessão da turma' })
   updateCohortSession(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -783,7 +783,7 @@ export class CoursesController {
   }
 
   @Post('cohorts/:cohortId/sessions/:sessionId/cancel')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Cancelar sessão (preserva as presenças já registadas)' })
   cancelCohortSession(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -795,7 +795,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/:cohortId/sessions/:sessionId/attendance')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Participantes inscritos e presenças de uma sessão' })
   getCohortSessionAttendance(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -806,7 +806,7 @@ export class CoursesController {
   }
 
   @Put('cohorts/:cohortId/sessions/:sessionId/attendance')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Guardar presenças de uma sessão' })
   saveCohortSessionAttendance(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -830,7 +830,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/:cohortId/sessions/:sessionId/attendance/history')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Histórico de alterações de presença da sessão' })
   getCohortSessionAttendanceHistory(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -852,7 +852,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/:cohortId/attendance-report')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Relatório de assiduidade da turma (geral e individual)' })
   getCohortAttendanceReport(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -862,7 +862,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/:cohortId/attendance-report/export')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Relatório de assiduidade em Excel, CSV ou PDF' })
   async exportCohortAttendanceReport(
     @Param('cohortId', ParseIntPipe) cohortId: number,

@@ -878,6 +878,12 @@ export class UsersService {
         { fullName: { contains: search, mode: 'insensitive' } },
         { email: { contains: search, mode: 'insensitive' } },
         { position: { name: { contains: search, mode: 'insensitive' } } },
+        // Pesquisar por perfil: "formador"/"instrutor"/"instructor" devolve os perfis
+        // INSTRUCTOR e INSTRUCTOR_EXTERNO (o nome do perfil não está em português).
+        { role: { name: { contains: search, mode: 'insensitive' } } },
+        ...(/formador|instrutor|instructor/i.test(search)
+          ? [{ role: { name: { startsWith: 'INSTRUCTOR' } } }]
+          : []),
       ];
     }
 
@@ -896,6 +902,7 @@ export class UsersService {
           country: true,
           position: { select: { name: true } },
           department: { select: { name: true } },
+          role: { select: { name: true } },
         },
         orderBy: { fullName: 'asc' },
         // Listar um departamento inteiro (sem pesquisa) não tem limite — é usado
