@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { searchIds } from '../common/helpers/text-search';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateCollectionDto,
@@ -108,15 +109,28 @@ export class LibraryService {
       ...(isApproved !== undefined && { isApproved }),
       ...(mandatory !== undefined && { mandatory }),
       ...(departmentId !== undefined && { departmentId }),
-      ...(search && {
-        OR: [
+    };
+    if (search) {
+      // Pesquisa por palavras, sem acentos, em título, subtítulo, descrição, autor,
+      // código, editora, ISBN/ISSN/DOI, etiquetas, categorias e palavras-chave.
+      const ids = await searchIds<string>(
+        this.prisma.read,
+        'LibraryItem',
+        `concat_ws(' ', title, subtitle, description, author, code, publisher, isbn, issn, doi, array_to_string(tags, ' '), array_to_string(categories, ' '), array_to_string(keywords, ' '))`,
+        search,
+        `"deletedAt" IS NULL`,
+      );
+      if (ids) {
+        where.id = { in: ids };
+      } else {
+        where.OR = [
           { title: { contains: search, mode: 'insensitive' } },
           { author: { contains: search, mode: 'insensitive' } },
           { code: { contains: search, mode: 'insensitive' } },
           { keywords: { has: search } },
-        ],
-      }),
-    };
+        ];
+      }
+    }
     const [data, total] = await Promise.all([
       this.prisma.read.libraryItem.findMany({
         where,
