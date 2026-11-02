@@ -302,6 +302,21 @@ describe('SsoAuthService', () => {
       expect(authService.issueSessionForUser).not.toHaveBeenCalled();
     });
 
+    it('instrutor externo não entra por SSO/LDAP (precisa do código por e-mail)', async () => {
+      authSettings.findLdapUser.mockResolvedValue(entry);
+      authSettings.verifyLdapCredentials.mockResolvedValue(true);
+      authService.findUserWithRoleByEmail.mockResolvedValue({
+        id: 9,
+        active: true,
+        role: { name: 'INSTRUCTOR_EXTERNO' },
+      });
+
+      await expect(service.ldapLogin('ana@innova.test', 'certa')).rejects.toThrow(
+        'Instrutores externos entram com email e palavra-passe',
+      );
+      expect(authService.issueSessionForUser).not.toHaveBeenCalled();
+    });
+
     it('verifica as credenciais contra o DN encontrado e emite sessão LDAP', async () => {
       authSettings.findLdapUser.mockResolvedValue(entry);
       authSettings.verifyLdapCredentials.mockResolvedValue(true);

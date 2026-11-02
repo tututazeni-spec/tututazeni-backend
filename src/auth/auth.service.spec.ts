@@ -5,6 +5,7 @@ import { AuthService, sessionIdleTimeoutMs } from './auth.service';
 import { SessionRevocationService } from './session-revocation.service';
 import { ExternalLoginSecurityService } from '../instructor-invites/external-login-security.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { SecuritySettingsService } from '../settings/security-settings.service';
 
 // A escrita encadeada (SHA-256 + advisory lock) é testada em audit-chain; aqui só
 // interessa o que cada serviço regista, por isso delega no mock de prisma.auditLog.
@@ -544,6 +545,12 @@ describe('AuthService.login — instrutor externo (código por e-mail)', () => {
     isExternal: jest.fn((u: { role?: { name?: string } }) => u.role?.name === 'INSTRUCTOR_EXTERNO'),
     challenge: jest.fn().mockResolvedValue({ purpose: 'NEW_DEVICE' }),
     verify: jest.fn(),
+    registerDevice: jest.fn().mockResolvedValue(undefined),
+  };
+  const securityMock = {
+    getPolicy: jest.fn().mockResolvedValue(null),
+    registerFailedAttempt: jest.fn().mockResolvedValue(null),
+    clearFailedAttempts: jest.fn().mockResolvedValue(undefined),
   };
   let svc: AuthService;
 
@@ -558,6 +565,7 @@ describe('AuthService.login — instrutor externo (código por e-mail)', () => {
         { provide: JwtService, useValue: mockJwt },
         { provide: SessionRevocationService, useValue: mockRevocation },
         { provide: ExternalLoginSecurityService, useValue: ext },
+        { provide: SecuritySettingsService, useValue: securityMock },
       ],
     }).compile();
     svc = module.get<AuthService>(AuthService);
@@ -611,6 +619,63 @@ describe('AuthService.login — instrutor externo (código por e-mail)', () => {
       '123456',
       DEVICE,
       expect.any(Object),
+    );
+  });
+
+  it('emailCode errado conta como tentativa falhada (bloqueio de conta)', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(external);
+    ext.verify.mockResolvedValue(false);
+    await svc
+      .login({
+        email: external.email,
+        password: 'pass',
+        emailCode: '000000',
+        deviceId: DEVICE,
+      } as never)
+      .catch(() => undefined);
+    expect(securityMock.registerFailedAttempt).toHaveBeenCalledWith(9);
+  });
+
+  it('sem deviceId o instrutor externo é recusado e não se envia código', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(external);
+    await expect(svc.login({ email: external.email, password: 'pass' } as never)).rejects.toThrow(
+      'Dispositivo não identificado',
+    );
+    expect(ext.challenge).not.toHaveBeenCalled();
+  });
+
+  it('com TOTP ativo e sem totpCode pede o TOTP antes de gastar o código de e-mail', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      ...external,
+      twoFactorEnabled: true,
+      twoFactorSecret: 'segredo',
+    });
+    const err = await svc
+      .login({
+        email: external.email,
+        password: 'pass',
+        emailCode: '123456',
+        deviceId: DEVICE,
+      } as never)
+      .catch((e: UnauthorizedException) => e);
+    expect((err as UnauthorizedException).getResponse()).toMatchObject({
+      code: 'TWO_FACTOR_REQUIRED',
+    });
+    expect(ext.verify).not.toHaveBeenCalled();
+    expect(ext.registerDevice).not.toHaveBeenCalled();
+  });
+
+  it('o dispositivo só é registado quando o login está concluído', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(external);
+    ext.verify.mockResolvedValue(true);
+    await svc.login(
+      { email: external.email, password: 'pass', emailCode: '123456', deviceId: DEVICE } as never,
+      { ip: '2.2.2.2' },
+    );
+    expect(ext.registerDevice).toHaveBeenCalledWith(
+      9,
+      DEVICE,
+      expect.objectContaining({ ip: '2.2.2.2' }),
     );
   });
 

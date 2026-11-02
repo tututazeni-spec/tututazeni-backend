@@ -239,12 +239,21 @@ export class AuthService {
     if (this.externalLogin?.isExternal(user)) {
       const who = { id: user.id, email: user.email, fullName: user.fullName };
       const loginCtx = ctx ?? {};
+      // Sem identificador de dispositivo não há registo, alerta nem auditoria: exige-se sempre.
+      if (!dto.deviceId) throw new BadRequestException('Dispositivo não identificado');
       if (!dto.emailCode) {
         const { purpose } = await this.externalLogin.challenge(who, dto.deviceId, loginCtx);
         throw new UnauthorizedException({
           message: 'Introduza o código enviado para o seu email',
           code: 'EMAIL_CODE_REQUIRED',
           purpose,
+        });
+      }
+      // Com TOTP ativo pede-se o TOTP antes de gastar o código de e-mail (uso único).
+      if (user.twoFactorEnabled && user.twoFactorSecret && !dto.totpCode) {
+        throw new UnauthorizedException({
+          message: 'Código de autenticação de dois factores necessário',
+          code: 'TWO_FACTOR_REQUIRED',
         });
       }
       if (!(await this.externalLogin.verify(who, dto.emailCode, dto.deviceId, loginCtx))) {
@@ -323,6 +332,11 @@ export class AuthService {
       !!securityPolicy &&
       !user.twoFactorEnabled &&
       isTwoFactorRequired(securityPolicy, user.role?.name === 'ADMIN' || user.role?.name === 'RH');
+
+    // Só aqui, com todas as verificações feitas, o dispositivo passa a confiável.
+    if (this.externalLogin?.isExternal(user)) {
+      await this.externalLogin.registerDevice(user.id, dto.deviceId, ctx ?? {});
+    }
 
     return this.issueSessionForUser(user, ctx, {
       mustChangePassword,

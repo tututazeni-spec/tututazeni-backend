@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { AuditService } from '../common/services/audit.service';
+import { SessionRevocationService } from '../auth/session-revocation.service';
 import { INSTRUCTOR_EXTERNO_ROLE } from './constants';
 
 export type LoginPurpose = 'LOGIN' | 'NEW_DEVICE';
@@ -36,6 +37,7 @@ export class ExternalLoginSecurityService {
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
     private readonly audit: AuditService,
+    @Optional() private readonly revocation?: SessionRevocationService,
   ) {}
 
   isExternal(user: { role?: { name?: string | null } | null }): boolean {
@@ -74,7 +76,7 @@ export class ExternalLoginSecurityService {
       where: { userId: user.id, consumedAt: null },
       data: { consumedAt: now },
     });
-    await this.prisma.loginChallenge.create({
+    const created = await this.prisma.loginChallenge.create({
       data: {
         userId: user.id,
         codeHash: codeHash(user.id, code),
@@ -82,7 +84,16 @@ export class ExternalLoginSecurityService {
         expiresAt: new Date(now.getTime() + CODE_TTL_MS),
       },
     });
-    await this.mail.sendLoginCode(user.email, user.fullName, code, purpose);
+    try {
+      await this.mail.sendLoginCode(user.email, user.fullName, code, purpose);
+    } catch (e) {
+      // Sem e-mail não há código: apagar o desafio evita um "código fantasma" que
+      // o reenvio em <60 s reaproveitaria sem nunca ter chegado ao instrutor.
+      await this.prisma.loginChallenge
+        .delete({ where: { id: created.id } })
+        .catch((): void => undefined);
+      throw e;
+    }
     this.logger.log({ userId: user.id, purpose, ip: ctx.ip, msg: 'Código de login enviado' });
     return { purpose };
   }
@@ -118,8 +129,6 @@ export class ExternalLoginSecurityService {
       data: { consumedAt: now },
     });
     if (claim.count !== 1) return false;
-
-    await this.registerDevice(user.id, deviceId, ctx);
     return true;
   }
 
@@ -146,6 +155,13 @@ export class ExternalLoginSecurityService {
       },
       update: { revokedAt: null, lastSeenAt: now, userAgent: ctx.userAgent, ip: ctx.ip },
     });
+    if (revoked.count > 0) {
+      // O dispositivo anterior deixa de poder renovar a sessão.
+      await this.prisma.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+    }
     if (revoked.count > 0 && alert) {
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
@@ -179,6 +195,12 @@ export class ExternalLoginSecurityService {
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    // Repor também termina as sessões abertas (o dispositivo antigo deixa de renovar).
+    await this.prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    await this.revocation?.revokeAllUserSessions(userId);
     await this.audit.log({
       action: 'INSTRUCTOR_DEVICES_RESET',
       entity: 'User',
