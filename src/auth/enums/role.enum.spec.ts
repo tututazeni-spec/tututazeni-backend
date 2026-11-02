@@ -3,12 +3,18 @@ import { DepartmentsController } from '../../departments/departments.controller'
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 
 describe('AUTHENTICATED_ROLES', () => {
-  it('contém todos os valores únicos do enum Role', () => {
-    const uniqueValues = [...new Set(Object.values(Role))];
-    expect(Array.from(AUTHENTICATED_ROLES)).toHaveLength(uniqueValues.length);
-    for (const value of uniqueValues) {
+  it('contém todos os valores únicos do enum Role, exceto o instrutor externo', () => {
+    // INSTRUCTOR_EXTERNO fica de fora de propósito: só entra em endpoints que o listem
+    // explicitamente em @Roles(...) (barreira do RolesGuard, fase 3 do instrutor externo).
+    const expected = [...new Set(Object.values(Role))].filter(r => r !== Role.INSTRUCTOR_EXTERNO);
+    expect(Array.from(AUTHENTICATED_ROLES)).toHaveLength(expected.length);
+    for (const value of expected) {
       expect(AUTHENTICATED_ROLES).toContain(value);
     }
+  });
+
+  it('nunca inclui o instrutor externo', () => {
+    expect(AUTHENTICATED_ROLES).not.toContain(Role.INSTRUCTOR_EXTERNO);
   });
 });
 

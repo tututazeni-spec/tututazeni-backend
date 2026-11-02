@@ -1,4 +1,4 @@
-import { AnyAuthenticated } from '../common/decorators/authz.decorators';
+import { AnyAuthenticated, AllowExternal } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -50,6 +50,7 @@ export class UsersController {
   @Get('me')
   @ApiOperation({ summary: 'Perfil do utilizador autenticado' })
   @AnyAuthenticated()
+  @AllowExternal()
   me(@CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(user.id);
   }
@@ -78,6 +79,7 @@ export class UsersController {
   @Put('me/profile')
   @ApiOperation({ summary: 'Actualizar perfil do utilizador autenticado' })
   @AnyAuthenticated()
+  @AllowExternal()
   updateMyProfile(@CurrentUser() user: CurrentUserData, @Body() dto: UpdateProfileDto) {
     return this.svc.upsertProfile(user.id, dto);
   }
@@ -86,6 +88,7 @@ export class UsersController {
   @Patch('me/avatar')
   @ApiOperation({ summary: 'Definir a foto de perfil do utilizador autenticado' })
   @AnyAuthenticated()
+  @AllowExternal()
   setMyAvatar(@CurrentUser() user: CurrentUserData, @Body() dto: UpdateMyAvatarDto) {
     return this.svc.setAvatar(user.id, dto.avatarUrl);
   }
@@ -94,6 +97,7 @@ export class UsersController {
   @ApiOperation({ summary: 'Remover a foto de perfil do utilizador autenticado' })
   @HttpCode(HttpStatus.OK)
   @AnyAuthenticated()
+  @AllowExternal()
   removeMyAvatar(@CurrentUser() user: CurrentUserData) {
     return this.svc.clearAvatar(user.id);
   }
@@ -102,6 +106,7 @@ export class UsersController {
   @ApiOperation({ summary: 'Alterar password' })
   @HttpCode(HttpStatus.OK)
   @AnyAuthenticated()
+  @AllowExternal()
   changePassword(@CurrentUser() user: CurrentUserData, @Body() dto: UserChangePasswordDto) {
     return this.svc.changePassword(user.id, dto);
   }

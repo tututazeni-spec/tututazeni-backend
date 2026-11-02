@@ -1,5 +1,5 @@
 // src/notifications/notifications.controller.ts
-import { AnyAuthenticated } from '../common/decorators/authz.decorators';
+import { AnyAuthenticated, AllowExternal } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -44,6 +44,7 @@ export class NotificationsController {
   @Get('my')
   @ApiOperation({ summary: 'As minhas notificações (com agrupamento por data)' })
   @AnyAuthenticated()
+  @AllowExternal()
   my(@CurrentUser() user: CurrentUserData, @Query() filters: NotificationFilterDto) {
     return this.svc.getMyNotifications(user.id, filters);
   }
@@ -51,6 +52,7 @@ export class NotificationsController {
   @Get('my/unread-count')
   @ApiOperation({ summary: 'Contagem de não lidas (badge do sino)' })
   @AnyAuthenticated()
+  @AllowExternal()
   unreadCount(@CurrentUser() user: CurrentUserData) {
     return this.svc.getUnreadCount(user.id);
   }
@@ -59,6 +61,7 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Marcar notificação como lida' })
   @HttpCode(HttpStatus.OK)
   @AnyAuthenticated()
+  @AllowExternal()
   markRead(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.markAsRead(id, user.id);
   }
@@ -67,6 +70,7 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Marcar todas como lidas' })
   @HttpCode(HttpStatus.OK)
   @AnyAuthenticated()
+  @AllowExternal()
   readAll(@CurrentUser() user: CurrentUserData) {
     return this.svc.markAllAsRead(user.id);
   }
@@ -75,6 +79,7 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Marcar lista de IDs como lidas' })
   @HttpCode(HttpStatus.OK)
   @AnyAuthenticated()
+  @AllowExternal()
   readBulk(@CurrentUser() user: CurrentUserData, @Body() dto: ReadBulkDto) {
     return this.svc.markBulkAsRead(user.id, dto.ids);
   }
@@ -83,6 +88,7 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Arquivar notificação' })
   @HttpCode(HttpStatus.OK)
   @AnyAuthenticated()
+  @AllowExternal()
   archive(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.archiveNotification(id, user.id);
   }

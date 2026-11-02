@@ -75,6 +75,51 @@ describe('RolesGuard', () => {
     });
   });
 
+  describe('instrutor externo (barreira)', () => {
+    const external = { id: 9, role: { name: 'INSTRUCTOR_EXTERNO', permissions: [] } };
+    afterEach(() => delete process.env.AUTHZ_DENY_BY_DEFAULT);
+
+    it('@AnyAuthenticated sozinho NÃO admite o externo', () => {
+      meta({ authenticatedOnly: true });
+      expect(() => guard.canActivate(mockContext(external))).toThrow(ForbiddenException);
+    });
+
+    it('@AnyAuthenticated + @AllowExternal admite o externo', () => {
+      meta({ authenticatedOnly: true, allowExternal: true });
+      expect(guard.canActivate(mockContext(external))).toBe(true);
+    });
+
+    it('@AllowExternal sem @AnyAuthenticated não abre nada por si só', () => {
+      meta({ allowExternal: true });
+      expect(() => guard.canActivate(mockContext(external))).toThrow(ForbiddenException);
+    });
+
+    it('@Roles que não o inclui → 403; que o inclui → permite', () => {
+      meta({ roles: ['ADMIN', 'RH'] });
+      expect(() => guard.canActivate(mockContext(external))).toThrow(ForbiddenException);
+      meta({ roles: ['ADMIN', 'INSTRUCTOR_EXTERNO'] });
+      expect(guard.canActivate(mockContext(external))).toBe(true);
+    });
+
+    it('o rollback AUTHZ_DENY_BY_DEFAULT=false nunca abre handlers sem política ao externo', () => {
+      process.env.AUTHZ_DENY_BY_DEFAULT = 'false';
+      meta({});
+      expect(() => guard.canActivate(mockContext(external))).toThrow(ForbiddenException);
+    });
+
+    it('outros papéis em @AnyAuthenticated continuam a passar (sem regressão)', () => {
+      meta({ authenticatedOnly: true });
+      for (const name of ['COLABORADOR', 'INSTRUCTOR', 'GESTOR', 'RH', 'ADMIN']) {
+        expect(guard.canActivate(mockContext({ id: 1, role: { name } }))).toBe(true);
+      }
+    });
+
+    it('@Public continua a abrir a anónimos', () => {
+      meta({ isPublic: true });
+      expect(guard.canActivate(mockContext(undefined))).toBe(true);
+    });
+  });
+
   it('deve permitir acesso se o utilizador tem o role correcto', () => {
     reflector.getAllAndOverride.mockReturnValue(['ADMIN', 'RH']);
     const ctx = mockContext({ id: 1, role: { name: 'ADMIN' } });

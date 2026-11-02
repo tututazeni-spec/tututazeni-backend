@@ -36,7 +36,6 @@ export const AUTHENTICATED_ROLES = [
   Role.RH,
   Role.ADMIN,
   Role.INSTRUCTOR,
-  Role.INSTRUCTOR_EXTERNO,
   Role.DIRECTOR,
   Role.AUDITOR,
 ] as const;
