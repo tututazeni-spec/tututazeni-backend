@@ -9942,6 +9942,11 @@ model ContentAsset {
   hasCertification Boolean            @default(false)
   tags             String[]           @default([])
   externalSource   String?
+  // Reciclagem: apagado pelo admin, restaurável durante 30 dias (src/recycle-bin).
+  deletedAt        DateTime?
+  deletedById      Int?
+
+  @@index([deletedAt])
 }
 
 enum Difficulty {

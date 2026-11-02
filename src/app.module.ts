@@ -46,6 +46,7 @@ import { AuditModule } from './audit/audit.module';
 import { FilesModule } from './common/files/files.module';
 import { AiTutorModule } from './ai-tutor/ai-tutor.module';
 import { AvatarTrainingModule } from './avatar-training/avatar-training.module';
+import { RecycleBinModule } from './recycle-bin/recycle-bin.module';
 import { EventsModule } from './events/events.module';
 import { CertificatesModule } from './certificates/certificates.module';
 // UsersModule único junta UsersController (/users), EmployeesController
@@ -216,6 +217,7 @@ const accessPath = (url = ''): string => url.split('?')[0];
     FilesModule,
     AiTutorModule,
     AvatarTrainingModule,
+    RecycleBinModule,
     EventsModule,
     CertificatesModule,
     AttendanceModule,

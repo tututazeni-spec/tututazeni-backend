@@ -180,7 +180,7 @@ export class ContentLibraryService {
 
   async findOne(id: number, userId?: number) {
     const c = await this.prisma.read.contentAsset.findUnique({ where: { id } });
-    if (!c) throw new NotFoundException('Conteúdo não encontrado');
+    if (!c || c.deletedAt) throw new NotFoundException('Conteúdo não encontrado');
 
     const [viewCount, avgRating, ratingCount, userProgress, isBookmarked] = await Promise.all([
       this.prisma.auditLog
@@ -456,6 +456,17 @@ export class ContentLibraryService {
     }
 
     return { message: 'Visualização registada' };
+  }
+
+  /** Envia o conteúdo para a reciclagem (restaurável durante 30 dias — ver RecycleBinService). */
+  async softDelete(id: number, userId: number) {
+    const c = await this.prisma.contentAsset.findUnique({ where: { id } });
+    if (!c || c.deletedAt) throw new NotFoundException('Conteúdo não encontrado');
+    await this.prisma.contentAsset.update({
+      where: { id },
+      data: { active: false, deletedAt: new Date(), deletedById: userId },
+    });
+    return { message: 'Conteúdo enviado para a reciclagem' };
   }
 
   // ══════════════════════════════════════════════════════

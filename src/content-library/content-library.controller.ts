@@ -5,6 +5,7 @@ import {
   Post,
   Put,
   Patch,
+  Delete,
   Param,
   Body,
   Query,
@@ -18,7 +19,7 @@ import { StripInlineFilesInterceptor } from './strip-inline-files.interceptor';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
-import { AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
+import { AUTHENTICATED_ROLES, Role } from '../auth/enums/role.enum';
 import {
   CreateContentDto,
   UpdateContentDto,
@@ -153,6 +154,13 @@ export class ContentLibraryController {
   }
 
   // ─── Interactions ─────────────────────────────────────────────
+
+  @Delete(':id')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Apagar conteúdo (vai para a reciclagem durante 30 dias)' })
+  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.softDelete(id, user.id);
+  }
 
   @Patch(':id/view')
   @Roles(...AUTHENTICATED_ROLES)
