@@ -20,8 +20,10 @@ type Db = Pick<PrismaService, 'trainingInstructorProfile' | 'liveClass' | 'cours
 
 const NOT_FOUND = 'Recurso não encontrado';
 
-export function isExternalInstructor(user: { role?: { name?: string | null } | null }): boolean {
-  return user.role?.name === Role.INSTRUCTOR_EXTERNO;
+export function isExternalInstructor(
+  user: { role?: { name?: string | null } | null } | null | undefined,
+): boolean {
+  return user?.role?.name === Role.INSTRUCTOR_EXTERNO;
 }
 
 /** Id do perfil de instrutor do externo (null se não for externo ou ainda não tiver perfil). */

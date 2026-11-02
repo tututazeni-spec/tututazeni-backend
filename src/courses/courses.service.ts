@@ -141,6 +141,16 @@ export class CoursesService {
 
   // ─── Catálogo ─────────────────────────────────────────────────────────────
 
+  /**
+   * Catálogo do instrutor externo: só os cursos onde é instrutor (principal ou co-instrutor),
+   * em qualquer estado (inclui rascunhos que está a escrever). Nunca vai à cache partilhada.
+   */
+  async findAllForExternal(userId: number, filters: CourseFilterDto) {
+    return this.loadCatalog(filters, {
+      OR: [{ primaryInstructorId: userId }, { instructors: { some: { userId } } }],
+    });
+  }
+
   async findAll(filters: CourseFilterDto) {
     const cache = this.cache;
     if (!cache || !isCatalogCacheable(filters)) return this.loadCatalog(filters);
@@ -155,7 +165,7 @@ export class CoursesService {
     await this.cache?.set(CATALOG_VERSION_KEY, Date.now(), CATALOG_VERSION_TTL_SECONDS);
   }
 
-  private async loadCatalog(filters: CourseFilterDto) {
+  private async loadCatalog(filters: CourseFilterDto, scope?: Prisma.CourseWhereInput) {
     const {
       page = 1,
       limit = 20,
@@ -172,6 +182,8 @@ export class CoursesService {
     const { skip, take } = calculatePagination(page, limit);
 
     const where: Prisma.CourseWhereInput = { deletedAt: null };
+    // O âmbito entra em AND para não colidir com o OR da pesquisa livre.
+    if (scope) where.AND = [scope];
     if (status) where.status = status;
     if (category) where.category = category;
     if (level) where.level = level;
