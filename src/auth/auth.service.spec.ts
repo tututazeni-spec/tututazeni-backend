@@ -217,9 +217,9 @@ describe('AuthService', () => {
         ...baseUser,
         accessExpiresAt: new Date(Date.now() - 1000),
       });
-      await expect(
-        service.login({ email: 'test@innova.com', password: 'pass' }),
-      ).rejects.toThrow('Acesso expirado');
+      await expect(service.login({ email: 'test@innova.com', password: 'pass' })).rejects.toThrow(
+        'Acesso expirado',
+      );
     });
 
     it('deve lançar UnauthorizedException se password inválida', async () => {
