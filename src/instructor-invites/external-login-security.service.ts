@@ -20,14 +20,34 @@ export interface LoginCtx {
 const CODE_TTL_MS = 10 * 60_000;
 const RESEND_MIN_MS = 60_000;
 const MAX_ATTEMPTS = 5;
+const UA_DB_MAX = 300;
+const UA_MAIL_MAX = 120;
 
 const sha256 = (v: string): string => crypto.createHash('sha256').update(v).digest('hex');
 const codeHash = (userId: number, code: string): string => sha256(`${userId}:${code}`);
 
+/** Sem caracteres de controlo (injeção de linhas) e com tamanho limitado. */
+function cleanUa(ua: string | undefined, max: number): string | undefined {
+  if (!ua) return undefined;
+  // eslint-disable-next-line no-control-regex
+  return ua
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .trim()
+    .slice(0, max);
+}
+
+/** Para o corpo do e-mail: além do limite, sem URLs (evita links de phishing no alerta). */
+function uaForMail(ua: string | undefined): string | undefined {
+  const cleaned = cleanUa(ua, UA_DB_MAX);
+  return cleaned?.replace(/https?:\/\/\S*/gi, '[link removido]').slice(0, UA_MAIL_MAX);
+}
+
 /**
  * Segundo factor por e-mail e dispositivo confiável do instrutor externo (spec 4.3).
- * O código vale 10 min, é de uso único e queima à 5.ª tentativa errada; só existe
- * 1 dispositivo confiável activo por utilizador.
+ * O código vale 10 min, é de uso único e queima à 5.ª tentativa; só existe 1 dispositivo
+ * confiável activo por utilizador. Os passos que leem-e-escrevem estado por utilizador
+ * correm sob `pg_advisory_xact_lock(userId)` para não haver corridas (dois pedidos
+ * simultâneos, dois registos de dispositivo).
  */
 @Injectable()
 export class ExternalLoginSecurityService {
@@ -57,33 +77,39 @@ export class ExternalLoginSecurityService {
       : null;
     const purpose: LoginPurpose = known ? 'LOGIN' : 'NEW_DEVICE';
 
-    const now = new Date();
-    // Anti-spam do endereço do instrutor: pedido repetido na janela reaproveita o código vivo.
-    const recent = await this.prisma.loginChallenge.findFirst({
-      where: {
-        userId: user.id,
-        consumedAt: null,
-        expiresAt: { gt: now },
-        createdAt: { gt: new Date(now.getTime() - RESEND_MIN_MS) },
-      },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, purpose: true },
-    });
-    if (recent) return { purpose };
-
     const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
-    await this.prisma.loginChallenge.updateMany({
-      where: { userId: user.id, consumedAt: null },
-      data: { consumedAt: now },
+    const created = await this.prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${user.id}::bigint)`;
+      const now = new Date();
+      // Anti-spam do endereço do instrutor: pedido repetido na janela reaproveita o código
+      // vivo — mas só se for do mesmo propósito (senão o aviso de dispositivo novo perdia-se).
+      const recent = await tx.loginChallenge.findFirst({
+        where: {
+          userId: user.id,
+          consumedAt: null,
+          expiresAt: { gt: now },
+          createdAt: { gt: new Date(now.getTime() - RESEND_MIN_MS) },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, purpose: true },
+      });
+      if (recent && recent.purpose === purpose) return null;
+
+      await tx.loginChallenge.updateMany({
+        where: { userId: user.id, consumedAt: null },
+        data: { consumedAt: now },
+      });
+      return tx.loginChallenge.create({
+        data: {
+          userId: user.id,
+          codeHash: codeHash(user.id, code),
+          purpose,
+          expiresAt: new Date(now.getTime() + CODE_TTL_MS),
+        },
+      });
     });
-    const created = await this.prisma.loginChallenge.create({
-      data: {
-        userId: user.id,
-        codeHash: codeHash(user.id, code),
-        purpose,
-        expiresAt: new Date(now.getTime() + CODE_TTL_MS),
-      },
-    });
+    if (!created) return { purpose };
+
     try {
       await this.mail.sendLoginCode(user.email, user.fullName, code, purpose);
     } catch (e) {
@@ -101,8 +127,8 @@ export class ExternalLoginSecurityService {
   async verify(
     user: LoginUser,
     code: string,
-    deviceId: string | undefined,
-    ctx: LoginCtx,
+    _deviceId: string | undefined,
+    _ctx: LoginCtx,
   ): Promise<boolean> {
     const now = new Date();
     const latest = await this.prisma.loginChallenge.findFirst({
@@ -111,15 +137,25 @@ export class ExternalLoginSecurityService {
     });
     if (!latest) return false;
 
+    // Cada tentativa é contada de forma atómica ANTES de comparar: palpites em paralelo
+    // não conseguem passar das 5 (o contador não perde actualizações).
+    const bumped = await this.prisma.loginChallenge.update({
+      where: { id: latest.id },
+      data: { attempts: { increment: 1 } },
+      select: { attempts: true },
+    });
+    if (bumped.attempts > MAX_ATTEMPTS) return false;
+
     const a = Buffer.from(codeHash(user.id, code));
     const b = Buffer.from(latest.codeHash);
     const match = a.length === b.length && crypto.timingSafeEqual(a, b);
     if (!match) {
-      const attempts = latest.attempts + 1;
-      await this.prisma.loginChallenge.update({
-        where: { id: latest.id },
-        data: { attempts, consumedAt: attempts >= MAX_ATTEMPTS ? now : null },
-      });
+      if (bumped.attempts >= MAX_ATTEMPTS) {
+        await this.prisma.loginChallenge.update({
+          where: { id: latest.id },
+          data: { consumedAt: now },
+        });
+      }
       return false;
     }
 
@@ -129,6 +165,11 @@ export class ExternalLoginSecurityService {
       data: { consumedAt: now },
     });
     if (claim.count !== 1) return false;
+    // Qualquer outro código ainda vivo deixa de servir.
+    await this.prisma.loginChallenge.updateMany({
+      where: { userId: user.id, consumedAt: null },
+      data: { consumedAt: now },
+    });
     return true;
   }
 
@@ -141,35 +182,38 @@ export class ExternalLoginSecurityService {
     if (!deviceId) return;
     const hash = sha256(deviceId);
     const now = new Date();
-    const revoked = await this.prisma.trustedDevice.updateMany({
-      where: { userId, revokedAt: null, deviceIdHash: { not: hash } },
-      data: { revokedAt: now },
-    });
-    await this.prisma.trustedDevice.upsert({
-      where: { userId_deviceIdHash: { userId, deviceIdHash: hash } },
-      create: {
-        userId,
-        deviceIdHash: hash,
-        userAgent: ctx.userAgent,
-        ip: ctx.ip,
-      },
-      update: { revokedAt: null, lastSeenAt: now, userAgent: ctx.userAgent, ip: ctx.ip },
-    });
-    if (revoked.count > 0) {
-      // O dispositivo anterior deixa de poder renovar a sessão.
-      await this.prisma.refreshToken.updateMany({
-        where: { userId, revokedAt: null },
+    const userAgent = cleanUa(ctx.userAgent, UA_DB_MAX);
+    const ip = ctx.ip?.slice(0, 64);
+
+    const replaced = await this.prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${userId}::bigint)`;
+      const revoked = await tx.trustedDevice.updateMany({
+        where: { userId, revokedAt: null, deviceIdHash: { not: hash } },
         data: { revokedAt: now },
       });
-    }
-    if (revoked.count > 0 && alert) {
+      await tx.trustedDevice.upsert({
+        where: { userId_deviceIdHash: { userId, deviceIdHash: hash } },
+        create: { userId, deviceIdHash: hash, userAgent, ip },
+        update: { revokedAt: null, lastSeenAt: now, userAgent, ip },
+      });
+      if (revoked.count > 0) {
+        // O dispositivo anterior deixa de poder renovar a sessão.
+        await tx.refreshToken.updateMany({
+          where: { userId, revokedAt: null },
+          data: { revokedAt: now },
+        });
+      }
+      return revoked.count;
+    });
+
+    if (replaced > 0 && alert) {
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
         select: { email: true, fullName: true },
       });
       if (user) {
         await this.mail
-          .sendNewDeviceAlert(user.email, user.fullName, ctx.userAgent)
+          .sendNewDeviceAlert(user.email, user.fullName, uaForMail(ctx.userAgent))
           .catch((e: unknown) =>
             this.logger.warn({
               userId,
@@ -179,13 +223,13 @@ export class ExternalLoginSecurityService {
           );
       }
     }
-    if (revoked.count > 0 || alert) {
+    if (replaced > 0 || alert) {
       await this.audit.log({
         action: 'INSTRUCTOR_DEVICE_REGISTERED',
         entity: 'User',
         entityId: userId,
         userId,
-        metadata: { replaced: revoked.count, ip: ctx.ip, userAgent: ctx.userAgent },
+        metadata: { replaced, ip, userAgent },
       });
     }
   }

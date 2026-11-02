@@ -20,9 +20,18 @@ function build(opts: { device?: unknown; recent?: unknown; latest?: unknown } = 
       update: jest.fn().mockResolvedValue({}),
     },
     user: { findUnique: jest.fn().mockResolvedValue(USER) },
+    $executeRaw: jest.fn().mockResolvedValue(1),
+    $transaction: jest.fn(),
     refreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
   };
   prisma.loginChallenge.delete = jest.fn().mockResolvedValue({});
+  prisma.$transaction.mockImplementation(async (fn: (t: typeof prisma) => unknown) => fn(prisma));
+  // update com increment devolve as tentativas já contadas
+  prisma.loginChallenge.update.mockImplementation(async (args: { data: { attempts?: unknown } }) =>
+    args.data.attempts && typeof args.data.attempts === 'object'
+      ? { attempts: (((opts.latest as { attempts?: number }) ?? {}).attempts ?? 0) + 1 }
+      : {},
+  );
   // Em challenge() a pesquisa é "desafio vivo criado há <60 s"; em verify() é "último desafio vivo".
   prisma.loginChallenge.findFirst.mockResolvedValue(opts.latest ?? opts.recent ?? null);
   const mail = {
@@ -83,6 +92,21 @@ describe('ExternalLoginSecurityService.challenge', () => {
     expect(prisma.loginChallenge.delete).toHaveBeenCalledWith({ where: { id: 'c1' } });
   });
 
+  it('serializa por utilizador com advisory lock dentro de uma transação', async () => {
+    const { svc, prisma } = build();
+    await svc.challenge(USER, DEVICE, CTX);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('desafio recente de outro propósito não é reaproveitado (o aviso de dispositivo novo não se perde)', async () => {
+    const { svc, prisma, mail } = build({ recent: { id: 'c0', purpose: 'LOGIN' } });
+    const out = await svc.challenge(USER, DEVICE, CTX); // sem dispositivo registado: NEW_DEVICE
+    expect(out.purpose).toBe('NEW_DEVICE');
+    expect(prisma.loginChallenge.create).toHaveBeenCalledTimes(1);
+    expect(mail.sendLoginCode).toHaveBeenCalledTimes(1);
+  });
+
   it('dispositivo conhecido → LOGIN', async () => {
     const { svc } = build({ device: { id: 'd1' } });
     expect((await svc.challenge(USER, DEVICE, CTX)).purpose).toBe('LOGIN');
@@ -123,27 +147,42 @@ describe('ExternalLoginSecurityService.verify', () => {
     expect(prisma.trustedDevice.upsert).not.toHaveBeenCalled();
   });
 
+  it('ao validar consome também os outros desafios vivos do utilizador', async () => {
+    const { svc, prisma } = build({ latest: live() });
+    await svc.verify(USER, '123456', DEVICE, CTX);
+    const others = prisma.loginChallenge.updateMany.mock.calls.find(
+      (c: [{ where: { userId?: number } }]) => c[0].where.userId === 7,
+    );
+    expect(others![0].where).toMatchObject({ userId: 7, consumedAt: null });
+  });
+
   it('sem desafio vivo (expirado/consumido/inexistente) → false', async () => {
     const { svc, prisma } = build({ latest: null });
     expect(await svc.verify(USER, '123456', DEVICE, CTX)).toBe(false);
     expect(prisma.trustedDevice.upsert).not.toHaveBeenCalled();
   });
 
-  it('código errado → false e incrementa tentativas sem consumir', async () => {
+  it('cada tentativa é contada de forma atómica ANTES de comparar o código', async () => {
     const { svc, prisma } = build({ latest: live() });
     expect(await svc.verify(USER, '000000', DEVICE, CTX)).toBe(false);
-    expect(prisma.loginChallenge.update.mock.calls[0][0].data).toMatchObject({
-      attempts: 1,
-      consumedAt: null,
+    expect(prisma.loginChallenge.update.mock.calls[0][0].data).toEqual({
+      attempts: { increment: 1 },
     });
   });
 
   it('5.ª tentativa errada queima o desafio', async () => {
     const { svc, prisma } = build({ latest: live({ attempts: 4 }) });
     expect(await svc.verify(USER, '000000', DEVICE, CTX)).toBe(false);
-    const data = prisma.loginChallenge.update.mock.calls[0][0].data;
-    expect(data.attempts).toBe(5);
-    expect(data.consumedAt).toBeInstanceOf(Date);
+    const burn = prisma.loginChallenge.update.mock.calls.find(
+      (c: [{ data: { consumedAt?: unknown } }]) => c[0].data.consumedAt instanceof Date,
+    );
+    expect(burn).toBeDefined();
+  });
+
+  it('para lá da 5.ª tentativa (palpites em paralelo) recusa sem comparar, mesmo com o código certo', async () => {
+    const { svc, prisma } = build({ latest: live({ attempts: 5 }) });
+    expect(await svc.verify(USER, '123456', DEVICE, CTX)).toBe(false);
+    expect(prisma.loginChallenge.updateMany).not.toHaveBeenCalled(); // nunca chegou a consumir
   });
 
   it('se outra verificação consumiu o desafio primeiro (corrida) → false', async () => {
@@ -172,6 +211,26 @@ describe('ExternalLoginSecurityService.registerDevice', () => {
     expect(prisma.refreshToken.updateMany.mock.calls[0][0]).toMatchObject({
       where: { userId: 7, revokedAt: null },
     });
+  });
+
+  it('corre numa transação com advisory lock (dois registos simultâneos não deixam 2 ativos)', async () => {
+    const { svc, prisma } = build();
+    await svc.registerDevice(7, DEVICE, CTX);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('limpa o user-agent: sem caracteres de controlo, máx. 300 na BD e sem URLs no e-mail', async () => {
+    const { svc, prisma, mail } = build();
+    prisma.trustedDevice.updateMany.mockResolvedValue({ count: 1 });
+    const evil = 'Mozilla\r\nvisite http://phishing.example/x ' + 'a'.repeat(500);
+    await svc.registerDevice(7, DEVICE, { ip: '1.1.1.1', userAgent: evil });
+    const stored = prisma.trustedDevice.upsert.mock.calls[0][0].create.userAgent as string;
+    expect(stored).not.toMatch(/[\u0000-\u001f]/);
+    expect(stored.length).toBeLessThanOrEqual(300);
+    const sentUa = mail.sendNewDeviceAlert.mock.calls[0][2] as string;
+    expect(sentUa).not.toMatch(/https?:/i);
+    expect(sentUa.length).toBeLessThanOrEqual(120);
   });
 
   it('primeiro dispositivo (nada para revogar) não envia alerta nem toca nas sessões', async () => {
