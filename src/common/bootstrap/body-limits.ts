@@ -33,6 +33,7 @@ export const LARGE_BODY_PREFIXES: readonly string[] = [
   '/avatar-training',
   '/library',
   '/content-library',
+  '/documents',
   // Respostas com ficheiro (FILE_UPLOAD) vão inline em base64 no save/submit da tentativa.
   '/assessments/attempts',
   '/crm-funders',
