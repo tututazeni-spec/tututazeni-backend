@@ -4,8 +4,11 @@ import { LiveClassesController } from './live-classes.controller';
 import { LiveClassesService } from './live-classes.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { ExternalLiveClassScopeGuard } from '../common/authz/external-live-class-scope.guard';
 
 const mockSvc = {
+  // âmbito do instrutor externo: undefined = sem restrição (os restantes papéis)
+  ownerScope: jest.fn().mockResolvedValue(undefined),
   findAll: jest.fn().mockResolvedValue({ data: [], total: 0 }),
   getUpcoming: jest.fn().mockResolvedValue([]),
   findOne: jest.fn().mockResolvedValue({ id: 1 }),
@@ -48,19 +51,28 @@ describe('LiveClassesController', () => {
       .useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard)
       .useValue({ canActivate: () => true })
+      .overrideGuard(ExternalLiveClassScopeGuard)
+      .useValue({ canActivate: () => true })
       .compile();
     controller = module.get<LiveClassesController>(LiveClassesController);
   });
 
   it('findAll → findAll(filters)', async () => {
     const filters = {} as any;
-    await controller.findAll(filters);
-    expect(mockSvc.findAll).toHaveBeenCalledWith(filters);
+    await controller.findAll(filters, mockUser as any);
+    expect(mockSvc.findAll).toHaveBeenCalledWith(filters, undefined);
+  });
+
+  it('findAll → o âmbito do instrutor externo segue para o serviço', async () => {
+    mockSvc.ownerScope.mockResolvedValueOnce(7);
+    const filters = {} as any;
+    await controller.findAll(filters, mockUser as any);
+    expect(mockSvc.findAll).toHaveBeenLastCalledWith(filters, 7);
   });
 
   it('upcoming → getUpcoming', async () => {
-    await controller.upcoming();
-    expect(mockSvc.getUpcoming).toHaveBeenCalled();
+    await controller.upcoming(mockUser as any);
+    expect(mockSvc.getUpcoming).toHaveBeenCalledWith(undefined);
   });
 
   it('room → getRoomAccess(id, utilizador autenticado)', async () => {
@@ -80,14 +92,14 @@ describe('LiveClassesController', () => {
   });
 
   it('attendanceReport → getAttendanceReport(id)', async () => {
-    await controller.attendanceReport(4);
-    expect(mockSvc.getAttendanceReport).toHaveBeenCalledWith(4);
+    await controller.attendanceReport(4, mockUser as any);
+    expect(mockSvc.getAttendanceReport).toHaveBeenCalledWith(4, mockUser);
   });
 
   it('create → create(dto)', async () => {
     const dto = {} as any;
-    await controller.create(dto);
-    expect(mockSvc.create).toHaveBeenCalledWith(dto);
+    await controller.create(dto, mockUser as any);
+    expect(mockSvc.create).toHaveBeenCalledWith(dto, mockUser);
   });
 
   it('join → joinClass(id, userId)', async () => {
@@ -134,14 +146,14 @@ describe('LiveClassesController', () => {
   });
 
   it('calendar → getCalendar(from, to)', async () => {
-    await controller.calendar('2026-07-01', '2026-07-31');
-    expect(mockSvc.getCalendar).toHaveBeenCalledWith('2026-07-01', '2026-07-31');
+    await controller.calendar('2026-07-01', '2026-07-31', mockUser as any);
+    expect(mockSvc.getCalendar).toHaveBeenCalledWith('2026-07-01', '2026-07-31', undefined);
   });
 
   it('calendar sem from/to → 400 em vez de 500', () => {
-    expect(() => controller.calendar(undefined as unknown as string, '2026-07-31')).toThrow(
-      BadRequestException,
-    );
+    expect(() =>
+      controller.calendar(undefined as unknown as string, '2026-07-31', mockUser as any),
+    ).toThrow(BadRequestException);
     expect(mockSvc.getCalendar).not.toHaveBeenCalled();
   });
 
@@ -169,8 +181,8 @@ describe('LiveClassesController', () => {
 
   it('listAllSessions → listAllSessions(filters)', async () => {
     const filters = {} as any;
-    await controller.listAllSessions(filters);
-    expect(mockSvc.listAllSessions).toHaveBeenCalledWith(filters);
+    await controller.listAllSessions(filters, mockUser as any);
+    expect(mockSvc.listAllSessions).toHaveBeenCalledWith(filters, undefined);
   });
 
   it('listSessions → listSessions(id)', async () => {

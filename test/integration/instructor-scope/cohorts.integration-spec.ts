@@ -39,7 +39,13 @@ describe('Instrutor externo — turmas', () => {
     c.B = (await mkCourse('B', B.id)).id;
     const mkCohort = (courseId: number, instructorId: number, name: string) =>
       prisma.courseCohort.create({
-        data: { courseId, instructorId, name, status: 'OPEN', startDate: new Date(Date.now() + 86_400_000) },
+        data: {
+          courseId,
+          instructorId,
+          name,
+          status: 'OPEN',
+          startDate: new Date(Date.now() + 86_400_000),
+        },
         select: { id: true },
       });
     h.a1 = (await mkCohort(c.A, A.id, 'Turma A1')).id;

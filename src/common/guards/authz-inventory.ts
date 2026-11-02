@@ -4,6 +4,7 @@ import { join, sep } from 'path';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { EXTERNAL_COURSE_SCOPE_KEY } from '../authz/external-course-scope.guard';
+import { EXTERNAL_LIVE_CLASS_SCOPE_KEY } from '../authz/external-live-class-scope.guard';
 import {
   ALLOW_EXTERNAL_KEY,
   AUTHENTICATED_ONLY_KEY,
@@ -22,6 +23,8 @@ export interface HandlerPolicy {
   allowExternal: boolean;
   /** Handler com @ExternalCourseScope(...) (posse do curso validada para o instrutor externo). */
   externalCourseScope: boolean;
+  /** Handler com @ExternalLiveClassScope(...) (posse da aula validada para o instrutor externo). */
+  externalLiveClassScope: boolean;
 }
 
 const HTTP_METHOD_KEY = 'method'; // METHOD_METADATA do @nestjs/common
@@ -76,6 +79,7 @@ export function collectAuthzInventory(srcDir: string): HandlerPolicy[] {
           policy: policyOf(exported, handler),
           roles: rolesOf(exported, handler),
           externalCourseScope: !!Reflect.getMetadata(EXTERNAL_COURSE_SCOPE_KEY, handler),
+          externalLiveClassScope: !!Reflect.getMetadata(EXTERNAL_LIVE_CLASS_SCOPE_KEY, handler),
           allowExternal: !!(
             Reflect.getMetadata(ALLOW_EXTERNAL_KEY, handler) ??
             Reflect.getMetadata(ALLOW_EXTERNAL_KEY, exported)

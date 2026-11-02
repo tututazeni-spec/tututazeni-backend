@@ -58,7 +58,10 @@ export async function makeExternal(
 }
 
 /** Limpeza: filhos antes dos pais (os cursos levam módulos/lições por cascade). */
-export async function cleanupScope(prisma: PrismaService, courseTitlePrefix: string): Promise<void> {
+export async function cleanupScope(
+  prisma: PrismaService,
+  courseTitlePrefix: string,
+): Promise<void> {
   const quiet = async (p: Promise<unknown>): Promise<void> => {
     try {
       await p;
@@ -71,13 +74,15 @@ export async function cleanupScope(prisma: PrismaService, courseTitlePrefix: str
     select: { id: true },
   });
   const ids = users.map(u => u.id);
+  // Aulas ao vivo criadas pelos testes (presenças/sessões levam cascade).
+  await quiet(prisma.liveClass.deleteMany({ where: { topic: { startsWith: courseTitlePrefix } } }));
   // Matrículas e turmas não têm cascade para o curso: apagar primeiro.
   await quiet(
-    prisma.enrollment.deleteMany({ where: { course: { title: { startsWith: courseTitlePrefix } } } }),
+    prisma.enrollment.deleteMany({
+      where: { course: { title: { startsWith: courseTitlePrefix } } },
+    }),
   );
-  await quiet(
-    prisma.course.deleteMany({ where: { title: { startsWith: courseTitlePrefix } } }),
-  );
+  await quiet(prisma.course.deleteMany({ where: { title: { startsWith: courseTitlePrefix } } }));
   await quiet(prisma.trainingInstructorProfile.deleteMany({ where: { userId: { in: ids } } }));
   await quiet(
     prisma.userAuditLog.deleteMany({
