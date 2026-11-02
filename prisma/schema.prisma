@@ -3185,6 +3185,8 @@ model Assessment {
   description         String?
   /// Imagem do cartão (data URL base64 ou URL), opcional.
   imageUrl            String?
+  /// Origem: AI_TUTOR = exportada de exercícios gerados por IA (perguntas já geradas).
+  source              String?
   type                AssessmentType             @default(QUIZ)
   status              AssessmentStatus           @default(DRAFT)
   courseId            Int?
@@ -15453,6 +15455,9 @@ model AvatarTrainingProgram {
   createdById                   Int?
   createdAt                     DateTime                     @default(now())
   updatedAt                     DateTime                     @updatedAt
+  /// Reciclagem: eliminar = preencher; passados 30 dias a rotina diária apaga de vez.
+  deletedAt                     DateTime?
+  deletedById                   Int?
   course                        Course?                      @relation(fields: [courseId], references: [id], onDelete: SetNull)
   avatar                        TrainingAvatar?              @relation(fields: [avatarId], references: [id], onDelete: SetNull)
   sessions                      AvatarTrainingSession[]
@@ -15460,6 +15465,7 @@ model AvatarTrainingProgram {
   @@index([status])
   @@index([courseId])
   @@index([avatarId])
+  @@index([deletedAt])
 }
 
 model AvatarTrainingSession {

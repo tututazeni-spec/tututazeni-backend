@@ -5,8 +5,10 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
@@ -38,8 +40,14 @@ import {
 
 const isNumber = (v: number | null): v is number => typeof v === 'number';
 
+/** Dias que uma formação eliminada fica na reciclagem antes de ser apagada. */
+export const PROGRAM_RECYCLE_DAYS = 30;
+const DAY_MS = 86_400_000;
+
 @Injectable()
 export class AvatarTrainingProgramsService {
+  private readonly logger = new Logger(AvatarTrainingProgramsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -69,6 +77,7 @@ export class AvatarTrainingProgramsService {
   async listPrograms(user: CurrentUserData, filters: AvatarProgramFilterDto) {
     const author = isPrivileged(user, AVATAR_AUTHOR_ROLES);
     const where: Prisma.AvatarTrainingProgramWhereInput = {
+      deletedAt: null,
       ...(author ? (filters.status ? { status: filters.status } : {}) : { status: 'PUBLISHED' }),
       ...(filters.courseId ? { courseId: filters.courseId } : {}),
       ...(filters.category ? { category: filters.category } : {}),
@@ -96,8 +105,8 @@ export class AvatarTrainingProgramsService {
 
   async getProgram(user: CurrentUserData, id: number) {
     const author = isPrivileged(user, AVATAR_AUTHOR_ROLES);
-    const program = await this.prisma.avatarTrainingProgram.findUnique({
-      where: { id },
+    const program = await this.prisma.avatarTrainingProgram.findFirst({
+      where: { id, deletedAt: null },
       include: {
         avatar: { select: { id: true, name: true, imageUrl: true, language: true } },
         course: { select: { id: true, title: true, status: true } },
@@ -230,7 +239,14 @@ export class AvatarTrainingProgramsService {
       throw new ConflictException(`Já existe uma formação com o código ${code}`);
     }
     const program = await this.prisma.avatarTrainingProgram.create({
-      data: { ...dto, code, createdById: userId, responsibleId: dto.responsibleId ?? userId },
+      // Uma formação nova nasce sempre em rascunho: publicar exige revisão e aprovação.
+      data: {
+        ...dto,
+        code,
+        status: 'DRAFT',
+        createdById: userId,
+        responsibleId: dto.responsibleId ?? userId,
+      },
     });
     await this.audit.log({
       userId,
@@ -243,7 +259,7 @@ export class AvatarTrainingProgramsService {
 
   private async getEditableProgram(id: number) {
     const program = await this.prisma.avatarTrainingProgram.findUnique({ where: { id } });
-    if (!program) throw new NotFoundException('Formação não encontrada');
+    if (!program || program.deletedAt) throw new NotFoundException('Formação não encontrada');
     if (program.status === 'ARCHIVED') throw new ConflictException('Formação arquivada');
     return program;
   }
@@ -359,6 +375,97 @@ export class AvatarTrainingProgramsService {
     return row;
   }
 
+  /** Eliminar = mover para a reciclagem (restaurável durante PROGRAM_RECYCLE_DAYS dias). */
+  async removeProgram(user: CurrentUserData, id: number) {
+    const program = await this.prisma.avatarTrainingProgram.findUnique({ where: { id } });
+    if (!program || program.deletedAt) throw new NotFoundException('Formação não encontrada');
+    this.assertOwnerOrAdmin(user, program.createdById, program.responsibleId);
+    if (program.status === 'PUBLISHED') {
+      throw new ConflictException('Formação publicada não pode ser eliminada. Arquive-a primeiro.');
+    }
+    await this.prisma.avatarTrainingProgram.update({
+      where: { id },
+      data: { deletedAt: new Date(), deletedById: user.id },
+    });
+    await this.audit.log({
+      userId: user.id,
+      action: 'DELETE',
+      entity: 'AvatarTrainingProgram',
+      entityId: id,
+    });
+    return { message: 'Formação movida para a reciclagem' };
+  }
+
+  /** Reciclagem: formações eliminadas, com os dias que faltam até serem apagadas. */
+  async listDeletedPrograms(user: CurrentUserData) {
+    const rows = await this.prisma.avatarTrainingProgram.findMany({
+      where: {
+        deletedAt: { not: null },
+        ...(isPrivileged(user, AVATAR_ADMIN_ROLES)
+          ? {}
+          : { OR: [{ createdById: user.id }, { responsibleId: user.id }] }),
+      },
+      orderBy: { deletedAt: 'desc' },
+      include: {
+        avatar: { select: { id: true, name: true, imageUrl: true } },
+        course: { select: { id: true, title: true } },
+        _count: { select: { sessions: true } },
+      },
+    });
+    const now = Date.now();
+    return rows.map(p => {
+      const purgeAt = (p.deletedAt as Date).getTime() + PROGRAM_RECYCLE_DAYS * DAY_MS;
+      return {
+        ...p,
+        purgeAt: new Date(purgeAt),
+        daysLeft: Math.max(0, Math.ceil((purgeAt - now) / DAY_MS)),
+      };
+    });
+  }
+
+  async restoreProgram(user: CurrentUserData, id: number) {
+    const program = await this.prisma.avatarTrainingProgram.findUnique({ where: { id } });
+    if (!program || !program.deletedAt) {
+      throw new NotFoundException('Formação não encontrada na reciclagem');
+    }
+    this.assertOwnerOrAdmin(user, program.createdById, program.responsibleId);
+    await this.prisma.avatarTrainingProgram.update({
+      where: { id },
+      data: { deletedAt: null, deletedById: null },
+    });
+    await this.audit.log({
+      userId: user.id,
+      action: 'UPDATE',
+      entity: 'AvatarTrainingProgram',
+      entityId: id,
+    });
+    return { message: 'Formação restaurada' };
+  }
+
+  /** Apaga em definitivo as formações na reciclagem há mais de PROGRAM_RECYCLE_DAYS dias. */
+  @Cron('20 4 * * *')
+  async purgeExpiredPrograms() {
+    const cutoff = new Date(Date.now() - PROGRAM_RECYCLE_DAYS * DAY_MS);
+    const expired = await this.prisma.avatarTrainingProgram.findMany({
+      where: { deletedAt: { lt: cutoff } },
+      select: { id: true },
+    });
+    let purged = 0;
+    for (const { id } of expired) {
+      try {
+        await this.prisma.avatarTrainingProgram.delete({ where: { id } });
+        purged++;
+      } catch (e: unknown) {
+        // FK sem cascade: fica na reciclagem e tenta-se amanhã.
+        this.logger.warn({
+          err: { message: e instanceof Error ? e.message : 'erro desconhecido' },
+          msg: `Formação ${id} não pôde ser apagada em definitivo`,
+        });
+      }
+    }
+    return { purged };
+  }
+
   async archiveProgram(user: CurrentUserData, id: number) {
     const program = await this.getEditableProgram(id);
     this.assertOwnerOrAdmin(user, program.createdById, program.responsibleId);
@@ -464,7 +571,7 @@ export class AvatarTrainingProgramsService {
       where: {
         ...(filters.programId ? { programId: filters.programId } : {}),
         ...(author ? (filters.status ? { status: filters.status } : {}) : { status: 'PUBLISHED' }),
-        ...(author ? {} : { program: { status: 'PUBLISHED' } }),
+        program: author ? { deletedAt: null } : { status: 'PUBLISHED', deletedAt: null },
       },
       orderBy: [{ programId: 'asc' }, { position: 'asc' }],
       include: {
