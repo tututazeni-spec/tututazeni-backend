@@ -425,7 +425,7 @@ describe('Instructor invites Integration', () => {
     });
 
     it('5 códigos errados queimam o desafio: o certo a seguir também falha', async () => {
-      const { email } = await activate('n');
+      const { email, userId } = await activate('n');
       await attempt(email).expect(401);
       const good = codes.filter(c => c.email === email).at(-1)!.code;
       const wrong = good === '000000' ? '111111' : '000000';
@@ -433,7 +433,20 @@ describe('Instructor invites Integration', () => {
         const r = await attempt(email, { emailCode: wrong }).expect(401);
         expect(JSON.stringify(r.body)).toContain('Código inválido ou expirado');
       }
-      await attempt(email, { emailCode: good }).expect(401);
+      // A 5.ª tentativa errada também bloqueia a conta (política por omissão = 5); desbloquear para
+      // que a rejeição abaixo venha da lógica do desafio e não do bloqueio da conta.
+      await prisma.user.update({
+        where: { id: userId },
+        data: { lockedUntil: null, failedLoginAttempts: 0 },
+      });
+      const row = await prisma.loginChallenge.findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(row?.attempts).toBe(5);
+      expect(row?.consumedAt).not.toBeNull();
+      const res = await attempt(email, { emailCode: good }).expect(401);
+      expect(JSON.stringify(res.body)).toContain('Código inválido ou expirado');
     });
 
     it('pedido repetido em menos de 60 s não envia segundo e-mail', async () => {

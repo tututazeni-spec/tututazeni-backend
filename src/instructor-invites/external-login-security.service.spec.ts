@@ -20,7 +20,9 @@ function build(opts: { device?: unknown; recent?: unknown; latest?: unknown } = 
       update: jest.fn().mockResolvedValue({}),
     },
     user: { findUnique: jest.fn().mockResolvedValue(USER) },
+    refreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
   };
+  prisma.loginChallenge.delete = jest.fn().mockResolvedValue({});
   // Em challenge() a pesquisa é "desafio vivo criado há <60 s"; em verify() é "último desafio vivo".
   prisma.loginChallenge.findFirst.mockResolvedValue(opts.latest ?? opts.recent ?? null);
   const mail = {
@@ -28,8 +30,14 @@ function build(opts: { device?: unknown; recent?: unknown; latest?: unknown } = 
     sendNewDeviceAlert: jest.fn().mockResolvedValue(undefined),
   };
   const audit = { log: jest.fn().mockResolvedValue(undefined) };
-  const svc = new ExternalLoginSecurityService(prisma as never, mail as never, audit as never);
-  return { svc, prisma, mail, audit };
+  const revocation = { revokeAllUserSessions: jest.fn().mockResolvedValue(undefined) };
+  const svc = new ExternalLoginSecurityService(
+    prisma as never,
+    mail as never,
+    audit as never,
+    revocation as never,
+  );
+  return { svc, prisma, mail, audit, revocation };
 }
 
 describe('ExternalLoginSecurityService.isExternal', () => {
@@ -57,6 +65,22 @@ describe('ExternalLoginSecurityService.challenge', () => {
     expect(ttlMin).toBeGreaterThan(9.9);
     expect(ttlMin).toBeLessThan(10.1);
     expect(prisma.loginChallenge.updateMany).toHaveBeenCalled(); // invalida anteriores
+  });
+
+  it('a janela de 60 s filtra por createdAt recente', async () => {
+    const { svc, prisma } = build();
+    await svc.challenge(USER, DEVICE, CTX);
+    const where = prisma.loginChallenge.findFirst.mock.calls[0][0].where;
+    expect(where.createdAt.gt).toBeInstanceOf(Date);
+    expect(Date.now() - where.createdAt.gt.getTime()).toBeGreaterThan(59_000);
+    expect(Date.now() - where.createdAt.gt.getTime()).toBeLessThan(61_000);
+  });
+
+  it('se o e-mail falhar apaga o desafio criado e propaga o erro (sem código fantasma)', async () => {
+    const { svc, prisma, mail } = build();
+    mail.sendLoginCode.mockRejectedValue(new Error('SMTP down'));
+    await expect(svc.challenge(USER, DEVICE, CTX)).rejects.toThrow('SMTP down');
+    expect(prisma.loginChallenge.delete).toHaveBeenCalledWith({ where: { id: 'c1' } });
   });
 
   it('dispositivo conhecido → LOGIN', async () => {
@@ -89,14 +113,14 @@ describe('ExternalLoginSecurityService.verify', () => {
     ...over,
   });
 
-  it('código certo → true, desafio consumido e dispositivo registado', async () => {
+  it('código certo → true e desafio consumido (o dispositivo só se regista no fim do login)', async () => {
     const { svc, prisma } = build({ latest: live() });
     expect(await svc.verify(USER, '123456', DEVICE, CTX)).toBe(true);
     expect(prisma.loginChallenge.updateMany.mock.calls[0][0].where).toMatchObject({
       id: 'c1',
       consumedAt: null,
     });
-    expect(prisma.trustedDevice.upsert).toHaveBeenCalledTimes(1);
+    expect(prisma.trustedDevice.upsert).not.toHaveBeenCalled();
   });
 
   it('sem desafio vivo (expirado/consumido/inexistente) → false', async () => {
@@ -144,12 +168,17 @@ describe('ExternalLoginSecurityService.registerDevice', () => {
     expect(up.update.revokedAt).toBeNull();
     expect(mail.sendNewDeviceAlert).toHaveBeenCalledTimes(1);
     expect(audit.log.mock.calls[0][0]).toMatchObject({ action: 'INSTRUCTOR_DEVICE_REGISTERED' });
+    // as sessões do dispositivo anterior deixam de se poder renovar
+    expect(prisma.refreshToken.updateMany.mock.calls[0][0]).toMatchObject({
+      where: { userId: 7, revokedAt: null },
+    });
   });
 
-  it('primeiro dispositivo (nada para revogar) não envia alerta', async () => {
-    const { svc, mail } = build();
+  it('primeiro dispositivo (nada para revogar) não envia alerta nem toca nas sessões', async () => {
+    const { svc, mail, prisma } = build();
     await svc.registerDevice(7, DEVICE, CTX);
     expect(mail.sendNewDeviceAlert).not.toHaveBeenCalled();
+    expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
   });
 
   it('com alert=false (registo no convite) nunca envia alerta', async () => {
@@ -168,7 +197,7 @@ describe('ExternalLoginSecurityService.registerDevice', () => {
 
 describe('ExternalLoginSecurityService.resetDevices', () => {
   it('revoga todos os dispositivos ativos e audita', async () => {
-    const { svc, prisma, audit } = build();
+    const { svc, prisma, audit, revocation } = build();
     prisma.trustedDevice.updateMany.mockResolvedValue({ count: 2 });
     expect(await svc.resetDevices(7, 99)).toBe(2);
     expect(prisma.trustedDevice.updateMany.mock.calls[0][0].where).toEqual({
@@ -179,5 +208,11 @@ describe('ExternalLoginSecurityService.resetDevices', () => {
       action: 'INSTRUCTOR_DEVICES_RESET',
       userId: 99,
     });
+    // repor termina também as sessões abertas do instrutor
+    expect(prisma.refreshToken.updateMany.mock.calls[0][0].where).toMatchObject({
+      userId: 7,
+      revokedAt: null,
+    });
+    expect(revocation.revokeAllUserSessions).toHaveBeenCalledWith(7);
   });
 });
