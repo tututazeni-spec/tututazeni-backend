@@ -139,6 +139,30 @@ export class MailService implements OnModuleInit {
     });
   }
 
+  async sendInstructorInvite(
+    email: string,
+    fullName: string,
+    token: string,
+    accessDays: number,
+  ): Promise<void> {
+    const link = `${process.env.APP_URL ?? ''}/auth/instructor-invite?token=${token}`;
+    await this.send({
+      to: email,
+      subject: 'Convite de instrutor — INNOVA',
+      text: [
+        `Olá ${fullName},`,
+        '',
+        'Foi convidado(a) para dar formação na plataforma INNOVA.',
+        `Defina a sua palavra-passe através deste link (uso único, válido por 72 horas): ${link}`,
+        `O seu acesso fica ativo durante ${accessDays} dias.`,
+        '',
+        'Se não esperava este convite, ignore este email.',
+        '',
+        '-- Sistema INNOVA',
+      ].join('\n'),
+    });
+  }
+
   /** Envio genérico (ex: canal "email" de notificações/automação) — as duas
    *  acima ficam com o template próprio por já terem consumidores fixos. */
   async sendNotification(to: string, subject: string, text: string): Promise<void> {

@@ -49,6 +49,7 @@ export default async function globalSetup() {
     { code: 'GESTOR', name: 'GESTOR' },
     { code: 'COLABORADOR', name: 'COLABORADOR' },
     { code: 'AUDITOR', name: 'AUDITOR' },
+    { code: 'INSTRUCTOR_EXTERNO', name: 'INSTRUCTOR_EXTERNO' },
   ];
   const roleRecords: Record<string, any> = {};
 

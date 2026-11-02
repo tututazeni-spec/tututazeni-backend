@@ -15,6 +15,7 @@ import { getRequestContext } from './common/logging/request-context';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { InstructorInvitesModule } from './instructor-invites/instructor-invites.module';
 import { DepartmentsModule } from './departments/departments.module';
 import { CoursesModule } from './courses/courses.module';
 import { CourseModulesModule } from './course-modules/course-modules.module';
@@ -192,6 +193,7 @@ const accessPath = (url = ''): string => url.split('?')[0];
     PrismaModule,
     AuthModule,
     UsersModule,
+    InstructorInvitesModule,
     DepartmentsModule,
     CoursesModule,
     CourseModulesModule,
