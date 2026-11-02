@@ -158,7 +158,10 @@ export class CourseModulesController {
 
   @Patch('lessons/:id/move')
   @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
-  @ExternalCourseScope({ kind: 'lesson', key: 'id' }, { kind: 'module', key: 'targetModuleId', from: 'body' })
+  @ExternalCourseScope(
+    { kind: 'lesson', key: 'id' },
+    { kind: 'module', key: 'targetModuleId', from: 'body' },
+  )
   @ApiOperation({ summary: 'Mover aula para outro módulo' })
   @HttpCode(HttpStatus.OK)
   moveLesson(@Param('id', ParseIntPipe) id: number, @Body() dto: MoveLessonDto) {
