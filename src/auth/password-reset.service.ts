@@ -13,6 +13,15 @@ function sha256(value: string): string {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
 
+const EXTERNAL_ROLE = 'INSTRUCTOR_EXTERNO';
+
+function isPendingExternal(user: {
+  accountStatus?: string | null;
+  role?: { name?: string | null } | null;
+}): boolean {
+  return user.accountStatus === 'PENDING' && user.role?.name === EXTERNAL_ROLE;
+}
+
 @Injectable()
 export class PasswordResetService {
   constructor(
@@ -22,12 +31,17 @@ export class PasswordResetService {
   ) {}
 
   async forgotPassword(email: string): Promise<{ message: string }> {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      include: { role: { select: { name: true } } },
+    });
     // Resposta genérica sempre — não revela se a conta existe (anti-enumeração).
     // F2: executa um hash dummy para nivelar o tempo de resposta com o
     // ramo real . Sem isto, a diferença de latência
     // permite distinguir contas existentes de inexistentes por timing.
-    if (!user || !user.active) {
+    // Instrutor externo ainda PENDING só pode ativar a conta pelo convite (72 h, revogável):
+    // senão "esqueci a senha" contornava a revogação do convite.
+    if (!user || !user.active || isPendingExternal(user)) {
       await hashPassword('dummy-timing-equalizer');
       return { message: GENERIC_MESSAGE };
     }
@@ -60,9 +74,16 @@ export class PasswordResetService {
   async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
     const record = await this.prisma.passwordResetToken.findUnique({
       where: { tokenHash: sha256(token) },
-      include: { user: { select: { accountStatus: true } } },
+      include: {
+        user: { select: { accountStatus: true, role: { select: { name: true } } } },
+      },
     });
-    if (!record || record.usedAt || record.expiresAt < new Date()) {
+    if (
+      !record ||
+      record.usedAt ||
+      record.expiresAt < new Date() ||
+      (record.user && isPendingExternal(record.user))
+    ) {
       throw new BadRequestException('Token inválido ou expirado');
     }
 

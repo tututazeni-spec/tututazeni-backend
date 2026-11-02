@@ -1,5 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 export class CreateInstructorInviteDto {
   @ApiProperty({ example: 'formador@externo.com' })
@@ -36,5 +45,6 @@ export class AcceptInstructorInviteDto {
   @ApiProperty({ minLength: 6, maxLength: 128 })
   @IsString()
   @MinLength(6)
+  @MaxLength(128)
   password!: string;
 }
