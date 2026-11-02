@@ -92,6 +92,13 @@ function buildAccessWhere(userId: number, userDept?: string, role?: string) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Troca um fileUrl inline (data URL) por '' e marca `hasInlineFile`, para as listas não arrastarem megabytes. */
+function stripInlineFileUrl<T extends { fileUrl?: string | null }>(
+  item: T,
+): T & { hasInlineFile?: boolean } {
+  return item.fileUrl?.startsWith('data:') ? { ...item, fileUrl: '', hasInlineFile: true } : item;
+}
+
 @Injectable()
 export class DocumentRepositoryService {
   private readonly logger = new Logger(DocumentRepositoryService.name);
@@ -203,7 +210,7 @@ export class DocumentRepositoryService {
       this.prisma.read.document.count({ where }),
     ]);
 
-    return buildPaginatedResponse(data, total, page, limit);
+    return buildPaginatedResponse(data.map(stripInlineFileUrl), total, page, limit);
   }
 
   async findOne(id: number, requesterId?: number) {
@@ -700,9 +707,10 @@ export class DocumentRepositoryService {
     const ids = logs.map(l => l.entityId).filter((id): id is number => id !== null);
     if (!ids.length) return [];
 
-    return this.prisma.read.document.findMany({
+    const docs = await this.prisma.read.document.findMany({
       where: { id: { in: ids }, status: { notIn: [DocStatus.DELETED] } },
     });
+    return docs.map(stripInlineFileUrl);
   }
 
   async getMyRecent(userId: number, limit = 10) {
@@ -717,7 +725,10 @@ export class DocumentRepositoryService {
 
     const docs = await this.prisma.read.document.findMany({ where: { id: { in: ids } } });
     const docMap = new Map(docs.map(d => [d.id, d]));
-    return ids.map(id => docMap.get(id)).filter((d): d is NonNullable<typeof d> => !!d);
+    return ids
+      .map(id => docMap.get(id))
+      .filter((d): d is NonNullable<typeof d> => !!d)
+      .map(stripInlineFileUrl);
   }
 
   async archive(id: number, archivedById: number, reason?: string) {
@@ -890,7 +901,7 @@ export class DocumentRepositoryService {
     const from = new Date();
     const to = new Date(Date.now() + days * 86400000);
 
-    return this.prisma.read.document.findMany({
+    const expiring = await this.prisma.read.document.findMany({
       where: { expiresAt: { gt: from, lte: to }, status: DocStatus.ACTIVE },
       include: {
         owner: { select: { id: true, fullName: true, email: true } },
@@ -898,6 +909,7 @@ export class DocumentRepositoryService {
       },
       orderBy: { expiresAt: 'asc' },
     });
+    return expiring.map(stripInlineFileUrl);
   }
 
   async renewDocument(id: number, newExpiresAt: string, renewedById: number) {
