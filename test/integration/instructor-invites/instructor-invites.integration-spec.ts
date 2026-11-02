@@ -562,6 +562,30 @@ describe('Instructor invites Integration', () => {
         .expect(401);
     });
 
+    it('refresh sem o cookie do dispositivo é recusado (a ligação, não a reutilização)', async () => {
+      const { email } = await activate('x');
+      const res = await loginExternal(email, DEVICE_A);
+      const r = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', [`refresh_token=${res.body.refreshToken}`])
+        .expect(401);
+      expect(JSON.stringify(r.body)).toContain('Refresh token inválido');
+    });
+
+    it('código pedido por um dispositivo não se resgata noutro (cliente sem cookies não derruba o browser)', async () => {
+      const { email, userId } = await activate('y');
+      await loginExternal(email, DEVICE_A); // browser registado
+      await attempt(email, {}, DEVICE_B).expect(401); // pede código a partir de B
+      const code = codes.filter(c => c.email === email).at(-1)!.code;
+      const DEVICE_C = '33333333-3333-4333-8333-333333333333';
+      const r = await attempt(email, { emailCode: code }, DEVICE_C).expect(401);
+      expect(JSON.stringify(r.body)).not.toContain('Código inválido');
+      // o dispositivo A continua confiável e nada foi revogado
+      expect(await prisma.trustedDevice.count({ where: { userId, revokedAt: null } })).toBe(1);
+      // e o dispositivo certo (B) ainda consegue usar o código
+      await attempt(email, { emailCode: code }, DEVICE_B).expect(201);
+    });
+
     it('o refresh do dispositivo certo renova e mantém a ligação', async () => {
       const { email } = await activate('t');
       const res = await loginExternal(email, DEVICE_A);

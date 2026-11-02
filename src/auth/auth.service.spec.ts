@@ -420,6 +420,23 @@ describe('AuthService', () => {
         );
       });
 
+      it('instrutor externo com sessão SEM ligação (anterior à migração/mudança de papel) → 401 e cadeia revogada', async () => {
+        mockPrisma.refreshToken.findUnique.mockResolvedValue(record({ deviceIdHash: null }));
+        mockPrisma.user.findUnique.mockReset();
+        mockPrisma.user.findUnique.mockResolvedValueOnce({
+          accessExpiresAt: null,
+          role: { name: 'INSTRUCTOR_EXTERNO' },
+        });
+        mockPrisma.refreshToken.create.mockClear();
+        await expect(
+          service.rotateRefreshToken(1, 'e@i.com', 'tok', { deviceId: DEV }),
+        ).rejects.toThrow('Refresh token inválido');
+        expect(mockPrisma.refreshToken.create).not.toHaveBeenCalled();
+        expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { userId: 1, revokedAt: null } }),
+        );
+      });
+
       it('sessão sem ligação (utilizador normal): roda sem cookie e continua sem ligação', async () => {
         mockPrisma.refreshToken.findUnique.mockResolvedValue(record({ deviceIdHash: null }));
         mockPrisma.refreshToken.create.mockClear();
@@ -756,7 +773,9 @@ describe('AuthService.login — instrutor externo (código por e-mail)', () => {
     mockPrisma.refreshToken.create.mockClear();
     await login({ email: external.email, password: 'pass', emailCode: '123456', deviceId: DEVICE });
     const bound = mockPrisma.refreshToken.create.mock.calls[0][0].data.deviceIdHash;
-    expect(bound).toMatch(/^[0-9a-f]{64}$/);
+    expect(bound).toBe(
+      require('crypto').createHash('sha256').update(DEVICE).digest('hex'),
+    );
 
     mockPrisma.user.findUnique.mockResolvedValue(baseUser);
     mockPrisma.refreshToken.create.mockClear();
