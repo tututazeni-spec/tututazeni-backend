@@ -25,6 +25,7 @@ import {
   CreateLiveClassSessionDto,
   UpdateLiveClassSessionDto,
   RegisterAttendanceDto,
+  BulkAttendanceDto,
   UpdateAttendanceDto,
   ParticipantsFilterDto,
   AddMaterialDto,
@@ -305,6 +306,13 @@ export class LiveClassesController {
   @ApiOperation({ summary: 'Adicionar participante / registar presença manualmente (secção 6)' })
   registerAttendance(@Param('id', ParseIntPipe) id: number, @Body() dto: RegisterAttendanceDto) {
     return this.svc.registerAttendance(id, dto);
+  }
+
+  @Post(':id/attendance/bulk')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
+  @ApiOperation({ summary: 'Adicionar presenças em massa (utilizadores, departamentos ou todos)' })
+  bulkRegisterAttendance(@Param('id', ParseIntPipe) id: number, @Body() dto: BulkAttendanceDto) {
+    return this.svc.bulkRegisterAttendance(id, dto);
   }
 
   @Post(':id/recording/publish')

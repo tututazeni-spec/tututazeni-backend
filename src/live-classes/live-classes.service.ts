@@ -32,6 +32,7 @@ import {
   CreateLiveClassSessionDto,
   UpdateLiveClassSessionDto,
   RegisterAttendanceDto,
+  BulkAttendanceDto,
   UpdateAttendanceDto,
   ParticipantsFilterDto,
   MaterialsFilterDto,
@@ -634,6 +635,7 @@ export class LiveClassesService {
         location: dto.location,
         ...this.resolveSessionMeeting(dto),
         notes: dto.notes,
+        thumbnailUrl: dto.thumbnailUrl || null,
       },
       include: { instructor: { select: { id: true, name: true } } },
     });
@@ -651,6 +653,7 @@ export class LiveClassesService {
       where: { id: sessionId },
       data: {
         ...rest,
+        ...(dto.thumbnailUrl !== undefined ? { thumbnailUrl: dto.thumbnailUrl || null } : {}),
         ...this.resolveSessionMeeting(dto),
         ...(sessionDate ? { sessionDate: new Date(sessionDate) } : {}),
       },
@@ -934,6 +937,50 @@ export class LiveClassesService {
       attendance.leftAt,
     );
     return { ...attendance, ...this.deriveAttendance(attendance, lc) };
+  }
+
+  /**
+   * Adicionar presenças em massa: por utilizadores, por departamentos ou todos
+   * os colaboradores activos. Não duplica quem já está inscrito (mesma aula e
+   * sessão); o estado fica por omissão, como no registo individual.
+   */
+  async bulkRegisterAttendance(liveClassId: number, dto: BulkAttendanceDto) {
+    await this.findOne(liveClassId);
+    if (dto.sessionId) {
+      const session = await this.prisma.read.liveClassSession.findUnique({
+        where: { id: dto.sessionId },
+      });
+      if (!session || session.liveClassId !== liveClassId) {
+        throw new NotFoundException('Sessão não encontrada');
+      }
+    }
+    const sessionId = dto.sessionId ?? null;
+    const userIds = new Set<number>(dto.userIds ?? []);
+    if (dto.all || dto.departmentIds?.length) {
+      const users = await this.prisma.read.user.findMany({
+        where: {
+          accountStatus: 'ACTIVE',
+          ...(dto.all ? {} : { departmentId: { in: dto.departmentIds } }),
+        },
+        select: { id: true },
+      });
+      users.forEach(u => userIds.add(u.id));
+    }
+    if (userIds.size === 0) {
+      throw new BadRequestException('Nenhum colaborador encontrado para adicionar');
+    }
+    const existing = await this.prisma.liveAttendance.findMany({
+      where: { liveClassId, sessionId, userId: { in: [...userIds] } },
+      select: { userId: true },
+    });
+    const have = new Set(existing.map(e => e.userId));
+    const toCreate = [...userIds].filter(id => !have.has(id));
+    if (toCreate.length) {
+      await this.prisma.liveAttendance.createMany({
+        data: toCreate.map(userId => ({ liveClassId, userId, sessionId })),
+      });
+    }
+    return { added: toCreate.length, alreadyPresent: have.size };
   }
 
   /** "Registar presença" / "Justificar ausência" (secções 2/6/10). */
