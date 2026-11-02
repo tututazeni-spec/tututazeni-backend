@@ -1,4 +1,5 @@
 ﻿// src/content-library/content-library.service.ts
+import { searchIds } from '../common/helpers/text-search';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -139,40 +140,18 @@ export class ContentLibraryService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * IDs de conteúdos cujo título, descrição ou tags contêm qualquer palavra da
-   * pesquisa, sem distinguir maiúsculas nem acentos. Usa translate() (não
-   * requer a extensão unaccent). Falha em silêncio: a pesquisa normal continua.
+   * IDs de conteúdos que contêm as palavras da pesquisa no título, descrição,
+   * autor, categoria, formato ou tags, sem distinguir maiúsculas nem acentos.
+   * `null` se a pesquisa falhar: aplica-se a pesquisa normal (buildWhereFromFilters).
    */
-  private async searchIdsIgnoringAccents(search: string): Promise<number[]> {
-    const fold = (s: string) =>
-      s
-        .normalize('NFD')
-        .replace(/[̀-ͯ]/g, '')
-        .toLowerCase();
-    const words = search
-      .split(/\s+/)
-      .map(t => fold(t.trim()))
-      .filter(t => t.length >= 2);
-    if (words.length === 0) return [];
-    const patterns = words.map(w => `%${w.replace(/[\\%_]/g, '\\$&')}%`);
-    const FROM = 'áàâãäéèêëíìîïóòôõöúùûüçñ';
-    const TO = 'aaaaaeeeeiiiiooooouuuucn';
-    try {
-      const rows = await this.prisma.read.$queryRaw<{ id: number }[]>`
-        SELECT id FROM "ContentAsset"
-        WHERE translate(lower(title), ${FROM}, ${TO}) LIKE ANY(${patterns}::text[])
-           OR translate(lower(coalesce(description, '')), ${FROM}, ${TO}) LIKE ANY(${patterns}::text[])
-           OR translate(lower(array_to_string(tags, ' ')), ${FROM}, ${TO}) LIKE ANY(${patterns}::text[])
-        LIMIT 5000`;
-      return rows.map(r => Number(r.id));
-    } catch (e) {
-      this.logger.warn({
-        action: 'findAll.accentSearch',
-        err: { message: e instanceof Error ? e.message : String(e) },
-        msg: 'Falha na pesquisa sem acentos; a usar apenas a pesquisa normal',
-      });
-      return [];
-    }
+  private searchIdsIgnoringAccents(search: string): Promise<number[] | null> {
+    return searchIds<number>(
+      this.prisma.read,
+      'ContentAsset',
+      `concat_ws(' ', title, description, author, category::text, type::text, array_to_string(tags, ' '))`,
+      search,
+      `"deletedAt" IS NULL`,
+    );
   }
 
   // ══════════════════════════════════════════════════════
@@ -186,7 +165,10 @@ export class ContentLibraryService {
     if (filters.search) {
       // `contains` do Prisma não ignora acentos ("incendio" ≠ "incêndio").
       const ids = await this.searchIdsIgnoringAccents(filters.search);
-      if (ids.length > 0) where.OR = [...(where.OR ?? []), { id: { in: ids } }];
+      if (ids) {
+        delete where.OR;
+        where.id = { in: ids };
+      }
     }
     const orderBy = buildOrderBy(filters.sortBy);
 
