@@ -40,6 +40,37 @@ describe('alcance do instrutor externo', () => {
     expect(unscoped).toEqual([]);
   }, 300_000);
 
+  it('todo o handler de aulas ao vivo por id a que o externo chega valida a posse da aula', () => {
+    // Sem rota :id (listagens e criação) o âmbito é aplicado no serviço (ownerScope / create).
+    const SERVICE_SCOPED = new Set([
+      'findAll',
+      'upcoming',
+      'dashboard',
+      'calendar',
+      'listAllSessions',
+      'listParticipants',
+      'listInstructors',
+      'listVirtualRooms',
+      'listRecordings',
+      'listMaterials',
+      'listEvaluations',
+      'evaluationsSummary',
+      'reports',
+      'exportReports',
+      'create',
+    ]);
+    const unscoped = inv
+      .filter(
+        h =>
+          reach.includes(`${h.file}#${h.handler}`) &&
+          h.file === 'live-classes/live-classes.controller.ts' &&
+          !SERVICE_SCOPED.has(h.handler) &&
+          !h.externalLiveClassScope,
+      )
+      .map(h => `${h.file}#${h.handler}`);
+    expect(unscoped).toEqual([]);
+  }, 300_000);
+
   it('o externo nunca alcança endpoints de administração (utilizadores, definições, auditoria, pagamentos)', () => {
     const sensitive =
       /^(users\/(?!users\.controller\.ts#(me|updateMyProfile|setMyAvatar|removeMyAvatar|changePassword)$)|settings\/|audit\/|payroll\/|roles-permissions\/|acl\/|billing\/|leave-management\/|career\/|development-plans\/|evaluation360\/|crm-)/;

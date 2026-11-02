@@ -7,6 +7,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   Prisma,
@@ -19,6 +20,13 @@ import {
   MeetingProvider,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import type { CurrentUserData } from '../common/decorators';
+import {
+  assertCanManageCourse,
+  ensureOwnInstructorProfile,
+  isExternalInstructor,
+  ownInstructorProfileId,
+} from '../common/authz/external-scope';
 import { ZoomService } from './zoom.service';
 import { CourseCompletionService } from '../course-completion/course-completion.service';
 import {
@@ -68,7 +76,30 @@ export class LiveClassesService {
     @Optional() private readonly zoom?: ZoomService,
   ) {}
 
-  async findAll(filters: LiveClassFilterDto) {
+  /**
+   * Instrutor externo (fase 3): condição "aula em que sou instrutor/co-instrutor". Os métodos de
+   * listagem recebem `ownerProfileId` (id do TrainingInstructorProfile do externo, ou -1 se ainda
+   * não tem perfil) e juntam-na ao `where`; `undefined` = sem restrição (restantes papéis).
+   */
+  private ownClass(ownerProfileId?: number): Prisma.LiveClassWhereInput {
+    return ownerProfileId === undefined
+      ? {}
+      : { OR: [{ instructorId: ownerProfileId }, { coInstructorId: ownerProfileId }] };
+  }
+
+  /** O externo vê o nome dos participantes, nunca o contacto/departamento. */
+  private redactAttendeeForExternal<T extends { user?: unknown }>(row: T): T {
+    const u = row.user as { id?: number; fullName?: string } | null | undefined;
+    return { ...row, user: u ? { id: u.id, fullName: u.fullName } : u } as T;
+  }
+
+  /** Resolve o âmbito do utilizador: `undefined` (sem restrição) ou o perfil do externo (-1 se não tem). */
+  async ownerScope(user: CurrentUserData): Promise<number | undefined> {
+    if (!isExternalInstructor(user)) return undefined;
+    return (await ownInstructorProfileId(this.prisma, user)) ?? -1;
+  }
+
+  async findAll(filters: LiveClassFilterDto, ownerProfileId?: number) {
     const { page = 1, limit = 20 } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.LiveClassWhereInput = {};
@@ -85,6 +116,8 @@ export class LiveClassesService {
         ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {}),
       };
     }
+
+    if (ownerProfileId !== undefined) where.AND = [this.ownClass(ownerProfileId)];
 
     const [data, total] = await Promise.all([
       this.prisma.read.liveClass.findMany({
@@ -370,7 +403,30 @@ export class LiveClassesService {
     return { meetingUrl: m.joinUrl, passcode: m.passcode };
   }
 
-  async create(dto: CreateLiveClassDto) {
+  async create(dto: CreateLiveClassDto, user?: CurrentUserData) {
+    if (user && isExternalInstructor(user)) {
+      // Instrutor externo: a aula é sempre dele (perfil criado na primeira aula); o co-instrutor e
+      // o instrutor vindos do cliente são ignorados, e o curso/módulo/lição têm de ser seus.
+      const profileId = await ensureOwnInstructorProfile(this.prisma, user);
+      dto = { ...dto, instructorId: profileId, coInstructorId: undefined };
+      if (dto.courseId) await assertCanManageCourse(this.prisma, user, dto.courseId);
+      if (dto.moduleId) {
+        const mod = await this.prisma.courseModule.findUnique({
+          where: { id: dto.moduleId },
+          select: { courseId: true },
+        });
+        if (!mod) throw new NotFoundException('Recurso não encontrado');
+        await assertCanManageCourse(this.prisma, user, mod.courseId);
+      }
+      if (dto.lessonId) {
+        const lesson = await this.prisma.lesson.findUnique({
+          where: { id: dto.lessonId },
+          select: { module: { select: { courseId: true } } },
+        });
+        if (!lesson) throw new NotFoundException('Recurso não encontrado');
+        await assertCanManageCourse(this.prisma, user, lesson.module.courseId);
+      }
+    }
     const scheduledAt = new Date(dto.scheduledAt);
     const sessionDates = this.buildSessionDates(dto, scheduledAt);
 
@@ -569,7 +625,7 @@ export class LiveClassesService {
   // ─── Sessões (secção 5) ────────────────────────────────────────────────────
 
   /** Todas as sessões de todas as aulas — tabela global da aba "Sessões". */
-  async listAllSessions(filters: LiveClassFilterDto) {
+  async listAllSessions(filters: LiveClassFilterDto, ownerProfileId?: number) {
     const { page = 1, limit = 20 } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.LiveClassSessionWhereInput = {};
@@ -582,6 +638,8 @@ export class LiveClassesService {
         ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {}),
       };
     }
+
+    if (ownerProfileId !== undefined) where.AND = [{ liveClass: this.ownClass(ownerProfileId) }];
 
     const [data, total] = await Promise.all([
       this.prisma.read.liveClassSession.findMany({
@@ -883,11 +941,14 @@ export class LiveClassesService {
     return { durationMinutes, attendancePercent, computedStatus: a.status ?? computedStatus };
   }
 
-  async getAttendanceReport(liveClassId: number) {
+  async getAttendanceReport(liveClassId: number, user?: CurrentUserData) {
     const lc = await this.findOne(liveClassId);
+    const external = !!user && isExternalInstructor(user);
     const attendances = await this.prisma.read.liveAttendance.findMany({
       where: { liveClassId },
-      include: { user: { select: { id: true, fullName: true, email: true } } },
+      include: {
+        user: { select: { id: true, fullName: true, ...(external ? {} : { email: true }) } },
+      },
     });
     return attendances.map(a => ({ ...a, ...this.deriveAttendance(a, lc) }));
   }
@@ -920,7 +981,7 @@ export class LiveClassesService {
     session: { select: { id: true, seq: true, sessionDate: true } },
   } satisfies Prisma.LiveAttendanceInclude;
 
-  async listParticipants(filters: ParticipantsFilterDto) {
+  async listParticipants(filters: ParticipantsFilterDto, ownerProfileId?: number) {
     const { page = 1, limit = 20 } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const userWhere: Prisma.UserWhereInput = {};
@@ -945,6 +1006,7 @@ export class LiveClassesService {
     const where: Prisma.LiveAttendanceWhereInput = {};
     if (filters.liveClassId) where.liveClassId = filters.liveClassId;
     if (filters.sessionId) where.sessionId = filters.sessionId;
+    if (ownerProfileId !== undefined) liveClassWhere.AND = [this.ownClass(ownerProfileId)];
     if (Object.keys(liveClassWhere).length) where.liveClass = liveClassWhere;
     if (Object.keys(userWhere).length) where.user = userWhere;
 
@@ -959,7 +1021,10 @@ export class LiveClassesService {
       this.prisma.read.liveAttendance.count({ where }),
     ]);
 
-    let data = rows.map(a => ({ ...a, ...this.deriveAttendance(a, a.liveClass) }));
+    let data = rows.map(a => {
+      const row = { ...a, ...this.deriveAttendance(a, a.liveClass) };
+      return ownerProfileId === undefined ? row : this.redactAttendeeForExternal(row);
+    });
     // status é derivado (não uma coluna filtrável directamente na query acima
     // porque pode vir de override manual) — filtra-se depois de calcular.
     if (filters.status) data = data.filter(a => a.computedStatus === filters.status);
@@ -1017,7 +1082,17 @@ export class LiveClassesService {
    * os colaboradores activos. Não duplica quem já está inscrito (mesma aula e
    * sessão); o estado fica por omissão, como no registo individual.
    */
-  async bulkRegisterAttendance(liveClassId: number, dto: BulkAttendanceDto) {
+  async bulkRegisterAttendance(
+    liveClassId: number,
+    dto: BulkAttendanceDto,
+    user?: CurrentUserData,
+  ) {
+    if (user && isExternalInstructor(user) && (dto.all || dto.departmentIds?.length)) {
+      // Inscrever departamentos inteiros ou "todos" é gestão de pessoas (RH/ADMIN).
+      throw new ForbiddenException(
+        'Apenas é possível adicionar participantes indicados individualmente',
+      );
+    }
     await this.findOne(liveClassId);
     if (dto.sessionId) {
       const session = await this.prisma.read.liveClassSession.findUnique({
@@ -1125,9 +1200,12 @@ export class LiveClassesService {
 
   // ─── Formadores (secção 7) — perfil partilhado com Trainings ──────────────
 
-  async listInstructors() {
+  async listInstructors(ownerProfileId?: number) {
     const classes = await this.prisma.read.liveClass.findMany({
-      where: { OR: [{ instructorId: { not: null } }, { coInstructorId: { not: null } }] },
+      where:
+        ownerProfileId === undefined
+          ? { OR: [{ instructorId: { not: null } }, { coInstructorId: { not: null } }] }
+          : this.ownClass(ownerProfileId),
       select: {
         instructorId: true,
         coInstructorId: true,
@@ -1211,13 +1289,14 @@ export class LiveClassesService {
   // TrainingResource (kind=ROOM) do módulo Trainings — GET /training-resources
   // — não há aqui um modelo próprio para isso, só para o lado "virtual".
 
-  async listVirtualRooms(filters: LiveClassFilterDto) {
+  async listVirtualRooms(filters: LiveClassFilterDto, ownerProfileId?: number) {
     const { page = 1, limit = 20 } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.LiveClassWhereInput = { modality: { in: ['ONLINE', 'HYBRID'] } };
     if (filters.courseId) where.courseId = filters.courseId;
     if (filters.instructorId) where.instructorId = filters.instructorId;
     if (filters.status) where.status = filters.status;
+    if (ownerProfileId !== undefined) where.AND = [this.ownClass(ownerProfileId)];
 
     const [data, total] = await Promise.all([
       this.prisma.read.liveClass.findMany({
@@ -1269,10 +1348,11 @@ export class LiveClassesService {
 
   // ─── Gravações (secção 9) ───────────────────────────────────────────────────
 
-  async listRecordings(filters: LiveClassFilterDto) {
+  async listRecordings(filters: LiveClassFilterDto, ownerProfileId?: number) {
     const classWhere: Prisma.LiveClassWhereInput = { recordingUrl: { not: null } };
     if (filters.courseId) classWhere.courseId = filters.courseId;
     if (filters.instructorId) classWhere.instructorId = filters.instructorId;
+    if (ownerProfileId !== undefined) classWhere.AND = [this.ownClass(ownerProfileId)];
 
     const [classRecordings, sessionRecordings] = await Promise.all([
       this.prisma.read.liveClass.findMany({
@@ -1297,6 +1377,9 @@ export class LiveClassesService {
           recordingUrl: { not: null },
           ...(filters.instructorId ? { instructorId: filters.instructorId } : {}),
           ...(filters.courseId ? { liveClass: { courseId: filters.courseId } } : {}),
+          ...(ownerProfileId !== undefined
+            ? { AND: [{ liveClass: this.ownClass(ownerProfileId) }] }
+            : {}),
         },
         select: {
           id: true,
@@ -1394,9 +1477,13 @@ export class LiveClassesService {
     });
   }
 
-  async getUpcoming() {
+  async getUpcoming(ownerProfileId?: number) {
     return this.prisma.read.liveClass.findMany({
-      where: { scheduledAt: { gte: new Date() }, status: { notIn: [LiveClassStatus.CANCELADA] } },
+      where: {
+        scheduledAt: { gte: new Date() },
+        status: { notIn: [LiveClassStatus.CANCELADA] },
+        ...this.ownClass(ownerProfileId),
+      },
       include: {
         course: { select: { id: true, title: true } },
         instructor: { select: { id: true, name: true } },
@@ -1409,7 +1496,8 @@ export class LiveClassesService {
 
   // ─── Visão Geral (secção 1) ────────────────────────────────────────────────
 
-  async getDashboard() {
+  async getDashboard(ownerProfileId?: number) {
+    const own = this.ownClass(ownerProfileId);
     const now = new Date();
     const startOfToday = new Date(now);
     startOfToday.setHours(0, 0, 0, 0);
@@ -1430,33 +1518,34 @@ export class LiveClassesService {
       byModality,
       attendanceAgg,
     ] = await Promise.all([
-      this.prisma.read.liveClass.count({ where: { status: LiveClassStatus.AGENDADA } }),
-      this.prisma.read.liveClass.count({ where: { status: LiveClassStatus.EM_CURSO } }),
-      this.prisma.read.liveClass.count({ where: { status: LiveClassStatus.CONCLUIDA } }),
-      this.prisma.read.liveClass.count({ where: { status: LiveClassStatus.CANCELADA } }),
+      this.prisma.read.liveClass.count({ where: { ...own, status: LiveClassStatus.AGENDADA } }),
+      this.prisma.read.liveClass.count({ where: { ...own, status: LiveClassStatus.EM_CURSO } }),
+      this.prisma.read.liveClass.count({ where: { ...own, status: LiveClassStatus.CONCLUIDA } }),
+      this.prisma.read.liveClass.count({ where: { ...own, status: LiveClassStatus.CANCELADA } }),
       this.prisma.read.liveClass.count({
-        where: { scheduledAt: { gte: startOfToday, lt: endOfToday } },
+        where: { ...own, scheduledAt: { gte: startOfToday, lt: endOfToday } },
       }),
       this.prisma.read.liveClass.count({
-        where: { scheduledAt: { gte: startOfToday, lt: endOfWeek } },
+        where: { ...own, scheduledAt: { gte: startOfToday, lt: endOfWeek } },
       }),
-      this.prisma.read.liveClass.count({ where: { scheduledAt: { gte: now } } }),
-      this.prisma.read.liveClass.count({ where: { recordingUrl: { not: null } } }),
-      this.prisma.read.liveClass.groupBy({ by: ['modality'], _count: { _all: true } }),
+      this.prisma.read.liveClass.count({ where: { ...own, scheduledAt: { gte: now } } }),
+      this.prisma.read.liveClass.count({ where: { ...own, recordingUrl: { not: null } } }),
+      this.prisma.read.liveClass.groupBy({ by: ['modality'], where: own, _count: { _all: true } }),
       this.prisma.read.liveAttendance.aggregate({
+        where: ownerProfileId === undefined ? {} : { liveClass: own },
         _avg: { attendancePercent: true },
         _count: { _all: true },
       }),
     ]);
 
     const hoursAgg = await this.prisma.read.liveClass.aggregate({
-      where: { status: LiveClassStatus.CONCLUIDA },
+      where: { ...own, status: LiveClassStatus.CONCLUIDA },
       _sum: { duration: true },
     });
 
     const byInstructor = await this.prisma.read.liveClass.groupBy({
       by: ['instructorId'],
-      where: { instructorId: { not: null } },
+      where: { ...own, instructorId: { not: null } },
       _count: { _all: true },
     });
     const instructorIds = byInstructor
@@ -1498,19 +1587,22 @@ export class LiveClassesService {
 
   // ─── Calendário (secção 4) ─────────────────────────────────────────────────
 
-  async getCalendar(from: string, to: string) {
+  async getCalendar(from: string, to: string, ownerProfileId?: number) {
     const start = new Date(from);
     const end = new Date(to);
     const [classes, sessions] = await Promise.all([
       this.prisma.read.liveClass.findMany({
-        where: { scheduledAt: { gte: start, lte: end } },
+        where: { scheduledAt: { gte: start, lte: end }, ...this.ownClass(ownerProfileId) },
         include: {
           course: { select: { id: true, title: true } },
           instructor: { select: { id: true, name: true } },
         },
       }),
       this.prisma.read.liveClassSession.findMany({
-        where: { sessionDate: { gte: start, lte: end } },
+        where: {
+          sessionDate: { gte: start, lte: end },
+          ...(ownerProfileId !== undefined ? { liveClass: this.ownClass(ownerProfileId) } : {}),
+        },
         include: {
           instructor: { select: { id: true, name: true } },
           liveClass: {
@@ -1558,7 +1650,7 @@ export class LiveClassesService {
   // LiveClassSession.materialDocumentIds (FK "solta" para a Biblioteca,
   // mesmo padrão de Training.requiredResources) e resolve contra Document. ──
 
-  async listMaterials(filters: MaterialsFilterDto) {
+  async listMaterials(filters: MaterialsFilterDto, ownerProfileId?: number) {
     const classWhere: Prisma.LiveClassWhereInput = { materialDocumentIds: { isEmpty: false } };
     if (filters.courseId) classWhere.courseId = filters.courseId;
     if (filters.instructorId) classWhere.instructorId = filters.instructorId;
@@ -1571,6 +1663,11 @@ export class LiveClassesService {
         ...(filters.courseId ? { courseId: filters.courseId } : {}),
         ...(filters.instructorId ? { instructorId: filters.instructorId } : {}),
       };
+    }
+
+    if (ownerProfileId !== undefined) {
+      classWhere.AND = [this.ownClass(ownerProfileId)];
+      sessionWhere.AND = [{ liveClass: this.ownClass(ownerProfileId) }];
     }
 
     const [classes, sessions] = await Promise.all([
@@ -1720,8 +1817,12 @@ export class LiveClassesService {
   // ─── Avaliações (secção 12) — lista agregada + resumo (rubrica detalhada
   // e NPS) sobre PostClassResponse, cruzando todas as aulas. ─────────────────
 
-  private buildEvaluationWhere(filters: EvaluationsFilterDto): Prisma.PostClassResponseWhereInput {
+  private buildEvaluationWhere(
+    filters: EvaluationsFilterDto,
+    ownerProfileId?: number,
+  ): Prisma.PostClassResponseWhereInput {
     const liveClassWhere: Prisma.LiveClassWhereInput = {};
+    if (ownerProfileId !== undefined) liveClassWhere.AND = [this.ownClass(ownerProfileId)];
     if (filters.courseId) liveClassWhere.courseId = filters.courseId;
     if (filters.instructorId) liveClassWhere.instructorId = filters.instructorId;
     if (filters.dateFrom || filters.dateTo) {
@@ -1736,10 +1837,10 @@ export class LiveClassesService {
     return Object.keys(evaluationWhere).length ? { evaluation: evaluationWhere } : {};
   }
 
-  async getEvaluations(filters: EvaluationsFilterDto) {
+  async getEvaluations(filters: EvaluationsFilterDto, ownerProfileId?: number) {
     const { page = 1, limit = 20 } = filters;
     const { skip, take } = calculatePagination(page, limit);
-    const where = this.buildEvaluationWhere(filters);
+    const where = this.buildEvaluationWhere(filters, ownerProfileId);
 
     const [data, total] = await Promise.all([
       this.prisma.read.postClassResponse.findMany({
@@ -1771,8 +1872,8 @@ export class LiveClassesService {
     return buildPaginatedResponse(data, total, page, limit);
   }
 
-  async getEvaluationsSummary(filters: EvaluationsFilterDto) {
-    const where = this.buildEvaluationWhere(filters);
+  async getEvaluationsSummary(filters: EvaluationsFilterDto, ownerProfileId?: number) {
+    const where = this.buildEvaluationWhere(filters, ownerProfileId);
     const responses = await this.prisma.read.postClassResponse.findMany({
       where,
       select: {
@@ -1812,8 +1913,12 @@ export class LiveClassesService {
 
   // ─── Relatórios (secção 13) ─────────────────────────────────────────────────
 
-  private buildReportClassWhere(filters: LiveClassReportFilterDto): Prisma.LiveClassWhereInput {
+  private buildReportClassWhere(
+    filters: LiveClassReportFilterDto,
+    ownerProfileId?: number,
+  ): Prisma.LiveClassWhereInput {
     const where: Prisma.LiveClassWhereInput = {};
+    if (ownerProfileId !== undefined) where.AND = [this.ownClass(ownerProfileId)];
     if (filters.year) {
       where.scheduledAt = {
         gte: new Date(filters.year, 0, 1),
@@ -1827,8 +1932,8 @@ export class LiveClassesService {
     return where;
   }
 
-  async getReports(filters: LiveClassReportFilterDto) {
-    const where = this.buildReportClassWhere(filters);
+  async getReports(filters: LiveClassReportFilterDto, ownerProfileId?: number) {
+    const where = this.buildReportClassWhere(filters, ownerProfileId);
 
     const classes = await this.prisma.read.liveClass.findMany({
       where,
@@ -1979,8 +2084,11 @@ export class LiveClassesService {
     };
   }
 
-  async exportReportsCsv(filters: LiveClassReportFilterDto): Promise<string> {
-    const report = await this.getReports(filters);
+  async exportReportsCsv(
+    filters: LiveClassReportFilterDto,
+    ownerProfileId?: number,
+  ): Promise<string> {
+    const report = await this.getReports(filters, ownerProfileId);
     const rows = [
       { metrica: 'Aulas (total)', valor: report.totals.classes },
       { metrica: 'Aulas realizadas', valor: report.totals.completed },

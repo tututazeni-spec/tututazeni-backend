@@ -62,7 +62,11 @@ describe('Instrutor externo — inscritos', () => {
 
   it('lista os inscritos dos seus cursos e só esses, sem email nem departamento', async () => {
     const res = await api().get('/enrollments?limit=100').set(as(A.token)).expect(200);
-    const rows = res.body.data as Array<{ id: number; courseId: number; user: Record<string, unknown> }>;
+    const rows = res.body.data as Array<{
+      id: number;
+      courseId: number;
+      user: Record<string, unknown>;
+    }>;
     const ids = rows.map(r => r.id);
     expect(ids).toContain(e.empA);
     expect(ids).not.toContain(e.empB);
@@ -81,7 +85,10 @@ describe('Instrutor externo — inscritos', () => {
   });
 
   it('o filtro userId não faz sair do âmbito dos seus cursos', async () => {
-    const res = await api().get(`/enrollments?userId=${e.employeeId}&limit=100`).set(as(A.token)).expect(200);
+    const res = await api()
+      .get(`/enrollments?userId=${e.employeeId}&limit=100`)
+      .set(as(A.token))
+      .expect(200);
     const ids = res.body.data.map((r: { id: number }) => r.id);
     expect(ids).toEqual([e.empA]);
   });
@@ -101,8 +108,16 @@ describe('Instrutor externo — inscritos', () => {
   });
 
   it('não escreve nem consulta o que é de RH/gestão/aluno', async () => {
-    await api().post('/enrollments').set(as(A.token)).send({ userId: e.employeeId, courseId: c.A }).expect(403);
-    await api().put(`/enrollments/${e.empA}/status`).set(as(A.token)).send({ status: 'COMPLETED' }).expect(403);
+    await api()
+      .post('/enrollments')
+      .set(as(A.token))
+      .send({ userId: e.employeeId, courseId: c.A })
+      .expect(403);
+    await api()
+      .put(`/enrollments/${e.empA}/status`)
+      .set(as(A.token))
+      .send({ status: 'COMPLETED' })
+      .expect(403);
     await api().patch(`/enrollments/${e.empA}/cancel`).set(as(A.token)).expect(403);
     await api().get('/enrollments/team').set(as(A.token)).expect(403);
     await api().get('/enrollments/compliance').set(as(A.token)).expect(403);

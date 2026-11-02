@@ -63,7 +63,12 @@ describe('Instrutor externo — cursos, módulos e lições', () => {
 
   describe('barreira geral', () => {
     it('o externo não chega a endpoints partilhados @AnyAuthenticated (ex.: pesquisa, IA, carreira)', async () => {
-      for (const path of ['/search?q=a', '/career/me', '/leave-management/balances/me', '/ai-tutor/sessions']) {
+      for (const path of [
+        '/search?q=a',
+        '/career/me',
+        '/leave-management/balances/me',
+        '/ai-tutor/sessions',
+      ]) {
         const r = await api().get(path).set(as(A.token));
         expect([401, 403, 404]).toContain(r.status);
         expect(r.status).not.toBe(200);
@@ -84,7 +89,10 @@ describe('Instrutor externo — cursos, módulos e lições', () => {
     });
 
     it('a pesquisa por texto não deixa escapar cursos alheios', async () => {
-      const res = await api().get(`/courses?limit=100&search=${encodeURIComponent(TITLE)}`).set(as(A.token)).expect(200);
+      const res = await api()
+        .get(`/courses?limit=100&search=${encodeURIComponent(TITLE)}`)
+        .set(as(A.token))
+        .expect(200);
       const ids = res.body.data.map((x: { id: number }) => x.id);
       expect(ids).toEqual([c.courseA]);
     });
@@ -120,13 +128,25 @@ describe('Instrutor externo — cursos, módulos e lições', () => {
         .set(as(A.token))
         .send({ courseId: c.courseA, title: 'Novo módulo', seq: 5 })
         .expect(201);
-      await api().post('/modules').set(as(A.token)).send({ courseId: c.courseB, title: 'X', seq: 1 }).expect(404);
-      await api().post('/modules').set(as(A.token)).send({ courseId: c.courseCo, title: 'X', seq: 1 }).expect(404);
+      await api()
+        .post('/modules')
+        .set(as(A.token))
+        .send({ courseId: c.courseB, title: 'X', seq: 1 })
+        .expect(404);
+      await api()
+        .post('/modules')
+        .set(as(A.token))
+        .send({ courseId: c.courseCo, title: 'X', seq: 1 })
+        .expect(404);
     });
 
     it('lê, edita e apaga o seu módulo; o alheio → 404', async () => {
       await api().get(`/modules/${c.modA}`).set(as(A.token)).expect(200);
-      await api().put(`/modules/${c.modA}`).set(as(A.token)).send({ title: 'Módulo A editado' }).expect(200);
+      await api()
+        .put(`/modules/${c.modA}`)
+        .set(as(A.token))
+        .send({ title: 'Módulo A editado' })
+        .expect(200);
       await api().get(`/modules/${c.modB}`).set(as(A.token)).expect(404);
       await api().put(`/modules/${c.modB}`).set(as(A.token)).send({ title: 'hack' }).expect(404);
       await api().delete(`/modules/${c.modCo}`).set(as(A.token)).expect(404);
@@ -135,8 +155,16 @@ describe('Instrutor externo — cursos, módulos e lições', () => {
     });
 
     it('não reordena módulos de outro curso nem clona módulos', async () => {
-      await api().patch(`/modules/reorder/${c.courseB}`).set(as(A.token)).send({ items: [] }).expect(404);
-      await api().post(`/modules/${c.modA}/clone`).set(as(A.token)).send({ targetCourseId: c.courseB }).expect(403);
+      await api()
+        .patch(`/modules/reorder/${c.courseB}`)
+        .set(as(A.token))
+        .send({ items: [] })
+        .expect(404);
+      await api()
+        .post(`/modules/${c.modA}/clone`)
+        .set(as(A.token))
+        .send({ targetCourseId: c.courseB })
+        .expect(403);
     });
 
     it('material do módulo: só no seu', async () => {
@@ -163,7 +191,11 @@ describe('Instrutor externo — cursos, módulos e lições', () => {
     });
 
     it('edita/apaga só as suas; ficheiros de lições alheias → 404', async () => {
-      await api().put(`/lessons/${c.lesA}`).set(as(A.token)).send({ title: 'Lição A editada' }).expect(200);
+      await api()
+        .put(`/lessons/${c.lesA}`)
+        .set(as(A.token))
+        .send({ title: 'Lição A editada' })
+        .expect(200);
       await api().put(`/lessons/${c.lesB}`).set(as(A.token)).send({ title: 'hack' }).expect(404);
       await api().delete(`/lessons/${c.lesCo}`).set(as(A.token)).expect(404);
       await api().get(`/lessons/${c.lesB}/file`).set(as(A.token)).expect(404);
@@ -171,8 +203,16 @@ describe('Instrutor externo — cursos, módulos e lições', () => {
     });
 
     it('não move uma lição sua para um módulo alheio (nem a alheia para o seu)', async () => {
-      await api().patch(`/lessons/${c.lesA}/move`).set(as(A.token)).send({ targetModuleId: c.modB, seq: 1 }).expect(404);
-      await api().patch(`/lessons/${c.lesB}/move`).set(as(A.token)).send({ targetModuleId: c.modA, seq: 1 }).expect(404);
+      await api()
+        .patch(`/lessons/${c.lesA}/move`)
+        .set(as(A.token))
+        .send({ targetModuleId: c.modB, seq: 1 })
+        .expect(404);
+      await api()
+        .patch(`/lessons/${c.lesB}/move`)
+        .set(as(A.token))
+        .send({ targetModuleId: c.modA, seq: 1 })
+        .expect(404);
       const les = await prisma.lesson.findUnique({ where: { id: c.lesA } });
       expect(les?.moduleId).toBe(c.modA);
     });
@@ -180,8 +220,16 @@ describe('Instrutor externo — cursos, módulos e lições', () => {
 
   describe('rotas de edição em /courses/…', () => {
     it('módulo no curso: seu → 201; alheio → 404', async () => {
-      await api().post(`/courses/${c.courseA}/modules`).set(as(A.token)).send({ title: 'M via curso', seq: 20 }).expect(201);
-      await api().post(`/courses/${c.courseB}/modules`).set(as(A.token)).send({ title: 'X', seq: 1 }).expect(404);
+      await api()
+        .post(`/courses/${c.courseA}/modules`)
+        .set(as(A.token))
+        .send({ title: 'M via curso', seq: 20 })
+        .expect(201);
+      await api()
+        .post(`/courses/${c.courseB}/modules`)
+        .set(as(A.token))
+        .send({ title: 'X', seq: 1 })
+        .expect(404);
     });
 
     it('lição, atividade e recurso: só os seus', async () => {
@@ -196,8 +244,16 @@ describe('Instrutor externo — cursos, módulos e lições', () => {
         .send({ title: 'X', type: 'TEXT', seq: 1 })
         .expect(404);
       await api().delete(`/courses/lessons/${c.lesB}`).set(as(A.token)).expect(404);
-      await api().post(`/courses/lessons/${c.lesB}/activities`).set(as(A.token)).send({}).expect(404);
-      await api().post(`/courses/lessons/${c.lesB}/resources`).set(as(A.token)).send({}).expect(404);
+      await api()
+        .post(`/courses/lessons/${c.lesB}/activities`)
+        .set(as(A.token))
+        .send({})
+        .expect(404);
+      await api()
+        .post(`/courses/lessons/${c.lesB}/resources`)
+        .set(as(A.token))
+        .send({})
+        .expect(404);
     });
 
     it('quizzes e competências continuam fechados', async () => {
