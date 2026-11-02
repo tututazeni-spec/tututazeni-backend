@@ -569,6 +569,7 @@ async function main() {
     'DIRECTOR',
     'AUDITOR',
     'INSTRUCTOR',
+    'INSTRUCTOR_EXTERNO',
   ];
   const roleMap: Record<string, any> = {};
 
