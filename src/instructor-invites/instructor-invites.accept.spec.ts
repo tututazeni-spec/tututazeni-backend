@@ -100,6 +100,14 @@ describe('InstructorInvitesService.acceptInvite — dispositivo', () => {
     );
   });
 
+  it('se registar o dispositivo falhar, a aceitação continua válida (a senha já foi definida)', async () => {
+    externalLogin.registerDevice.mockRejectedValueOnce(new Error('db down'));
+    const { svc } = build();
+    await expect(svc.acceptInvite(TOKEN, 'Segura@123', DEVICE)).resolves.toMatchObject({
+      message: expect.any(String),
+    });
+  });
+
   it('convite inválido nunca regista dispositivo', async () => {
     const { svc } = build(null);
     await expect(svc.acceptInvite(TOKEN, 'Segura@123', DEVICE)).rejects.toThrow();

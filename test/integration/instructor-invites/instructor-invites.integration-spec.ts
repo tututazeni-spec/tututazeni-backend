@@ -436,7 +436,10 @@ describe('Instructor invites Integration', () => {
       const wrong = good === '000000' ? '111111' : '000000';
       for (let i = 0; i < 5; i++) {
         const r = await attempt(email, { emailCode: wrong }).expect(401);
-        expect(JSON.stringify(r.body)).toContain('Código inválido ou expirado');
+        // a 5.ª tentativa errada bloqueia a conta e o instrutor é avisado disso
+        expect(JSON.stringify(r.body)).toContain(
+          i < 4 ? 'Código inválido ou expirado' : 'conta bloqueada',
+        );
       }
       // A 5.ª tentativa errada também bloqueia a conta (política por omissão = 5); desbloquear para
       // que a rejeição abaixo venha da lógica do desafio e não do bloqueio da conta.
@@ -572,6 +575,47 @@ describe('Instructor invites Integration', () => {
         .post('/auth/refresh')
         .set('Cookie', [`refresh_token=${renewed.body.refreshToken}`, `innova_device=${DEVICE_B}`])
         .expect(401);
+    });
+
+    it('dois pedidos simultâneos geram um só desafio vivo e um só e-mail', async () => {
+      const { email, userId } = await activate('u');
+      const [a, b] = await Promise.all([attempt(email), attempt(email)]);
+      expect([a.status, b.status]).toEqual([401, 401]);
+      expect(codes.filter(c => c.email === email)).toHaveLength(1);
+      expect(
+        await prisma.loginChallenge.count({
+          where: { userId, consumedAt: null, expiresAt: { gt: new Date() } },
+        }),
+      ).toBe(1);
+    });
+
+    it('palpites em paralelo queimam o desafio e o código certo já não serve', async () => {
+      const { email, userId } = await activate('v');
+      await attempt(email).expect(401);
+      const good = codes.filter(c => c.email === email).at(-1)!.code;
+      const wrong = good === '000000' ? '111111' : '000000';
+      await Promise.all(Array.from({ length: 10 }, () => attempt(email, { emailCode: wrong })));
+      await prisma.user.update({
+        where: { id: userId },
+        data: { lockedUntil: null, failedLoginAttempts: 0 },
+      });
+      const row = await prisma.loginChallenge.findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(row?.consumedAt).not.toBeNull();
+      await attempt(email, { emailCode: good }).expect(401);
+    });
+
+    it('um pedido de outro dispositivo logo a seguir envia o aviso de dispositivo novo', async () => {
+      const { email } = await activate('w');
+      await loginExternal(email, DEVICE_A); // regista A
+      await attempt(email, {}, DEVICE_A).expect(401); // A conhecido: código LOGIN
+      const before = codes.filter(c => c.email === email).length;
+      await attempt(email, {}, DEVICE_B).expect(401); // <60 s mas outro propósito: novo e-mail
+      const sent = codes.filter(c => c.email === email);
+      expect(sent).toHaveLength(before + 1);
+      expect(sent.at(-1)!.purpose).toBe('NEW_DEVICE');
     });
 
     it('utilizador que não é instrutor externo continua a entrar sem código', async () => {

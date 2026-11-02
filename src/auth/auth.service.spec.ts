@@ -700,6 +700,15 @@ describe('AuthService.login — instrutor externo (código por e-mail)', () => {
     expect(securityMock.registerFailedAttempt).toHaveBeenCalledWith(9);
   });
 
+  it('se o código errado bloqueia a conta, diz que a conta está bloqueada', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(external);
+    ext.verify.mockResolvedValue(false);
+    securityMock.registerFailedAttempt.mockResolvedValueOnce(new Date(Date.now() + 15 * 60_000));
+    await expect(
+      login({ email: external.email, password: 'pass', emailCode: '000000' }, { deviceId: DEVICE }),
+    ).rejects.toThrow('Demasiadas tentativas falhadas');
+  });
+
   it('sem deviceId o instrutor externo é recusado e não se envia código', async () => {
     mockPrisma.user.findUnique.mockResolvedValue(external);
     await expect(login({ email: external.email, password: 'pass' } as never)).rejects.toThrow(

@@ -162,7 +162,17 @@ export class InstructorInvitesService {
 
     await this.revocation?.revokeAllUserSessions(invite.userId);
     // O link provou a posse do e-mail: este dispositivo já nasce confiável (sem alerta).
-    await this.externalLogin?.registerDevice(invite.userId, deviceId, ctx, false);
+    // A senha já está definida e o link gasto: uma falha aqui não pode devolver erro ao
+    // instrutor. Sem registo, o primeiro login pede o código de dispositivo novo.
+    try {
+      await this.externalLogin?.registerDevice(invite.userId, deviceId, ctx, false);
+    } catch (e) {
+      this.logger.warn({
+        userId: invite.userId,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao registar o dispositivo no convite',
+      });
+    }
     await this.audit.log({
       action: 'INSTRUCTOR_INVITE_ACCEPTED',
       entity: 'User',

@@ -262,9 +262,14 @@ export class AuthService {
         });
       }
       if (!(await this.externalLogin.verify(who, dto.emailCode, deviceId, loginCtx))) {
-        await this.security
+        const lockedUntil = await this.security
           ?.registerFailedAttempt(user.id)
           .catch(err => this.logLockoutFailure(user.id, err));
+        if (lockedUntil) {
+          throw new UnauthorizedException(
+            'Demasiadas tentativas falhadas — conta bloqueada temporariamente',
+          );
+        }
         throw new UnauthorizedException('Código inválido ou expirado');
       }
     }
