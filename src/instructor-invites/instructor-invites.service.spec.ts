@@ -98,3 +98,54 @@ describe('InstructorInvitesService.deactivateUser', () => {
     expect(audit.log).not.toHaveBeenCalled();
   });
 });
+
+describe('InstructorInvitesService.create — falha de e-mail (I4)', () => {
+  it('se o e-mail falhar, não rebenta: audita e devolve emailSent=false', async () => {
+    const { svc, mail, audit } = build();
+    mail.sendInstructorInvite.mockRejectedValue(new Error('SMTP down'));
+    const out = await svc.create({ email: 'a@x.com', fullName: 'Ana Externa' }, 5);
+    expect(out.emailSent).toBe(false);
+    expect(out.inviteId).toBe('inv-1');
+    expect(audit.log).toHaveBeenCalledTimes(1);
+  });
+
+  it('com e-mail enviado devolve emailSent=true', async () => {
+    const { svc } = build();
+    const out = await svc.create({ email: 'a@x.com', fullName: 'Ana Externa' }, 5);
+    expect(out.emailSent).toBe(true);
+  });
+});
+
+describe('InstructorInvitesService.extendAccess (I3)', () => {
+  function buildExt(passwordChangedAt: Date | null) {
+    const prisma = {
+      user: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: 7, accountStatus: 'PENDING', passwordChangedAt }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+    };
+    const audit = { log: jest.fn().mockResolvedValue(undefined) };
+    const svc = new InstructorInvitesService(prisma as never, {} as never, audit as never);
+    return { svc, prisma };
+  }
+
+  it('conta ainda não aceite: reativa (active) mas mantém PENDING', async () => {
+    const { svc, prisma } = buildExt(null);
+    await svc.extendAccess(7, 10, 5);
+    const data = prisma.user.update.mock.calls[0][0].data;
+    expect(data.active).toBe(true);
+    expect(data.accountStatus).toBe('PENDING');
+    expect(data.accessExpiresAt).toBeInstanceOf(Date);
+  });
+
+  it('conta já aceite: reativa e fica ACTIVE', async () => {
+    const { svc, prisma } = buildExt(new Date());
+    await svc.extendAccess(7, 10, 5);
+    expect(prisma.user.update.mock.calls[0][0].data).toMatchObject({
+      active: true,
+      accountStatus: 'ACTIVE',
+    });
+  });
+});

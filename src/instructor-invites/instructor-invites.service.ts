@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
@@ -36,12 +37,14 @@ export const sha256 = (v: string): string => crypto.createHash('sha256').update(
 
 @Injectable()
 export class InstructorInvitesService {
+  private readonly logger = new Logger(InstructorInvitesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
     private readonly audit: AuditService,
     @Optional() private readonly revocation?: SessionRevocationService,
-    @Optional() private readonly security?: SecuritySettingsService,
+    private readonly security?: SecuritySettingsService,
   ) {}
 
   private newToken(): { token: string; tokenHash: string; expiresAt: Date } {
@@ -84,7 +87,7 @@ export class InstructorInvitesService {
       return { userId: user.id, inviteId: invite.id };
     });
 
-    await this.mail.sendInstructorInvite(email, dto.fullName.trim(), token, accessDays);
+    // Auditar antes de enviar: a conta e o convite já estão gravados, o e-mail pode falhar.
     await this.audit.log({
       action: 'INSTRUCTOR_INVITE_CREATED',
       entity: 'User',
@@ -92,7 +95,20 @@ export class InstructorInvitesService {
       userId: actorId,
       metadata: { email, accessDays },
     });
-    return { inviteId, userId, expiresAt, accessExpiresAt };
+    // Falha de SMTP não pode deixar o admin sem resposta nem esconder o convite criado:
+    // devolve emailSent=false e o admin usa "Reenviar".
+    let emailSent = true;
+    try {
+      await this.mail.sendInstructorInvite(email, dto.fullName.trim(), token, accessDays);
+    } catch (e) {
+      emailSent = false;
+      this.logger.warn({
+        userId,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao enviar e-mail de convite de instrutor',
+      });
+    }
+    return { inviteId, userId, expiresAt, accessExpiresAt, emailSent };
   }
 
   /**
@@ -128,7 +144,7 @@ export class InstructorInvitesService {
       if (claim.count !== 1) throw invalid();
       await tx.user.update({
         where: { id: invite.userId },
-        data: { password: hashed, passwordChangedAt: now, accountStatus: 'ACTIVE' },
+        data: { password: hashed, passwordChangedAt: now, accountStatus: 'ACTIVE', active: true },
       });
       await tx.refreshToken.updateMany({
         where: { userId: invite.userId, revokedAt: null },
@@ -234,7 +250,10 @@ export class InstructorInvitesService {
       where: { id: userId },
       data: {
         accessExpiresAt,
-        ...(accepted ? { active: true, accountStatus: 'ACTIVE' as const } : {}),
+        // Reativa sempre (o cron desativa também contas por aceitar); só quem já
+        // aceitou o convite fica ACTIVE, os restantes voltam a PENDING.
+        active: true,
+        accountStatus: accepted ? ('ACTIVE' as const) : ('PENDING' as const),
       },
     });
     await this.audit.log({

@@ -14,6 +14,7 @@ const quiet = async (p: Promise<unknown>): Promise<void> => {
     /* limpeza best-effort */
   }
 };
+const resets: { email: string; token: string }[] = [];
 const mailed: { email: string; token: string; days: number }[] = [];
 
 describe('Instructor invites Integration', () => {
@@ -44,7 +45,9 @@ describe('Instructor invites Integration', () => {
             mailed.push({ email, token, days });
           },
         ),
-        sendPasswordReset: jest.fn(),
+        sendPasswordReset: jest.fn(async (email: string, token: string) => {
+          resets.push({ email, token });
+        }),
         sendUserInvite: jest.fn(),
         sendNotification: jest.fn(),
       })
@@ -195,6 +198,32 @@ describe('Instructor invites Integration', () => {
       expect(revoked.body.message).toBe(unknown.body.message);
     });
 
+    it('a política de senhas da organização é aplicada: senha fraca → 400 e o convite continua utilizável', async () => {
+      await invite(adminToken, {
+        email: `${PREFIX}k@innova-test.com`,
+        fullName: 'Kátia Externa',
+      }).expect(201);
+      const { token } = mailed.at(-1)!;
+      await accept(token, 'abcdef').expect(400);
+      await accept(token, 'Segura@1234').expect(201);
+    });
+
+    it('revogar o convite não pode ser contornado por "esqueci a senha"', async () => {
+      const email = `${PREFIX}l@innova-test.com`;
+      const created = await invite(adminToken, { email, fullName: 'Luís Externo' }).expect(201);
+      await request(app.getHttpServer())
+        .post(`/instructor-invites/${created.body.inviteId}/revoke`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      const before = resets.length;
+      await request(app.getHttpServer()).post('/auth/forgot-password').send({ email });
+      expect(resets.length).toBe(before); // nenhum token de recuperação emitido
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email, password: 'Segura@1234' })
+        .expect(401);
+    });
+
     it('duas aceitações em paralelo: só uma vence', async () => {
       await invite(adminToken, {
         email: `${PREFIX}f@innova-test.com`,
@@ -242,13 +271,12 @@ describe('Instructor invites Integration', () => {
         .post('/auth/login')
         .send({ email, password: 'Segura@1234' })
         .expect(401);
-      if (refresh) {
-        await request(app.getHttpServer())
-          .post('/auth/refresh')
-          .set('Cookie', [`refresh_token=${refresh}`])
-          .set('Authorization', `Bearer ${refresh}`)
-          .expect(401);
-      }
+      const refreshRes = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', [`refresh_token=${refresh}`])
+        .set('Authorization', `Bearer ${refresh}`)
+        .expect(401);
+      expect(JSON.stringify(refreshRes.body)).toMatch(/expirad|Unauthorized/i);
     });
   });
 
@@ -284,19 +312,77 @@ describe('Instructor invites Integration', () => {
       expect(second.deactivated).toBe(0);
     });
 
-    it('prolongar uma conta já expirada e desativada reativa-a', async () => {
-      const row = await prisma.user.findUnique({ where: { email: `${PREFIX}h@innova-test.com` } });
+    it('prolongar uma conta já aceite, expirada e desativada reativa-a', async () => {
+      const email = `${PREFIX}i@innova-test.com`;
+      const created = await invite(adminToken, { email, fullName: 'Inês Externa' }).expect(201);
       await request(app.getHttpServer())
-        .patch(`/instructor-invites/users/${row!.id}/extend`)
+        .post('/auth/instructor-invite/accept')
+        .send({ token: mailed.at(-1)!.token, password: 'Segura@1234' })
+        .expect(201);
+      await prisma.user.update({
+        where: { id: created.body.userId },
+        data: { accessExpiresAt: new Date(Date.now() - 1000) },
+      });
+      await app.get(InstructorAccessExpiryService).runExpiryJob();
+      expect((await prisma.user.findUnique({ where: { email } }))?.active).toBe(false);
+
+      await request(app.getHttpServer())
+        .patch(`/instructor-invites/users/${created.body.userId}/extend`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ accessDays: 7 })
         .expect(200);
-      const after = await prisma.user.findUnique({ where: { id: row!.id } });
+      const after = await prisma.user.findUnique({ where: { email } });
       expect(after).toMatchObject({ active: true, accountStatus: 'ACTIVE' });
+      await new Promise(r => setTimeout(r, 1100));
       await request(app.getHttpServer())
         .post('/auth/login')
-        .send({ email: row!.email, password: 'Segura@1234' })
+        .send({ email, password: 'Segura@1234' })
         .expect(201);
+    });
+
+    it('conta por aceitar cujo prazo passou: prolongar + reenviar permite aceitar e entrar', async () => {
+      const email = `${PREFIX}j@innova-test.com`;
+      const created = await invite(adminToken, { email, fullName: 'Jorge Externo' }).expect(201);
+      await prisma.user.update({
+        where: { id: created.body.userId },
+        data: { accessExpiresAt: new Date(Date.now() - 1000) },
+      });
+      await app.get(InstructorAccessExpiryService).runExpiryJob();
+      expect((await prisma.user.findUnique({ where: { email } }))?.active).toBe(false);
+
+      await request(app.getHttpServer())
+        .patch(`/instructor-invites/users/${created.body.userId}/extend`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ accessDays: 5 })
+        .expect(200);
+      const pending = await prisma.user.findUnique({ where: { email } });
+      expect(pending).toMatchObject({ active: true, accountStatus: 'PENDING' });
+
+      await request(app.getHttpServer())
+        .post(`/instructor-invites/${created.body.inviteId}/resend`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      await request(app.getHttpServer())
+        .post('/auth/instructor-invite/accept')
+        .send({ token: mailed.at(-1)!.token, password: 'Segura@1234' })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email, password: 'Segura@1234' })
+        .expect(201);
+    });
+
+    it('extend e deactivate só aceitam instrutores externos (404 para outros utilizadores)', async () => {
+      const rh = await prisma.user.findUnique({ where: { email: 'int.rh@innova-test.com' } });
+      await request(app.getHttpServer())
+        .patch(`/instructor-invites/users/${rh!.id}/extend`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ accessDays: 7 })
+        .expect(404);
+      await request(app.getHttpServer())
+        .post(`/instructor-invites/users/${rh!.id}/deactivate`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(404);
     });
   });
 });

@@ -90,10 +90,18 @@ function buildWhereFromFilters(filters: ContentFilterDto): Prisma.ContentAssetWh
   if (filters.category) where.category = filters.category;
 
   if (filters.search) {
-    where.OR = [
-      { title: { contains: filters.search, mode: 'insensitive' } },
-      { description: { contains: filters.search, mode: 'insensitive' } },
-    ];
+    // Qualquer palavra da frase basta: devolve conteúdos que contenham pelo
+    // menos uma delas no título, descrição ou tags.
+    const terms = filters.search
+      .split(/\s+/)
+      .map(t => t.trim())
+      .filter(t => t.length >= 2);
+    if (terms.length === 0) terms.push(filters.search.trim());
+    where.OR = terms.flatMap(term => [
+      { title: { contains: term, mode: 'insensitive' } },
+      { description: { contains: term, mode: 'insensitive' } },
+      { tags: { has: term.toLowerCase() } },
+    ]);
   }
 
   return where;
