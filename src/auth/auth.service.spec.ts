@@ -211,6 +211,17 @@ describe('AuthService', () => {
       );
     });
 
+    it('conta com prazo de acesso expirado → 401 mesmo com a password certa', async () => {
+      (verifyPassword as jest.Mock).mockResolvedValue({ valid: true, needsRehash: false });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        ...baseUser,
+        accessExpiresAt: new Date(Date.now() - 1000),
+      });
+      await expect(
+        service.login({ email: 'test@innova.com', password: 'pass' }),
+      ).rejects.toThrow('Acesso expirado');
+    });
+
     it('deve lançar UnauthorizedException se password inválida', async () => {
       (verifyPassword as jest.Mock).mockResolvedValue({ valid: false, needsRehash: false });
       mockPrisma.user.findUnique.mockResolvedValue(baseUser);
@@ -358,6 +369,23 @@ describe('AuthService', () => {
   // ─── rotateRefreshToken ───────────────────────────────────────────────────
 
   describe('rotateRefreshToken', () => {
+    it('refresh de conta com prazo expirado → 401 e não emite tokens', async () => {
+      mockPrisma.refreshToken.findUnique.mockResolvedValue({
+        id: 3,
+        userId: 1,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 1e6),
+        createdAt: new Date(),
+      });
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        id: 1,
+        accessExpiresAt: new Date(Date.now() - 1000),
+      });
+      await expect(service.rotateRefreshToken(1, 'test@innova.com', 'present')).rejects.toThrow(
+        'Acesso expirado',
+      );
+    });
+
     it('roda: revoga o token apresentado de forma atómica e emite um novo par', async () => {
       mockPrisma.refreshToken.findUnique.mockResolvedValue({
         id: 3,

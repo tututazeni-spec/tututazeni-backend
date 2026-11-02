@@ -71,6 +71,12 @@ describe('Instructor invites Integration', () => {
     });
     const ids = users.map(u => u.id);
     await quiet(prisma.instructorInvite.deleteMany({ where: { userId: { in: ids } } }));
+    // UserAuditLog tem FK RESTRICT para User (userId e performedById): filhos primeiro.
+    await quiet(
+      prisma.userAuditLog.deleteMany({
+        where: { OR: [{ userId: { in: ids } }, { performedById: { in: ids } }] },
+      }),
+    );
     await quiet(prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } }));
     await quiet(prisma.user.deleteMany({ where: { id: { in: ids } } }));
     await app.close();
@@ -196,6 +202,50 @@ describe('Instructor invites Integration', () => {
       const { token } = mailed.at(-1)!;
       const results = await Promise.all([accept(token), accept(token)]);
       expect(results.map(r => r.status).sort()).toEqual([201, 400]);
+    });
+  });
+
+  describe('validade do acesso', () => {
+    it('depois do prazo: pedido com token ainda válido, login e refresh dão 401', async () => {
+      const email = `${PREFIX}g@innova-test.com`;
+      const created = await invite(adminToken, { email, fullName: 'Gil Externo' }).expect(201);
+      await request(app.getHttpServer())
+        .post('/auth/instructor-invite/accept')
+        .send({ token: mailed.at(-1)!.token, password: 'Segura@1234' })
+        .expect(201);
+      const loginRes = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email, password: 'Segura@1234' })
+        .expect(201);
+      const access = loginRes.body.accessToken as string;
+      const refresh = loginRes.body.refreshToken as string;
+
+      await prisma.user.update({
+        where: { id: created.body.userId },
+        data: { accessExpiresAt: new Date(Date.now() + 1500) },
+      });
+      // Dentro do prazo (carrega o utilizador para a cache do JwtStrategy).
+      await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${access}`)
+        .expect(200);
+
+      await new Promise(r => setTimeout(r, 1800));
+      await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${access}`)
+        .expect(401);
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email, password: 'Segura@1234' })
+        .expect(401);
+      if (refresh) {
+        await request(app.getHttpServer())
+          .post('/auth/refresh')
+          .set('Cookie', [`refresh_token=${refresh}`])
+          .set('Authorization', `Bearer ${refresh}`)
+          .expect(401);
+      }
     });
   });
 });

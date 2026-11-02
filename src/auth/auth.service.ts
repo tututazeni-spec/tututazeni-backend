@@ -1,4 +1,5 @@
 import { setRequestUserId } from '../common/logging/request-context';
+import { ACCESS_EXPIRED_MESSAGE, isAccessExpired } from './access-expiry';
 import {
   Injectable,
   UnauthorizedException,
@@ -168,6 +169,8 @@ export class AuthService {
       throw this.failedLogin('UNKNOWN_USER', dto.email, null, ctx);
     }
     if (!user.active) throw this.failedLogin('ACCOUNT_DISABLED', dto.email, user.id, ctx);
+    // Prazo de acesso (instrutor externo) esgotado: recusa antes de verificar a password.
+    if (isAccessExpired(user)) throw new UnauthorizedException(ACCESS_EXPIRED_MESSAGE);
 
     // Definições §11: organização pode obrigar autenticação externa (SSO/LDAP)
     // para todos menos ADMIN (acesso de emergência caso o IdP fique indisponível).
@@ -522,6 +525,19 @@ export class AuthService {
 
     if (record.expiresAt < new Date()) {
       throw new UnauthorizedException('Refresh token expirado');
+    }
+
+    // Prazo de acesso (instrutor externo) esgotado: a cadeia de sessões morre aqui.
+    const owner = await this.prisma.user.findUnique({
+      where: { id: authorizedUserId },
+      select: { accessExpiresAt: true },
+    });
+    if (owner && isAccessExpired(owner)) {
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: authorizedUserId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException(ACCESS_EXPIRED_MESSAGE);
     }
 
     // A10-24: cada rotação cria um registo novo (persistRefreshToken), por
