@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { AllExceptionsFilter } from './all-exceptions.filter';
 
 function makeRes() {
@@ -64,6 +64,27 @@ describe('AllExceptionsFilter', () => {
       'email deve ser um email',
       'password não pode estar vazio',
     ]);
+  });
+
+  it('401 com code/purpose estruturados: o cliente recebe-os (ex.: EMAIL_CODE_REQUIRED)', () => {
+    const res = makeRes();
+    new AllExceptionsFilter(logger).catch(
+      new UnauthorizedException({
+        message: 'Introduza o código',
+        code: 'EMAIL_CODE_REQUIRED',
+        purpose: 'NEW_DEVICE',
+        secret: 'nao-deve-sair',
+      }),
+      makeHost({ method: 'POST', url: '/auth/login', id: 'req-9' }, res),
+    );
+    const body = res.json.mock.calls[0][0];
+    expect(body).toMatchObject({
+      statusCode: 401,
+      message: 'Introduza o código',
+      code: 'EMAIL_CODE_REQUIRED',
+      purpose: 'NEW_DEVICE',
+    });
+    expect(body.secret).toBeUndefined(); // só campos da lista branca
   });
 
   it('4xx: inclui stack trace no log (regra 2)', () => {

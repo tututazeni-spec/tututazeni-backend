@@ -3,6 +3,7 @@ import { UnauthorizedException, ConflictException, BadRequestException } from '@
 import { JwtService } from '@nestjs/jwt';
 import { AuthService, sessionIdleTimeoutMs } from './auth.service';
 import { SessionRevocationService } from './session-revocation.service';
+import { ExternalLoginSecurityService } from '../instructor-invites/external-login-security.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 // A escrita encadeada (SHA-256 + advisory lock) é testada em audit-chain; aqui só
@@ -530,3 +531,94 @@ describe('AuthService', () => {
   });
 });
 // forgotPassword / resetPassword foram movidos para PasswordResetService (password-reset.service.spec.ts)
+
+describe('AuthService.login — instrutor externo (código por e-mail)', () => {
+  const external = {
+    ...baseUser,
+    id: 9,
+    email: 'ext@innova.com',
+    role: { id: 5, name: 'INSTRUCTOR_EXTERNO', rolePermissions: [] },
+  };
+  const DEVICE = '3f0c1b0e-6a5d-4a6e-9a47-2f1d6c1c0a11';
+  const ext = {
+    isExternal: jest.fn((u: { role?: { name?: string } }) => u.role?.name === 'INSTRUCTOR_EXTERNO'),
+    challenge: jest.fn().mockResolvedValue({ purpose: 'NEW_DEVICE' }),
+    verify: jest.fn(),
+  };
+  let svc: AuthService;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    process.env.JWT_REFRESH_SECRET = 'test-refresh-secret';
+    (verifyPassword as jest.Mock).mockResolvedValue({ valid: true, needsRehash: false });
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: JwtService, useValue: mockJwt },
+        { provide: SessionRevocationService, useValue: mockRevocation },
+        { provide: ExternalLoginSecurityService, useValue: ext },
+      ],
+    }).compile();
+    svc = module.get<AuthService>(AuthService);
+  });
+
+  it('sem emailCode → 401 EMAIL_CODE_REQUIRED e pede o desafio', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(external);
+    const err = await svc
+      .login({ email: external.email, password: 'pass', deviceId: DEVICE } as never, {
+        ip: '1.1.1.1',
+      })
+      .catch((e: UnauthorizedException) => e);
+    expect(err).toBeInstanceOf(UnauthorizedException);
+    expect((err as UnauthorizedException).getResponse()).toMatchObject({
+      code: 'EMAIL_CODE_REQUIRED',
+      purpose: 'NEW_DEVICE',
+    });
+    expect(ext.challenge).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 9, email: external.email }),
+      DEVICE,
+      expect.objectContaining({ ip: '1.1.1.1' }),
+    );
+  });
+
+  it('emailCode errado → 401 genérico e não emite sessão', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(external);
+    ext.verify.mockResolvedValue(false);
+    await expect(
+      svc.login({
+        email: external.email,
+        password: 'pass',
+        emailCode: '000000',
+        deviceId: DEVICE,
+      } as never),
+    ).rejects.toThrow('Código inválido ou expirado');
+    expect(mockJwt.signAsync).not.toHaveBeenCalled();
+  });
+
+  it('emailCode certo → devolve a sessão', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(external);
+    ext.verify.mockResolvedValue(true);
+    const out = await svc.login({
+      email: external.email,
+      password: 'pass',
+      emailCode: '123456',
+      deviceId: DEVICE,
+    } as never);
+    expect(out).toHaveProperty('accessToken');
+    expect(ext.verify).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 9 }),
+      '123456',
+      DEVICE,
+      expect.any(Object),
+    );
+  });
+
+  it('utilizador que não é instrutor externo nunca recebe desafio', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(baseUser);
+    const out = await svc.login({ email: baseUser.email, password: 'pass' } as never);
+    expect(out).toHaveProperty('accessToken');
+    expect(ext.challenge).not.toHaveBeenCalled();
+    expect(ext.verify).not.toHaveBeenCalled();
+  });
+});

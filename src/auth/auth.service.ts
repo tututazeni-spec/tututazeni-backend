@@ -1,5 +1,6 @@
 import { setRequestUserId } from '../common/logging/request-context';
 import { ACCESS_EXPIRED_MESSAGE, isAccessExpired } from './access-expiry';
+import { ExternalLoginSecurityService } from '../instructor-invites/external-login-security.service';
 import {
   Injectable,
   UnauthorizedException,
@@ -72,6 +73,7 @@ export class AuthService {
     @Optional() private readonly security?: SecuritySettingsService,
     @Optional() private readonly authSettings?: AuthSettingsService,
     @Optional() private readonly revocation?: SessionRevocationService,
+    @Optional() private readonly externalLogin?: ExternalLoginSecurityService,
   ) {}
 
   /** Mesmo include/omit usado para autenticar — reutilizado pelo SSO/LDAP (sso-auth.service.ts). */
@@ -230,6 +232,27 @@ export class AuthService {
         );
       }
       throw err;
+    }
+
+    // Instrutor externo: segundo factor por e-mail em todo o login (código de 6 dígitos) e
+    // dispositivo confiável. Sem `emailCode` envia o código e o cliente repete o login com ele.
+    if (this.externalLogin?.isExternal(user)) {
+      const who = { id: user.id, email: user.email, fullName: user.fullName };
+      const loginCtx = ctx ?? {};
+      if (!dto.emailCode) {
+        const { purpose } = await this.externalLogin.challenge(who, dto.deviceId, loginCtx);
+        throw new UnauthorizedException({
+          message: 'Introduza o código enviado para o seu email',
+          code: 'EMAIL_CODE_REQUIRED',
+          purpose,
+        });
+      }
+      if (!(await this.externalLogin.verify(who, dto.emailCode, dto.deviceId, loginCtx))) {
+        await this.security
+          ?.registerFailedAttempt(user.id)
+          .catch(err => this.logLockoutFailure(user.id, err));
+        throw new UnauthorizedException('Código inválido ou expirado');
+      }
     }
 
     // Definições §4: 2FA (TOTP). Sem código → o cliente pede-o e repete o login.

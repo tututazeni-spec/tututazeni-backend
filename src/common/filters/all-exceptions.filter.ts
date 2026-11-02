@@ -47,12 +47,21 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (clientStatus === 413) {
       message = 'O pedido é demasiado grande (por exemplo, uma imagem pesada).';
     }
+    // Campos estruturados que o cliente precisa para reagir (ex.: EMAIL_CODE_REQUIRED no login).
+    // Lista branca de strings: nenhum outro campo da exceção chega à resposta.
+    const extras: Record<string, string> = {};
     if (exception instanceof HttpException) {
       const response = exception.getResponse();
       message =
         typeof response === 'string'
           ? response
           : ((response as Record<string, unknown>).message ?? exception.message);
+      if (typeof response === 'object' && response !== null) {
+        for (const key of ['code', 'purpose'] as const) {
+          const value = (response as Record<string, unknown>)[key];
+          if (typeof value === 'string') extras[key] = value;
+        }
+      }
     }
 
     const isServerError = status >= 500;
@@ -82,6 +91,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     res.status(status).json({
       statusCode: status,
       message,
+      ...extras,
       requestId,
       path: req.url,
       timestamp: new Date().toISOString(),
