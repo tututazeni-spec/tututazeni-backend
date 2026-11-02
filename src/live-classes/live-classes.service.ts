@@ -674,36 +674,93 @@ export class LiveClassesService {
 
   // ─── Sala ao vivo (join/leave/chat) — inalterado, ao nível da Aula ────────
 
-  // Sala ao vivo (Jitsi/chat) continua exclusivamente ao nível da Aula — por
-  // isso sessionId fica sempre null aqui, mesmo para aulas recorrentes (ver
-  // comentário em LiveClassSession no schema). findFirst em vez de
+  // A presença regista-se sozinha ao entrar na sala. Em aulas recorrentes fica
+  // ligada à sessão em curso (janela: 15 min antes do início até 30 min depois
+  // do fim, ignorando as canceladas); fora de qualquer sessão — e nas aulas
+  // únicas — fica ao nível da Aula (sessionId null). findFirst em vez de
   // findUnique pelo índice composto: nulls não são únicos em Postgres, por
-  // isso é o próprio código que garante no máximo uma linha "geral" por
-  // (aula, utilizador) — ver nota junto de @@unique em LiveAttendance.
-  async joinClass(liveClassId: number, userId: number) {
-    const existing = await this.prisma.liveAttendance.findFirst({
-      where: { liveClassId, userId, sessionId: null },
+  // isso é o próprio código que garante no máximo uma linha por
+  // (aula, utilizador, sessão) — ver nota junto de @@unique em LiveAttendance.
+  private async resolveActiveSessionId(liveClassId: number, now = new Date()) {
+    const early = 15 * 60_000;
+    const late = 30 * 60_000;
+    const candidates = await this.prisma.read.liveClassSession.findMany({
+      where: {
+        liveClassId,
+        status: { not: LiveClassStatus.CANCELADA },
+        sessionDate: {
+          gte: new Date(now.getTime() - 24 * 3_600_000 - late),
+          lte: new Date(now.getTime() + early),
+        },
+      },
+      select: { id: true, sessionDate: true, durationMinutes: true },
+      orderBy: { sessionDate: 'desc' },
     });
+    const current = candidates.find(c => {
+      const start = c.sessionDate.getTime();
+      return (
+        now.getTime() >= start - early && now.getTime() <= start + c.durationMinutes * 60_000 + late
+      );
+    });
+    return current?.id ?? null;
+  }
+
+  async joinClass(liveClassId: number, userId: number) {
+    const sessionId = await this.resolveActiveSessionId(liveClassId);
+    const existing = await this.prisma.liveAttendance.findFirst({
+      where: { liveClassId, userId, sessionId },
+    });
+    const now = new Date();
+    let attendance;
     if (existing) {
-      return this.prisma.liveAttendance.update({
+      // Reentrada: mantém a primeira entrada (para o cálculo de atraso) e
+      // limpa a saída.
+      attendance = await this.prisma.liveAttendance.update({
         where: { id: existing.id },
-        data: { joinedAt: new Date(), leftAt: null },
+        data: {
+          joinedAt: existing.joinedAt ?? now,
+          leftAt: null,
+          // Nova passagem: o tempo anterior mantém-se em accumulatedSeconds
+          currentJoinedAt: existing.currentJoinedAt ?? now,
+        },
+      });
+    } else {
+      attendance = await this.prisma.liveAttendance.create({
+        data: { liveClassId, userId, sessionId, joinedAt: now, currentJoinedAt: now },
       });
     }
-    return this.prisma.liveAttendance.create({
-      data: { liveClassId, userId, joinedAt: new Date() },
-    });
+    return attendance;
   }
 
   async leaveClass(liveClassId: number, userId: number) {
-    const existing = await this.prisma.liveAttendance.findFirst({
-      where: { liveClassId, userId, sessionId: null },
+    // Fecha o registo aberto mais recente, seja da sessão ou da aula, e soma a
+    // passagem que acabou ao tempo total (entrar de novo continua a somar).
+    const open = await this.prisma.liveAttendance.findFirst({
+      where: { liveClassId, userId, joinedAt: { not: null }, leftAt: null },
+      orderBy: { joinedAt: 'desc' },
     });
-    if (!existing) throw new NotFoundException('Não está inscrito nesta aula');
-    return this.prisma.liveAttendance.update({
-      where: { id: existing.id },
-      data: { leftAt: new Date() },
+    if (!open) throw new NotFoundException('Não está inscrito nesta aula');
+    const now = new Date();
+    const stintStart = open.currentJoinedAt ?? open.joinedAt!;
+    const stintSeconds = Math.max(0, Math.floor((now.getTime() - stintStart.getTime()) / 1000));
+    const attendance = await this.prisma.liveAttendance.update({
+      where: { id: open.id },
+      data: {
+        leftAt: now,
+        currentJoinedAt: null,
+        accumulatedSeconds: open.accumulatedSeconds + stintSeconds,
+      },
     });
+    const lc = await this.findOne(liveClassId);
+    await this.maybeSyncCourseProgress(
+      lc,
+      userId,
+      attendance.status,
+      attendance.joinedAt,
+      attendance.leftAt,
+      attendance,
+    );
+    return { ...attendance, ...this.deriveAttendance(attendance, lc) };
   }
 
   async sendMessage(liveClassId: number, userId: number, dto: LiveChatMessageDto) {
@@ -781,7 +838,13 @@ export class LiveClassesService {
    *  Participantes/Presenças (secções 6/10). `status` explícito (registo
    *  manual) tem sempre prioridade sobre o cálculo automático. */
   private deriveAttendance(
-    a: { joinedAt: Date | null; leftAt: Date | null; status: LiveAttendanceStatus | null },
+    a: {
+      joinedAt: Date | null;
+      leftAt: Date | null;
+      status: LiveAttendanceStatus | null;
+      accumulatedSeconds?: number | null;
+      currentJoinedAt?: Date | null;
+    },
     lc: {
       scheduledAt: Date;
       duration: number;
@@ -789,10 +852,18 @@ export class LiveClassesService {
       lateToleranceMinutes: number;
     },
   ) {
+    // Tempo único = soma de todas as passagens (+ a que está em curso). Registos
+    // manuais/antigos sem acumulado caem no intervalo entrada → saída.
+    const openStint = a.currentJoinedAt
+      ? Math.max(0, Math.floor((Date.now() - a.currentJoinedAt.getTime()) / 1000))
+      : 0;
+    const totalSeconds = (a.accumulatedSeconds ?? 0) + openStint;
     const durationMinutes =
-      a.joinedAt && a.leftAt
-        ? Math.round((a.leftAt.getTime() - a.joinedAt.getTime()) / 60000)
-        : null;
+      totalSeconds > 0
+        ? Math.round(totalSeconds / 60)
+        : a.joinedAt && a.leftAt
+          ? Math.round((a.leftAt.getTime() - a.joinedAt.getTime()) / 60000)
+          : null;
     const attendancePercent =
       durationMinutes !== null && lc.duration > 0
         ? Math.min(100, Math.round((durationMinutes / lc.duration) * 100))
@@ -922,6 +993,8 @@ export class LiveClassesService {
       joinedAt: dto.joinedAt ? new Date(dto.joinedAt) : undefined,
       leftAt: dto.leftAt ? new Date(dto.leftAt) : undefined,
       justification: dto.justification,
+      // Registo manual das horas prevalece sobre o tempo medido
+      ...(dto.joinedAt || dto.leftAt ? { accumulatedSeconds: 0, currentJoinedAt: null } : {}),
     };
     const attendance = existing
       ? await this.prisma.liveAttendance.update({ where: { id: existing.id }, data })
@@ -994,6 +1067,7 @@ export class LiveClassesService {
         joinedAt: dto.joinedAt ? new Date(dto.joinedAt) : undefined,
         leftAt: dto.leftAt ? new Date(dto.leftAt) : undefined,
         justification: dto.justification,
+        ...(dto.joinedAt || dto.leftAt ? { accumulatedSeconds: 0, currentJoinedAt: null } : {}),
       },
     });
     await this.maybeSyncCourseProgress(
@@ -1035,9 +1109,10 @@ export class LiveClassesService {
     status: LiveAttendanceStatus | null,
     joinedAt: Date | null,
     leftAt: Date | null,
+    extra?: { accumulatedSeconds?: number | null; currentJoinedAt?: Date | null },
   ) {
     if (!lc.lessonId) return;
-    const { computedStatus } = this.deriveAttendance({ joinedAt, leftAt, status }, lc);
+    const { computedStatus } = this.deriveAttendance({ joinedAt, leftAt, status, ...extra }, lc);
     if (computedStatus !== 'PRESENTE' && computedStatus !== 'ATRASADO') return;
     try {
       await this.courseCompletion.markLessonComplete(userId, lc.lessonId, {});
@@ -1779,6 +1854,8 @@ export class LiveClassesService {
             liveClassId: true,
             joinedAt: true,
             leftAt: true,
+            accumulatedSeconds: true,
+            currentJoinedAt: true,
             status: true,
             user: {
               select: {

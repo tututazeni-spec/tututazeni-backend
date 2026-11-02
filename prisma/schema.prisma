@@ -7646,6 +7646,11 @@ model LiveAttendance {
   // fica null até ao join real ou ao registo manual de presença.
   joinedAt          DateTime?
   leftAt            DateTime?
+  // Tempo total dentro da aula/sessão somando todas as passagens (entrar →
+  // sair, voltar a entrar…). `currentJoinedAt` é o início da passagem em
+  // curso (null quando está fora); joinedAt guarda só a 1.ª entrada.
+  accumulatedSeconds Int                  @default(0)
+  currentJoinedAt   DateTime?
   // Presente só quando sessionId aponta para uma LiveClassSession de uma
   // aula recorrente; aulas de ocorrência única (a maioria) mantêm-se null
   // — mesmo comportamento de antes desta extensão.
