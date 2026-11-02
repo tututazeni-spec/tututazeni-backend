@@ -26,6 +26,13 @@ export function isExternalInstructor(
   return user?.role?.name === Role.INSTRUCTOR_EXTERNO;
 }
 
+/** Cursos onde o utilizador é instrutor (principal ou co-instrutor): a definição de "meu curso". */
+export function ownCourseWhere(userId: number) {
+  return {
+    OR: [{ primaryInstructorId: userId }, { instructors: { some: { userId } } }],
+  };
+}
+
 /** Id do perfil de instrutor do externo (null se não for externo ou ainda não tiver perfil). */
 export async function ownInstructorProfileId(db: Db, user: ScopeUser): Promise<number | null> {
   if (!isExternalInstructor(user)) return null;
@@ -104,7 +111,7 @@ export async function assertCanManageCourse(
   const found = await db.course.findFirst({
     where: {
       id: courseId,
-      OR: [{ primaryInstructorId: user.id }, { instructors: { some: { userId: user.id } } }],
+      ...ownCourseWhere(user.id),
     },
     select: { id: true },
   });

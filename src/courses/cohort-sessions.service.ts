@@ -8,6 +8,7 @@ import {
 import { CurrentUserData } from '../common/decorators';
 import { AuditService } from '../common/services/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { isExternalInstructor } from '../common/authz/external-scope';
 import {
   AttendancePolicy,
   AttendanceState,
@@ -54,6 +55,13 @@ interface SessionTiming {
  * Acesso: ADMIN/RH ou o formador da turma gerem tudo; o formador de uma sessão
  * concreta só vê e regista presenças nessa sessão. Tudo é validado aqui (API).
  */
+/** Dados do participante visíveis a quem gere a turma: o externo só vê o nome (sem contactos). */
+function participantUserSelect(user: CurrentUserData) {
+  return isExternalInstructor(user)
+    ? { id: true, fullName: true }
+    : { id: true, fullName: true, email: true, employeeNumber: true };
+}
+
 @Injectable()
 export class CohortSessionsService {
   constructor(
@@ -286,9 +294,7 @@ export class CohortSessionsService {
     const [participants, records] = await Promise.all([
       this.prisma.read.courseCohortParticipant.findMany({
         where: { cohortId },
-        include: {
-          user: { select: { id: true, fullName: true, email: true, employeeNumber: true } },
-        },
+        include: { user: { select: participantUserSelect(user) } },
       }),
       this.prisma.read.courseCohortAttendance.findMany({ where: { sessionId } }),
     ]);
@@ -513,9 +519,7 @@ export class CohortSessionsService {
       }),
       this.prisma.read.courseCohortParticipant.findMany({
         where: { cohortId },
-        include: {
-          user: { select: { id: true, fullName: true, email: true, employeeNumber: true } },
-        },
+        include: { user: { select: participantUserSelect(user) } },
       }),
     ]);
     const completed = sessions.filter(s => this.derived(s).status === 'COMPLETED');

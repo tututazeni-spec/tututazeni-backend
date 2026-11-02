@@ -600,10 +600,11 @@ export class CoursesController {
   // ── Turmas (docs/modulo_courses.md secção 5) — cursos presenciais/híbridos ─
 
   @Get(':id/cohorts')
-  @Roles(...AUTHENTICATED_ROLES)
+  @Roles(...AUTHENTICATED_ROLES, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'course', key: 'id' })
   @ApiOperation({ summary: 'Listar turmas de um curso' })
-  listCohorts(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.listCohorts(id);
+  listCohorts(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.listCohorts(id, user);
   }
 
   @Post(':id/cohorts')
