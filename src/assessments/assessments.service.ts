@@ -75,6 +75,7 @@ export class AssessmentsService {
         title: data.title,
         description: data.description,
         imageUrl: data.imageUrl || null,
+        source: data.source ?? null,
         type: data.type,
         status: data.status ?? 'DRAFT',
         courseId: data.courseId,
@@ -251,7 +252,8 @@ export class AssessmentsService {
     if (current.status !== 'DRAFT') {
       throw new ConflictException('Só é possível editar uma avaliação antes de a publicar');
     }
-    const { questions, availableFrom, availableUntil, ...data } = dto;
+    // `source` só se define na criação.
+    const { questions, availableFrom, availableUntil, source: _source, ...data } = dto;
     this.assertValidAvailabilityWindow(availableFrom, availableUntil);
 
     if (questions) {
