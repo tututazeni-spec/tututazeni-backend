@@ -1107,6 +1107,9 @@ model User {
   twoFactorSecret     String?
   passwordResetTokens PasswordResetToken[]
   refreshTokens       RefreshToken[]
+  // Instrutor externo: fim da validade do acesso (null = sem prazo) e convites emitidos
+  accessExpiresAt     DateTime?
+  instructorInvites   InstructorInvite[]
 
   // ─── ROI & Impact ─────────────────────────────────────────────
   createdRoiAnalyses             RoiAnalysis[]
@@ -14685,6 +14688,22 @@ model PasswordResetToken {
   createdAt DateTime  @default(now())
 
   @@index([userId])
+}
+
+model InstructorInvite {
+  id          String    @id @default(uuid())
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email       String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  revokedAt   DateTime?
+  createdById Int?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([email])
 }
 
 model RefreshToken {
