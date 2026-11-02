@@ -5,6 +5,8 @@ const TOKEN = 'a'.repeat(64);
 const future = () => new Date(Date.now() + 3_600_000);
 const past = () => new Date(Date.now() - 3_600_000);
 
+const externalLogin = { registerDevice: jest.fn().mockResolvedValue(undefined) };
+
 function build(inviteOverride: Record<string, unknown> | null = {}, claimCount = 1) {
   const invite =
     inviteOverride === null
@@ -34,6 +36,8 @@ function build(inviteOverride: Record<string, unknown> | null = {}, claimCount =
     {} as never,
     audit as never,
     revocation as never,
+    undefined,
+    externalLogin as never,
   );
   return { svc, prisma, tx, audit, revocation };
 }
@@ -78,5 +82,27 @@ describe('InstructorInvitesService.acceptInvite', () => {
       'Convite inválido ou expirado',
     );
     expect(tx.user.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('InstructorInvitesService.acceptInvite — dispositivo', () => {
+  const DEVICE = '3f0c1b0e-6a5d-4a6e-9a47-2f1d6c1c0a11';
+  beforeEach(() => externalLogin.registerDevice.mockClear());
+
+  it('com deviceId regista o dispositivo como confiável, sem alerta', async () => {
+    const { svc } = build();
+    await svc.acceptInvite(TOKEN, 'Segura@123', DEVICE, { ip: '1.1.1.1', userAgent: 'UA' });
+    expect(externalLogin.registerDevice).toHaveBeenCalledWith(
+      7,
+      DEVICE,
+      { ip: '1.1.1.1', userAgent: 'UA' },
+      false,
+    );
+  });
+
+  it('convite inválido nunca regista dispositivo', async () => {
+    const { svc } = build(null);
+    await expect(svc.acceptInvite(TOKEN, 'Segura@123', DEVICE)).rejects.toThrow();
+    expect(externalLogin.registerDevice).not.toHaveBeenCalled();
   });
 });

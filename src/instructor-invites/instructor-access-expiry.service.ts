@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
-import { INSTRUCTOR_EXTERNO_ROLE, InstructorInvitesService } from './instructor-invites.service';
+import { INSTRUCTOR_EXTERNO_ROLE } from './constants';
+import { InstructorInvitesService } from './instructor-invites.service';
 
 const BATCH = 200;
 const MAX_BATCHES = 50;

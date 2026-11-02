@@ -4,6 +4,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -47,4 +48,11 @@ export class AcceptInstructorInviteDto {
   @MinLength(6)
   @MaxLength(128)
   password!: string;
+
+  @ApiPropertyOptional({
+    description: 'Identificador do dispositivo (UUID v4 guardado no browser)',
+  })
+  @IsOptional()
+  @IsUUID(4)
+  deviceId?: string;
 }

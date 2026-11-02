@@ -1,4 +1,5 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, Req } from '@nestjs/common';
+import type { Request } from 'express';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '../common/decorators/public.decorator';
@@ -17,7 +18,11 @@ export class InstructorInviteAcceptController {
   @Throttle(AUTH_THROTTLE)
   @Post('accept')
   @ApiOperation({ summary: 'Aceitar convite de instrutor externo e definir a palavra-passe' })
-  accept(@Body() dto: AcceptInstructorInviteDto) {
-    return this.svc.acceptInvite(dto.token, dto.password);
+  accept(@Body() dto: AcceptInstructorInviteDto, @Req() req: Request) {
+    const ua = req.headers?.['user-agent'];
+    return this.svc.acceptInvite(dto.token, dto.password, dto.deviceId, {
+      ip: req.ip,
+      userAgent: Array.isArray(ua) ? ua[0] : ua,
+    });
   }
 }
