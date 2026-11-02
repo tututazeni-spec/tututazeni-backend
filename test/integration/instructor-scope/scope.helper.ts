@@ -71,6 +71,10 @@ export async function cleanupScope(prisma: PrismaService, courseTitlePrefix: str
     select: { id: true },
   });
   const ids = users.map(u => u.id);
+  // Matrículas e turmas não têm cascade para o curso: apagar primeiro.
+  await quiet(
+    prisma.enrollment.deleteMany({ where: { course: { title: { startsWith: courseTitlePrefix } } } }),
+  );
   await quiet(
     prisma.course.deleteMany({ where: { title: { startsWith: courseTitlePrefix } } }),
   );

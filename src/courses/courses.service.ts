@@ -13,6 +13,7 @@ import { CacheService } from '../cache/cache.service';
 import { assertLessonFileClean } from '../common/authz/lesson-files';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { isExternalInstructor } from '../common/authz/external-scope';
 import { cohortDays } from './cohort-days';
 import { CertificatesService } from '../certificates/certificates.service';
 import { CourseCompletionService } from '../course-completion/course-completion.service';
@@ -1793,9 +1794,10 @@ export class CoursesService {
     throw new ForbiddenException('Sem acesso a esta turma');
   }
 
-  async listCohorts(courseId: number) {
+  async listCohorts(courseId: number, user?: CurrentUserData) {
     const cohorts = await this.prisma.read.courseCohort.findMany({
-      where: { courseId },
+      // O instrutor externo vê só as turmas que ele dá (num curso seu podem existir de outros).
+      where: { courseId, ...(isExternalInstructor(user) ? { instructorId: user!.id } : {}) },
       include: {
         instructor: { select: { id: true, fullName: true, avatarUrl: true } },
         _count: { select: { participants: true } },
@@ -1859,7 +1861,15 @@ export class CoursesService {
         instructor: { select: { id: true, fullName: true, avatarUrl: true } },
         participants: {
           include: {
-            user: { select: { id: true, fullName: true, avatarUrl: true, email: true } },
+            // O instrutor externo vê o nome, nunca o contacto dos participantes.
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                avatarUrl: true,
+                ...(isExternalInstructor(user) ? {} : { email: true }),
+              },
+            },
           },
           orderBy: { enrolledAt: 'asc' },
         },
