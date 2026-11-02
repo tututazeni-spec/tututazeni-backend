@@ -4,6 +4,7 @@ import request from 'supertest';
 import { AppModule } from '../../../src/app.module';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { MailService } from '../../../src/mail/mail.service';
+import { InstructorAccessExpiryService } from '../../../src/instructor-invites/instructor-access-expiry.service';
 
 const PREFIX = 'inv.test.';
 const quiet = async (p: Promise<unknown>): Promise<void> => {
@@ -213,6 +214,8 @@ describe('Instructor invites Integration', () => {
         .post('/auth/instructor-invite/accept')
         .send({ token: mailed.at(-1)!.token, password: 'Segura@1234' })
         .expect(201);
+      // O iat do JWT tem resolução de 1 s; o JwtStrategy recusa tokens emitidos antes de passwordChangedAt.
+      await new Promise(r => setTimeout(r, 1100));
       const loginRes = await request(app.getHttpServer())
         .post('/auth/login')
         .send({ email, password: 'Segura@1234' })
@@ -222,7 +225,7 @@ describe('Instructor invites Integration', () => {
 
       await prisma.user.update({
         where: { id: created.body.userId },
-        data: { accessExpiresAt: new Date(Date.now() + 1500) },
+        data: { accessExpiresAt: new Date(Date.now() + 4000) },
       });
       // Dentro do prazo (carrega o utilizador para a cache do JwtStrategy).
       await request(app.getHttpServer())
@@ -230,7 +233,7 @@ describe('Instructor invites Integration', () => {
         .set('Authorization', `Bearer ${access}`)
         .expect(200);
 
-      await new Promise(r => setTimeout(r, 1800));
+      await new Promise(r => setTimeout(r, 4300));
       await request(app.getHttpServer())
         .get('/auth/me')
         .set('Authorization', `Bearer ${access}`)
@@ -246,6 +249,54 @@ describe('Instructor invites Integration', () => {
           .set('Authorization', `Bearer ${refresh}`)
           .expect(401);
       }
+    });
+  });
+
+  describe('tarefa de expiração', () => {
+    it('desativa a conta expirada, revoga as sessões e é idempotente', async () => {
+      const email = `${PREFIX}h@innova-test.com`;
+      const created = await invite(adminToken, { email, fullName: 'Hugo Externo' }).expect(201);
+      await request(app.getHttpServer())
+        .post('/auth/instructor-invite/accept')
+        .send({ token: mailed.at(-1)!.token, password: 'Segura@1234' })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email, password: 'Segura@1234' })
+        .expect(201);
+      await prisma.user.update({
+        where: { id: created.body.userId },
+        data: { accessExpiresAt: new Date(Date.now() - 1000) },
+      });
+
+      const job = app.get(InstructorAccessExpiryService);
+      const first = await job.runExpiryJob();
+      expect(first.deactivated).toBeGreaterThanOrEqual(1);
+      const user = await prisma.user.findUnique({ where: { id: created.body.userId } });
+      expect(user).toMatchObject({ active: false, accountStatus: 'INACTIVE' });
+      expect(
+        await prisma.refreshToken.count({
+          where: { userId: created.body.userId, revokedAt: null },
+        }),
+      ).toBe(0);
+
+      const second = await job.runExpiryJob();
+      expect(second.deactivated).toBe(0);
+    });
+
+    it('prolongar uma conta já expirada e desativada reativa-a', async () => {
+      const row = await prisma.user.findUnique({ where: { email: `${PREFIX}h@innova-test.com` } });
+      await request(app.getHttpServer())
+        .patch(`/instructor-invites/users/${row!.id}/extend`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ accessDays: 7 })
+        .expect(200);
+      const after = await prisma.user.findUnique({ where: { id: row!.id } });
+      expect(after).toMatchObject({ active: true, accountStatus: 'ACTIVE' });
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: row!.email, password: 'Segura@1234' })
+        .expect(201);
     });
   });
 });

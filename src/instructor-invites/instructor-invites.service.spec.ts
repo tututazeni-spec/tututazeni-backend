@@ -60,3 +60,41 @@ describe('InstructorInvitesService.create', () => {
     expect(ttlH).toBeLessThan(72.1);
   });
 });
+
+describe('InstructorInvitesService.deactivateUser', () => {
+  function buildDeact(count: number) {
+    const prisma = {
+      user: { updateMany: jest.fn().mockResolvedValue({ count }) },
+      refreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 2 }) },
+    };
+    const audit = { log: jest.fn().mockResolvedValue(undefined) };
+    const revocation = { revokeAllUserSessions: jest.fn().mockResolvedValue(undefined) };
+    const svc = new InstructorInvitesService(
+      prisma as never,
+      {} as never,
+      audit as never,
+      revocation as never,
+    );
+    return { svc, prisma, audit, revocation };
+  }
+
+  it('conta ativa: desativa, revoga sessões e audita uma vez', async () => {
+    const { svc, prisma, audit, revocation } = buildDeact(1);
+    expect(await svc.deactivateUser(7, null, 'EXPIRED')).toBe(true);
+    expect(prisma.user.updateMany.mock.calls[0][0]).toMatchObject({
+      where: { id: 7, active: true },
+      data: { active: false, accountStatus: 'INACTIVE' },
+    });
+    expect(revocation.revokeAllUserSessions).toHaveBeenCalledWith(7);
+    expect(audit.log).toHaveBeenCalledTimes(1);
+    expect(audit.log.mock.calls[0][0]).toMatchObject({ action: 'INSTRUCTOR_ACCESS_EXPIRED' });
+  });
+
+  it('conta já desativada (segunda execução): não revoga nem audita outra vez', async () => {
+    const { svc, prisma, audit, revocation } = buildDeact(0);
+    expect(await svc.deactivateUser(7, null, 'EXPIRED')).toBe(false);
+    expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+    expect(revocation.revokeAllUserSessions).not.toHaveBeenCalled();
+    expect(audit.log).not.toHaveBeenCalled();
+  });
+});
