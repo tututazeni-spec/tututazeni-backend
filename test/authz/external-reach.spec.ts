@@ -24,6 +24,22 @@ describe('alcance do instrutor externo', () => {
     expect(leaked).toEqual([]);
   }, 300_000);
 
+  it('todo o handler de módulos/lições a que o externo chega valida a posse do curso', () => {
+    // Exceções explícitas: listagem filtrada no serviço (findAll) e turmas (âmbito por instructorId).
+    const unscoped = inv
+      .filter(
+        h =>
+          reach.includes(`${h.file}#${h.handler}`) &&
+          (h.file === 'course-modules/course-modules.controller.ts' ||
+            h.file === 'courses/courses.controller.ts') &&
+          h.handler !== 'findAll' &&
+          !/cohort/i.test(h.handler) &&
+          !h.externalCourseScope,
+      )
+      .map(h => `${h.file}#${h.handler}`);
+    expect(unscoped).toEqual([]);
+  }, 300_000);
+
   it('o externo nunca alcança endpoints de administração (utilizadores, definições, auditoria, pagamentos)', () => {
     const sensitive =
       /^(users\/(?!users\.controller\.ts#(me|updateMyProfile|setMyAvatar|removeMyAvatar|changePassword)$)|settings\/|audit\/|payroll\/|roles-permissions\/|acl\/|billing\/|leave-management\/|career\/|development-plans\/|evaluation360\/|crm-)/;

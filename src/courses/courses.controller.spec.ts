@@ -5,6 +5,7 @@ import { CohortsExportService } from './cohorts-export.service';
 import { CohortSessionsService } from './cohort-sessions.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { ExternalCourseScopeGuard } from '../common/authz/external-course-scope.guard';
 
 const mockSvc = {
   findAll: jest.fn().mockResolvedValue({ data: [], total: 0 }),
@@ -62,14 +63,30 @@ describe('CoursesController', () => {
       .useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard)
       .useValue({ canActivate: () => true })
+      .overrideGuard(ExternalCourseScopeGuard)
+      .useValue({ canActivate: () => true })
       .compile();
     controller = module.get<CoursesController>(CoursesController);
   });
 
   it('findAll → findAll(filters)', async () => {
     const filters = {} as any;
-    await controller.findAll(filters);
+    await controller.findAll(filters, { id: 1, role: { name: 'ADMIN' } } as never);
     expect(mockSvc.findAll).toHaveBeenCalledWith(filters);
+  });
+
+  it('findAll → o instrutor externo só recebe o catálogo dos seus cursos', async () => {
+    const filters = { page: 1 } as never;
+    mockSvc.findAll.mockClear();
+    (mockSvc as Record<string, jest.Mock>).findAllForExternal = jest
+      .fn()
+      .mockResolvedValue({ data: [], total: 0 });
+    await controller.findAll(filters, { id: 9, role: { name: 'INSTRUCTOR_EXTERNO' } } as never);
+    expect((mockSvc as Record<string, jest.Mock>).findAllForExternal).toHaveBeenCalledWith(
+      9,
+      filters,
+    );
+    expect(mockSvc.findAll).not.toHaveBeenCalled();
   });
 
   it('categories → getCategories', async () => {
