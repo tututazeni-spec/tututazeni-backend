@@ -122,12 +122,9 @@ export class ContentLibraryController {
   @UploadThrottle()
   @Post()
   @Roles(...AUTHOR_ROLES)
-  @ApiOperation({ summary: 'Criar novo conteúdo (ADMIN/RH publicam logo; INSTRUCTOR vai para DRAFT)' })
+  @ApiOperation({ summary: 'Criar novo conteúdo (fica ACTIVE logo)' })
   create(@CurrentUser() user: CurrentUserData, @Body() dto: CreateContentDto) {
-    // ADMIN/RH publicam directamente (aparecem logo no catálogo e na pesquisa);
-    // INSTRUCTOR cria em DRAFT e aguarda publicação.
-    const autoPublish = ADMIN_ROLES.some(r => r === user.role?.name);
-    return this.svc.create(user.id, dto, autoPublish);
+    return this.svc.create(user.id, dto);
   }
 
   @UploadThrottle()

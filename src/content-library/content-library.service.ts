@@ -138,6 +138,43 @@ export class ContentLibraryService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * IDs de conteúdos cujo título, descrição ou tags contêm qualquer palavra da
+   * pesquisa, sem distinguir maiúsculas nem acentos. Usa translate() (não
+   * requer a extensão unaccent). Falha em silêncio: a pesquisa normal continua.
+   */
+  private async searchIdsIgnoringAccents(search: string): Promise<number[]> {
+    const fold = (s: string) =>
+      s
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .toLowerCase();
+    const words = search
+      .split(/\s+/)
+      .map(t => fold(t.trim()))
+      .filter(t => t.length >= 2);
+    if (words.length === 0) return [];
+    const patterns = words.map(w => `%${w.replace(/[\\%_]/g, '\\$&')}%`);
+    const FROM = 'áàâãäéèêëíìîïóòôõöúùûüçñ';
+    const TO = 'aaaaaeeeeiiiiooooouuuucn';
+    try {
+      const rows = await this.prisma.read.$queryRaw<{ id: number }[]>`
+        SELECT id FROM "ContentAsset"
+        WHERE translate(lower(title), ${FROM}, ${TO}) LIKE ANY(${patterns}::text[])
+           OR translate(lower(coalesce(description, '')), ${FROM}, ${TO}) LIKE ANY(${patterns}::text[])
+           OR translate(lower(array_to_string(tags, ' ')), ${FROM}, ${TO}) LIKE ANY(${patterns}::text[])
+        LIMIT 5000`;
+      return rows.map(r => Number(r.id));
+    } catch (e) {
+      this.logger.warn({
+        action: 'findAll.accentSearch',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha na pesquisa sem acentos; a usar apenas a pesquisa normal',
+      });
+      return [];
+    }
+  }
+
   // ══════════════════════════════════════════════════════
   // CATALOGUE — SEARCH & BROWSE
   // ══════════════════════════════════════════════════════
@@ -146,6 +183,11 @@ export class ContentLibraryService {
     const { page = 1, limit = 20 } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const where = buildWhereFromFilters(filters);
+    if (filters.search) {
+      // `contains` do Prisma não ignora acentos ("incendio" ≠ "incêndio").
+      const ids = await this.searchIdsIgnoringAccents(filters.search);
+      if (ids.length > 0) where.OR = [...(where.OR ?? []), { id: { in: ids } }];
+    }
     const orderBy = buildOrderBy(filters.sortBy);
 
     const [data, total] = await Promise.all([
@@ -272,7 +314,7 @@ export class ContentLibraryService {
     };
   }
 
-  async create(createdById: number, dto: CreateContentDto, autoPublish = false) {
+  async create(createdById: number, dto: CreateContentDto) {
     const asset = await this.prisma.contentAsset.create({
       data: {
         title: dto.title,
@@ -293,7 +335,7 @@ export class ContentLibraryService {
         ...(dto.tags && { tags: dto.tags }),
         ...(dto.externalSource && { externalSource: dto.externalSource }),
         createdById,
-        status: autoPublish ? ContentStatus.ACTIVE : ContentStatus.DRAFT,
+        status: ContentStatus.ACTIVE,
       },
     });
 
@@ -302,9 +344,7 @@ export class ContentLibraryService {
         data: {
           userId: createdById,
           type: 'CONTENT_CREATED',
-          message: autoPublish
-            ? `Conteúdo "${dto.title}" publicado`
-            : `Conteúdo "${dto.title}" criado e aguarda revisão`,
+          message: `Conteúdo "${dto.title}" publicado`,
           metadata: JSON.stringify({}),
         },
       })
