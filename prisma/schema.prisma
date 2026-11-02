@@ -9929,7 +9929,7 @@ model ContentAsset {
   version          String             @default("1.0")
   active           Boolean            @default(true)
   createdAt        DateTime           @default(now())
-  status           ContentAssetStatus @default(DRAFT)
+  status           ContentAssetStatus @default(ACTIVE)
   createdById      Int?
   thumbnailUrl     String?
   author           String?
