@@ -14,6 +14,7 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  ForbiddenException,
   Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
@@ -59,7 +60,7 @@ import {
 } from './courses.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { isExternalInstructor } from '../common/authz/external-scope';
+import { isExternalInstructor, omitForExternal } from '../common/authz/external-scope';
 import {
   ExternalCourseScope,
   ExternalCourseScopeGuard,
@@ -160,7 +161,7 @@ export class CoursesController {
     const course = await this.svc.findOne(id);
     if (isExternalInstructor(user)) {
       // Sem cursos relacionados nem percursos: apontariam para cursos que não são seus.
-      const { relatedCourses: _r, learningPaths: _l, ...own } = course;
+      const { relatedCourses: _r, learningPaths: _l, audienceGroups: _a, ...own } = course;
       return own;
     }
     // PDFs das aulas só vão por inteiro a quem gere conteúdos; o aluno usa /lessons/:id/file.
@@ -315,8 +316,13 @@ export class CoursesController {
   @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
   @ExternalCourseScope({ kind: 'course', key: 'id' })
   @ApiOperation({ summary: 'Criar módulo no curso' })
-  createModule(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateCourseModuleDto) {
-    return this.svc.createModule(id, dto);
+  createModule(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateCourseModuleDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    // Competências do módulo ficam fechadas ao externo.
+    return this.svc.createModule(id, omitForExternal(user, dto, ['competencyIds']));
   }
 
   @Put(':id/modules/:moduleId')
@@ -327,8 +333,9 @@ export class CoursesController {
     @Param('id', ParseIntPipe) id: number,
     @Param('moduleId', ParseIntPipe) moduleId: number,
     @Body() dto: UpdateCourseModuleDto,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.updateModule(id, moduleId, dto);
+    return this.svc.updateModule(id, moduleId, omitForExternal(user, dto, ['competencyIds']));
   }
 
   @Patch(':id/modules/reorder')
@@ -675,7 +682,8 @@ export class CoursesController {
     @Body() dto: UpdateCourseCohortDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.updateCohort(cohortId, dto, user);
+    // A turma não passa para outro instrutor pela mão do externo.
+    return this.svc.updateCohort(cohortId, omitForExternal(user, dto, ['instructorId']), user);
   }
 
   @Patch('cohorts/:cohortId/close')
@@ -707,6 +715,12 @@ export class CoursesController {
     @Body() dto: AddCohortParticipantsDto,
     @CurrentUser() user: CurrentUserData,
   ) {
+    if (isExternalInstructor(user) && dto.departmentIds?.length) {
+      // Departamentos inteiros é gestão de pessoas (ADMIN/RH): o externo adiciona pessoas uma a uma.
+      throw new ForbiddenException(
+        'Apenas é possível adicionar participantes indicados individualmente',
+      );
+    }
     return this.svc.addCohortParticipants(cohortId, dto, user);
   }
 
@@ -796,7 +810,11 @@ export class CoursesController {
     @Body() dto: CreateCohortSessionDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.sessions.createSession(cohortId, dto, user);
+    return this.sessions.createSession(
+      cohortId,
+      omitForExternal(user, dto, ['instructorId']),
+      user,
+    );
   }
 
   @Patch('cohorts/:cohortId/sessions/:sessionId')
@@ -808,7 +826,12 @@ export class CoursesController {
     @Body() dto: UpdateCohortSessionDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.sessions.updateSession(cohortId, sessionId, dto, user);
+    return this.sessions.updateSession(
+      cohortId,
+      sessionId,
+      omitForExternal(user, dto, ['instructorId']),
+      user,
+    );
   }
 
   @Post('cohorts/:cohortId/sessions/:sessionId/cancel')

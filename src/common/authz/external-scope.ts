@@ -33,6 +33,22 @@ export function ownCourseWhere(userId: number) {
   };
 }
 
+/**
+ * Retira do corpo os campos que o instrutor externo não pode definir (ids que apontariam para
+ * fora do seu âmbito, URLs de gravação, competências…). Para os restantes papéis devolve o
+ * corpo intacto. Mass-assignment: a guarda valida o id da ROTA, não o que vem no corpo.
+ */
+export function omitForExternal<T extends object, K extends string>(
+  user: { role?: { name?: string | null } | null } | null | undefined,
+  dto: T,
+  keys: readonly K[],
+): T {
+  if (!isExternalInstructor(user)) return dto;
+  const copy: Record<string, unknown> = { ...(dto as Record<string, unknown>) };
+  for (const key of keys) delete copy[key];
+  return copy as T;
+}
+
 /** Id do perfil de instrutor do externo (null se não for externo ou ainda não tiver perfil). */
 export async function ownInstructorProfileId(db: Db, user: ScopeUser): Promise<number | null> {
   if (!isExternalInstructor(user)) return null;

@@ -35,6 +35,7 @@ import {
 } from './live-classes.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { omitForExternal } from '../common/authz/external-scope';
 import {
   ExternalLiveClassScope,
   ExternalLiveClassScopeGuard,
@@ -42,6 +43,14 @@ import {
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 import { parseDateQuery } from '../common/helpers/parse-date-query';
+
+/** Campos de uma sessão que o instrutor externo não define: quem a dá, gravação e biblioteca. */
+const EXTERNAL_SESSION_BLOCKED = [
+  'instructorId',
+  'recordingUrl',
+  'recordingPublishedAt',
+  'materialDocumentIds',
+] as const;
 
 @ApiTags('Live Classes')
 @ApiBearerAuth()
@@ -335,16 +344,24 @@ export class LiveClassesController {
   @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
   @ExternalLiveClassScope({ key: 'id' })
   @ApiOperation({ summary: 'Adicionar sessão à aula' })
-  createSession(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateLiveClassSessionDto) {
-    return this.svc.createSession(id, dto);
+  createSession(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateLiveClassSessionDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.createSession(id, omitForExternal(user, dto, EXTERNAL_SESSION_BLOCKED));
   }
 
   @Post(':id/materials')
   @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
   @ExternalLiveClassScope({ key: 'id' })
   @ApiOperation({ summary: 'Associar material da Biblioteca à aula (secção 11)' })
-  addMaterial(@Param('id', ParseIntPipe) id: number, @Body() dto: AddMaterialDto) {
-    return this.svc.addClassMaterial(id, dto.documentId);
+  addMaterial(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AddMaterialDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.addClassMaterial(id, dto.documentId, user);
   }
 
   @Post(':id/sessions/:sessionId/materials')
@@ -355,8 +372,9 @@ export class LiveClassesController {
     @Param('id', ParseIntPipe) id: number,
     @Param('sessionId', ParseIntPipe) sessionId: number,
     @Body() dto: AddMaterialDto,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.addSessionMaterial(id, sessionId, dto.documentId);
+    return this.svc.addSessionMaterial(id, sessionId, dto.documentId, user);
   }
 
   @Post(':id/attendance')
@@ -417,8 +435,12 @@ export class LiveClassesController {
   @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
   @ExternalLiveClassScope({ key: 'id' })
   @ApiOperation({ summary: 'Atualizar aula' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateLiveClassDto) {
-    return this.svc.update(id, dto);
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateLiveClassDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.update(id, dto, user);
   }
 
   @Put(':id/sessions/:sessionId')
@@ -429,8 +451,13 @@ export class LiveClassesController {
     @Param('id', ParseIntPipe) id: number,
     @Param('sessionId', ParseIntPipe) sessionId: number,
     @Body() dto: UpdateLiveClassSessionDto,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.updateSession(id, sessionId, dto);
+    return this.svc.updateSession(
+      id,
+      sessionId,
+      omitForExternal(user, dto, EXTERNAL_SESSION_BLOCKED),
+    );
   }
 
   @Put(':id/attendance/:attendanceId')

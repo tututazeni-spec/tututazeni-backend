@@ -328,6 +328,12 @@ export class CourseModulesService {
   }
 
   async reorderLessons(moduleId: number, order: Array<{ id: number; seq: number }>) {
+    // Cada aula tem de ser deste módulo: o guard valida o módulo da rota, não os ids do corpo.
+    const wanted = new Set(order.map(o => o.id));
+    const own = await this.prisma.lesson.count({ where: { id: { in: [...wanted] }, moduleId } });
+    if (own !== wanted.size) {
+      throw new BadRequestException('Há aulas que não pertencem a este módulo');
+    }
     await Promise.all(
       order.map(({ id, seq }) => this.prisma.lesson.update({ where: { id }, data: { seq } })),
     );
