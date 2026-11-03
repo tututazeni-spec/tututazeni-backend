@@ -14,8 +14,11 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-  Header,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import { safeDownloadHeaders } from '../common/files/safe-download';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TrainingPlanService } from './training-plan.service';
 import {
@@ -71,11 +74,22 @@ export class TrainingPlanController {
 
   @Get(':id/export')
   @Roles(...CAN_MANAGE_PLANS)
-  @Header('Content-Type', 'text/csv')
-  @Header('Content-Disposition', 'attachment; filename="plano-formacao.csv"')
-  @ApiOperation({ summary: 'Exportar formações do plano como CSV' })
-  export(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.exportCsv(id);
+  @ApiOperation({ summary: 'Exportar plano de formação em CSV (por defeito) ou PDF (?format=pdf)' })
+  async export(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('format') format: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    if (format?.toLowerCase() === 'pdf') {
+      const pdf = await this.svc.exportPdf(id);
+      res.set(
+        safeDownloadHeaders({ filename: `plano-formacao-${id}.pdf`, mime: 'application/pdf' }),
+      );
+      return new StreamableFile(pdf);
+    }
+    const csv = await this.svc.exportCsv(id);
+    res.set(safeDownloadHeaders({ filename: 'plano-formacao.csv', mime: 'text/csv' }));
+    return csv;
   }
 
   @UploadThrottle()
