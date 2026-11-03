@@ -24,8 +24,33 @@ import {
 } from './enrollments.dto';
 import { assertCanAccess, isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
+import {
+  assertCanManageCourse,
+  isExternalInstructor,
+  ownCourseWhere,
+} from '../common/authz/external-scope';
 import { CurrentUserData } from '../common/decorators';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+
+/**
+ * O instrutor externo vê nome e progresso dos inscritos, nunca contactos, departamento ou
+ * certificados (decisão do produto: dados pessoais só para RH/gestão).
+ */
+function redactForExternal<T extends { user?: unknown }>(row: T): T {
+  const u = row.user as { id?: number; fullName?: string; avatarUrl?: string | null } | undefined;
+  const {
+    certificate: _c,
+    certificates: _cs,
+    ...rest
+  } = row as T & {
+    certificate?: unknown;
+    certificates?: unknown;
+  };
+  return {
+    ...rest,
+    user: u ? { id: u.id, fullName: u.fullName, avatarUrl: u.avatarUrl } : u,
+  } as T;
+}
 
 const ENROLLMENT_INCLUDE_BASIC = {
   user: {
@@ -137,7 +162,22 @@ export class EnrollmentsService {
 
   // ─── LISTAGEM ADMIN ───────────────────────────────────────────────────────
 
+  /** IDs dos cursos onde o instrutor externo é instrutor (principal ou co-instrutor). */
+  private async externalCourseIds(userId: number): Promise<number[]> {
+    const courses = await this.prisma.read.course.findMany({
+      where: { deletedAt: null, ...ownCourseWhere(userId) },
+      select: { id: true },
+    });
+    return courses.map(c => c.id);
+  }
+
   async findAll(filters: EnrollmentFilterDto, requestingUser?: CurrentUserData) {
+    const result = await this.findAllScoped(filters, requestingUser);
+    if (!isExternalInstructor(requestingUser)) return result;
+    return { ...result, data: result.data.map(redactForExternal) };
+  }
+
+  private async findAllScoped(filters: EnrollmentFilterDto, requestingUser?: CurrentUserData) {
     const {
       page = 1,
       limit = 20,
@@ -160,7 +200,8 @@ export class EnrollmentsService {
     where.status = status ? status : { not: 'CANCELLED' };
     if (origin) where.origin = origin;
     if (mandatory !== undefined) where.mandatory = mandatory;
-    if (departmentId || unitId) {
+    // O externo não filtra por departamento/unidade (denunciaria a que departamento pertence cada inscrito).
+    if ((departmentId || unitId) && !isExternalInstructor(requestingUser)) {
       where.user = { ...(departmentId ? { departmentId } : {}), ...(unitId ? { unitId } : {}) };
     }
     if (overdue) {
@@ -172,7 +213,8 @@ export class EnrollmentsService {
     // aberto a GESTOR, não tinha filtro nenhum e devolvia a empresa toda.
     // Mesma classe de lacuna documentada no CLAUDE.md ("Verificação de
     // ownership não é garantidamente exaustiva") — confirmar por método.
-    if (requestingUser && !isPrivileged(requestingUser, [Role.ADMIN, Role.RH])) {
+    const external = isExternalInstructor(requestingUser);
+    if (requestingUser && !external && !isPrivileged(requestingUser, [Role.ADMIN, Role.RH])) {
       const subordinates = await this.prisma.read.user.findMany({
         where: { managerId: requestingUser.id },
         select: { id: true },
@@ -187,6 +229,14 @@ export class EnrollmentsService {
       // ver o próprio departamento, nunca escolher outro.
       const ownDeptId = await this.getOwnDepartmentId(requestingUser!.id);
       where.user = { departmentId: ownDeptId ?? -1 };
+    } else if (external) {
+      // Instrutor externo: só inscritos dos cursos onde é instrutor. Curso alheio → 404.
+      const own = await this.externalCourseIds(requestingUser!.id);
+      if (courseId !== undefined && courseId !== null) {
+        if (!own.includes(Number(courseId))) throw new NotFoundException('Recurso não encontrado');
+      } else {
+        where.courseId = { in: own.length ? own : [-1] };
+      }
     } else if (roleName === Role.INSTRUCTOR) {
       if (!courseId) {
         throw new BadRequestException('Selecione primeiro um curso para ver os matriculados');
@@ -290,6 +340,22 @@ export class EnrollmentsService {
       );
     }
 
+    if (isExternalInstructor(user)) {
+      const courseIds = await this.externalCourseIds(user.id);
+      return Promise.all(
+        courseIds.map(async courseId => {
+          const [course, enrollments] = await Promise.all([
+            this.prisma.read.course.findUnique({
+              where: { id: courseId },
+              select: { id: true, title: true, thumbnailUrl: true, category: true, status: true },
+            }),
+            this.prisma.read.enrollment.count({ where: { courseId } }),
+          ]);
+          return { ...course, enrollments };
+        }),
+      );
+    }
+
     if (roleName === Role.INSTRUCTOR) {
       const courseIds = await this.instructorCourseIds(user.id);
       return Promise.all(
@@ -346,15 +412,20 @@ export class EnrollmentsService {
     });
     // Ownership (A3): dono OU ADMIN/RH/GESTOR; senão 404.
     // Quando chamado sem user (contexto interno de confiança), não filtra.
-    if (user) assertCanAccess(e, e?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+    // Instrutor externo: só matrículas de cursos onde é instrutor (404 caso contrário).
+    if (user && isExternalInstructor(user)) {
+      if (!e) throw new NotFoundException('Matrícula não encontrada');
+      await assertCanManageCourse(this.prisma, user, e.courseId);
+    } else if (user) assertCanAccess(e, e?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     else if (!e) throw new NotFoundException('Matrícula não encontrada');
 
     const prog = await this.computeProgress(id, e.courseId, e.userId, opts);
-    return {
+    const detail = {
       ...withCurrentCertificate(e),
       ...prog,
       isOverdue: this.isOverdue(e.deadline, e.status),
     };
+    return user && isExternalInstructor(user) ? redactForExternal(detail) : detail;
   }
 
   // ─── MATRICULAR ───────────────────────────────────────────────────────────

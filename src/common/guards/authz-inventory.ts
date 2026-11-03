@@ -3,7 +3,13 @@ import { readdirSync, statSync } from 'fs';
 import { join, sep } from 'path';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
-import { AUTHENTICATED_ONLY_KEY, PERMISSION_KEY } from '../decorators/authz.decorators';
+import { EXTERNAL_COURSE_SCOPE_KEY } from '../authz/external-course-scope.guard';
+import { EXTERNAL_LIVE_CLASS_SCOPE_KEY } from '../authz/external-live-class-scope.guard';
+import {
+  ALLOW_EXTERNAL_KEY,
+  AUTHENTICATED_ONLY_KEY,
+  PERMISSION_KEY,
+} from '../decorators/authz.decorators';
 
 export interface HandlerPolicy {
   controller: string;
@@ -13,6 +19,12 @@ export interface HandlerPolicy {
   policy: 'roles' | 'public' | 'authenticated' | 'permission' | 'none';
   /** Papéis de @Roles (handler tem prioridade sobre a classe); vazio se a política não é 'roles'. */
   roles: string[];
+  /** Handler marcado com @AllowExternal() (o instrutor externo passa em @AnyAuthenticated). */
+  allowExternal: boolean;
+  /** Handler com @ExternalCourseScope(...) (posse do curso validada para o instrutor externo). */
+  externalCourseScope: boolean;
+  /** Handler com @ExternalLiveClassScope(...) (posse da aula validada para o instrutor externo). */
+  externalLiveClassScope: boolean;
 }
 
 const HTTP_METHOD_KEY = 'method'; // METHOD_METADATA do @nestjs/common
@@ -66,9 +78,30 @@ export function collectAuthzInventory(srcDir: string): HandlerPolicy[] {
             .join('/'),
           policy: policyOf(exported, handler),
           roles: rolesOf(exported, handler),
+          externalCourseScope: !!Reflect.getMetadata(EXTERNAL_COURSE_SCOPE_KEY, handler),
+          externalLiveClassScope: !!Reflect.getMetadata(EXTERNAL_LIVE_CLASS_SCOPE_KEY, handler),
+          allowExternal: !!(
+            Reflect.getMetadata(ALLOW_EXTERNAL_KEY, handler) ??
+            Reflect.getMetadata(ALLOW_EXTERNAL_KEY, exported)
+          ),
         });
       }
     }
   }
   return result;
+}
+
+/**
+ * Handlers a que o instrutor externo chega: os que o listam em @Roles(...) ou que são
+ * @AnyAuthenticated + @AllowExternal. (Os @Public abrem a toda a gente e ficam de fora.)
+ */
+export function externalReach(inv: HandlerPolicy[]): string[] {
+  return inv
+    .filter(
+      h =>
+        (h.policy === 'roles' && h.roles.includes('INSTRUCTOR_EXTERNO')) ||
+        (h.policy === 'authenticated' && h.allowExternal),
+    )
+    .map(h => `${h.file}#${h.handler}`)
+    .sort();
 }

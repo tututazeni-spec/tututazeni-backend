@@ -1,4 +1,4 @@
-import { AnyAuthenticated } from '../common/decorators/authz.decorators';
+import { AnyAuthenticated, AllowExternal } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -30,6 +30,11 @@ import {
 } from './course-modules.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { omitForExternal } from '../common/authz/external-scope';
+import {
+  ExternalCourseScope,
+  ExternalCourseScopeGuard,
+} from '../common/authz/external-course-scope.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 import { canManageLessonContent, redactModuleFiles } from '../common/authz/lesson-files';
@@ -37,7 +42,7 @@ import { canManageLessonContent, redactModuleFiles } from '../common/authz/lesso
 import { UploadThrottle } from '../common/security/upload-throttle';
 @ApiTags('Course Modules & Lessons')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ExternalCourseScopeGuard)
 @Controller()
 export class CourseModulesController {
   constructor(private readonly svc: CourseModulesService) {}
@@ -45,7 +50,8 @@ export class CourseModulesController {
   // ── Módulos ────────────────────────────────────────────────────────────────
 
   @Post('modules')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'course', key: 'courseId', from: 'body' })
   @ApiOperation({ summary: 'Criar módulo num curso' })
   createModule(@Body() dto: CreateModuleDto) {
     return this.svc.createModule(dto);
@@ -54,6 +60,8 @@ export class CourseModulesController {
   @Get('modules/:id')
   @ApiOperation({ summary: 'Detalhe do módulo (aulas + materiais)' })
   @AnyAuthenticated()
+  @AllowExternal()
+  @ExternalCourseScope({ kind: 'module', key: 'id' })
   async findModule(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     const mod = await this.svc.findModuleOrFail(id);
     // Os PDFs inline só vão por inteiro a quem gere conteúdos.
@@ -68,14 +76,21 @@ export class CourseModulesController {
   }
 
   @Put('modules/:id')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'module', key: 'id' })
   @ApiOperation({ summary: 'Actualizar módulo' })
-  updateModule(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateModuleDto) {
-    return this.svc.updateModule(id, dto);
+  updateModule(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateModuleDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    // O externo não muda o curso de um módulo (mover conteúdo para outro curso é ADMIN/RH).
+    return this.svc.updateModule(id, omitForExternal(user, dto, ['courseId']));
   }
 
   @Patch('modules/:id/publish')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'module', key: 'id' })
   @ApiOperation({ summary: 'Publicar módulo (DRAFT → PUBLISHED)' })
   @HttpCode(HttpStatus.OK)
   publishModule(@Param('id', ParseIntPipe) id: number) {
@@ -83,7 +98,8 @@ export class CourseModulesController {
   }
 
   @Patch('modules/reorder/:courseId')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'course', key: 'courseId' })
   @ApiOperation({ summary: 'Reordenar módulos de um curso (drag & drop)' })
   @HttpCode(HttpStatus.OK)
   reorderModules(
@@ -101,7 +117,8 @@ export class CourseModulesController {
   }
 
   @Delete('modules/:id')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'module', key: 'id' })
   @ApiOperation({ summary: 'Eliminar módulo (bloqueia se há progresso activo)' })
   deleteModule(@Param('id', ParseIntPipe) id: number) {
     return this.svc.deleteModule(id);
@@ -110,14 +127,16 @@ export class CourseModulesController {
   // ── Materiais complementares ───────────────────────────────────────────────
 
   @Post('modules/:id/materials')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'module', key: 'id' })
   @ApiOperation({ summary: 'Adicionar material complementar ao módulo' })
   addMaterial(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateModuleMaterialDto) {
     return this.svc.addMaterial(id, dto);
   }
 
   @Delete('modules/materials/:materialId')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'moduleMaterial', key: 'materialId' })
   @ApiOperation({ summary: 'Remover material complementar' })
   removeMaterial(@Param('materialId', ParseIntPipe) materialId: number) {
     return this.svc.removeMaterial(materialId);
@@ -127,7 +146,8 @@ export class CourseModulesController {
 
   @UploadThrottle()
   @Post('lessons')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'module', key: 'moduleId', from: 'body' })
   @ApiOperation({ summary: 'Criar aula num módulo' })
   createLesson(@Body() dto: CreateModuleLessonDto) {
     return this.svc.createLesson(dto);
@@ -135,14 +155,24 @@ export class CourseModulesController {
 
   @UploadThrottle()
   @Put('lessons/:id')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'lesson', key: 'id' })
   @ApiOperation({ summary: 'Actualizar aula' })
-  updateLesson(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateModuleLessonDto) {
-    return this.svc.updateLesson(id, dto);
+  updateLesson(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateModuleLessonDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    // Mover aula entre módulos só por PATCH lessons/:id/move (que valida os dois lados).
+    return this.svc.updateLesson(id, omitForExternal(user, dto, ['moduleId']));
   }
 
   @Patch('lessons/:id/move')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope(
+    { kind: 'lesson', key: 'id' },
+    { kind: 'module', key: 'targetModuleId', from: 'body' },
+  )
   @ApiOperation({ summary: 'Mover aula para outro módulo' })
   @HttpCode(HttpStatus.OK)
   moveLesson(@Param('id', ParseIntPipe) id: number, @Body() dto: MoveLessonDto) {
@@ -150,7 +180,8 @@ export class CourseModulesController {
   }
 
   @Patch('lessons/reorder/:moduleId')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'module', key: 'moduleId' })
   @ApiOperation({ summary: 'Reordenar aulas de um módulo (drag & drop)' })
   @HttpCode(HttpStatus.OK)
   reorderLessons(
@@ -161,7 +192,8 @@ export class CourseModulesController {
   }
 
   @Delete('lessons/:id')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'lesson', key: 'id' })
   @ApiOperation({ summary: 'Eliminar aula' })
   deleteLesson(@Param('id', ParseIntPipe) id: number) {
     return this.svc.deleteLesson(id);
@@ -182,6 +214,8 @@ export class CourseModulesController {
     summary: 'PDF da aula (valida matrícula/publicação/drip; gestores de conteúdos sempre)',
   })
   @AnyAuthenticated()
+  @AllowExternal()
+  @ExternalCourseScope({ kind: 'lesson', key: 'id' })
   async getLessonFile(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: CurrentUserData,
@@ -203,6 +237,8 @@ export class CourseModulesController {
     summary: 'Áudio da aula gerado por text-to-speech (proxy — chave fica no backend)',
   })
   @AnyAuthenticated()
+  @AllowExternal()
+  @ExternalCourseScope({ kind: 'lesson', key: 'id' })
   async getLessonAudio(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: CurrentUserData,

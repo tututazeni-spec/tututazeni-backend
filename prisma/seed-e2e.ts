@@ -33,6 +33,7 @@ async function main() {
     { code: 'DIRECTOR', name: 'DIRECTOR' },
     { code: 'AUDITOR', name: 'AUDITOR' },
     { code: 'INSTRUCTOR', name: 'INSTRUCTOR' },
+    { code: 'INSTRUCTOR_EXTERNO', name: 'INSTRUCTOR_EXTERNO' },
   ];
   const roleRecords: Record<string, any> = {};
 

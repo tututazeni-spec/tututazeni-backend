@@ -118,6 +118,17 @@ describe('JwtStrategy', () => {
       ).resolves.toBeDefined();
     });
 
+    it('conta com prazo expirado é recusada mesmo com o utilizador em cache', async () => {
+      const soon = new Date(Date.now() + 50);
+      mockPrisma.user.findUnique.mockResolvedValue({ ...baseUser, accessExpiresAt: soon });
+      await strategy.validate({ sub: 1, email: 'user@innova.com' });
+      await new Promise(r => setTimeout(r, 80));
+      await expect(strategy.validate({ sub: 1, email: 'user@innova.com' })).rejects.toThrow(
+        'Acesso expirado',
+      );
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledTimes(1); // veio da cache
+    });
+
     it('utilizador marcado como stale recarrega da BD (mudança de papel/desativação imediata)', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(baseUser);
       await strategy.validate({ sub: 1, email: 'user@innova.com' });

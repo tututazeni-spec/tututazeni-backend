@@ -13,6 +13,7 @@ import { CacheService } from '../cache/cache.service';
 import { assertLessonFileClean } from '../common/authz/lesson-files';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { isExternalInstructor } from '../common/authz/external-scope';
 import { cohortDays } from './cohort-days';
 import { CertificatesService } from '../certificates/certificates.service';
 import { CourseCompletionService } from '../course-completion/course-completion.service';
@@ -141,6 +142,16 @@ export class CoursesService {
 
   // ─── Catálogo ─────────────────────────────────────────────────────────────
 
+  /**
+   * Catálogo do instrutor externo: só os cursos onde é instrutor (principal ou co-instrutor),
+   * em qualquer estado (inclui rascunhos que está a escrever). Nunca vai à cache partilhada.
+   */
+  async findAllForExternal(userId: number, filters: CourseFilterDto) {
+    return this.loadCatalog(filters, {
+      OR: [{ primaryInstructorId: userId }, { instructors: { some: { userId } } }],
+    });
+  }
+
   async findAll(filters: CourseFilterDto) {
     const cache = this.cache;
     if (!cache || !isCatalogCacheable(filters)) return this.loadCatalog(filters);
@@ -155,7 +166,7 @@ export class CoursesService {
     await this.cache?.set(CATALOG_VERSION_KEY, Date.now(), CATALOG_VERSION_TTL_SECONDS);
   }
 
-  private async loadCatalog(filters: CourseFilterDto) {
+  private async loadCatalog(filters: CourseFilterDto, scope?: Prisma.CourseWhereInput) {
     const {
       page = 1,
       limit = 20,
@@ -172,6 +183,8 @@ export class CoursesService {
     const { skip, take } = calculatePagination(page, limit);
 
     const where: Prisma.CourseWhereInput = { deletedAt: null };
+    // O âmbito entra em AND para não colidir com o OR da pesquisa livre.
+    if (scope) where.AND = [scope];
     if (status) where.status = status;
     if (category) where.category = category;
     if (level) where.level = level;
@@ -645,6 +658,14 @@ export class CoursesService {
   }
 
   async reorderModules(courseId: number, orderedIds: number[]) {
+    // Cada módulo tem de ser deste curso: o guard valida o curso da rota, não os ids do corpo.
+    const wanted = new Set(orderedIds);
+    const own = await this.prisma.courseModule.count({
+      where: { id: { in: [...wanted] }, courseId },
+    });
+    if (own !== wanted.size) {
+      throw new BadRequestException('Há módulos que não pertencem a este curso');
+    }
     await Promise.all(
       orderedIds.map((id, idx) =>
         this.prisma.courseModule.update({ where: { id }, data: { seq: idx } }),
@@ -809,6 +830,12 @@ export class CoursesService {
   }
 
   async reorderLessons(moduleId: number, orderedIds: number[]) {
+    // Cada aula tem de ser deste módulo: o guard valida o módulo da rota, não os ids do corpo.
+    const wanted = new Set(orderedIds);
+    const own = await this.prisma.lesson.count({ where: { id: { in: [...wanted] }, moduleId } });
+    if (own !== wanted.size) {
+      throw new BadRequestException('Há aulas que não pertencem a este módulo');
+    }
     await Promise.all(
       orderedIds.map((id, idx) => this.prisma.lesson.update({ where: { id }, data: { seq: idx } })),
     );
@@ -1781,9 +1808,10 @@ export class CoursesService {
     throw new ForbiddenException('Sem acesso a esta turma');
   }
 
-  async listCohorts(courseId: number) {
+  async listCohorts(courseId: number, user?: CurrentUserData) {
     const cohorts = await this.prisma.read.courseCohort.findMany({
-      where: { courseId },
+      // O instrutor externo vê só as turmas que ele dá (num curso seu podem existir de outros).
+      where: { courseId, ...(isExternalInstructor(user) ? { instructorId: user!.id } : {}) },
       include: {
         instructor: { select: { id: true, fullName: true, avatarUrl: true } },
         _count: { select: { participants: true } },
@@ -1847,7 +1875,15 @@ export class CoursesService {
         instructor: { select: { id: true, fullName: true, avatarUrl: true } },
         participants: {
           include: {
-            user: { select: { id: true, fullName: true, avatarUrl: true, email: true } },
+            // O instrutor externo vê o nome, nunca o contacto dos participantes.
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                avatarUrl: true,
+                ...(isExternalInstructor(user) ? {} : { email: true }),
+              },
+            },
           },
           orderBy: { enrolledAt: 'asc' },
         },

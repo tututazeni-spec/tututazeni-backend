@@ -12,6 +12,7 @@ import { FILE_POLICIES } from '../files/file-policies';
 import { isPrivileged } from './ownership';
 
 import { ADMIN_RH_INSTRUCTOR_ROLES } from '../../auth/enums/role-groups';
+import { Role } from '../../auth/enums/role.enum';
 
 /** Papéis que criam/editam lições e por isso podem sempre ver os ficheiros. */
 export const CONTENT_MANAGER_ROLES = ADMIN_RH_INSTRUCTOR_ROLES;
@@ -24,7 +25,8 @@ interface UserLike {
 }
 
 export function canManageLessonContent(user: UserLike): boolean {
-  return isPrivileged(user, CONTENT_MANAGER_ROLES);
+  // O instrutor externo é autor do conteúdo dos seus cursos (a posse é validada à entrada).
+  return isPrivileged(user, [...CONTENT_MANAGER_ROLES, Role.INSTRUCTOR_EXTERNO]);
 }
 
 export function isInlinePdf(contentUrl: string | null | undefined): contentUrl is string {

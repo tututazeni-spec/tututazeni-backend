@@ -9,6 +9,7 @@ import { RefreshTokenStrategy } from './refresh-token.strategy';
 import { MailModule } from '../mail/mail.module';
 import { PasswordResetService } from './password-reset.service';
 import { SettingsModule } from '../settings/settings.module';
+import { InstructorInvitesModule } from '../instructor-invites/instructor-invites.module';
 import { SsoController } from './sso.controller';
 import { SsoAuthService } from './sso-auth.service';
 
@@ -25,6 +26,7 @@ import { SsoAuthService } from './sso-auth.service';
     }),
     MailModule,
     SettingsModule,
+    InstructorInvitesModule,
   ],
   providers: [AuthService, JwtStrategy, RefreshTokenStrategy, PasswordResetService, SsoAuthService],
   controllers: [AuthController, SsoController],

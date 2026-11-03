@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { searchIds } from '../common/helpers/text-search';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateCollectionDto,
@@ -14,6 +15,13 @@ import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+
+/** Troca um fileUrl inline (data URL) por '' e marca `hasInlineFile`, para não arrastar megabytes. */
+function stripInlineFileUrl<T extends { fileUrl?: string | null }>(
+  item: T,
+): T & { hasInlineFile?: boolean } {
+  return item.fileUrl?.startsWith('data:') ? { ...item, fileUrl: '', hasInlineFile: true } : item;
+}
 
 @Injectable()
 export class LibraryService {
@@ -77,7 +85,7 @@ export class LibraryService {
       code,
       type: dto.type,
     });
-    return item;
+    return stripInlineFileUrl(item);
   }
 
   async findAllItems(filters: FilterItemDto) {
@@ -101,15 +109,28 @@ export class LibraryService {
       ...(isApproved !== undefined && { isApproved }),
       ...(mandatory !== undefined && { mandatory }),
       ...(departmentId !== undefined && { departmentId }),
-      ...(search && {
-        OR: [
+    };
+    if (search) {
+      // Pesquisa por palavras, sem acentos, em título, subtítulo, descrição, autor,
+      // código, editora, ISBN/ISSN/DOI, etiquetas, categorias e palavras-chave.
+      const ids = await searchIds<string>(
+        this.prisma.read,
+        'LibraryItem',
+        `concat_ws(' ', title, subtitle, description, author, code, publisher, isbn, issn, doi, array_to_string(tags, ' '), array_to_string(categories, ' '), array_to_string(keywords, ' '))`,
+        search,
+        `"deletedAt" IS NULL`,
+      );
+      if (ids) {
+        where.id = { in: ids };
+      } else {
+        where.OR = [
           { title: { contains: search, mode: 'insensitive' } },
           { author: { contains: search, mode: 'insensitive' } },
           { code: { contains: search, mode: 'insensitive' } },
           { keywords: { has: search } },
-        ],
-      }),
-    };
+        ];
+      }
+    }
     const [data, total] = await Promise.all([
       this.prisma.read.libraryItem.findMany({
         where,
@@ -124,7 +145,8 @@ export class LibraryService {
       }),
       this.prisma.read.libraryItem.count({ where }),
     ]);
-    return buildPaginatedResponse(data, total, page, limit);
+    // Ficheiros inline (data URL, até 5 MB) não viajam nas listas: o detalhe devolve o completo.
+    return buildPaginatedResponse(data.map(stripInlineFileUrl), total, page, limit);
   }
 
   async findItemById(id: string) {

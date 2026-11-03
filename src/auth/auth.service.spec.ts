@@ -1,9 +1,12 @@
+import { createHash } from 'crypto';
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService, sessionIdleTimeoutMs } from './auth.service';
 import { SessionRevocationService } from './session-revocation.service';
+import { ExternalLoginSecurityService } from '../instructor-invites/external-login-security.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { SecuritySettingsService } from '../settings/security-settings.service';
 
 // A escrita encadeada (SHA-256 + advisory lock) é testada em audit-chain; aqui só
 // interessa o que cada serviço regista, por isso delega no mock de prisma.auditLog.
@@ -211,6 +214,17 @@ describe('AuthService', () => {
       );
     });
 
+    it('conta com prazo de acesso expirado → 401 mesmo com a password certa', async () => {
+      (verifyPassword as jest.Mock).mockResolvedValue({ valid: true, needsRehash: false });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        ...baseUser,
+        accessExpiresAt: new Date(Date.now() - 1000),
+      });
+      await expect(service.login({ email: 'test@innova.com', password: 'pass' })).rejects.toThrow(
+        'Acesso expirado',
+      );
+    });
+
     it('deve lançar UnauthorizedException se password inválida', async () => {
       (verifyPassword as jest.Mock).mockResolvedValue({ valid: false, needsRehash: false });
       mockPrisma.user.findUnique.mockResolvedValue(baseUser);
@@ -358,6 +372,97 @@ describe('AuthService', () => {
   // ─── rotateRefreshToken ───────────────────────────────────────────────────
 
   describe('rotateRefreshToken', () => {
+    describe('ligação ao dispositivo (instrutor externo)', () => {
+      const DEV = '3f0c1b0e-6a5d-4a6e-9a47-2f1d6c1c0a11';
+      const hash = (v: string) => createHash('sha256').update(v).digest('hex');
+      const record = (over: Record<string, unknown> = {}) => ({
+        id: 3,
+        userId: 1,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 1e6),
+        createdAt: new Date(),
+        deviceIdHash: hash(DEV),
+        ...over,
+      });
+      beforeEach(() => {
+        mockPrisma.user.findUnique.mockResolvedValueOnce({ accessExpiresAt: null });
+        mockPrisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+      });
+      afterEach(() => {
+        // não deixar estado nos mocks partilhados pelos testes seguintes
+        mockPrisma.user.findUnique.mockReset();
+        mockPrisma.refreshToken.updateMany.mockReset().mockResolvedValue({ count: 0 });
+      });
+
+      it('mesmo dispositivo: roda e o novo token mantém a ligação', async () => {
+        mockPrisma.refreshToken.findUnique.mockResolvedValue(record());
+        await service.rotateRefreshToken(1, 'e@i.com', 'tok', { deviceId: DEV });
+        expect(mockPrisma.refreshToken.create.mock.calls.at(-1)![0].data.deviceIdHash).toBe(
+          hash(DEV),
+        );
+      });
+
+      it('outro dispositivo (cookie diferente) → 401, cadeia revogada e nenhum token novo', async () => {
+        mockPrisma.refreshToken.findUnique.mockResolvedValue(record());
+        mockPrisma.refreshToken.create.mockClear();
+        await expect(
+          service.rotateRefreshToken(1, 'e@i.com', 'tok', { deviceId: 'outro-dispositivo' }),
+        ).rejects.toThrow('Refresh token inválido');
+        expect(mockPrisma.refreshToken.create).not.toHaveBeenCalled();
+        expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { userId: 1, revokedAt: null } }),
+        );
+      });
+
+      it('sem cookie de dispositivo → 401', async () => {
+        mockPrisma.refreshToken.findUnique.mockResolvedValue(record());
+        await expect(service.rotateRefreshToken(1, 'e@i.com', 'tok')).rejects.toThrow(
+          'Refresh token inválido',
+        );
+      });
+
+      it('instrutor externo com sessão SEM ligação (anterior à migração/mudança de papel) → 401 e cadeia revogada', async () => {
+        mockPrisma.refreshToken.findUnique.mockResolvedValue(record({ deviceIdHash: null }));
+        mockPrisma.user.findUnique.mockReset();
+        mockPrisma.user.findUnique.mockResolvedValueOnce({
+          accessExpiresAt: null,
+          role: { name: 'INSTRUCTOR_EXTERNO' },
+        });
+        mockPrisma.refreshToken.create.mockClear();
+        await expect(
+          service.rotateRefreshToken(1, 'e@i.com', 'tok', { deviceId: DEV }),
+        ).rejects.toThrow('Refresh token inválido');
+        expect(mockPrisma.refreshToken.create).not.toHaveBeenCalled();
+        expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { userId: 1, revokedAt: null } }),
+        );
+      });
+
+      it('sessão sem ligação (utilizador normal): roda sem cookie e continua sem ligação', async () => {
+        mockPrisma.refreshToken.findUnique.mockResolvedValue(record({ deviceIdHash: null }));
+        mockPrisma.refreshToken.create.mockClear();
+        await service.rotateRefreshToken(1, 'u@i.com', 'tok');
+        expect(mockPrisma.refreshToken.create.mock.calls[0][0].data.deviceIdHash).toBeUndefined();
+      });
+    });
+
+    it('refresh de conta com prazo expirado → 401 e não emite tokens', async () => {
+      mockPrisma.refreshToken.findUnique.mockResolvedValue({
+        id: 3,
+        userId: 1,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 1e6),
+        createdAt: new Date(),
+      });
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        id: 1,
+        accessExpiresAt: new Date(Date.now() - 1000),
+      });
+      await expect(service.rotateRefreshToken(1, 'test@innova.com', 'present')).rejects.toThrow(
+        'Acesso expirado',
+      );
+    });
+
     it('roda: revoga o token apresentado de forma atómica e emite um novo par', async () => {
       mockPrisma.refreshToken.findUnique.mockResolvedValue({
         id: 3,
@@ -502,3 +607,186 @@ describe('AuthService', () => {
   });
 });
 // forgotPassword / resetPassword foram movidos para PasswordResetService (password-reset.service.spec.ts)
+
+describe('AuthService.login — instrutor externo (código por e-mail)', () => {
+  const external = {
+    ...baseUser,
+    id: 9,
+    email: 'ext@innova.com',
+    role: { id: 5, name: 'INSTRUCTOR_EXTERNO', rolePermissions: [] },
+  };
+  const DEVICE = '3f0c1b0e-6a5d-4a6e-9a47-2f1d6c1c0a11';
+  const ext = {
+    isExternal: jest.fn((u: { role?: { name?: string } }) => u.role?.name === 'INSTRUCTOR_EXTERNO'),
+    challenge: jest.fn().mockResolvedValue({ purpose: 'NEW_DEVICE' }),
+    verify: jest.fn(),
+    registerDevice: jest.fn().mockResolvedValue(undefined),
+  };
+  const securityMock = {
+    getPolicy: jest.fn().mockResolvedValue(null),
+    registerFailedAttempt: jest.fn().mockResolvedValue(null),
+    clearFailedAttempts: jest.fn().mockResolvedValue(undefined),
+  };
+  let svc: AuthService;
+  // O deviceId viaja no contexto do pedido (cookie httpOnly), não no corpo do login.
+  const login = (dto: Record<string, unknown>, ctx: Record<string, unknown> = {}) => {
+    const { deviceId, ...rest } = dto;
+    return svc.login(rest as never, {
+      ...ctx,
+      ...(deviceId ? { deviceId: deviceId as string } : {}),
+    });
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    process.env.JWT_REFRESH_SECRET = 'test-refresh-secret';
+    (verifyPassword as jest.Mock).mockResolvedValue({ valid: true, needsRehash: false });
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: JwtService, useValue: mockJwt },
+        { provide: SessionRevocationService, useValue: mockRevocation },
+        { provide: ExternalLoginSecurityService, useValue: ext },
+        { provide: SecuritySettingsService, useValue: securityMock },
+      ],
+    }).compile();
+    svc = module.get<AuthService>(AuthService);
+  });
+
+  it('sem emailCode → 401 EMAIL_CODE_REQUIRED e pede o desafio', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(external);
+    const err = await login(
+      { email: external.email, password: 'pass', deviceId: DEVICE } as never,
+      {
+        ip: '1.1.1.1',
+      },
+    ).catch((e: UnauthorizedException) => e);
+    expect(err).toBeInstanceOf(UnauthorizedException);
+    expect((err as UnauthorizedException).getResponse()).toMatchObject({
+      code: 'EMAIL_CODE_REQUIRED',
+      purpose: 'NEW_DEVICE',
+    });
+    expect(ext.challenge).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 9, email: external.email }),
+      DEVICE,
+      expect.objectContaining({ ip: '1.1.1.1' }),
+    );
+  });
+
+  it('emailCode errado → 401 genérico e não emite sessão', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(external);
+    ext.verify.mockResolvedValue(false);
+    await expect(
+      login({
+        email: external.email,
+        password: 'pass',
+        emailCode: '000000',
+        deviceId: DEVICE,
+      } as never),
+    ).rejects.toThrow('Código inválido ou expirado');
+    expect(mockJwt.signAsync).not.toHaveBeenCalled();
+  });
+
+  it('emailCode certo → devolve a sessão', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(external);
+    ext.verify.mockResolvedValue(true);
+    const out = await login({
+      email: external.email,
+      password: 'pass',
+      emailCode: '123456',
+      deviceId: DEVICE,
+    } as never);
+    expect(out).toHaveProperty('accessToken');
+    expect(ext.verify).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 9 }),
+      '123456',
+      DEVICE,
+      expect.any(Object),
+    );
+  });
+
+  it('emailCode errado conta como tentativa falhada (bloqueio de conta)', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(external);
+    ext.verify.mockResolvedValue(false);
+    await login({
+      email: external.email,
+      password: 'pass',
+      emailCode: '000000',
+      deviceId: DEVICE,
+    } as never).catch(() => undefined);
+    expect(securityMock.registerFailedAttempt).toHaveBeenCalledWith(9);
+  });
+
+  it('se o código errado bloqueia a conta, diz que a conta está bloqueada', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(external);
+    ext.verify.mockResolvedValue(false);
+    securityMock.registerFailedAttempt.mockResolvedValueOnce(new Date(Date.now() + 15 * 60_000));
+    await expect(
+      login({ email: external.email, password: 'pass', emailCode: '000000' }, { deviceId: DEVICE }),
+    ).rejects.toThrow('Demasiadas tentativas falhadas');
+  });
+
+  it('sem deviceId o instrutor externo é recusado e não se envia código', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(external);
+    await expect(login({ email: external.email, password: 'pass' } as never)).rejects.toThrow(
+      'Dispositivo não identificado',
+    );
+    expect(ext.challenge).not.toHaveBeenCalled();
+  });
+
+  it('com TOTP ativo e sem totpCode pede o TOTP antes de gastar o código de e-mail', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      ...external,
+      twoFactorEnabled: true,
+      twoFactorSecret: 'segredo',
+    });
+    const err = await login({
+      email: external.email,
+      password: 'pass',
+      emailCode: '123456',
+      deviceId: DEVICE,
+    } as never).catch((e: UnauthorizedException) => e);
+    expect((err as UnauthorizedException).getResponse()).toMatchObject({
+      code: 'TWO_FACTOR_REQUIRED',
+    });
+    expect(ext.verify).not.toHaveBeenCalled();
+    expect(ext.registerDevice).not.toHaveBeenCalled();
+  });
+
+  it('o dispositivo só é registado quando o login está concluído', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(external);
+    ext.verify.mockResolvedValue(true);
+    await login(
+      { email: external.email, password: 'pass', emailCode: '123456', deviceId: DEVICE } as never,
+      { ip: '2.2.2.2' },
+    );
+    expect(ext.registerDevice).toHaveBeenCalledWith(
+      9,
+      DEVICE,
+      expect.objectContaining({ ip: '2.2.2.2' }),
+    );
+  });
+
+  it('a sessão do instrutor externo fica ligada ao dispositivo; a de um utilizador normal não', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(external);
+    ext.verify.mockResolvedValue(true);
+    mockPrisma.refreshToken.create.mockClear();
+    await login({ email: external.email, password: 'pass', emailCode: '123456', deviceId: DEVICE });
+    const bound = mockPrisma.refreshToken.create.mock.calls[0][0].data.deviceIdHash;
+    expect(bound).toBe(createHash('sha256').update(DEVICE).digest('hex'));
+
+    mockPrisma.user.findUnique.mockResolvedValue(baseUser);
+    mockPrisma.refreshToken.create.mockClear();
+    await login({ email: baseUser.email, password: 'pass' }, { deviceId: DEVICE });
+    expect(mockPrisma.refreshToken.create.mock.calls[0][0].data.deviceIdHash).toBeUndefined();
+  });
+
+  it('utilizador que não é instrutor externo nunca recebe desafio', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(baseUser);
+    const out = await login({ email: baseUser.email, password: 'pass' } as never);
+    expect(out).toHaveProperty('accessToken');
+    expect(ext.challenge).not.toHaveBeenCalled();
+    expect(ext.verify).not.toHaveBeenCalled();
+  });
+});

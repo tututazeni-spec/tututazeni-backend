@@ -8,6 +8,7 @@ import { runAsSystem } from '../common/rls/rls-context';
 import { withFlatPermissions } from '../common/utils/role-permissions';
 import { SessionRevocationService } from './session-revocation.service';
 import { toSecretKeyObject } from './jwt-key';
+import { assertAccessNotExpired } from './access-expiry';
 
 // Extrai o JWT do cookie httpOnly 'token' (definido pelo backend no login).
 const cookieExtractor: JwtFromRequestFunction = (req: Request) => {
@@ -91,6 +92,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const cached = this.userCache.get(payload.sub);
     const user =
       cached && cached.expiresAt > Date.now() ? cached.user : await this.loadUserOnce(payload.sub);
+
+    // Prazo de acesso (instrutor externo): verificado em cada pedido, também sobre a cache.
+    assertAccessNotExpired(user);
 
     // Access token emitido antes de uma alteração de senha é inválido.
     if (

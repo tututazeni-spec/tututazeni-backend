@@ -3,6 +3,7 @@ import { CourseModulesController } from './course-modules.controller';
 import { CourseModulesService } from './course-modules.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { ExternalCourseScopeGuard } from '../common/authz/external-course-scope.guard';
 
 const mockSvc = {
   createModule: jest.fn().mockResolvedValue({ id: 1 }),
@@ -39,6 +40,8 @@ describe('CourseModulesController', () => {
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(ExternalCourseScopeGuard)
       .useValue({ canActivate: () => true })
       .compile();
     controller = module.get<CourseModulesController>(CourseModulesController);

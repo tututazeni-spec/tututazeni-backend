@@ -139,6 +139,72 @@ export class MailService implements OnModuleInit {
     });
   }
 
+  async sendLoginCode(
+    email: string,
+    fullName: string,
+    code: string,
+    purpose: 'LOGIN' | 'NEW_DEVICE',
+  ): Promise<void> {
+    await this.send({
+      to: email,
+      subject: 'O seu código de acesso — INNOVA',
+      text: [
+        `Olá ${fullName},`,
+        '',
+        `O seu código de acesso é: ${code}`,
+        'É válido durante 10 minutos e só pode ser usado uma vez.',
+        ...(purpose === 'NEW_DEVICE'
+          ? ['', 'Este pedido veio de um dispositivo novo. Se não foi você, não partilhe o código.']
+          : []),
+        '',
+        'Se não tentou iniciar sessão, ignore este email.',
+        '',
+        '-- Sistema INNOVA',
+      ].join('\n'),
+    });
+  }
+
+  async sendNewDeviceAlert(email: string, fullName: string, userAgent?: string): Promise<void> {
+    await this.send({
+      to: email,
+      subject: 'Novo dispositivo registado na sua conta — INNOVA',
+      text: [
+        `Olá ${fullName},`,
+        '',
+        'Um novo dispositivo foi registado na sua conta de instrutor e o anterior deixou de ser confiável.',
+        ...(userAgent ? [`Dispositivo: ${userAgent}`] : []),
+        '',
+        'Se não foi você, contacte já o administrador.',
+        '',
+        '-- Sistema INNOVA',
+      ].join('\n'),
+    });
+  }
+
+  async sendInstructorInvite(
+    email: string,
+    fullName: string,
+    token: string,
+    accessDays: number,
+  ): Promise<void> {
+    const link = `${process.env.APP_URL ?? ''}/auth/instructor-invite?token=${token}`;
+    await this.send({
+      to: email,
+      subject: 'Convite de instrutor — INNOVA',
+      text: [
+        `Olá ${fullName},`,
+        '',
+        'Foi convidado(a) para dar formação na plataforma INNOVA.',
+        `Defina a sua palavra-passe através deste link (uso único, válido por 72 horas): ${link}`,
+        `O seu acesso fica ativo durante ${accessDays} dias.`,
+        '',
+        'Se não esperava este convite, ignore este email.',
+        '',
+        '-- Sistema INNOVA',
+      ].join('\n'),
+    });
+  }
+
   /** Envio genérico (ex: canal "email" de notificações/automação) — as duas
    *  acima ficam com o template próprio por já terem consumidores fixos. */
   async sendNotification(to: string, subject: string, text: string): Promise<void> {

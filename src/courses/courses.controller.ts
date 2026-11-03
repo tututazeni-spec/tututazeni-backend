@@ -14,6 +14,7 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  ForbiddenException,
   Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
@@ -59,6 +60,11 @@ import {
 } from './courses.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { isExternalInstructor, omitForExternal } from '../common/authz/external-scope';
+import {
+  ExternalCourseScope,
+  ExternalCourseScopeGuard,
+} from '../common/authz/external-course-scope.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { canManageLessonContent, redactCourseFiles } from '../common/authz/lesson-files';
 import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
@@ -66,7 +72,7 @@ import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 import { UploadThrottle } from '../common/security/upload-throttle';
 @ApiTags('Courses')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ExternalCourseScopeGuard)
 @Controller('courses')
 export class CoursesController {
   constructor(
@@ -78,10 +84,13 @@ export class CoursesController {
   // ── Catálogo & Descoberta ─────────────────────────────────────────────────
 
   @Get()
-  @Roles(...AUTHENTICATED_ROLES)
+  @Roles(...AUTHENTICATED_ROLES, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Catálogo de cursos com filtros e paginação' })
-  findAll(@Query() filters: CourseFilterDto) {
-    return this.svc.findAll(filters);
+  findAll(@Query() filters: CourseFilterDto, @CurrentUser() user: CurrentUserData) {
+    // O externo vê só os cursos onde é instrutor (âmbito imposto no servidor).
+    return isExternalInstructor(user)
+      ? this.svc.findAllForExternal(user.id, filters)
+      : this.svc.findAll(filters);
   }
 
   @Get('categories')
@@ -145,10 +154,16 @@ export class CoursesController {
   }
 
   @Get(':id')
-  @Roles(...AUTHENTICATED_ROLES)
+  @Roles(...AUTHENTICATED_ROLES, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'course', key: 'id' })
   @ApiOperation({ summary: 'Detalhe completo do curso (módulos, aulas, feedback)' })
   async findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     const course = await this.svc.findOne(id);
+    if (isExternalInstructor(user)) {
+      // Sem cursos relacionados nem percursos: apontariam para cursos que não são seus.
+      const { relatedCourses: _r, learningPaths: _l, audienceGroups: _a, ...own } = course;
+      return own;
+    }
     // PDFs das aulas só vão por inteiro a quem gere conteúdos; o aluno usa /lessons/:id/file.
     return canManageLessonContent(user) ? course : redactCourseFiles(course);
   }
@@ -298,25 +313,34 @@ export class CoursesController {
   // ── Módulos ───────────────────────────────────────────────────────────────
 
   @Post(':id/modules')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'course', key: 'id' })
   @ApiOperation({ summary: 'Criar módulo no curso' })
-  createModule(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateCourseModuleDto) {
-    return this.svc.createModule(id, dto);
+  createModule(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateCourseModuleDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    // Competências do módulo ficam fechadas ao externo.
+    return this.svc.createModule(id, omitForExternal(user, dto, ['competencyIds']));
   }
 
   @Put(':id/modules/:moduleId')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'module', key: 'moduleId' })
   @ApiOperation({ summary: 'Actualizar módulo' })
   updateModule(
     @Param('id', ParseIntPipe) id: number,
     @Param('moduleId', ParseIntPipe) moduleId: number,
     @Body() dto: UpdateCourseModuleDto,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.updateModule(id, moduleId, dto);
+    return this.svc.updateModule(id, moduleId, omitForExternal(user, dto, ['competencyIds']));
   }
 
   @Patch(':id/modules/reorder')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'course', key: 'id' })
   @ApiOperation({ summary: 'Reordenar módulos (drag & drop)' })
   @HttpCode(HttpStatus.OK)
   reorderModules(@Param('id', ParseIntPipe) id: number, @Body('orderedIds') ids: number[]) {
@@ -324,7 +348,8 @@ export class CoursesController {
   }
 
   @Delete(':id/modules/:moduleId')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'module', key: 'moduleId' })
   @ApiOperation({ summary: 'Remover módulo' })
   removeModule(
     @Param('id', ParseIntPipe) id: number,
@@ -359,7 +384,8 @@ export class CoursesController {
 
   @UploadThrottle()
   @Post('modules/:moduleId/lessons')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'module', key: 'moduleId' })
   @ApiOperation({ summary: 'Criar aula num módulo' })
   createLesson(@Param('moduleId', ParseIntPipe) moduleId: number, @Body() dto: CreateLessonDto) {
     return this.svc.createLesson(moduleId, dto);
@@ -367,14 +393,16 @@ export class CoursesController {
 
   @UploadThrottle()
   @Put('lessons/:lessonId')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'lesson', key: 'lessonId' })
   @ApiOperation({ summary: 'Actualizar aula' })
   updateLesson(@Param('lessonId', ParseIntPipe) lessonId: number, @Body() dto: UpdateLessonDto) {
     return this.svc.updateLesson(lessonId, dto);
   }
 
   @Patch('modules/:moduleId/lessons/reorder')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'module', key: 'moduleId' })
   @ApiOperation({ summary: 'Reordenar aulas (drag & drop)' })
   @HttpCode(HttpStatus.OK)
   reorderLessons(
@@ -385,7 +413,8 @@ export class CoursesController {
   }
 
   @Delete('lessons/:lessonId')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'lesson', key: 'lessonId' })
   @ApiOperation({ summary: 'Remover aula' })
   removeLesson(@Param('lessonId', ParseIntPipe) lessonId: number) {
     return this.svc.removeLesson(lessonId);
@@ -406,7 +435,8 @@ export class CoursesController {
   // ── Actividades da aula ──────────────────────────────────────────────────
 
   @Post('lessons/:lessonId/activities')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'lesson', key: 'lessonId' })
   @ApiOperation({ summary: 'Criar actividade dentro da aula' })
   createLessonActivity(
     @Param('lessonId', ParseIntPipe) lessonId: number,
@@ -416,7 +446,8 @@ export class CoursesController {
   }
 
   @Put('lessons/activities/:activityId')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'lessonActivity', key: 'activityId' })
   @ApiOperation({ summary: 'Actualizar actividade da aula' })
   updateLessonActivity(
     @Param('activityId', ParseIntPipe) activityId: number,
@@ -426,7 +457,8 @@ export class CoursesController {
   }
 
   @Delete('lessons/activities/:activityId')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'lessonActivity', key: 'activityId' })
   @ApiOperation({ summary: 'Remover actividade da aula' })
   removeLessonActivity(@Param('activityId', ParseIntPipe) activityId: number) {
     return this.svc.removeLessonActivity(activityId);
@@ -435,7 +467,8 @@ export class CoursesController {
   // ── Recursos da aula ─────────────────────────────────────────────────────
 
   @Post('lessons/:lessonId/resources')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'lesson', key: 'lessonId' })
   @ApiOperation({ summary: 'Adicionar recurso/material de apoio à aula' })
   createLessonResource(
     @Param('lessonId', ParseIntPipe) lessonId: number,
@@ -445,7 +478,8 @@ export class CoursesController {
   }
 
   @Put('lessons/resources/:resourceId')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'lessonResource', key: 'resourceId' })
   @ApiOperation({ summary: 'Actualizar recurso da aula' })
   updateLessonResource(
     @Param('resourceId', ParseIntPipe) resourceId: number,
@@ -455,7 +489,8 @@ export class CoursesController {
   }
 
   @Delete('lessons/resources/:resourceId')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'lessonResource', key: 'resourceId' })
   @ApiOperation({ summary: 'Remover recurso da aula' })
   removeLessonResource(@Param('resourceId', ParseIntPipe) resourceId: number) {
     return this.svc.removeLessonResource(resourceId);
@@ -572,10 +607,11 @@ export class CoursesController {
   // ── Turmas (docs/modulo_courses.md secção 5) — cursos presenciais/híbridos ─
 
   @Get(':id/cohorts')
-  @Roles(...AUTHENTICATED_ROLES)
+  @Roles(...AUTHENTICATED_ROLES, Role.INSTRUCTOR_EXTERNO)
+  @ExternalCourseScope({ kind: 'course', key: 'id' })
   @ApiOperation({ summary: 'Listar turmas de um curso' })
-  listCohorts(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.listCohorts(id);
+  listCohorts(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.listCohorts(id, user);
   }
 
   @Post(':id/cohorts')
@@ -586,7 +622,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/open')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({
     summary: 'Listar turmas abertas (OPEN) ou activas (ACTIVE) de todos os cursos',
   })
@@ -603,7 +639,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/export')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Relatório de turmas abertas/activas/encerradas em Excel ou PDF' })
   async exportCohorts(
     @CurrentUser() user: CurrentUserData,
@@ -629,7 +665,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/:cohortId')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Detalhe da turma (com participantes)' })
   getCohort(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -639,18 +675,19 @@ export class CoursesController {
   }
 
   @Patch('cohorts/:cohortId')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Actualizar turma' })
   updateCohort(
     @Param('cohortId', ParseIntPipe) cohortId: number,
     @Body() dto: UpdateCourseCohortDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.updateCohort(cohortId, dto, user);
+    // A turma não passa para outro instrutor pela mão do externo.
+    return this.svc.updateCohort(cohortId, omitForExternal(user, dto, ['instructorId']), user);
   }
 
   @Patch('cohorts/:cohortId/close')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Encerrar turma' })
   @HttpCode(HttpStatus.OK)
   closeCohort(
@@ -671,18 +708,24 @@ export class CoursesController {
   }
 
   @Post('cohorts/:cohortId/participants')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Adicionar participantes à turma' })
   addCohortParticipants(
     @Param('cohortId', ParseIntPipe) cohortId: number,
     @Body() dto: AddCohortParticipantsDto,
     @CurrentUser() user: CurrentUserData,
   ) {
+    if (isExternalInstructor(user) && dto.departmentIds?.length) {
+      // Departamentos inteiros é gestão de pessoas (ADMIN/RH): o externo adiciona pessoas uma a uma.
+      throw new ForbiddenException(
+        'Apenas é possível adicionar participantes indicados individualmente',
+      );
+    }
     return this.svc.addCohortParticipants(cohortId, dto, user);
   }
 
   @Delete('cohorts/:cohortId/participants/:userId')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Remover participante da turma' })
   removeCohortParticipant(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -693,7 +736,7 @@ export class CoursesController {
   }
 
   @Post('cohorts/:cohortId/attendance')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Marcar presenças da turma numa data' })
   markCohortAttendance(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -704,7 +747,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/:cohortId/attendance/export')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Folha de presenças da turma em Excel ou PDF' })
   async exportCohortAttendance(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -727,7 +770,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/:cohortId/attendance/sheet')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Folha de presenças da turma: todos os dias de aula × participantes' })
   getCohortAttendanceSheet(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -737,7 +780,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/:cohortId/attendance')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Ler presenças já marcadas da turma numa data' })
   getCohortAttendance(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -750,7 +793,7 @@ export class CoursesController {
   // ── Sessões e presenças da turma (docs/innova-gestao-presencas-claude-code.md) ──
 
   @Get('cohorts/:cohortId/sessions')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Sessões da turma' })
   listCohortSessions(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -760,18 +803,22 @@ export class CoursesController {
   }
 
   @Post('cohorts/:cohortId/sessions')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Criar sessão da turma' })
   createCohortSession(
     @Param('cohortId', ParseIntPipe) cohortId: number,
     @Body() dto: CreateCohortSessionDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.sessions.createSession(cohortId, dto, user);
+    return this.sessions.createSession(
+      cohortId,
+      omitForExternal(user, dto, ['instructorId']),
+      user,
+    );
   }
 
   @Patch('cohorts/:cohortId/sessions/:sessionId')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Editar sessão da turma' })
   updateCohortSession(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -779,11 +826,16 @@ export class CoursesController {
     @Body() dto: UpdateCohortSessionDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.sessions.updateSession(cohortId, sessionId, dto, user);
+    return this.sessions.updateSession(
+      cohortId,
+      sessionId,
+      omitForExternal(user, dto, ['instructorId']),
+      user,
+    );
   }
 
   @Post('cohorts/:cohortId/sessions/:sessionId/cancel')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Cancelar sessão (preserva as presenças já registadas)' })
   cancelCohortSession(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -795,7 +847,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/:cohortId/sessions/:sessionId/attendance')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Participantes inscritos e presenças de uma sessão' })
   getCohortSessionAttendance(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -806,7 +858,7 @@ export class CoursesController {
   }
 
   @Put('cohorts/:cohortId/sessions/:sessionId/attendance')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Guardar presenças de uma sessão' })
   saveCohortSessionAttendance(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -830,7 +882,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/:cohortId/sessions/:sessionId/attendance/history')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Histórico de alterações de presença da sessão' })
   getCohortSessionAttendanceHistory(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -852,7 +904,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/:cohortId/attendance-report')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Relatório de assiduidade da turma (geral e individual)' })
   getCohortAttendanceReport(
     @Param('cohortId', ParseIntPipe) cohortId: number,
@@ -862,7 +914,7 @@ export class CoursesController {
   }
 
   @Get('cohorts/:cohortId/attendance-report/export')
-  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Relatório de assiduidade em Excel, CSV ou PDF' })
   async exportCohortAttendanceReport(
     @Param('cohortId', ParseIntPipe) cohortId: number,

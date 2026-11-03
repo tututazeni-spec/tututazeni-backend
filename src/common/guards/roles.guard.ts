@@ -2,7 +2,12 @@ import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
-import { AUTHENTICATED_ONLY_KEY, PERMISSION_KEY } from '../decorators/authz.decorators';
+import {
+  ALLOW_EXTERNAL_KEY,
+  AUTHENTICATED_ONLY_KEY,
+  PERMISSION_KEY,
+} from '../decorators/authz.decorators';
+import { Role } from '../../auth/enums/role.enum';
 
 /**
  * Autorização global. Cada handler tem de declarar UMA política:
@@ -42,12 +47,19 @@ export class RolesGuard implements CanActivate {
 
     if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, targets)) return true;
 
+    const isExternal = user?.role?.name === Role.INSTRUCTOR_EXTERNO;
+
     if (this.reflector.getAllAndOverride<boolean>(AUTHENTICATED_ONLY_KEY, targets)) {
       if (!user) throw new ForbiddenException('Acesso negado: autenticação necessária');
+      // O instrutor externo só entra aqui nos handlers marcados com @AllowExternal().
+      if (isExternal && !this.reflector.getAllAndOverride<boolean>(ALLOW_EXTERNAL_KEY, targets)) {
+        throw new ForbiddenException('Acesso negado: indisponível para instrutores externos');
+      }
       return true;
     }
 
-    if (process.env.AUTHZ_DENY_BY_DEFAULT === 'false') return true;
+    // O rollback de emergência nunca abre handlers sem política ao instrutor externo.
+    if (process.env.AUTHZ_DENY_BY_DEFAULT === 'false' && !isExternal) return true;
     throw new ForbiddenException('Acesso negado: endpoint sem política de autorização');
   }
 }

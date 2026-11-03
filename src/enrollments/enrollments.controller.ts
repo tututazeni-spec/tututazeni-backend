@@ -1,4 +1,4 @@
-import { AnyAuthenticated } from '../common/decorators/authz.decorators';
+import { AllowExternal, AnyAuthenticated } from '../common/decorators/authz.decorators';
 import {
   Controller,
   Get,
@@ -91,7 +91,15 @@ export class EnrollmentsController {
   // ── Admin / RH ────────────────────────────────────────────────────────────
 
   @Get()
-  @Roles(Role.ADMIN, Role.RH, Role.DIRECTOR, Role.GESTOR, Role.LIDER, Role.INSTRUCTOR)
+  @Roles(
+    Role.ADMIN,
+    Role.RH,
+    Role.DIRECTOR,
+    Role.GESTOR,
+    Role.LIDER,
+    Role.INSTRUCTOR,
+    Role.INSTRUCTOR_EXTERNO,
+  )
   @ApiOperation({
     summary:
       'Listar matrículas com filtros avançados (inclui compliance). ' +
@@ -103,7 +111,15 @@ export class EnrollmentsController {
   }
 
   @Get('manageable-courses')
-  @Roles(Role.ADMIN, Role.RH, Role.DIRECTOR, Role.GESTOR, Role.LIDER, Role.INSTRUCTOR)
+  @Roles(
+    Role.ADMIN,
+    Role.RH,
+    Role.DIRECTOR,
+    Role.GESTOR,
+    Role.LIDER,
+    Role.INSTRUCTOR,
+    Role.INSTRUCTOR_EXTERNO,
+  )
   @ApiOperation({
     summary:
       'Passo 1 da "Gestão": cursos que o utilizador pode escolher antes de ver ' +
@@ -156,6 +172,7 @@ export class EnrollmentsController {
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe da matrícula com progresso' })
   @AnyAuthenticated()
+  @AllowExternal() // o serviço limita o externo às matrículas dos seus cursos
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(id, user);
   }

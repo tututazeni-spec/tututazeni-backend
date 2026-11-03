@@ -1107,6 +1107,11 @@ model User {
   twoFactorSecret     String?
   passwordResetTokens PasswordResetToken[]
   refreshTokens       RefreshToken[]
+  // Instrutor externo: fim da validade do acesso (null = sem prazo) e convites emitidos
+  accessExpiresAt     DateTime?
+  instructorInvites   InstructorInvite[]
+  loginChallenges     LoginChallenge[]
+  trustedDevices      TrustedDevice[]
 
   // ─── ROI & Impact ─────────────────────────────────────────────
   createdRoiAnalyses             RoiAnalysis[]
@@ -5541,6 +5546,14 @@ enum SessionModality {
   HYBRID
 }
 
+// Plataforma da reunião online de uma aula ao vivo. JITSI = sala própria
+// (JaaS/meet.jit.si); ZOOM/TEAMS = link externo colado pelo organizador.
+enum MeetingProvider {
+  JITSI
+  ZOOM
+  TEAMS
+}
+
 model Training {
   id                     Int                    @id @default(autoincrement())
   title                  String
@@ -7493,6 +7506,10 @@ model LiveClass {
   id            Int      @id @default(autoincrement())
   courseId      Int?
   zoomMeetingId String?  @db.Text
+  // Plataforma + link da reunião (Zoom/Teams). JITSI não precisa de link.
+  meetingProvider MeetingProvider @default(JITSI)
+  meetingUrl      String?         @db.Text
+  meetingPasscode String?
   topic         String   @db.Text
   scheduledAt   DateTime
   duration      Int
@@ -7600,8 +7617,12 @@ model LiveClassSession {
   instructorId         Int?
   location             String?
   meetingUrl           String?
+  // null = herda a plataforma da aula
+  meetingProvider      MeetingProvider?
   status               LiveClassStatus @default(AGENDADA)
   notes                String?
+  // Imagem da sessão (URL https ou data URL), mostrada no cartão
+  thumbnailUrl         String?
   recordingUrl         String?
   recordingPublishedAt DateTime?
   createdAt            DateTime        @default(now())
@@ -7630,6 +7651,11 @@ model LiveAttendance {
   // fica null até ao join real ou ao registo manual de presença.
   joinedAt          DateTime?
   leftAt            DateTime?
+  // Tempo total dentro da aula/sessão somando todas as passagens (entrar →
+  // sair, voltar a entrar…). `currentJoinedAt` é o início da passagem em
+  // curso (null quando está fora); joinedAt guarda só a 1.ª entrada.
+  accumulatedSeconds Int                  @default(0)
+  currentJoinedAt   DateTime?
   // Presente só quando sessionId aponta para uma LiveClassSession de uma
   // aula recorrente; aulas de ocorrência única (a maioria) mantêm-se null
   // — mesmo comportamento de antes desta extensão.
@@ -9903,7 +9929,7 @@ model ContentAsset {
   version          String             @default("1.0")
   active           Boolean            @default(true)
   createdAt        DateTime           @default(now())
-  status           ContentAssetStatus @default(DRAFT)
+  status           ContentAssetStatus @default(ACTIVE)
   createdById      Int?
   thumbnailUrl     String?
   author           String?
@@ -9916,6 +9942,11 @@ model ContentAsset {
   hasCertification Boolean            @default(false)
   tags             String[]           @default([])
   externalSource   String?
+  // Reciclagem: apagado pelo admin, restaurável durante 30 dias (src/recycle-bin).
+  deletedAt        DateTime?
+  deletedById      Int?
+
+  @@index([deletedAt])
 }
 
 enum Difficulty {
@@ -14672,6 +14703,53 @@ model PasswordResetToken {
   @@index([userId])
 }
 
+model LoginChallenge {
+  id         String    @id @default(uuid())
+  userId     Int
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash   String
+  purpose    String
+  // Dispositivo que pediu o código: só esse o pode resgatar (null = desafio anterior à ligação)
+  deviceIdHash String?
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model TrustedDevice {
+  id           String    @id @default(uuid())
+  userId       Int
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceIdHash String
+  userAgent    String?
+  ip           String?
+  firstSeenAt  DateTime  @default(now())
+  lastSeenAt   DateTime  @default(now())
+  revokedAt    DateTime?
+
+  @@unique([userId, deviceIdHash])
+  @@index([userId])
+}
+
+model InstructorInvite {
+  id          String    @id @default(uuid())
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email       String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  revokedAt   DateTime?
+  createdById Int?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([email])
+}
+
 model RefreshToken {
   id           Int       @id @default(autoincrement())
   userId       Int
@@ -14682,6 +14760,8 @@ model RefreshToken {
   replacedById Int?
   ip           String?
   userAgent    String?
+  // Instrutor externo: hash do dispositivo a que a sessão está ligada (null = sem ligação)
+  deviceIdHash String?
   createdAt    DateTime  @default(now())
 
   @@index([userId])

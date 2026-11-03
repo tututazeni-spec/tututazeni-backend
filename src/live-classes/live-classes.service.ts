@@ -3,9 +3,11 @@ import { sign } from 'jsonwebtoken';
 import {
   Injectable,
   Logger,
+  Optional,
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   Prisma,
@@ -15,8 +17,18 @@ import {
   LiveClassEnrollmentMode,
   SessionModality,
   LiveAttendanceStatus,
+  MeetingProvider,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import type { CurrentUserData } from '../common/decorators';
+import {
+  assertCanManageCourse,
+  ensureOwnInstructorProfile,
+  isExternalInstructor,
+  omitForExternal,
+  ownInstructorProfileId,
+} from '../common/authz/external-scope';
+import { ZoomService } from './zoom.service';
 import { CourseCompletionService } from '../course-completion/course-completion.service';
 import {
   CreateLiveClassDto,
@@ -29,6 +41,7 @@ import {
   CreateLiveClassSessionDto,
   UpdateLiveClassSessionDto,
   RegisterAttendanceDto,
+  BulkAttendanceDto,
   UpdateAttendanceDto,
   ParticipantsFilterDto,
   MaterialsFilterDto,
@@ -36,6 +49,7 @@ import {
   LiveClassReportFilterDto,
 } from './live-classes.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { normalizeMeeting } from './meeting-link.util';
 import { buildCsvString } from '../common/utils/csv-export.util';
 
 // Limite de segurança para a expansão de sessões recorrentes — evita um
@@ -53,6 +67,20 @@ const CLASS_INCLUDE = {
   postEvaluation: true,
 } satisfies Prisma.LiveClassInclude;
 
+/**
+ * Campos do corpo que o instrutor externo não pode definir numa aula: quem a dá, a gravação
+ * (publicar é ADMIN/RH) e os documentos da biblioteca da empresa.
+ */
+const EXTERNAL_LIVE_BLOCKED = [
+  'instructorId',
+  'coInstructorId',
+  'recordingUrl',
+  'recordingExpiresAt',
+  'allowRecordingDownload',
+  'recordingPublishedAt',
+  'materialDocumentIds',
+] as const;
+
 @Injectable()
 export class LiveClassesService {
   private readonly logger = new Logger(LiveClassesService.name);
@@ -60,9 +88,57 @@ export class LiveClassesService {
   constructor(
     private prisma: PrismaService,
     private readonly courseCompletion: CourseCompletionService,
+    @Optional() private readonly zoom?: ZoomService,
   ) {}
 
-  async findAll(filters: LiveClassFilterDto) {
+  /**
+   * Instrutor externo (fase 3): condição "aula em que sou instrutor/co-instrutor". Os métodos de
+   * listagem recebem `ownerProfileId` (id do TrainingInstructorProfile do externo, ou -1 se ainda
+   * não tem perfil) e juntam-na ao `where`; `undefined` = sem restrição (restantes papéis).
+   */
+  private ownClass(ownerProfileId?: number): Prisma.LiveClassWhereInput {
+    return ownerProfileId === undefined
+      ? {}
+      : { OR: [{ instructorId: ownerProfileId }, { coInstructorId: ownerProfileId }] };
+  }
+
+  /** O externo vê o nome dos participantes, nunca o contacto/departamento. */
+  private redactAttendeeForExternal<T extends { user?: unknown }>(row: T): T {
+    const u = row.user as { id?: number; fullName?: string } | null | undefined;
+    return { ...row, user: u ? { id: u.id, fullName: u.fullName } : u } as T;
+  }
+
+  /** Curso, módulo e lição indicados têm de ser de cursos onde o externo é instrutor. */
+  private async assertExternalContentRefs(
+    user: CurrentUserData,
+    dto: { courseId?: number | null; moduleId?: number | null; lessonId?: number | null },
+  ): Promise<void> {
+    if (dto.courseId) await assertCanManageCourse(this.prisma, user, dto.courseId);
+    if (dto.moduleId) {
+      const mod = await this.prisma.courseModule.findUnique({
+        where: { id: dto.moduleId },
+        select: { courseId: true },
+      });
+      if (!mod) throw new NotFoundException('Recurso não encontrado');
+      await assertCanManageCourse(this.prisma, user, mod.courseId);
+    }
+    if (dto.lessonId) {
+      const lesson = await this.prisma.lesson.findUnique({
+        where: { id: dto.lessonId },
+        select: { module: { select: { courseId: true } } },
+      });
+      if (!lesson) throw new NotFoundException('Recurso não encontrado');
+      await assertCanManageCourse(this.prisma, user, lesson.module.courseId);
+    }
+  }
+
+  /** Resolve o âmbito do utilizador: `undefined` (sem restrição) ou o perfil do externo (-1 se não tem). */
+  async ownerScope(user: CurrentUserData): Promise<number | undefined> {
+    if (!isExternalInstructor(user)) return undefined;
+    return (await ownInstructorProfileId(this.prisma, user)) ?? -1;
+  }
+
+  async findAll(filters: LiveClassFilterDto, ownerProfileId?: number) {
     const { page = 1, limit = 20 } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.LiveClassWhereInput = {};
@@ -79,6 +155,8 @@ export class LiveClassesService {
         ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {}),
       };
     }
+
+    if (ownerProfileId !== undefined) where.AND = [this.ownClass(ownerProfileId)];
 
     const [data, total] = await Promise.all([
       this.prisma.read.liveClass.findMany({
@@ -128,26 +206,105 @@ export class LiveClassesService {
   async getRoomAccess(
     id: number,
     user: { id: number; email: string; fullName?: string | null; role?: { name: string } | null },
-  ): Promise<{ roomName: string; domain: string; jwt?: string }> {
-    const secret = process.env.JWT_SECRET;
-    if (!secret) throw new Error('JWT_SECRET em falta — impossível gerar a sala');
+  ): Promise<
+    | { roomName: string; domain: string; jwt?: string; appId?: string }
+    | {
+        provider: 'ZOOM' | 'TEAMS';
+        joinUrl: string;
+        passcode: string | null;
+        /** Só Zoom com Meeting SDK configurado: permite embeber a reunião na página. */
+        sdk?: {
+          signature: string;
+          sdkKey: string;
+          meetingNumber: string;
+          userName: string;
+          userEmail: string;
+        };
+      }
+  > {
     const lc = await this.prisma.read.liveClass.findUnique({
       where: { id },
-      select: { id: true },
+      select: {
+        id: true,
+        meetingProvider: true,
+        meetingUrl: true,
+        meetingPasscode: true,
+        zoomMeetingId: true,
+      },
     });
     if (!lc) throw new NotFoundException('Aula ao vivo não encontrada');
 
-    const digest = createHmac('sha256', secret).update(`jitsi-room:${id}`).digest('hex');
-    const roomName = `innova-live-${id}-${digest.slice(0, 24)}`;
-    const domain = process.env.JITSI_DOMAIN || 'meet.jit.si';
+    // Zoom/Teams: o organizador colou o link; o participante só o abre (estas
+    // plataformas não se embebem em iframe). Sem JWT_SECRET nem sala Jitsi.
+    if (lc.meetingProvider && lc.meetingProvider !== MeetingProvider.JITSI) {
+      if (!lc.meetingUrl) {
+        throw new ConflictException('A aula não tem link de reunião definido.');
+      }
+      const meetingNumber =
+        lc.meetingProvider === MeetingProvider.ZOOM
+          ? (lc.zoomMeetingId ?? lc.meetingUrl.match(/\/j\/(\d{9,11})/)?.[1] ?? null)
+          : null;
+      const sdk =
+        meetingNumber && this.zoom?.isSdkConfigured()
+          ? {
+              ...this.zoom.buildSdkSignature(meetingNumber, 0),
+              meetingNumber,
+              userName: user.fullName || user.email,
+              userEmail: user.email,
+            }
+          : undefined;
+      return {
+        provider: lc.meetingProvider,
+        joinUrl: lc.meetingUrl,
+        passcode: lc.meetingPasscode ?? null,
+        ...(sdk ? { sdk } : {}),
+      };
+    }
 
+    const secret = process.env.JWT_SECRET;
+    if (!secret) throw new Error('JWT_SECRET em falta — impossível gerar a sala');
+
+    const digest = createHmac('sha256', secret).update(`jitsi-room:${id}`).digest('hex');
+    const baseRoom = `innova-live-${id}-${digest.slice(0, 24)}`;
+    const domain = process.env.JITSI_DOMAIN || 'meet.jit.si';
+    const roleName = user.role?.name ?? '';
+    // O externo só chega aqui para a sua própria aula (ExternalLiveClassScopeGuard).
+    const moderator = ['ADMIN', 'RH', 'INSTRUCTOR', 'INSTRUCTOR_EXTERNO'].includes(roleName);
+    const now = Math.floor(Date.now() / 1000);
+    const displayName = user.fullName || user.email;
+
+    // JaaS (8x8.vc): sala com prefixo `<appId>/`, JWT RS256 com `kid`, iss "chat"
+    // e sub = appId. Activa-se com JITSI_PRIVATE_KEY (PEM) + JITSI_KEY_ID.
+    const privateKey = process.env.JITSI_PRIVATE_KEY?.replace(/\\n/g, '\n');
+    const jaasAppId = process.env.JITSI_APP_ID;
+    const keyId = process.env.JITSI_KEY_ID;
+    if (privateKey && jaasAppId && keyId) {
+      const roomName = `${jaasAppId}/${baseRoom}`;
+      const jwt = sign(
+        {
+          aud: 'jitsi',
+          iss: 'chat',
+          sub: jaasAppId,
+          room: baseRoom,
+          iat: now,
+          nbf: now - 5,
+          exp: now + this.jitsiTokenTtlSeconds(),
+          context: {
+            user: { id: String(user.id), name: displayName, moderator },
+            features: { recording: false, livestreaming: false, transcription: false },
+          },
+        },
+        privateKey,
+        { algorithm: 'RS256', keyid: keyId.includes('/') ? keyId : `${jaasAppId}/${keyId}` },
+      );
+      return { roomName, domain, jwt, appId: jaasAppId };
+    }
+
+    const roomName = baseRoom;
     const appSecret = process.env.JITSI_APP_SECRET;
     if (!appSecret) return { roomName, domain };
 
     const appId = process.env.JITSI_APP_ID || 'innova';
-    const roleName = user.role?.name ?? '';
-    const moderator = ['ADMIN', 'RH', 'INSTRUCTOR'].includes(roleName);
-    const now = Math.floor(Date.now() / 1000);
     const jwt = sign(
       {
         aud: 'jitsi',
@@ -169,6 +326,35 @@ export class LiveClassesService {
       { algorithm: 'HS256' },
     );
     return { roomName, domain, jwt };
+  }
+
+  /** Valida/normaliza a plataforma+link da aula. PRESENTIAL nunca usa reunião online. */
+  private resolveMeeting(
+    provider: MeetingProvider,
+    rawUrl: string | null | undefined,
+    modality?: SessionModality,
+  ) {
+    const effective = modality === SessionModality.PRESENTIAL ? MeetingProvider.JITSI : provider;
+    const m = normalizeMeeting(effective, rawUrl);
+    return {
+      meetingProvider: effective,
+      meetingUrl: m.url,
+      ...(m.zoomId ? { zoomMeetingId: m.zoomId } : {}),
+    };
+  }
+
+  /** Plataforma/link de uma sessão: sem plataforma, mantém-se só um link web simples. */
+  private resolveSessionMeeting(dto: { meetingProvider?: MeetingProvider; meetingUrl?: string }) {
+    if (dto.meetingProvider) {
+      const m = normalizeMeeting(dto.meetingProvider, dto.meetingUrl);
+      return { meetingProvider: dto.meetingProvider, meetingUrl: m.url };
+    }
+    if (dto.meetingUrl === undefined) return {};
+    const url = dto.meetingUrl.trim();
+    if (url && !/^https?:\/\//i.test(url)) {
+      throw new BadRequestException('O link da reunião tem de começar por http:// ou https://.');
+    }
+    return { meetingUrl: url || null };
   }
 
   /** Validade do JWT da sala (omissão 2h; JITSI_JWT_TTL_MINUTES, entre 15 e 240). */
@@ -232,17 +418,68 @@ export class LiveClassesService {
     throw e;
   }
 
-  async create(dto: CreateLiveClassDto) {
+  /**
+   * Zoom sem link/ID colado e com credenciais configuradas: cria a reunião via API
+   * e devolve o link (e código de acesso) a guardar. Sem credenciais, mantém-se o
+   * comportamento antigo (pede ao organizador que cole o link).
+   */
+  private async autoCreateZoom(
+    provider: MeetingProvider,
+    modality: SessionModality | undefined,
+    rawUrl: string | null | undefined,
+    topic: string,
+    scheduledAt: Date,
+    durationMinutes: number,
+    timezone?: string,
+  ): Promise<{ meetingUrl: string; passcode: string | null } | null> {
+    if (provider !== MeetingProvider.ZOOM || modality === SessionModality.PRESENTIAL) return null;
+    if ((rawUrl ?? '').trim() || !this.zoom?.isConfigured()) return null;
+    const m = await this.zoom.createMeeting({
+      topic,
+      startTime: scheduledAt,
+      durationMinutes,
+      timezone,
+    });
+    return { meetingUrl: m.joinUrl, passcode: m.passcode };
+  }
+
+  async create(dto: CreateLiveClassDto, user?: CurrentUserData) {
+    if (user && isExternalInstructor(user)) {
+      // Instrutor externo: a aula é sempre dele (perfil criado na primeira aula); o co-instrutor e
+      // o instrutor vindos do cliente são ignorados, e o curso/módulo/lição têm de ser seus.
+      const profileId = await ensureOwnInstructorProfile(this.prisma, user);
+      dto = { ...omitForExternal(user, dto, EXTERNAL_LIVE_BLOCKED), instructorId: profileId };
+      await this.assertExternalContentRefs(user, dto);
+    }
     const scheduledAt = new Date(dto.scheduledAt);
     const sessionDates = this.buildSessionDates(dto, scheduledAt);
 
     const { recurrenceEndDate, recurrenceDaysOfWeek, recordingExpiresAt, notifySettings, ...rest } =
       dto;
+    const auto = await this.autoCreateZoom(
+      dto.meetingProvider ?? MeetingProvider.JITSI,
+      dto.modality,
+      dto.meetingUrl,
+      dto.topic,
+      scheduledAt,
+      dto.duration,
+      dto.timezone,
+    );
+    const meeting = this.resolveMeeting(
+      dto.meetingProvider ?? MeetingProvider.JITSI,
+      auto?.meetingUrl ?? dto.meetingUrl,
+      dto.modality,
+    );
 
     const lc = await this.prisma.liveClass
       .create({
         data: {
           ...rest,
+          ...meeting,
+          meetingPasscode:
+            meeting.meetingProvider === MeetingProvider.JITSI
+              ? null
+              : dto.meetingPasscode?.trim() || auto?.passcode || null,
           code: dto.code ?? this.generateCode(dto.type ?? 'AULA'),
           scheduledAt,
           recurrenceEndDate: recurrenceEndDate ? new Date(recurrenceEndDate) : undefined,
@@ -257,7 +494,8 @@ export class LiveClassesService {
                   durationMinutes: dto.duration,
                   instructorId: dto.instructorId,
                   location: dto.location,
-                  meetingUrl: dto.zoomMeetingId,
+                  meetingUrl: meeting.meetingUrl ?? dto.zoomMeetingId,
+                  meetingProvider: meeting.meetingProvider,
                 })),
               }
             : undefined,
@@ -268,10 +506,43 @@ export class LiveClassesService {
     return lc;
   }
 
-  async update(id: number, dto: UpdateLiveClassDto) {
-    await this.findOne(id);
+  async update(id: number, dto: UpdateLiveClassDto, user?: CurrentUserData) {
+    if (user && isExternalInstructor(user)) {
+      // O corpo não pode apontar a aula para fora do âmbito (curso/módulo/lição alheios, outro
+      // instrutor, gravação ou documentos da biblioteca).
+      dto = omitForExternal(user, dto, EXTERNAL_LIVE_BLOCKED);
+      await this.assertExternalContentRefs(user, dto);
+    }
+    const current = await this.findOne(id);
     const { recurrenceEndDate, recordingExpiresAt, notifySettings, ...rest } = dto;
     const data: Prisma.LiveClassUpdateInput = { ...rest };
+    if (
+      dto.meetingProvider !== undefined ||
+      dto.meetingUrl !== undefined ||
+      dto.modality !== undefined
+    ) {
+      const provider = dto.meetingProvider ?? current.meetingProvider;
+      const modality = dto.modality ?? current.modality;
+      const rawUrl = dto.meetingUrl ?? current.meetingUrl;
+      const auto = await this.autoCreateZoom(
+        provider,
+        modality,
+        rawUrl,
+        dto.topic ?? current.topic,
+        dto.scheduledAt ? new Date(dto.scheduledAt) : current.scheduledAt,
+        dto.duration ?? current.duration,
+        dto.timezone ?? current.timezone ?? undefined,
+      );
+      const meeting = this.resolveMeeting(provider, auto?.meetingUrl ?? rawUrl, modality);
+      Object.assign(data, meeting);
+      if (meeting.meetingProvider === MeetingProvider.JITSI) data.meetingPasscode = null;
+      else if (auto?.passcode && dto.meetingPasscode === undefined) {
+        data.meetingPasscode = auto.passcode;
+      }
+    }
+    if (dto.meetingPasscode !== undefined && data.meetingPasscode === undefined) {
+      data.meetingPasscode = dto.meetingPasscode.trim() || null;
+    }
     if (dto.scheduledAt) data.scheduledAt = new Date(dto.scheduledAt);
     if (recurrenceEndDate) data.recurrenceEndDate = new Date(recurrenceEndDate);
     if (recordingExpiresAt) data.recordingExpiresAt = new Date(recordingExpiresAt);
@@ -351,6 +622,9 @@ export class LiveClassesService {
         recurrence: LiveClassRecurrence.ONCE,
         modality: lc.modality,
         zoomMeetingId: lc.zoomMeetingId,
+        meetingProvider: lc.meetingProvider,
+        meetingUrl: lc.meetingUrl,
+        meetingPasscode: lc.meetingPasscode,
         location: lc.location,
         building: lc.building,
         room: lc.room,
@@ -381,7 +655,7 @@ export class LiveClassesService {
   // ─── Sessões (secção 5) ────────────────────────────────────────────────────
 
   /** Todas as sessões de todas as aulas — tabela global da aba "Sessões". */
-  async listAllSessions(filters: LiveClassFilterDto) {
+  async listAllSessions(filters: LiveClassFilterDto, ownerProfileId?: number) {
     const { page = 1, limit = 20 } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.LiveClassSessionWhereInput = {};
@@ -394,6 +668,8 @@ export class LiveClassesService {
         ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {}),
       };
     }
+
+    if (ownerProfileId !== undefined) where.AND = [{ liveClass: this.ownClass(ownerProfileId) }];
 
     const [data, total] = await Promise.all([
       this.prisma.read.liveClassSession.findMany({
@@ -445,8 +721,9 @@ export class LiveClassesService {
         durationMinutes: dto.durationMinutes,
         instructorId: dto.instructorId,
         location: dto.location,
-        meetingUrl: dto.meetingUrl,
+        ...this.resolveSessionMeeting(dto),
         notes: dto.notes,
+        thumbnailUrl: dto.thumbnailUrl || null,
       },
       include: { instructor: { select: { id: true, name: true } } },
     });
@@ -459,10 +736,15 @@ export class LiveClassesService {
     if (!session || session.liveClassId !== liveClassId) {
       throw new NotFoundException('Sessão não encontrada');
     }
-    const { sessionDate, ...rest } = dto;
+    const { sessionDate, meetingProvider: _p, meetingUrl: _u, ...rest } = dto;
     return this.prisma.liveClassSession.update({
       where: { id: sessionId },
-      data: { ...rest, ...(sessionDate ? { sessionDate: new Date(sessionDate) } : {}) },
+      data: {
+        ...rest,
+        ...(dto.thumbnailUrl !== undefined ? { thumbnailUrl: dto.thumbnailUrl || null } : {}),
+        ...this.resolveSessionMeeting(dto),
+        ...(sessionDate ? { sessionDate: new Date(sessionDate) } : {}),
+      },
       include: { instructor: { select: { id: true, name: true } } },
     });
   }
@@ -480,36 +762,93 @@ export class LiveClassesService {
 
   // ─── Sala ao vivo (join/leave/chat) — inalterado, ao nível da Aula ────────
 
-  // Sala ao vivo (Jitsi/chat) continua exclusivamente ao nível da Aula — por
-  // isso sessionId fica sempre null aqui, mesmo para aulas recorrentes (ver
-  // comentário em LiveClassSession no schema). findFirst em vez de
+  // A presença regista-se sozinha ao entrar na sala. Em aulas recorrentes fica
+  // ligada à sessão em curso (janela: 15 min antes do início até 30 min depois
+  // do fim, ignorando as canceladas); fora de qualquer sessão — e nas aulas
+  // únicas — fica ao nível da Aula (sessionId null). findFirst em vez de
   // findUnique pelo índice composto: nulls não são únicos em Postgres, por
-  // isso é o próprio código que garante no máximo uma linha "geral" por
-  // (aula, utilizador) — ver nota junto de @@unique em LiveAttendance.
-  async joinClass(liveClassId: number, userId: number) {
-    const existing = await this.prisma.liveAttendance.findFirst({
-      where: { liveClassId, userId, sessionId: null },
+  // isso é o próprio código que garante no máximo uma linha por
+  // (aula, utilizador, sessão) — ver nota junto de @@unique em LiveAttendance.
+  private async resolveActiveSessionId(liveClassId: number, now = new Date()) {
+    const early = 15 * 60_000;
+    const late = 30 * 60_000;
+    const candidates = await this.prisma.read.liveClassSession.findMany({
+      where: {
+        liveClassId,
+        status: { not: LiveClassStatus.CANCELADA },
+        sessionDate: {
+          gte: new Date(now.getTime() - 24 * 3_600_000 - late),
+          lte: new Date(now.getTime() + early),
+        },
+      },
+      select: { id: true, sessionDate: true, durationMinutes: true },
+      orderBy: { sessionDate: 'desc' },
     });
+    const current = candidates.find(c => {
+      const start = c.sessionDate.getTime();
+      return (
+        now.getTime() >= start - early && now.getTime() <= start + c.durationMinutes * 60_000 + late
+      );
+    });
+    return current?.id ?? null;
+  }
+
+  async joinClass(liveClassId: number, userId: number) {
+    const sessionId = await this.resolveActiveSessionId(liveClassId);
+    const existing = await this.prisma.liveAttendance.findFirst({
+      where: { liveClassId, userId, sessionId },
+    });
+    const now = new Date();
+    let attendance;
     if (existing) {
-      return this.prisma.liveAttendance.update({
+      // Reentrada: mantém a primeira entrada (para o cálculo de atraso) e
+      // limpa a saída.
+      attendance = await this.prisma.liveAttendance.update({
         where: { id: existing.id },
-        data: { joinedAt: new Date(), leftAt: null },
+        data: {
+          joinedAt: existing.joinedAt ?? now,
+          leftAt: null,
+          // Nova passagem: o tempo anterior mantém-se em accumulatedSeconds
+          currentJoinedAt: existing.currentJoinedAt ?? now,
+        },
+      });
+    } else {
+      attendance = await this.prisma.liveAttendance.create({
+        data: { liveClassId, userId, sessionId, joinedAt: now, currentJoinedAt: now },
       });
     }
-    return this.prisma.liveAttendance.create({
-      data: { liveClassId, userId, joinedAt: new Date() },
-    });
+    return attendance;
   }
 
   async leaveClass(liveClassId: number, userId: number) {
-    const existing = await this.prisma.liveAttendance.findFirst({
-      where: { liveClassId, userId, sessionId: null },
+    // Fecha o registo aberto mais recente, seja da sessão ou da aula, e soma a
+    // passagem que acabou ao tempo total (entrar de novo continua a somar).
+    const open = await this.prisma.liveAttendance.findFirst({
+      where: { liveClassId, userId, joinedAt: { not: null }, leftAt: null },
+      orderBy: { joinedAt: 'desc' },
     });
-    if (!existing) throw new NotFoundException('Não está inscrito nesta aula');
-    return this.prisma.liveAttendance.update({
-      where: { id: existing.id },
-      data: { leftAt: new Date() },
+    if (!open) throw new NotFoundException('Não está inscrito nesta aula');
+    const now = new Date();
+    const stintStart = open.currentJoinedAt ?? open.joinedAt!;
+    const stintSeconds = Math.max(0, Math.floor((now.getTime() - stintStart.getTime()) / 1000));
+    const attendance = await this.prisma.liveAttendance.update({
+      where: { id: open.id },
+      data: {
+        leftAt: now,
+        currentJoinedAt: null,
+        accumulatedSeconds: open.accumulatedSeconds + stintSeconds,
+      },
     });
+    const lc = await this.findOne(liveClassId);
+    await this.maybeSyncCourseProgress(
+      lc,
+      userId,
+      attendance.status,
+      attendance.joinedAt,
+      attendance.leftAt,
+      attendance,
+    );
+    return { ...attendance, ...this.deriveAttendance(attendance, lc) };
   }
 
   async sendMessage(liveClassId: number, userId: number, dto: LiveChatMessageDto) {
@@ -587,7 +926,13 @@ export class LiveClassesService {
    *  Participantes/Presenças (secções 6/10). `status` explícito (registo
    *  manual) tem sempre prioridade sobre o cálculo automático. */
   private deriveAttendance(
-    a: { joinedAt: Date | null; leftAt: Date | null; status: LiveAttendanceStatus | null },
+    a: {
+      joinedAt: Date | null;
+      leftAt: Date | null;
+      status: LiveAttendanceStatus | null;
+      accumulatedSeconds?: number | null;
+      currentJoinedAt?: Date | null;
+    },
     lc: {
       scheduledAt: Date;
       duration: number;
@@ -595,10 +940,18 @@ export class LiveClassesService {
       lateToleranceMinutes: number;
     },
   ) {
+    // Tempo único = soma de todas as passagens (+ a que está em curso). Registos
+    // manuais/antigos sem acumulado caem no intervalo entrada → saída.
+    const openStint = a.currentJoinedAt
+      ? Math.max(0, Math.floor((Date.now() - a.currentJoinedAt.getTime()) / 1000))
+      : 0;
+    const totalSeconds = (a.accumulatedSeconds ?? 0) + openStint;
     const durationMinutes =
-      a.joinedAt && a.leftAt
-        ? Math.round((a.leftAt.getTime() - a.joinedAt.getTime()) / 60000)
-        : null;
+      totalSeconds > 0
+        ? Math.round(totalSeconds / 60)
+        : a.joinedAt && a.leftAt
+          ? Math.round((a.leftAt.getTime() - a.joinedAt.getTime()) / 60000)
+          : null;
     const attendancePercent =
       durationMinutes !== null && lc.duration > 0
         ? Math.min(100, Math.round((durationMinutes / lc.duration) * 100))
@@ -618,11 +971,14 @@ export class LiveClassesService {
     return { durationMinutes, attendancePercent, computedStatus: a.status ?? computedStatus };
   }
 
-  async getAttendanceReport(liveClassId: number) {
+  async getAttendanceReport(liveClassId: number, user?: CurrentUserData) {
     const lc = await this.findOne(liveClassId);
+    const external = !!user && isExternalInstructor(user);
     const attendances = await this.prisma.read.liveAttendance.findMany({
       where: { liveClassId },
-      include: { user: { select: { id: true, fullName: true, email: true } } },
+      include: {
+        user: { select: { id: true, fullName: true, ...(external ? {} : { email: true }) } },
+      },
     });
     return attendances.map(a => ({ ...a, ...this.deriveAttendance(a, lc) }));
   }
@@ -655,16 +1011,20 @@ export class LiveClassesService {
     session: { select: { id: true, seq: true, sessionDate: true } },
   } satisfies Prisma.LiveAttendanceInclude;
 
-  async listParticipants(filters: ParticipantsFilterDto) {
+  async listParticipants(filters: ParticipantsFilterDto, ownerProfileId?: number) {
     const { page = 1, limit = 20 } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const userWhere: Prisma.UserWhereInput = {};
-    if (filters.departmentId) userWhere.departmentId = filters.departmentId;
-    if (filters.unitId) userWhere.unitId = filters.unitId;
+    // O externo não filtra por departamento/unidade nem procura por nº de colaborador.
+    const external = ownerProfileId !== undefined;
+    if (filters.departmentId && !external) userWhere.departmentId = filters.departmentId;
+    if (filters.unitId && !external) userWhere.unitId = filters.unitId;
     if (filters.search) {
       userWhere.OR = [
         { fullName: { contains: filters.search, mode: 'insensitive' } },
-        { employeeNumber: { contains: filters.search, mode: 'insensitive' } },
+        ...(external
+          ? []
+          : [{ employeeNumber: { contains: filters.search, mode: 'insensitive' as const } }]),
       ];
     }
 
@@ -680,6 +1040,7 @@ export class LiveClassesService {
     const where: Prisma.LiveAttendanceWhereInput = {};
     if (filters.liveClassId) where.liveClassId = filters.liveClassId;
     if (filters.sessionId) where.sessionId = filters.sessionId;
+    if (ownerProfileId !== undefined) liveClassWhere.AND = [this.ownClass(ownerProfileId)];
     if (Object.keys(liveClassWhere).length) where.liveClass = liveClassWhere;
     if (Object.keys(userWhere).length) where.user = userWhere;
 
@@ -694,7 +1055,10 @@ export class LiveClassesService {
       this.prisma.read.liveAttendance.count({ where }),
     ]);
 
-    let data = rows.map(a => ({ ...a, ...this.deriveAttendance(a, a.liveClass) }));
+    let data = rows.map(a => {
+      const row = { ...a, ...this.deriveAttendance(a, a.liveClass) };
+      return ownerProfileId === undefined ? row : this.redactAttendeeForExternal(row);
+    });
     // status é derivado (não uma coluna filtrável directamente na query acima
     // porque pode vir de override manual) — filtra-se depois de calcular.
     if (filters.status) data = data.filter(a => a.computedStatus === filters.status);
@@ -728,6 +1092,8 @@ export class LiveClassesService {
       joinedAt: dto.joinedAt ? new Date(dto.joinedAt) : undefined,
       leftAt: dto.leftAt ? new Date(dto.leftAt) : undefined,
       justification: dto.justification,
+      // Registo manual das horas prevalece sobre o tempo medido
+      ...(dto.joinedAt || dto.leftAt ? { accumulatedSeconds: 0, currentJoinedAt: null } : {}),
     };
     const attendance = existing
       ? await this.prisma.liveAttendance.update({ where: { id: existing.id }, data })
@@ -745,6 +1111,60 @@ export class LiveClassesService {
     return { ...attendance, ...this.deriveAttendance(attendance, lc) };
   }
 
+  /**
+   * Adicionar presenças em massa: por utilizadores, por departamentos ou todos
+   * os colaboradores activos. Não duplica quem já está inscrito (mesma aula e
+   * sessão); o estado fica por omissão, como no registo individual.
+   */
+  async bulkRegisterAttendance(
+    liveClassId: number,
+    dto: BulkAttendanceDto,
+    user?: CurrentUserData,
+  ) {
+    if (user && isExternalInstructor(user) && (dto.all || dto.departmentIds?.length)) {
+      // Inscrever departamentos inteiros ou "todos" é gestão de pessoas (RH/ADMIN).
+      throw new ForbiddenException(
+        'Apenas é possível adicionar participantes indicados individualmente',
+      );
+    }
+    await this.findOne(liveClassId);
+    if (dto.sessionId) {
+      const session = await this.prisma.read.liveClassSession.findUnique({
+        where: { id: dto.sessionId },
+      });
+      if (!session || session.liveClassId !== liveClassId) {
+        throw new NotFoundException('Sessão não encontrada');
+      }
+    }
+    const sessionId = dto.sessionId ?? null;
+    const userIds = new Set<number>(dto.userIds ?? []);
+    if (dto.all || dto.departmentIds?.length) {
+      const users = await this.prisma.read.user.findMany({
+        where: {
+          accountStatus: 'ACTIVE',
+          ...(dto.all ? {} : { departmentId: { in: dto.departmentIds } }),
+        },
+        select: { id: true },
+      });
+      users.forEach(u => userIds.add(u.id));
+    }
+    if (userIds.size === 0) {
+      throw new BadRequestException('Nenhum colaborador encontrado para adicionar');
+    }
+    const existing = await this.prisma.liveAttendance.findMany({
+      where: { liveClassId, sessionId, userId: { in: [...userIds] } },
+      select: { userId: true },
+    });
+    const have = new Set(existing.map(e => e.userId));
+    const toCreate = [...userIds].filter(id => !have.has(id));
+    if (toCreate.length) {
+      await this.prisma.liveAttendance.createMany({
+        data: toCreate.map(userId => ({ liveClassId, userId, sessionId })),
+      });
+    }
+    return { added: toCreate.length, alreadyPresent: have.size };
+  }
+
   /** "Registar presença" / "Justificar ausência" (secções 2/6/10). */
   async updateAttendance(liveClassId: number, attendanceId: number, dto: UpdateAttendanceDto) {
     const lc = await this.findOne(liveClassId);
@@ -756,6 +1176,7 @@ export class LiveClassesService {
         joinedAt: dto.joinedAt ? new Date(dto.joinedAt) : undefined,
         leftAt: dto.leftAt ? new Date(dto.leftAt) : undefined,
         justification: dto.justification,
+        ...(dto.joinedAt || dto.leftAt ? { accumulatedSeconds: 0, currentJoinedAt: null } : {}),
       },
     });
     await this.maybeSyncCourseProgress(
@@ -797,9 +1218,10 @@ export class LiveClassesService {
     status: LiveAttendanceStatus | null,
     joinedAt: Date | null,
     leftAt: Date | null,
+    extra?: { accumulatedSeconds?: number | null; currentJoinedAt?: Date | null },
   ) {
     if (!lc.lessonId) return;
-    const { computedStatus } = this.deriveAttendance({ joinedAt, leftAt, status }, lc);
+    const { computedStatus } = this.deriveAttendance({ joinedAt, leftAt, status, ...extra }, lc);
     if (computedStatus !== 'PRESENTE' && computedStatus !== 'ATRASADO') return;
     try {
       await this.courseCompletion.markLessonComplete(userId, lc.lessonId, {});
@@ -812,9 +1234,12 @@ export class LiveClassesService {
 
   // ─── Formadores (secção 7) — perfil partilhado com Trainings ──────────────
 
-  async listInstructors() {
+  async listInstructors(ownerProfileId?: number) {
     const classes = await this.prisma.read.liveClass.findMany({
-      where: { OR: [{ instructorId: { not: null } }, { coInstructorId: { not: null } }] },
+      where:
+        ownerProfileId === undefined
+          ? { OR: [{ instructorId: { not: null } }, { coInstructorId: { not: null } }] }
+          : this.ownClass(ownerProfileId),
       select: {
         instructorId: true,
         coInstructorId: true,
@@ -898,13 +1323,14 @@ export class LiveClassesService {
   // TrainingResource (kind=ROOM) do módulo Trainings — GET /training-resources
   // — não há aqui um modelo próprio para isso, só para o lado "virtual".
 
-  async listVirtualRooms(filters: LiveClassFilterDto) {
+  async listVirtualRooms(filters: LiveClassFilterDto, ownerProfileId?: number) {
     const { page = 1, limit = 20 } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.LiveClassWhereInput = { modality: { in: ['ONLINE', 'HYBRID'] } };
     if (filters.courseId) where.courseId = filters.courseId;
     if (filters.instructorId) where.instructorId = filters.instructorId;
     if (filters.status) where.status = filters.status;
+    if (ownerProfileId !== undefined) where.AND = [this.ownClass(ownerProfileId)];
 
     const [data, total] = await Promise.all([
       this.prisma.read.liveClass.findMany({
@@ -915,6 +1341,8 @@ export class LiveClassesService {
           id: true,
           topic: true,
           zoomMeetingId: true,
+          meetingProvider: true,
+          meetingUrl: true,
           status: true,
           scheduledAt: true,
           course: { select: { id: true, title: true } },
@@ -935,13 +1363,18 @@ export class LiveClassesService {
       instructor: lc.instructor,
       status: lc.status,
       scheduledAt: lc.scheduledAt,
-      platform: lc.zoomMeetingId
-        ? 'Zoom'
-        : lc.sessions.some(s => s.meetingUrl)
-          ? 'Personalizada'
-          : '—',
+      platform:
+        lc.meetingProvider === MeetingProvider.ZOOM
+          ? 'Zoom'
+          : lc.meetingProvider === MeetingProvider.TEAMS
+            ? 'Teams'
+            : lc.zoomMeetingId
+              ? 'Zoom'
+              : lc.sessions.some(s => s.meetingUrl)
+                ? 'Personalizada'
+                : 'Jitsi',
       meetingId: lc.zoomMeetingId,
-      link: lc.sessions.find(s => s.meetingUrl)?.meetingUrl ?? null,
+      link: lc.meetingUrl ?? lc.sessions.find(s => s.meetingUrl)?.meetingUrl ?? null,
       sessions: lc.sessions,
     }));
     return buildPaginatedResponse(rooms, total, page, limit);
@@ -949,10 +1382,11 @@ export class LiveClassesService {
 
   // ─── Gravações (secção 9) ───────────────────────────────────────────────────
 
-  async listRecordings(filters: LiveClassFilterDto) {
+  async listRecordings(filters: LiveClassFilterDto, ownerProfileId?: number) {
     const classWhere: Prisma.LiveClassWhereInput = { recordingUrl: { not: null } };
     if (filters.courseId) classWhere.courseId = filters.courseId;
     if (filters.instructorId) classWhere.instructorId = filters.instructorId;
+    if (ownerProfileId !== undefined) classWhere.AND = [this.ownClass(ownerProfileId)];
 
     const [classRecordings, sessionRecordings] = await Promise.all([
       this.prisma.read.liveClass.findMany({
@@ -977,6 +1411,9 @@ export class LiveClassesService {
           recordingUrl: { not: null },
           ...(filters.instructorId ? { instructorId: filters.instructorId } : {}),
           ...(filters.courseId ? { liveClass: { courseId: filters.courseId } } : {}),
+          ...(ownerProfileId !== undefined
+            ? { AND: [{ liveClass: this.ownClass(ownerProfileId) }] }
+            : {}),
         },
         select: {
           id: true,
@@ -1074,9 +1511,13 @@ export class LiveClassesService {
     });
   }
 
-  async getUpcoming() {
+  async getUpcoming(ownerProfileId?: number) {
     return this.prisma.read.liveClass.findMany({
-      where: { scheduledAt: { gte: new Date() }, status: { notIn: [LiveClassStatus.CANCELADA] } },
+      where: {
+        scheduledAt: { gte: new Date() },
+        status: { notIn: [LiveClassStatus.CANCELADA] },
+        ...this.ownClass(ownerProfileId),
+      },
       include: {
         course: { select: { id: true, title: true } },
         instructor: { select: { id: true, name: true } },
@@ -1089,7 +1530,8 @@ export class LiveClassesService {
 
   // ─── Visão Geral (secção 1) ────────────────────────────────────────────────
 
-  async getDashboard() {
+  async getDashboard(ownerProfileId?: number) {
+    const own = this.ownClass(ownerProfileId);
     const now = new Date();
     const startOfToday = new Date(now);
     startOfToday.setHours(0, 0, 0, 0);
@@ -1110,33 +1552,34 @@ export class LiveClassesService {
       byModality,
       attendanceAgg,
     ] = await Promise.all([
-      this.prisma.read.liveClass.count({ where: { status: LiveClassStatus.AGENDADA } }),
-      this.prisma.read.liveClass.count({ where: { status: LiveClassStatus.EM_CURSO } }),
-      this.prisma.read.liveClass.count({ where: { status: LiveClassStatus.CONCLUIDA } }),
-      this.prisma.read.liveClass.count({ where: { status: LiveClassStatus.CANCELADA } }),
+      this.prisma.read.liveClass.count({ where: { ...own, status: LiveClassStatus.AGENDADA } }),
+      this.prisma.read.liveClass.count({ where: { ...own, status: LiveClassStatus.EM_CURSO } }),
+      this.prisma.read.liveClass.count({ where: { ...own, status: LiveClassStatus.CONCLUIDA } }),
+      this.prisma.read.liveClass.count({ where: { ...own, status: LiveClassStatus.CANCELADA } }),
       this.prisma.read.liveClass.count({
-        where: { scheduledAt: { gte: startOfToday, lt: endOfToday } },
+        where: { ...own, scheduledAt: { gte: startOfToday, lt: endOfToday } },
       }),
       this.prisma.read.liveClass.count({
-        where: { scheduledAt: { gte: startOfToday, lt: endOfWeek } },
+        where: { ...own, scheduledAt: { gte: startOfToday, lt: endOfWeek } },
       }),
-      this.prisma.read.liveClass.count({ where: { scheduledAt: { gte: now } } }),
-      this.prisma.read.liveClass.count({ where: { recordingUrl: { not: null } } }),
-      this.prisma.read.liveClass.groupBy({ by: ['modality'], _count: { _all: true } }),
+      this.prisma.read.liveClass.count({ where: { ...own, scheduledAt: { gte: now } } }),
+      this.prisma.read.liveClass.count({ where: { ...own, recordingUrl: { not: null } } }),
+      this.prisma.read.liveClass.groupBy({ by: ['modality'], where: own, _count: { _all: true } }),
       this.prisma.read.liveAttendance.aggregate({
+        where: ownerProfileId === undefined ? {} : { liveClass: own },
         _avg: { attendancePercent: true },
         _count: { _all: true },
       }),
     ]);
 
     const hoursAgg = await this.prisma.read.liveClass.aggregate({
-      where: { status: LiveClassStatus.CONCLUIDA },
+      where: { ...own, status: LiveClassStatus.CONCLUIDA },
       _sum: { duration: true },
     });
 
     const byInstructor = await this.prisma.read.liveClass.groupBy({
       by: ['instructorId'],
-      where: { instructorId: { not: null } },
+      where: { ...own, instructorId: { not: null } },
       _count: { _all: true },
     });
     const instructorIds = byInstructor
@@ -1178,19 +1621,22 @@ export class LiveClassesService {
 
   // ─── Calendário (secção 4) ─────────────────────────────────────────────────
 
-  async getCalendar(from: string, to: string) {
+  async getCalendar(from: string, to: string, ownerProfileId?: number) {
     const start = new Date(from);
     const end = new Date(to);
     const [classes, sessions] = await Promise.all([
       this.prisma.read.liveClass.findMany({
-        where: { scheduledAt: { gte: start, lte: end } },
+        where: { scheduledAt: { gte: start, lte: end }, ...this.ownClass(ownerProfileId) },
         include: {
           course: { select: { id: true, title: true } },
           instructor: { select: { id: true, name: true } },
         },
       }),
       this.prisma.read.liveClassSession.findMany({
-        where: { sessionDate: { gte: start, lte: end } },
+        where: {
+          sessionDate: { gte: start, lte: end },
+          ...(ownerProfileId !== undefined ? { liveClass: this.ownClass(ownerProfileId) } : {}),
+        },
         include: {
           instructor: { select: { id: true, name: true } },
           liveClass: {
@@ -1238,7 +1684,7 @@ export class LiveClassesService {
   // LiveClassSession.materialDocumentIds (FK "solta" para a Biblioteca,
   // mesmo padrão de Training.requiredResources) e resolve contra Document. ──
 
-  async listMaterials(filters: MaterialsFilterDto) {
+  async listMaterials(filters: MaterialsFilterDto, ownerProfileId?: number) {
     const classWhere: Prisma.LiveClassWhereInput = { materialDocumentIds: { isEmpty: false } };
     if (filters.courseId) classWhere.courseId = filters.courseId;
     if (filters.instructorId) classWhere.instructorId = filters.instructorId;
@@ -1251,6 +1697,11 @@ export class LiveClassesService {
         ...(filters.courseId ? { courseId: filters.courseId } : {}),
         ...(filters.instructorId ? { instructorId: filters.instructorId } : {}),
       };
+    }
+
+    if (ownerProfileId !== undefined) {
+      classWhere.AND = [this.ownClass(ownerProfileId)];
+      sessionWhere.AND = [{ liveClass: this.ownClass(ownerProfileId) }];
     }
 
     const [classes, sessions] = await Promise.all([
@@ -1335,25 +1786,39 @@ export class LiveClassesService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const rows = documents.map(document => ({
-      document,
-      referencedBy: refs.get(document.id) ?? [],
-    }));
+    const rows = documents.map(document => {
+      // O externo vê o material sem o conteúdo do ficheiro (documentos inline vêm como data URL).
+      const { fileUrl: _file, ...meta } = document;
+      return {
+        document: ownerProfileId === undefined ? document : meta,
+        referencedBy: refs.get(document.id) ?? [],
+      };
+    });
     const total = rows.length;
     const start = (page - 1) * limit;
     return buildPaginatedResponse(rows.slice(start, start + limit), total, page, limit);
   }
 
-  private async assertDocumentExists(documentId: number) {
+  private async assertDocumentExists(documentId: number, user?: CurrentUserData) {
     const doc = await this.prisma.read.document.findUnique({ where: { id: documentId } });
     if (!doc || doc.deletedAt)
       throw new NotFoundException('Documento não encontrado na Biblioteca');
+    // O externo só anexa documentos que ele próprio carregou: a biblioteca da empresa (RH,
+    // confidenciais) não é dele.
+    if (
+      user &&
+      isExternalInstructor(user) &&
+      doc.createdById !== user.id &&
+      doc.ownerId !== user.id
+    ) {
+      throw new NotFoundException('Documento não encontrado na Biblioteca');
+    }
     return doc;
   }
 
-  async addClassMaterial(liveClassId: number, documentId: number) {
+  async addClassMaterial(liveClassId: number, documentId: number, user?: CurrentUserData) {
     const lc = await this.findOne(liveClassId);
-    await this.assertDocumentExists(documentId);
+    await this.assertDocumentExists(documentId, user);
     if (lc.materialDocumentIds.includes(documentId)) return lc;
     return this.prisma.liveClass.update({
       where: { id: liveClassId },
@@ -1371,13 +1836,18 @@ export class LiveClassesService {
     });
   }
 
-  async addSessionMaterial(liveClassId: number, sessionId: number, documentId: number) {
+  async addSessionMaterial(
+    liveClassId: number,
+    sessionId: number,
+    documentId: number,
+    user?: CurrentUserData,
+  ) {
     const session = await this.prisma.read.liveClassSession.findUnique({
       where: { id: sessionId },
     });
     if (!session || session.liveClassId !== liveClassId)
       throw new NotFoundException('Sessão não encontrada');
-    await this.assertDocumentExists(documentId);
+    await this.assertDocumentExists(documentId, user);
     if (session.materialDocumentIds.includes(documentId)) return session;
     return this.prisma.liveClassSession.update({
       where: { id: sessionId },
@@ -1400,8 +1870,12 @@ export class LiveClassesService {
   // ─── Avaliações (secção 12) — lista agregada + resumo (rubrica detalhada
   // e NPS) sobre PostClassResponse, cruzando todas as aulas. ─────────────────
 
-  private buildEvaluationWhere(filters: EvaluationsFilterDto): Prisma.PostClassResponseWhereInput {
+  private buildEvaluationWhere(
+    filters: EvaluationsFilterDto,
+    ownerProfileId?: number,
+  ): Prisma.PostClassResponseWhereInput {
     const liveClassWhere: Prisma.LiveClassWhereInput = {};
+    if (ownerProfileId !== undefined) liveClassWhere.AND = [this.ownClass(ownerProfileId)];
     if (filters.courseId) liveClassWhere.courseId = filters.courseId;
     if (filters.instructorId) liveClassWhere.instructorId = filters.instructorId;
     if (filters.dateFrom || filters.dateTo) {
@@ -1416,10 +1890,10 @@ export class LiveClassesService {
     return Object.keys(evaluationWhere).length ? { evaluation: evaluationWhere } : {};
   }
 
-  async getEvaluations(filters: EvaluationsFilterDto) {
+  async getEvaluations(filters: EvaluationsFilterDto, ownerProfileId?: number) {
     const { page = 1, limit = 20 } = filters;
     const { skip, take } = calculatePagination(page, limit);
-    const where = this.buildEvaluationWhere(filters);
+    const where = this.buildEvaluationWhere(filters, ownerProfileId);
 
     const [data, total] = await Promise.all([
       this.prisma.read.postClassResponse.findMany({
@@ -1451,8 +1925,8 @@ export class LiveClassesService {
     return buildPaginatedResponse(data, total, page, limit);
   }
 
-  async getEvaluationsSummary(filters: EvaluationsFilterDto) {
-    const where = this.buildEvaluationWhere(filters);
+  async getEvaluationsSummary(filters: EvaluationsFilterDto, ownerProfileId?: number) {
+    const where = this.buildEvaluationWhere(filters, ownerProfileId);
     const responses = await this.prisma.read.postClassResponse.findMany({
       where,
       select: {
@@ -1492,8 +1966,12 @@ export class LiveClassesService {
 
   // ─── Relatórios (secção 13) ─────────────────────────────────────────────────
 
-  private buildReportClassWhere(filters: LiveClassReportFilterDto): Prisma.LiveClassWhereInput {
+  private buildReportClassWhere(
+    filters: LiveClassReportFilterDto,
+    ownerProfileId?: number,
+  ): Prisma.LiveClassWhereInput {
     const where: Prisma.LiveClassWhereInput = {};
+    if (ownerProfileId !== undefined) where.AND = [this.ownClass(ownerProfileId)];
     if (filters.year) {
       where.scheduledAt = {
         gte: new Date(filters.year, 0, 1),
@@ -1507,8 +1985,8 @@ export class LiveClassesService {
     return where;
   }
 
-  async getReports(filters: LiveClassReportFilterDto) {
-    const where = this.buildReportClassWhere(filters);
+  async getReports(filters: LiveClassReportFilterDto, ownerProfileId?: number) {
+    const where = this.buildReportClassWhere(filters, ownerProfileId);
 
     const classes = await this.prisma.read.liveClass.findMany({
       where,
@@ -1534,6 +2012,8 @@ export class LiveClassesService {
             liveClassId: true,
             joinedAt: true,
             leftAt: true,
+            accumulatedSeconds: true,
+            currentJoinedAt: true,
             status: true,
             user: {
               select: {
@@ -1657,8 +2137,11 @@ export class LiveClassesService {
     };
   }
 
-  async exportReportsCsv(filters: LiveClassReportFilterDto): Promise<string> {
-    const report = await this.getReports(filters);
+  async exportReportsCsv(
+    filters: LiveClassReportFilterDto,
+    ownerProfileId?: number,
+  ): Promise<string> {
+    const report = await this.getReports(filters, ownerProfileId);
     const rows = [
       { metrica: 'Aulas (total)', valor: report.totals.classes },
       { metrica: 'Aulas realizadas', valor: report.totals.completed },

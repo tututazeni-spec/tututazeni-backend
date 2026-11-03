@@ -16,6 +16,7 @@ import { AuthService, AuthRequestContext } from './auth.service';
 import { SettingsService } from '../settings/settings.service';
 import { AuthSettingsService } from '../settings/auth-settings.service';
 import { OidcProviderKey } from '../settings/auth-settings';
+import { INSTRUCTOR_EXTERNO_ROLE } from '../instructor-invites/constants';
 
 interface SsoStatePayload {
   typ: 'sso_state';
@@ -176,6 +177,10 @@ export class SsoAuthService {
 
     let user = await this.authService.findUserWithRoleByEmail(email);
     if (user && !user.active) throw new UnauthorizedException('Conta desativada');
+    // O instrutor externo exige o código por e-mail em todo o login: SSO/LDAP não o dá.
+    if (user?.role?.name === INSTRUCTOR_EXTERNO_ROLE) {
+      throw new UnauthorizedException('Instrutores externos entram com email e palavra-passe');
+    }
 
     if (!user) {
       if (!policy.invitesEnabled) {

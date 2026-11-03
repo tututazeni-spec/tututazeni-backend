@@ -22,6 +22,7 @@ import {
   DocOrigin,
   ShareLinkAccess,
 } from '@prisma/client';
+import { FILE_POLICIES } from '../common/files/file-policies';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 import { ALLOWED_MIME_TYPES, MAX_FILE_NAME_LENGTH } from '../common/validators/allowed-mime-types';
 import { IsFileSizeWithinLimit } from '../common/files/is-file-size-within-limit.decorator';
@@ -49,7 +50,11 @@ export class CreateDocumentDto {
   @ApiProperty() @IsEnum(DocCategoryType) category!: DocCategoryType;
   @ApiPropertyOptional() @IsOptional() @IsInt() categoryId?: number;
   @ApiProperty() @IsEnum(DocSensitivity) sensitivity!: DocSensitivity;
-  @ApiProperty() @IsAllowedFileUrl() fileUrl!: string; // URL no storage (S3/Azure)
+  @ApiProperty({
+    description: 'URL https do ficheiro OU ficheiro inline em data URL base64 (máx. 5 MB)',
+  })
+  @IsAllowedFileUrl(undefined, { inline: FILE_POLICIES.DOCUMENT })
+  fileUrl!: string;
   @ApiProperty({ enum: ALLOWED_MIME_TYPES }) @IsIn(ALLOWED_MIME_TYPES) mimeType!: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() @IsFileSizeWithinLimit() fileSize?: number; // bytes
   @ApiPropertyOptional()
@@ -111,7 +116,7 @@ export class SubmitForApprovalDto {
 }
 
 export class NewVersionDto {
-  @ApiProperty() @IsAllowedFileUrl() fileUrl!: string;
+  @ApiProperty() @IsAllowedFileUrl(undefined, { inline: FILE_POLICIES.DOCUMENT }) fileUrl!: string;
   @ApiProperty({ enum: ALLOWED_MIME_TYPES }) @IsIn(ALLOWED_MIME_TYPES) mimeType!: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() @IsFileSizeWithinLimit() fileSize?: number;
   @ApiPropertyOptional()

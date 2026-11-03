@@ -164,6 +164,29 @@ describe('LiveClassesService (additional)', () => {
       expect(result).toBeDefined();
     });
 
+    it('liga a presença à sessão em curso', async () => {
+      const start = new Date(Date.now() - 10 * 60_000);
+      mockPrisma.liveClassSession.findMany.mockResolvedValueOnce([
+        { id: 77, sessionDate: start, durationMinutes: 60 },
+      ]);
+      mockPrisma.liveAttendance.findFirst.mockResolvedValue(null);
+      mockPrisma.liveAttendance.create.mockResolvedValue({ id: 9 });
+      await service.joinClass(1, 2);
+      expect(mockPrisma.liveAttendance.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ liveClassId: 1, userId: 2, sessionId: 77 }),
+      });
+    });
+
+    it('sem sessão em curso regista ao nível da aula (sessionId null)', async () => {
+      mockPrisma.liveClassSession.findMany.mockResolvedValueOnce([]);
+      mockPrisma.liveAttendance.findFirst.mockResolvedValue(null);
+      mockPrisma.liveAttendance.create.mockResolvedValue({ id: 10 });
+      await service.joinClass(1, 2);
+      expect(mockPrisma.liveAttendance.create).toHaveBeenLastCalledWith({
+        data: expect.objectContaining({ sessionId: null }),
+      });
+    });
+
     it('deve actualizar presença existente quando utilizador re-entra', async () => {
       mockPrisma.liveAttendance.findFirst.mockResolvedValue({ id: 1, liveClassId: 1, userId: 2 });
       mockPrisma.liveAttendance.update.mockResolvedValue({ id: 1, joinedAt: new Date() });
@@ -175,11 +198,27 @@ describe('LiveClassesService (additional)', () => {
   // ─── leaveClass ───────────────────────────────────────────────
 
   describe('leaveClass', () => {
-    it('deve registar saída da aula', async () => {
-      mockPrisma.liveAttendance.findFirst.mockResolvedValue({ id: 1 });
-      mockPrisma.liveAttendance.update.mockResolvedValue({ id: 1, leftAt: new Date() });
-      const result = await service.leaveClass(1, 2);
-      expect(result).toBeDefined();
+    it('soma a passagem que terminou ao tempo acumulado', async () => {
+      mockPrisma.liveClass.findUnique.mockResolvedValue(baseLiveClass);
+      const start = new Date(Date.now() - 600_000); // 10 min dentro
+      mockPrisma.liveAttendance.findFirst.mockResolvedValue({
+        id: 1,
+        joinedAt: new Date(Date.now() - 3_600_000),
+        currentJoinedAt: start,
+        accumulatedSeconds: 300, // 5 min de uma passagem anterior
+      });
+      mockPrisma.liveAttendance.update.mockImplementation(async ({ data }: any) => ({
+        id: 1,
+        status: null,
+        joinedAt: new Date(Date.now() - 3_600_000),
+        ...data,
+      }));
+      const result: any = await service.leaveClass(1, 2);
+      const data = mockPrisma.liveAttendance.update.mock.calls.at(-1)[0].data;
+      expect(data.currentJoinedAt).toBeNull();
+      expect(data.accumulatedSeconds).toBeGreaterThanOrEqual(899);
+      expect(data.accumulatedSeconds).toBeLessThanOrEqual(902);
+      expect(result.durationMinutes).toBe(15);
     });
   });
 

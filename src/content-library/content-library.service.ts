@@ -1,4 +1,5 @@
 ﻿// src/content-library/content-library.service.ts
+import { searchIds } from '../common/helpers/text-search';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -90,10 +91,18 @@ function buildWhereFromFilters(filters: ContentFilterDto): Prisma.ContentAssetWh
   if (filters.category) where.category = filters.category;
 
   if (filters.search) {
-    where.OR = [
-      { title: { contains: filters.search, mode: 'insensitive' } },
-      { description: { contains: filters.search, mode: 'insensitive' } },
-    ];
+    // Qualquer palavra da frase basta: devolve conteúdos que contenham pelo
+    // menos uma delas no título, descrição ou tags.
+    const terms = filters.search
+      .split(/\s+/)
+      .map(t => t.trim())
+      .filter(t => t.length >= 2);
+    if (terms.length === 0) terms.push(filters.search.trim());
+    where.OR = terms.flatMap(term => [
+      { title: { contains: term, mode: 'insensitive' } },
+      { description: { contains: term, mode: 'insensitive' } },
+      { tags: { has: term.toLowerCase() } },
+    ]);
   }
 
   return where;
@@ -130,6 +139,21 @@ export class ContentLibraryService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * IDs de conteúdos que contêm as palavras da pesquisa no título, descrição,
+   * autor, categoria, formato ou tags, sem distinguir maiúsculas nem acentos.
+   * `null` se a pesquisa falhar: aplica-se a pesquisa normal (buildWhereFromFilters).
+   */
+  private searchIdsIgnoringAccents(search: string): Promise<number[] | null> {
+    return searchIds<number>(
+      this.prisma.read,
+      'ContentAsset',
+      `concat_ws(' ', title, description, author, category::text, type::text, array_to_string(tags, ' '))`,
+      search,
+      `"deletedAt" IS NULL`,
+    );
+  }
+
   // ══════════════════════════════════════════════════════
   // CATALOGUE — SEARCH & BROWSE
   // ══════════════════════════════════════════════════════
@@ -138,6 +162,14 @@ export class ContentLibraryService {
     const { page = 1, limit = 20 } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const where = buildWhereFromFilters(filters);
+    if (filters.search) {
+      // `contains` do Prisma não ignora acentos ("incendio" ≠ "incêndio").
+      const ids = await this.searchIdsIgnoringAccents(filters.search);
+      if (ids) {
+        delete where.OR;
+        where.id = { in: ids };
+      }
+    }
     const orderBy = buildOrderBy(filters.sortBy);
 
     const [data, total] = await Promise.all([
@@ -172,7 +204,7 @@ export class ContentLibraryService {
 
   async findOne(id: number, userId?: number) {
     const c = await this.prisma.read.contentAsset.findUnique({ where: { id } });
-    if (!c) throw new NotFoundException('Conteúdo não encontrado');
+    if (!c || c.deletedAt) throw new NotFoundException('Conteúdo não encontrado');
 
     const [viewCount, avgRating, ratingCount, userProgress, isBookmarked] = await Promise.all([
       this.prisma.auditLog
@@ -285,7 +317,7 @@ export class ContentLibraryService {
         ...(dto.tags && { tags: dto.tags }),
         ...(dto.externalSource && { externalSource: dto.externalSource }),
         createdById,
-        status: ContentStatus.DRAFT,
+        status: ContentStatus.ACTIVE,
       },
     });
 
@@ -294,7 +326,7 @@ export class ContentLibraryService {
         data: {
           userId: createdById,
           type: 'CONTENT_CREATED',
-          message: `Conteúdo "${dto.title}" criado e aguarda revisão`,
+          message: `Conteúdo "${dto.title}" publicado`,
           metadata: JSON.stringify({}),
         },
       })
@@ -448,6 +480,17 @@ export class ContentLibraryService {
     }
 
     return { message: 'Visualização registada' };
+  }
+
+  /** Envia o conteúdo para a reciclagem (restaurável durante 30 dias — ver RecycleBinService). */
+  async softDelete(id: number, userId: number) {
+    const c = await this.prisma.contentAsset.findUnique({ where: { id } });
+    if (!c || c.deletedAt) throw new NotFoundException('Conteúdo não encontrado');
+    await this.prisma.contentAsset.update({
+      where: { id },
+      data: { active: false, deletedAt: new Date(), deletedById: userId },
+    });
+    return { message: 'Conteúdo enviado para a reciclagem' };
   }
 
   // ══════════════════════════════════════════════════════

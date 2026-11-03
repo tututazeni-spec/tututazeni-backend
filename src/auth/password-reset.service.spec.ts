@@ -47,6 +47,41 @@ describe('PasswordResetService', () => {
     expect(mail.sendPasswordReset).toHaveBeenCalledWith('u@i.com', expect.any(String));
   });
 
+  it('forgotPassword não cria token para instrutor externo ainda PENDING (tem de usar o convite)', async () => {
+    const prisma = makePrisma();
+    prisma.user.findUnique.mockResolvedValue({
+      id: 9,
+      email: 'e@i.com',
+      active: true,
+      accountStatus: 'PENDING',
+      role: { name: 'INSTRUCTOR_EXTERNO' },
+    });
+    const svc = new PasswordResetService(prisma as any, mail as any);
+
+    const res = await svc.forgotPassword('e@i.com');
+
+    expect(res.message).toBe(GENERIC);
+    expect(prisma.passwordResetToken.create).not.toHaveBeenCalled();
+    expect(mail.sendPasswordReset).not.toHaveBeenCalled();
+  });
+
+  it('resetPassword recusa token de instrutor externo PENDING com o erro genérico', async () => {
+    const prisma = makePrisma();
+    prisma.passwordResetToken.findUnique.mockResolvedValue({
+      id: 5,
+      userId: 9,
+      usedAt: null,
+      expiresAt: new Date(Date.now() + 1e6),
+      user: { accountStatus: 'PENDING', role: { name: 'INSTRUCTOR_EXTERNO' } },
+    });
+    const svc = new PasswordResetService(prisma as any, mail as any);
+
+    await expect(svc.resetPassword('tok', 'NovaSenha123')).rejects.toThrow(
+      'Token inválido ou expirado',
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('forgotPassword devolve a MESMA mensagem e não cria token quando o user não existe', async () => {
     const prisma = makePrisma();
     prisma.user.findUnique.mockResolvedValue(null);

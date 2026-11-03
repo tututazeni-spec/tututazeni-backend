@@ -1,4 +1,4 @@
-import { AnyAuthenticated } from '../common/decorators/authz.decorators';
+import { AnyAuthenticated, AllowExternal } from '../common/decorators/authz.decorators';
 import { Controller, Post, Get, Body, Patch, UseGuards, Req, Res, HttpCode } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '../common/decorators/public.decorator';
@@ -22,6 +22,9 @@ import {
   REFRESH_COOKIE,
   buildRefreshCookieOptions,
   LEGACY_REFRESH_COOKIE_PATH,
+  DEVICE_COOKIE,
+  buildDeviceCookieOptions,
+  resolveDeviceId,
 } from './token-cookie';
 
 // JwtStrategy.validate() devolve a entidade User (tem `id`, não `sub`).
@@ -49,6 +52,22 @@ function requestContext(req: Request): { ip?: string; userAgent?: string } {
   return { ip: req.ip, userAgent: Array.isArray(ua) ? ua[0] : ua };
 }
 
+const deviceCookieOptions = buildDeviceCookieOptions(process.env.NODE_ENV === 'production');
+
+/**
+ * Identificador do dispositivo para o login/refresh: lido do cookie httpOnly ou gerado aqui.
+ * O cookie é definido ANTES de chamar o serviço para seguir também nas respostas 401
+ * (ex.: EMAIL_CODE_REQUIRED), senão o código pedido ficaria ligado a um id que o browser nunca guarda.
+ */
+export function deviceContext(
+  req: Request,
+  res: Response,
+): { ip?: string; userAgent?: string; deviceId: string } {
+  const { deviceId, isNew } = resolveDeviceId(req.cookies as Record<string, unknown> | undefined);
+  if (isNew) res.cookie(DEVICE_COOKIE, deviceId, deviceCookieOptions);
+  return { ...requestContext(req), deviceId };
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -64,7 +83,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.authService.login(dto, requestContext(req));
+    const result = await this.authService.login(dto, deviceContext(req, res));
     res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
     setCsrfCookie(res, result.accessToken);
     res.cookie(REFRESH_COOKIE, result.refreshToken, refreshCookieOptions);
@@ -92,6 +111,7 @@ export class AuthController {
       req.user.id,
       req.user.email,
       req.user.refreshToken,
+      deviceContext(req, res),
     );
     res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
     setCsrfCookie(res, result.accessToken);
@@ -124,6 +144,7 @@ export class AuthController {
 
   @Patch('change-password')
   @AnyAuthenticated()
+  @AllowExternal()
   changePassword(@Req() req: AuthenticatedRequest, @Body() dto: ChangePasswordDto) {
     return this.authService.changePassword(req.user.id, dto);
   }
@@ -145,6 +166,7 @@ export class AuthController {
 
   @Get('me')
   @AnyAuthenticated()
+  @AllowExternal()
   me(@Req() req: AuthenticatedRequest) {
     return this.authService.me(req.user.id);
   }

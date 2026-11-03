@@ -1,4 +1,7 @@
 import { setRequestUserId } from '../common/logging/request-context';
+import { ACCESS_EXPIRED_MESSAGE, isAccessExpired } from './access-expiry';
+import { INSTRUCTOR_EXTERNO_ROLE } from '../instructor-invites/constants';
+import { ExternalLoginSecurityService } from '../instructor-invites/external-login-security.service';
 import {
   Injectable,
   UnauthorizedException,
@@ -37,9 +40,13 @@ import { writeChainedAuditLog } from '../common/helpers/audit-chain';
 // frontend/lib/sessionActivity.ts.
 // Contexto de rede do pedido, registado nos eventos de auditoria de acesso
 // (docs/modulo_audit.md §6). Opcional: chamadores internos/testes omitem-no.
+const sha256Hex = (v: string): string => crypto.createHash('sha256').update(v).digest('hex');
+
 export interface AuthRequestContext {
   ip?: string;
   userAgent?: string;
+  /** Identificador do dispositivo (cookie httpOnly definido pelo servidor). */
+  deviceId?: string;
 }
 
 export function sessionIdleTimeoutMs(
@@ -71,6 +78,7 @@ export class AuthService {
     @Optional() private readonly security?: SecuritySettingsService,
     @Optional() private readonly authSettings?: AuthSettingsService,
     @Optional() private readonly revocation?: SessionRevocationService,
+    @Optional() private readonly externalLogin?: ExternalLoginSecurityService,
   ) {}
 
   /** Mesmo include/omit usado para autenticar — reutilizado pelo SSO/LDAP (sso-auth.service.ts). */
@@ -168,6 +176,8 @@ export class AuthService {
       throw this.failedLogin('UNKNOWN_USER', dto.email, null, ctx);
     }
     if (!user.active) throw this.failedLogin('ACCOUNT_DISABLED', dto.email, user.id, ctx);
+    // Prazo de acesso (instrutor externo) esgotado: recusa antes de verificar a password.
+    if (isAccessExpired(user)) throw new UnauthorizedException(ACCESS_EXPIRED_MESSAGE);
 
     // Definições §11: organização pode obrigar autenticação externa (SSO/LDAP)
     // para todos menos ADMIN (acesso de emergência caso o IdP fique indisponível).
@@ -227,6 +237,42 @@ export class AuthService {
         );
       }
       throw err;
+    }
+
+    // Instrutor externo: segundo factor por e-mail em todo o login (código de 6 dígitos) e
+    // dispositivo confiável. Sem `emailCode` envia o código e o cliente repete o login com ele.
+    if (this.externalLogin?.isExternal(user)) {
+      const who = { id: user.id, email: user.email, fullName: user.fullName };
+      const loginCtx = ctx ?? {};
+      // Sem identificador de dispositivo não há registo, alerta nem auditoria: exige-se sempre.
+      const deviceId = loginCtx.deviceId;
+      if (!deviceId) throw new BadRequestException('Dispositivo não identificado');
+      if (!dto.emailCode) {
+        const { purpose } = await this.externalLogin.challenge(who, deviceId, loginCtx);
+        throw new UnauthorizedException({
+          message: 'Introduza o código enviado para o seu email',
+          code: 'EMAIL_CODE_REQUIRED',
+          purpose,
+        });
+      }
+      // Com TOTP ativo pede-se o TOTP antes de gastar o código de e-mail (uso único).
+      if (user.twoFactorEnabled && user.twoFactorSecret && !dto.totpCode) {
+        throw new UnauthorizedException({
+          message: 'Código de autenticação de dois factores necessário',
+          code: 'TWO_FACTOR_REQUIRED',
+        });
+      }
+      if (!(await this.externalLogin.verify(who, dto.emailCode, deviceId, loginCtx))) {
+        const lockedUntil = await this.security
+          ?.registerFailedAttempt(user.id)
+          .catch(err => this.logLockoutFailure(user.id, err));
+        if (lockedUntil) {
+          throw new UnauthorizedException(
+            'Demasiadas tentativas falhadas — conta bloqueada temporariamente',
+          );
+        }
+        throw new UnauthorizedException('Código inválido ou expirado');
+      }
     }
 
     // Definições §4: 2FA (TOTP). Sem código → o cliente pede-o e repete o login.
@@ -298,11 +344,17 @@ export class AuthService {
       !user.twoFactorEnabled &&
       isTwoFactorRequired(securityPolicy, user.role?.name === 'ADMIN' || user.role?.name === 'RH');
 
+    // Só aqui, com todas as verificações feitas, o dispositivo passa a confiável.
+    if (this.externalLogin?.isExternal(user)) {
+      await this.externalLogin.registerDevice(user.id, ctx?.deviceId, ctx ?? {});
+    }
+
     return this.issueSessionForUser(user, ctx, {
       mustChangePassword,
       twoFactorSetupRequired,
       accessTokenMinutes: securityPolicy?.accessTokenMinutes,
       refreshTokenDays: securityPolicy?.refreshTokenDays,
+      bindDevice: !!this.externalLogin?.isExternal(user),
     });
   }
 
@@ -321,10 +373,18 @@ export class AuthService {
       accessTokenMinutes?: number;
       refreshTokenDays?: number;
       method?: 'SSO' | 'LDAP';
+      /** Liga a sessão ao dispositivo do cookie (instrutor externo). */
+      bindDevice?: boolean;
     } = {},
   ) {
     const tokens = await this.generateTokens(user.id, user.email, opts.accessTokenMinutes);
-    await this.persistRefreshToken(user.id, tokens.refreshToken, ctx, opts.refreshTokenDays);
+    await this.persistRefreshToken(
+      user.id,
+      tokens.refreshToken,
+      ctx,
+      opts.refreshTokenDays,
+      opts.bindDevice && ctx?.deviceId ? sha256Hex(ctx.deviceId) : undefined,
+    );
 
     // fire-and-forget — não bloqueia a resposta de login
     writeChainedAuditLog(this.prisma, {
@@ -473,11 +533,14 @@ export class AuthService {
     refreshToken: string,
     ctx?: AuthRequestContext,
     refreshDays = 7,
+    deviceIdHash?: string,
   ): Promise<void> {
     await this.prisma.refreshToken.create({
       data: {
         userId,
         tokenHash: crypto.createHash('sha256').update(refreshToken).digest('hex'),
+        // Instrutor externo: a sessão só se renova a partir do dispositivo que a abriu.
+        deviceIdHash,
         expiresAt: new Date(Date.now() + refreshDays * 24 * 60 * 60 * 1000),
         // Sessões activas (Definições §4): de onde veio esta sessão.
         ip: ctx?.ip,
@@ -486,7 +549,12 @@ export class AuthService {
     });
   }
 
-  async rotateRefreshToken(userId: number, email: string, presented: string) {
+  async rotateRefreshToken(
+    userId: number,
+    email: string,
+    presented: string,
+    ctx?: AuthRequestContext,
+  ) {
     const hash = crypto.createHash('sha256').update(presented).digest('hex');
     const record = await this.prisma.refreshToken.findUnique({ where: { tokenHash: hash } });
 
@@ -520,8 +588,43 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token inválido');
     }
 
+    // Sessão de instrutor externo ligada a um dispositivo: cookie ausente ou diferente =
+    // token copiado para outra máquina → a cadeia inteira morre.
+    if (
+      record.deviceIdHash &&
+      (!ctx?.deviceId || sha256Hex(ctx.deviceId) !== record.deviceIdHash)
+    ) {
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: authorizedUserId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException('Refresh token inválido');
+    }
+
     if (record.expiresAt < new Date()) {
       throw new UnauthorizedException('Refresh token expirado');
+    }
+
+    // Prazo de acesso (instrutor externo) esgotado: a cadeia de sessões morre aqui.
+    const owner = await this.prisma.user.findUnique({
+      where: { id: authorizedUserId },
+      select: { accessExpiresAt: true, role: { select: { name: true } } },
+    });
+    // Instrutor externo sem ligação ao dispositivo (sessão anterior à migração, mudança de
+    // papel, provisionamento): não se renova — tem de iniciar sessão de novo com o código.
+    if (owner?.role?.name === INSTRUCTOR_EXTERNO_ROLE && !record.deviceIdHash) {
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: authorizedUserId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException('Refresh token inválido');
+    }
+    if (owner && isAccessExpired(owner)) {
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: authorizedUserId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException(ACCESS_EXPIRED_MESSAGE);
     }
 
     // A10-24: cada rotação cria um registo novo (persistRefreshToken), por
@@ -561,6 +664,7 @@ export class AuthService {
       tokens.refreshToken,
       { ip: record.ip ?? undefined, userAgent: record.userAgent ?? undefined },
       policy?.refreshTokenDays,
+      record.deviceIdHash ?? undefined,
     );
     return tokens;
   }
