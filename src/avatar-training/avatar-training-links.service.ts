@@ -163,7 +163,7 @@ export class AvatarTrainingLinksService {
       where,
       select: { id: true, workMinutes: true, courseId: true },
     });
-    const note = `Avatar Training: ${ctx.session.title} (tentativa ${ctx.attemptId})`;
+    const note = `Treino com Avatar: ${ctx.session.title} (tentativa ${ctx.attemptId})`;
     if (existing) {
       const total = (existing.workMinutes ?? 0) + minutes;
       await this.prisma.attendanceRecord.update({

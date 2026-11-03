@@ -151,7 +151,7 @@ export class ScalabilityModulesService {
       },
       {
         key: 'avatar-training',
-        label: 'Avatar Training',
+        label: 'Treino com Avatar',
         metric: 'sessões',
         count: s => r.avatarTrainingSession.count({ where: { createdAt: ca(s) } }),
       },
