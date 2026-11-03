@@ -6,6 +6,7 @@
 // padrão de computeTotalCost em trainings.service.ts.
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import PDFDocument from 'pdfkit';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCanAccess, isPrivileged } from '../common/authz/ownership';
 import { CurrentUserData } from '../common/types/current-user';
@@ -377,5 +378,120 @@ export class TrainingPlanService {
       'horas',
       'orcamentoPrevisto',
     ]);
+  }
+  /** Exporta o plano em PDF (A4 horizontal): cabeçalho do plano + tabela de formações. */
+  async exportPdf(id: number): Promise<Buffer> {
+    const plan = await this.findOne(id);
+    const day = (d?: Date | null) => (d ? d.toISOString().slice(0, 10) : '—');
+    const val = (v: unknown) => (v === null || v === undefined || v === '' ? '—' : String(v));
+    const header: [string, string][] = [
+      ['Código', val(plan.code)],
+      ['Ano', val(plan.year)],
+      ['Período', val(plan.period)],
+      ['Estado', val(plan.status)],
+      ['Prioridade', val(plan.priority)],
+      ['Início', day(plan.startDate)],
+      ['Fim', day(plan.endDate)],
+      ['Orçamento previsto', val(plan.plannedBudget)],
+      ['Participantes previstos', val(plan.expectedParticipants)],
+      ['Horas previstas', val(plan.expectedHours)],
+      ['Responsável', val(plan.responsible?.fullName)],
+      ['Aprovador', val(plan.approver?.fullName)],
+    ];
+    const cols: {
+      label: string;
+      w: number;
+      get: (t: (typeof plan.trainings)[number]) => string;
+    }[] = [
+      { label: 'Formação', w: 250, get: t => t.title },
+      { label: 'Estado', w: 90, get: t => val(t.status) },
+      { label: 'Tipo', w: 90, get: t => val(t.type) },
+      { label: 'Início', w: 65, get: t => day(t.startDate) },
+      { label: 'Fim', w: 65, get: t => day(t.endDate) },
+      { label: 'Partic.', w: 50, get: t => String(t._count.participants) },
+      { label: 'Horas', w: 45, get: t => String(t.workloadHours ?? 0) },
+      { label: 'Orçamento', w: 70, get: t => String(t.plannedBudget ?? 0) },
+    ];
+
+    return new Promise<Buffer>((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 36, size: 'A4', layout: 'landscape' });
+      const chunks: Buffer[] = [];
+      doc.on('data', (d: Buffer) => chunks.push(d));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      const left = doc.page.margins.left;
+      const bottom = () => doc.page.height - doc.page.margins.bottom;
+
+      doc.font('Helvetica-Bold').fontSize(16).text(`Plano de Formação — ${plan.name}`);
+      doc
+        .font('Helvetica')
+        .fontSize(8)
+        .fillColor('#555555')
+        .text(`Gerado em ${new Date().toISOString().slice(0, 19).replace('T', ' ')}`)
+        .fillColor('#000000')
+        .moveDown(0.5);
+
+      doc.fontSize(9);
+      for (let i = 0; i < header.length; i += 3) {
+        const y = doc.y;
+        header.slice(i, i + 3).forEach(([k, v], j) => {
+          doc
+            .font('Helvetica-Bold')
+            .text(`${k}: `, left + j * 260, y, { continued: true, width: 250 })
+            .font('Helvetica')
+            .text(v, { width: 250 });
+        });
+        doc.y = y + 14;
+      }
+      for (const [k, v] of [
+        ['Objectivos', plan.objectives],
+        ['Necessidades identificadas', plan.identifiedNeeds],
+        ['Prioridades estratégicas', plan.strategicPriorities],
+      ] as const) {
+        if (v) {
+          doc.moveDown(0.3).font('Helvetica-Bold').text(`${k}: `, left, doc.y, { continued: true });
+          doc.font('Helvetica').text(v);
+        }
+      }
+      doc.moveDown();
+
+      const row = (cells: string[], bold: boolean) => {
+        const h = 16;
+        if (doc.y + h > bottom()) {
+          doc.addPage();
+        }
+        const y = doc.y;
+        let x = left;
+        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(8);
+        cells.forEach((c, i) => {
+          doc.text(c, x + 2, y + 3, {
+            width: cols[i].w - 4,
+            height: 10,
+            ellipsis: true,
+            lineBreak: false,
+          });
+          x += cols[i].w;
+        });
+        doc
+          .moveTo(left, y + h)
+          .lineTo(x, y + h)
+          .strokeColor('#cccccc')
+          .stroke();
+        doc.y = y + h;
+      };
+      row(
+        cols.map(c => c.label),
+        true,
+      );
+      if (plan.trainings.length === 0)
+        doc.font('Helvetica').text('Sem formações associadas.', left, doc.y + 4);
+      for (const t of plan.trainings)
+        row(
+          cols.map(c => c.get(t)),
+          false,
+        );
+      doc.end();
+    });
   }
 }
