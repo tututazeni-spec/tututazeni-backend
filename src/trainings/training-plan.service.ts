@@ -266,6 +266,26 @@ export class TrainingPlanService {
     });
   }
 
+  /**
+   * Elimina o plano. Só em rascunho, rejeitado ou arquivado — um plano em
+   * aprovação/aprovado/publicado tem de ser arquivado primeiro. As formações
+   * ligadas ficam sem plano (FK opcional, SET NULL); não são apagadas.
+   */
+  async remove(id: number, user: CurrentUserData) {
+    await this.assertCanManage(id, user);
+    const plan = await this.prisma.trainingPlan.findUnique({
+      where: { id },
+      select: { status: true },
+    });
+    if (!plan || !['DRAFT', 'REJECTED', 'ARCHIVED'].includes(plan.status)) {
+      throw new ConflictException(
+        'Só é possível eliminar planos em rascunho, rejeitados ou arquivados. Arquive o plano primeiro.',
+      );
+    }
+    await this.prisma.trainingPlan.delete({ where: { id } });
+    return { deleted: true };
+  }
+
   // ─── Formações do plano ───────────────────────────────────────────────────
 
   async addTraining(id: number, dto: AddTrainingToPlanDto, user: CurrentUserData) {
