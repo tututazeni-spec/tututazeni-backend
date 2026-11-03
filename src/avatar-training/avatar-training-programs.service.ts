@@ -14,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { CurrentUserData } from '../common/decorators';
 import { isPrivileged } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
 import { AvatarTrainingIntegrationsService } from './avatar-training-integrations.service';
 import { AvatarTrainingNotificationsService } from './avatar-training-notifications.service';
 import {
@@ -239,11 +240,14 @@ export class AvatarTrainingProgramsService {
       throw new ConflictException(`Já existe uma formação com o código ${code}`);
     }
     const program = await this.prisma.avatarTrainingProgram.create({
-      // Uma formação nova nasce sempre em rascunho: publicar exige revisão e aprovação.
+      // Decisão de produto: a formação nasce publicada (sem passar por revisão/aprovação).
       data: {
         ...dto,
         code,
-        status: 'DRAFT',
+        status: 'PUBLISHED',
+        approvedById: userId,
+        approvedAt: new Date(),
+        publishedAt: new Date(),
         createdById: userId,
         responsibleId: dto.responsibleId ?? userId,
       },
@@ -625,8 +629,9 @@ export class AvatarTrainingProgramsService {
         ...rest,
         position: dto.position ?? (last._max.position ?? 0) + 1,
         contentConfig: serializeSteps(steps ?? [], rules),
-        // Sessão nova numa formação já publicada nasce em rascunho até nova aprovação.
-        status: 'DRAFT',
+        // Decisão de produto: a aula nasce publicada; só fica visível aos colaboradores
+        // quando a própria formação estiver publicada.
+        status: 'PUBLISHED',
       },
     });
     await this.audit.log({
@@ -846,9 +851,32 @@ export class AvatarTrainingProgramsService {
     if (!session || session.status !== 'PUBLISHED' || session.program.status !== 'PUBLISHED') {
       throw new NotFoundException('Sessão publicada não encontrada');
     }
-    const userIds = [...new Set(dto.userIds)];
-    if (!userIds.length) throw new BadRequestException('Indique pelo menos um utilizador');
-    await this.integrations.assertCanManageUsers(user, userIds);
+    const explicitIds = [...new Set(dto.userIds ?? [])];
+    if (explicitIds.length) await this.integrations.assertCanManageUsers(user, explicitIds);
+    // Atribuição por departamento: expande para os colaboradores activos. ADMIN/RH/DIRECTOR
+    // abrangem todos; GESTOR/LIDER só os seus subordinados directos.
+    let deptIds: number[] = [];
+    if (dto.allDepartments || dto.departmentIds?.length) {
+      const deptUsers = await this.prisma.user.findMany({
+        where: {
+          active: true,
+          departmentId: dto.allDepartments ? { not: null } : { in: dto.departmentIds },
+          ...(isPrivileged(user, [Role.ADMIN, Role.RH, Role.DIRECTOR])
+            ? {}
+            : { managerId: user.id }),
+        },
+        select: { id: true },
+      });
+      deptIds = deptUsers.map(u => u.id);
+    }
+    const userIds = [...new Set([...explicitIds, ...deptIds])];
+    if (!userIds.length) {
+      throw new BadRequestException(
+        dto.allDepartments || dto.departmentIds?.length
+          ? 'Os departamentos escolhidos não têm colaboradores activos que possa atribuir'
+          : 'Indique pelo menos um utilizador',
+      );
+    }
     const users = await this.prisma.user.findMany({
       where: { id: { in: userIds } },
       select: { id: true },
