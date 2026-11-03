@@ -6,7 +6,7 @@ import { AvatarTrainingIntegrationsService } from './avatar-training-integration
 
 describe('AvatarTrainingIntegrationsService', () => {
   const prisma: any = {
-    course: { findUnique: jest.fn(), count: jest.fn() },
+    course: { findUnique: jest.fn(), count: jest.fn(), findMany: jest.fn() },
     courseModule: { findUnique: jest.fn() },
     lesson: { findUnique: jest.fn() },
     document: { findUnique: jest.fn() },
@@ -105,11 +105,24 @@ describe('AvatarTrainingIntegrationsService', () => {
     });
 
     it('lista os cursos por concluir', async () => {
+      prisma.course.findMany
+        .mockResolvedValueOnce([{ id: 1 }, { id: 2 }, { id: 3 }])
+        .mockResolvedValueOnce([
+          { id: 2, title: 'Curso B' },
+          { id: 3, title: 'Curso C' },
+        ]);
       prisma.enrollment.findMany.mockResolvedValue([{ courseId: 1 }]);
-      await expect(svc.assertPrerequisites(1, [1, 2, 3])).rejects.toThrow(/2, 3/);
+      await expect(svc.assertPrerequisites(1, [1, 2, 3])).rejects.toThrow(/«Curso B», «Curso C»/);
+    });
+
+    it('ignora pré-requisitos cujo curso já não existe', async () => {
+      prisma.course.findMany.mockResolvedValue([]);
+      await expect(svc.assertPrerequisites(1, [57])).resolves.toBeUndefined();
+      expect(prisma.enrollment.findMany).not.toHaveBeenCalled();
     });
 
     it('passa quando todos estão concluídos', async () => {
+      prisma.course.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
       prisma.enrollment.findMany.mockResolvedValue([{ courseId: 1 }, { courseId: 2 }]);
       await expect(svc.assertPrerequisites(1, [1, 2])).resolves.toBeUndefined();
     });

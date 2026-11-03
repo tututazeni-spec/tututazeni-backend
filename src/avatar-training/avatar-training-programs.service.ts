@@ -276,7 +276,15 @@ export class AvatarTrainingProgramsService {
       if (!courseId) throw new BadRequestException('moduleId exige courseId');
       await this.integrations.assertCourse(courseId, dto.moduleId ?? program.moduleId ?? undefined);
     }
-    if (dto.prerequisiteCourseIds) await this.integrations.assertCourses(dto.prerequisiteCourseIds);
+    if (dto.prerequisiteCourseIds) {
+      // Pré-requisitos já gravados cujo curso entretanto foi apagado são retirados em vez de bloquear a edição.
+      const stale = new Set(program.prerequisiteCourseIds);
+      const alive = new Set(await this.integrations.existingCourseIds([...stale]));
+      dto.prerequisiteCourseIds = dto.prerequisiteCourseIds.filter(
+        id => alive.has(id) || !stale.has(id),
+      );
+      await this.integrations.assertCourses(dto.prerequisiteCourseIds);
+    }
     if (dto.avatarId) await this.assertAvatarUsable(dto.avatarId);
     if (dto.code && dto.code !== program.code) {
       throw new BadRequestException('O código da formação não pode ser alterado');
