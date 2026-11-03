@@ -656,7 +656,7 @@ export class AvatarTrainingReportsService {
       doc
         .font('Helvetica-Bold')
         .fontSize(16)
-        .text(report.title ?? `Avatar Training — ${type}`);
+        .text(report.title ?? `Treino com Avatar — ${type}`);
       doc
         .font('Helvetica')
         .fontSize(8)

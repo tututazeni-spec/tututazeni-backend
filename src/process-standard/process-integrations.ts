@@ -155,7 +155,7 @@ export const INTEGRATION_CATALOG: CatalogEntry[] = [
   },
   {
     key: 'AvatarTraining',
-    label: 'Avatar Training',
+    label: 'Treino com Avatar',
     description: 'Aprovação, publicação e acompanhamento de formações com avatar.',
   },
   {
