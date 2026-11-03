@@ -158,6 +158,14 @@ export class TrainingPlanController {
     return this.svc.archive(id, user);
   }
 
+  @Delete(':id')
+  @Roles(...CAN_MANAGE_PLANS)
+  @ApiOperation({ summary: 'Eliminar plano (rascunho, rejeitado ou arquivado)' })
+  @HttpCode(HttpStatus.OK)
+  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.remove(id, user);
+  }
+
   @Post(':id/trainings')
   @Roles(...CAN_MANAGE_PLANS)
   @ApiOperation({ summary: 'Adicionar formação existente ao plano' })
