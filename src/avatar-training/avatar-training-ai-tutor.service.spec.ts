@@ -187,13 +187,15 @@ describe('AvatarTrainingAiTutorService.ask', () => {
   });
 
   describe('fontes autorizadas', () => {
-    it('sem fonte relevante → NO_SOURCE, encaminha para formador e não chama o AI', async () => {
+    it('sem fonte relevante → NO_SOURCE amigável, sem escalar e sem chamar o AI', async () => {
       const r = await ask({ question: 'Qual é a capital da Mongólia?' });
       expect(r.status).toBe('NO_SOURCE');
       expect(providers.chat).not.toHaveBeenCalled();
-      const created = tx.avatarTrainingInteraction.create.mock.calls[0][0].data;
-      expect(created.interactionType).toBe('HELP_REQUEST');
-      expect(JSON.parse(created.metadata)).toMatchObject({ channel: 'HUMAN_TRAINER' });
+      expect(r.message).not.toMatch(/encaminhada/);
+      const types = tx.avatarTrainingInteraction.create.mock.calls.map(
+        (c: any[]) => c[0].data.interactionType,
+      );
+      expect(types).not.toContain('HELP_REQUEST');
     });
 
     it('só consulta documentos autorizados (categoria, sensibilidade, não apagados)', async () => {

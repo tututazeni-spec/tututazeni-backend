@@ -130,14 +130,15 @@ export class AvatarTrainingAiTutorService {
       mode !== TutorRequestMode.ASK,
     );
     if (!excerpts.length) {
-      await this.escalate(attemptId, step?.key, question || label);
+      // Sem fontes para esta pergunta: resposta amigável, sem escalar. O formando
+      // pode pedir ajuda a um formador pelo botão próprio da sala.
       return this.respond(
         attemptId,
         step?.key,
         label,
-        'Não encontrei nas fontes aprovadas desta formação informação suficiente para responder com segurança. A dúvida foi encaminhada para um formador.',
+        'Não encontrei nada sobre isso no conteúdo desta formação. Tente perguntar de outra forma, usando termos da etapa em que está, ou peça ajuda a um formador.',
         'NO_SOURCE',
-        { escalated: true },
+        { escalated: false },
       );
     }
 
