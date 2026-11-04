@@ -134,17 +134,17 @@ describe('Avatar Training Integration', () => {
       expect(res.body.status).toBe('ACTIVE');
     });
 
-    it('cria uma formação em rascunho', async () => {
+    it('cria uma formação (nasce publicada)', async () => {
       const res = await http()
         .post('/avatar-training/programs')
         .set(as(adminToken))
         .send({ title: PROGRAM_TITLE, avatarId })
         .expect(201);
       programId = res.body.id;
-      expect(res.body.status).toBe('DRAFT');
+      expect(res.body.status).toBe('PUBLISHED');
     });
 
-    it('não submete uma formação sem sessões → 409', async () => {
+    it('uma formação já publicada não é submetida para revisão → 409', async () => {
       await http()
         .post(`/avatar-training/programs/${programId}/submit-review`)
         .set(as(adminToken))
@@ -165,27 +165,10 @@ describe('Avatar Training Integration', () => {
         })
         .expect(201);
       sessionId = res.body.id;
-      expect(res.body.status).toBe('DRAFT');
-    });
-
-    it('sessão não publicada não pode ser atribuída → 404', async () => {
-      await http()
-        .post(`/avatar-training/sessions/${sessionId}/assign`)
-        .set(as(adminToken))
-        .send({ userIds: [employeeId] })
-        .expect(404);
-    });
-
-    it('submete para revisão e publica (as sessões ficam publicadas)', async () => {
-      await http()
-        .post(`/avatar-training/programs/${programId}/submit-review`)
-        .set(as(adminToken))
-        .expect(200);
-      const res = await http()
-        .post(`/avatar-training/programs/${programId}/publish`)
-        .set(as(adminToken))
-        .expect(200);
       expect(res.body.status).toBe('PUBLISHED');
+    });
+
+    it('a sessão criada fica publicada e visível na formação publicada', async () => {
       const session = await prisma.avatarTrainingSession.findUniqueOrThrow({
         where: { id: sessionId },
       });
