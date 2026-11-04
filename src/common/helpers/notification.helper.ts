@@ -57,3 +57,49 @@ export async function createNotificationSafe(
     return null;
   }
 }
+
+export interface NotifyUsersSafeInput {
+  userIds: Iterable<number>;
+  type: string;
+  message: string;
+  title?: string;
+  category?: NotificationCategory;
+  actionUrl?: string;
+  /** Objecto a serializar com JSON.stringify — NotificationLog.metadata é String?. */
+  metadata?: unknown;
+}
+
+/**
+ * Cria a mesma notificação para vários utilizadores (sem duplicar destinatários)
+ * num único `createMany`. Melhor esforço: nunca lança. Devolve quantas criou.
+ */
+export async function notifyUsersSafe(
+  prisma: PrismaService,
+  logger: Logger,
+  input: NotifyUsersSafeInput,
+): Promise<number> {
+  const userIds = [...new Set(input.userIds)];
+  if (userIds.length === 0) return 0;
+  try {
+    const metadata = JSON.stringify(input.metadata ?? {});
+    const res = await prisma.notificationLog.createMany({
+      data: userIds.map(userId => ({
+        userId,
+        type: input.type,
+        title: input.title,
+        message: input.message,
+        category: input.category,
+        actionUrl: input.actionUrl,
+        metadata,
+      })),
+    });
+    return res.count;
+  } catch (e: unknown) {
+    logger.warn(
+      `Falha ao criar notificações em massa (não bloqueante) — type=${input.type} destinatários=${userIds.length}: ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    );
+    return 0;
+  }
+}

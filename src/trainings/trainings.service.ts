@@ -401,7 +401,41 @@ export class TrainingService {
       data: { status: 'PUBLISHED', publishedAt: new Date() },
     });
     this.logHistory('PUBLISH', id, user.id);
+    await this.notifyTrainingPublished(id, training.title);
     return training;
+  }
+
+  /** Notifica os participantes (não cancelados/rejeitados) de que a formação foi publicada. */
+  private async notifyTrainingPublished(trainingId: number, title: string) {
+    try {
+      const participants = await this.prisma.read.trainingParticipant.findMany({
+        where: {
+          session: { trainingId },
+          status: { notIn: ['CANCELLED', 'REJECTED'] },
+        },
+        select: { userId: true },
+        distinct: ['userId'],
+      });
+      if (participants.length === 0) return;
+      await this.prisma.notificationLog.createMany({
+        data: participants.map(p => ({
+          userId: p.userId,
+          type: 'TRAINING_PUBLISHED',
+          title: 'Formação publicada',
+          message: `A formação "${title}" foi publicada e estás incluído nela.`,
+          category: 'LMS' as const,
+          actionUrl: '/trainings',
+          metadata: JSON.stringify({ trainingId }),
+        })),
+      });
+    } catch (e) {
+      this.logger.warn({
+        trainingId,
+        action: 'TRAINING_PUBLISHED',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao notificar participantes da formação publicada',
+      });
+    }
   }
 
   async archive(id: number, user: CurrentUserData) {

@@ -50,6 +50,7 @@ import {
 } from './live-classes.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { normalizeMeeting } from './meeting-link.util';
+import { notifyUsersSafe } from '../common/helpers/notification.helper';
 import { buildCsvString } from '../common/utils/csv-export.util';
 
 // Limite de segurança para a expansão de sessões recorrentes — evita um
@@ -547,9 +548,66 @@ export class LiveClassesService {
     if (recurrenceEndDate) data.recurrenceEndDate = new Date(recurrenceEndDate);
     if (recordingExpiresAt) data.recordingExpiresAt = new Date(recordingExpiresAt);
     if (notifySettings) data.notifySettings = notifySettings;
-    return this.prisma.liveClass
+    const result = await this.prisma.liveClass
       .update({ where: { id }, data, include: CLASS_INCLUDE })
       .catch((e: unknown) => this.mapWriteError(e));
+    if (dto.recordingUrl && !current.recordingUrl && current.recordingPublishedAt) {
+      await this.notifyRecordingAvailable(id, null, dto.topic ?? current.topic);
+    }
+    return result;
+  }
+
+  /** Avisa quem foi adicionado à aula ao vivo (ou a uma sessão dela). */
+  private async notifyAddedToLiveClass(
+    userIds: number[],
+    topic: string,
+    liveClassId: number,
+    sessionId: number | null,
+  ) {
+    await notifyUsersSafe(this.prisma, this.logger, {
+      userIds,
+      type: sessionId ? 'LIVE_CLASS_SESSION_ADDED' : 'LIVE_CLASS_ADDED',
+      title: sessionId ? 'Adicionado a uma sessão' : 'Adicionado a uma aula ao vivo',
+      message: sessionId
+        ? `Foste adicionado a uma sessão da aula ao vivo "${topic}".`
+        : `Foste adicionado à aula ao vivo "${topic}".`,
+      category: 'LMS',
+      metadata: { liveClassId, sessionId },
+    });
+  }
+
+  /** Avisa quem participou (não ausente) na aula/sessão de que a gravação já está disponível. */
+  private async notifyRecordingAvailable(
+    liveClassId: number,
+    sessionId: number | null,
+    topic: string,
+  ) {
+    try {
+      const attendees = await this.prisma.read.liveAttendance.findMany({
+        where: {
+          liveClassId,
+          ...(sessionId ? { sessionId } : {}),
+          status: { not: 'AUSENTE' },
+          OR: [{ joinedAt: { not: null } }, { accumulatedSeconds: { gt: 0 } }],
+        },
+        select: { userId: true },
+        distinct: ['userId'],
+      });
+      await notifyUsersSafe(this.prisma, this.logger, {
+        userIds: attendees.map(a => a.userId),
+        type: 'LIVE_CLASS_RECORDING_AVAILABLE',
+        title: 'Gravação disponível',
+        message: `A gravação da aula ao vivo "${topic}", em que participaste, já está disponível.`,
+        category: 'LMS',
+        metadata: { liveClassId, sessionId },
+      });
+    } catch (e: unknown) {
+      this.logger.warn(
+        `Falha ao notificar gravação da aula ao vivo ${liveClassId}: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
   }
 
   async remove(id: number) {
@@ -737,7 +795,7 @@ export class LiveClassesService {
       throw new NotFoundException('Sessão não encontrada');
     }
     const { sessionDate, meetingProvider: _p, meetingUrl: _u, ...rest } = dto;
-    return this.prisma.liveClassSession.update({
+    const updated = await this.prisma.liveClassSession.update({
       where: { id: sessionId },
       data: {
         ...rest,
@@ -747,6 +805,11 @@ export class LiveClassesService {
       },
       include: { instructor: { select: { id: true, name: true } } },
     });
+    if (dto.recordingUrl && !session.recordingUrl && session.recordingPublishedAt) {
+      const lc = await this.findOne(liveClassId);
+      await this.notifyRecordingAvailable(liveClassId, sessionId, lc.topic);
+    }
+    return updated;
   }
 
   async deleteSession(liveClassId: number, sessionId: number) {
@@ -1100,6 +1163,8 @@ export class LiveClassesService {
       : await this.prisma.liveAttendance.create({
           data: { liveClassId, userId: dto.userId, sessionId, ...data },
         });
+    if (!existing)
+      await this.notifyAddedToLiveClass([dto.userId], lc.topic, liveClassId, sessionId);
 
     await this.maybeSyncCourseProgress(
       lc,
@@ -1127,7 +1192,7 @@ export class LiveClassesService {
         'Apenas é possível adicionar participantes indicados individualmente',
       );
     }
-    await this.findOne(liveClassId);
+    const lc = await this.findOne(liveClassId);
     if (dto.sessionId) {
       const session = await this.prisma.read.liveClassSession.findUnique({
         where: { id: dto.sessionId },
@@ -1161,6 +1226,7 @@ export class LiveClassesService {
       await this.prisma.liveAttendance.createMany({
         data: toCreate.map(userId => ({ liveClassId, userId, sessionId })),
       });
+      await this.notifyAddedToLiveClass(toCreate, lc.topic, liveClassId, sessionId);
     }
     return { added: toCreate.length, alreadyPresent: have.size };
   }
@@ -1472,11 +1538,15 @@ export class LiveClassesService {
   }
 
   async publishRecording(id: number, publish: boolean) {
-    await this.findOne(id);
-    return this.prisma.liveClass.update({
+    const lc = await this.findOne(id);
+    const updated = await this.prisma.liveClass.update({
       where: { id },
       data: { recordingPublishedAt: publish ? new Date() : null },
     });
+    if (publish && !lc.recordingPublishedAt && lc.recordingUrl) {
+      await this.notifyRecordingAvailable(id, null, lc.topic);
+    }
+    return updated;
   }
 
   async deleteRecording(id: number) {
@@ -1493,10 +1563,15 @@ export class LiveClassesService {
     });
     if (!session || session.liveClassId !== liveClassId)
       throw new NotFoundException('Sessão não encontrada');
-    return this.prisma.liveClassSession.update({
+    const updated = await this.prisma.liveClassSession.update({
       where: { id: sessionId },
       data: { recordingPublishedAt: publish ? new Date() : null },
     });
+    if (publish && !session.recordingPublishedAt && session.recordingUrl) {
+      const lc = await this.findOne(liveClassId);
+      await this.notifyRecordingAvailable(liveClassId, sessionId, lc.topic);
+    }
+    return updated;
   }
 
   async deleteSessionRecording(liveClassId: number, sessionId: number) {

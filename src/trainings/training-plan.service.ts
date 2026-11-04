@@ -4,7 +4,7 @@
 // de Formações previstas (Training.trainingPlanId) — "planeado vs. realizado"
 // é sempre calculado a partir das Training ligadas (nunca guardado), mesmo
 // padrão de computeTotalCost em trainings.service.ts.
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import PDFDocument from 'pdfkit';
 import { PrismaService } from '../prisma/prisma.service';
@@ -33,6 +33,8 @@ const PRIVILEGED_ROLES = ADMIN_RH_ROLES;
 
 @Injectable()
 export class TrainingPlanService {
+  private readonly logger = new Logger(TrainingPlanService.name);
+
   constructor(private prisma: PrismaService) {}
 
   private async assertCanManage(id: number, user: CurrentUserData) {
@@ -260,10 +262,57 @@ export class TrainingPlanService {
     if (!plan || plan.status !== 'APPROVED') {
       throw new ConflictException('Só um plano aprovado pode ser publicado');
     }
-    return this.prisma.trainingPlan.update({
+    const published = await this.prisma.trainingPlan.update({
       where: { id },
       data: { status: 'PUBLISHED', publishedAt: new Date() },
     });
+    await this.notifyPlanPublished(id, published.name);
+    return published;
+  }
+
+  /**
+   * Notifica todos os utilizadores incluídos no plano publicado: participantes
+   * (não cancelados/rejeitados) das formações do plano e o responsável do plano.
+   * Falhas aqui nunca impedem a publicação.
+   */
+  private async notifyPlanPublished(planId: number, planName: string) {
+    try {
+      const [participants, plan] = await Promise.all([
+        this.prisma.read.trainingParticipant.findMany({
+          where: {
+            session: { training: { trainingPlanId: planId } },
+            status: { notIn: ['CANCELLED', 'REJECTED'] },
+          },
+          select: { userId: true },
+          distinct: ['userId'],
+        }),
+        this.prisma.read.trainingPlan.findUnique({
+          where: { id: planId },
+          select: { responsibleId: true },
+        }),
+      ]);
+      const userIds = new Set(participants.map(p => p.userId));
+      if (plan?.responsibleId) userIds.add(plan.responsibleId);
+      if (userIds.size === 0) return;
+      await this.prisma.notificationLog.createMany({
+        data: [...userIds].map(userId => ({
+          userId,
+          type: 'TRAINING_PLAN_PUBLISHED',
+          title: 'Plano de formação publicado',
+          message: `O plano de formação "${planName}" foi publicado e estás incluído nele.`,
+          category: 'LMS' as const,
+          actionUrl: '/trainings',
+          metadata: JSON.stringify({ trainingPlanId: planId }),
+        })),
+      });
+    } catch (e) {
+      this.logger.warn({
+        planId,
+        action: 'TRAINING_PLAN_PUBLISHED',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao notificar utilizadores do plano publicado',
+      });
+    }
   }
 
   async archive(id: number, user: CurrentUserData) {
