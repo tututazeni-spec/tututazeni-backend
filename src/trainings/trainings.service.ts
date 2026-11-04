@@ -268,7 +268,7 @@ export class TrainingService {
       avgRating: Math.round((avgRating._avg.rating ?? 0) * 10) / 10,
       totalCost,
       canManage,
-      mySessionIds: mine.map((p) => p.sessionId),
+      mySessionIds: mine.map(p => p.sessionId),
     };
   }
 
