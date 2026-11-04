@@ -5496,6 +5496,7 @@ enum TrainingPriority {
 enum TrainingPlanPeriod {
   ANNUAL
   QUARTERLY
+  SEMIANNUAL
   EXTRAORDINARY
 }
 
