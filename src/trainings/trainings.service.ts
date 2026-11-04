@@ -250,11 +250,25 @@ export class TrainingService {
       ? String(user.id) === String(t.createdById ?? -1) || isPrivileged(user, PRIVILEGED_ROLES)
       : false;
 
+    // Sessões em que o utilizador autenticado já tem inscrição activa (ou em
+    // espera/aprovação) — o frontend esconde «Inscrever-me» nessas.
+    const mine = user
+      ? await this.prisma.read.trainingParticipant.findMany({
+          where: {
+            session: { trainingId: id },
+            userId: Number(user.id),
+            status: { notIn: ['CANCELLED', 'REJECTED'] },
+          },
+          select: { sessionId: true },
+        })
+      : [];
+
     return {
       ...t,
       avgRating: Math.round((avgRating._avg.rating ?? 0) * 10) / 10,
       totalCost,
       canManage,
+      mySessionIds: mine.map((p) => p.sessionId),
     };
   }
 
