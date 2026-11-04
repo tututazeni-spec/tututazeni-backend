@@ -18,7 +18,7 @@ import { cohortDays } from './cohort-days';
 import { CertificatesService } from '../certificates/certificates.service';
 import { CourseCompletionService } from '../course-completion/course-completion.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
-import { createNotificationSafe } from '../common/helpers/notification.helper';
+import { createNotificationSafe, notifyUsersSafe } from '../common/helpers/notification.helper';
 import {
   CreateCourseDto,
   UpdateCourseDto,
@@ -357,7 +357,33 @@ export class CoursesService {
       data: { status: 'PUBLISHED', publishedAt: new Date() },
     });
     await this.invalidateCatalog();
+    await this.notifyCoursePublished(id, published.title);
     return published;
+  }
+
+  /** Avisa os matriculados (inscrições não canceladas) de que o curso foi publicado. */
+  private async notifyCoursePublished(courseId: number, title: string) {
+    try {
+      const enrollments = await this.prisma.read.enrollment.findMany({
+        where: { courseId, status: { notIn: ['CANCELLED', 'PENDING_APPROVAL'] } },
+        select: { userId: true },
+      });
+      await notifyUsersSafe(this.prisma, this.logger, {
+        userIds: enrollments.map(e => e.userId),
+        type: 'COURSE_PUBLISHED',
+        title: 'Curso publicado',
+        message: `O curso "${title}" foi publicado e já podes começar.`,
+        category: 'LMS',
+        actionUrl: `/courses/${courseId}/learn`,
+        metadata: { courseId },
+      });
+    } catch (e: unknown) {
+      this.logger.warn(
+        `Falha ao notificar matriculados do curso ${courseId} publicado: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
   }
 
   async archive(id: number) {

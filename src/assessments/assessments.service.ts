@@ -675,6 +675,26 @@ export class AssessmentsService {
             msg: 'Falha ao notificar utilizador sobre aprovação em avaliação',
           });
         });
+    } else if (passed === null) {
+      // Há perguntas de correcção manual — o resultado final fica pendente.
+      await this.prisma.notificationLog
+        .create({
+          data: {
+            userId,
+            type: 'ASSESSMENT_SUBMITTED',
+            message: `Concluíste a ${assessment.type === 'EXAM' ? 'avaliação formal' : 'avaliação'} "${assessment.title}". O resultado fica disponível após a correcção.`,
+            metadata: JSON.stringify({ assessmentId: assessment.id }),
+          },
+        })
+        .catch(e => {
+          this.logger.warn({
+            userId,
+            assessmentId: assessment.id,
+            action: 'NOTIFY_ASSESSMENT_SUBMITTED',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao notificar utilizador sobre avaliação submetida',
+          });
+        });
     } else if (passed === false) {
       await this.prisma.notificationLog
         .create({
