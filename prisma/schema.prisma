@@ -5802,6 +5802,7 @@ model TrainingAssessment {
 model TrainingSession {
   id               Int                       @id @default(autoincrement())
   trainingId       Int
+  title            String?
   sessionDate      DateTime
   sessionEndDate   DateTime?
   durationMinutes  Int

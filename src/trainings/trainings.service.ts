@@ -519,6 +519,7 @@ export class TrainingService {
     const session = await this.prisma.trainingSession.create({
       data: {
         trainingId: dto.trainingId,
+        title: dto.title,
         sessionDate: new Date(dto.sessionDate),
         sessionEndDate: dto.sessionEndDate ? new Date(dto.sessionEndDate) : null,
         durationMinutes: dto.durationMinutes,
