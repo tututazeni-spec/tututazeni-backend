@@ -10,6 +10,14 @@ import PDFDocument from 'pdfkit';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCanAccess, isPrivileged } from '../common/authz/ownership';
 import { CurrentUserData } from '../common/types/current-user';
+import {
+  PLAN_PERIOD_PT,
+  PLAN_STATUS_PT,
+  PRIORITY_PT,
+  TRAINING_STATUS_PT,
+  TRAINING_TYPE_PT,
+  pt,
+} from './training-plan.labels';
 import { buildCsvString } from '../common/utils/csv-export.util';
 import {
   CreateTrainingPlanDto,
@@ -380,8 +388,8 @@ export class TrainingPlanService {
     const plan = await this.findOne(id);
     const rows = plan.trainings.map(t => ({
       formacao: t.title,
-      estado: t.status,
-      tipo: t.type,
+      estado: pt(TRAINING_STATUS_PT, t.status),
+      tipo: pt(TRAINING_TYPE_PT, t.type),
       inicio: t.startDate?.toISOString().slice(0, 10) ?? '',
       fim: t.endDate?.toISOString().slice(0, 10) ?? '',
       participantes: t._count.participants,
@@ -407,9 +415,9 @@ export class TrainingPlanService {
     const header: [string, string][] = [
       ['Código', val(plan.code)],
       ['Ano', val(plan.year)],
-      ['Período', val(plan.period)],
-      ['Estado', val(plan.status)],
-      ['Prioridade', val(plan.priority)],
+      ['Período', val(pt(PLAN_PERIOD_PT, plan.period))],
+      ['Estado', val(pt(PLAN_STATUS_PT, plan.status))],
+      ['Prioridade', val(pt(PRIORITY_PT, plan.priority))],
       ['Início', day(plan.startDate)],
       ['Fim', day(plan.endDate)],
       ['Orçamento previsto', val(plan.plannedBudget)],
@@ -424,8 +432,8 @@ export class TrainingPlanService {
       get: (t: (typeof plan.trainings)[number]) => string;
     }[] = [
       { label: 'Formação', w: 250, get: t => t.title },
-      { label: 'Estado', w: 90, get: t => val(t.status) },
-      { label: 'Tipo', w: 90, get: t => val(t.type) },
+      { label: 'Estado', w: 90, get: t => val(pt(TRAINING_STATUS_PT, t.status)) },
+      { label: 'Tipo', w: 90, get: t => val(pt(TRAINING_TYPE_PT, t.type)) },
       { label: 'Início', w: 65, get: t => day(t.startDate) },
       { label: 'Fim', w: 65, get: t => day(t.endDate) },
       { label: 'Partic.', w: 50, get: t => String(t._count.participants) },
