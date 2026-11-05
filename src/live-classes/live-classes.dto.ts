@@ -345,9 +345,15 @@ export class ParticipantsFilterDto extends BaseFilterDto {
 // ─── Materiais (secção 11) ──────────────────────────────────────────────────
 
 export class AddMaterialDto {
-  @ApiProperty({ description: 'ID de um documento existente na Biblioteca' })
+  @ApiPropertyOptional({ description: 'ID de um documento existente no Repositório (Document)' })
+  @IsOptional()
   @IsInt()
-  documentId!: number;
+  documentId?: number;
+
+  @ApiPropertyOptional({ description: 'ID de um item da Biblioteca de conteúdos (LibraryItem)' })
+  @IsOptional()
+  @IsString()
+  libraryItemId?: string;
 }
 
 export class MaterialsFilterDto extends BaseFilterDto {

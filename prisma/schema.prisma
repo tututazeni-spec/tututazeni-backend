@@ -7564,6 +7564,8 @@ model LiveClass {
 
   // Etapa 6 — Presença (regra: só "Presente" com >= minAttendancePercent)
   attendanceAutoRegister Boolean @default(true)
+  // Itens da Biblioteca de conteúdos (LibraryItem, id texto) usados como material — FK solta, como materialDocumentIds.
+  materialLibraryItemIds String[] @default([])
   attendanceRequired     Boolean @default(false)
   minAttendancePercent   Int     @default(70)
   lateToleranceMinutes   Int     @default(10)
@@ -7640,6 +7642,7 @@ model LiveClassSession {
 
   liveClass   LiveClass                  @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
   instructor  TrainingInstructorProfile? @relation(fields: [instructorId], references: [id], onDelete: SetNull)
+  materialLibraryItemIds String[] @default([])
   attendances LiveAttendance[]
 
   @@unique([liveClassId, seq])
