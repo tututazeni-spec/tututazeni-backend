@@ -14,7 +14,12 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Res,
+  BadRequestException,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import { safeDownloadHeaders } from '../common/files/safe-download';
+import { AssessmentsExportService } from './assessments-export.service';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AssessmentsService } from './assessments.service';
 import {
@@ -48,7 +53,10 @@ const EVAL_CREATOR_ROLES = ADMIN_RH_LEADERSHIP_INSTRUCTOR_ROLES;
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('assessments')
 export class AssessmentsController {
-  constructor(private readonly svc: AssessmentsService) {}
+  constructor(
+    private readonly svc: AssessmentsService,
+    private readonly exportSvc: AssessmentsExportService,
+  ) {}
 
   // ── Catálogo & Descoberta ─────────────────────────────────────────────────
 
@@ -111,6 +119,30 @@ export class AssessmentsController {
   })
   results(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getResultsRoster(id);
+  }
+
+  @Get(':id/results/export')
+  @Roles(...EVAL_CREATOR_ROLES)
+  @ApiOperation({ summary: 'Exporta os resultados de uma avaliação formal em CSV, Excel ou PDF' })
+  @ApiQuery({ name: 'format', enum: ['csv', 'xlsx', 'pdf'] })
+  async exportResults(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: CurrentUserData,
+    @Res() res: Response,
+    @Query('format') format?: string,
+  ) {
+    if (format !== 'csv' && format !== 'xlsx' && format !== 'pdf') {
+      throw new BadRequestException('format deve ser csv, xlsx ou pdf');
+    }
+    const file = await this.exportSvc.exportResults(id, format, user);
+    res.set(
+      safeDownloadHeaders({
+        filename: file.filename,
+        mime: file.contentType,
+        extra: { 'Content-Length': String(file.buffer.length) },
+      }),
+    );
+    res.end(file.buffer);
   }
 
   @Get('attempts/:attemptId')

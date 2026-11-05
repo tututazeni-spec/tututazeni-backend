@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AssessmentsController } from './assessments.controller';
+import { AssessmentsExportService } from './assessments-export.service';
 import { AssessmentsService } from './assessments.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -37,7 +38,10 @@ describe('AssessmentsController', () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AssessmentsController],
-      providers: [{ provide: AssessmentsService, useValue: mockSvc }],
+      providers: [
+        { provide: AssessmentsService, useValue: mockSvc },
+        { provide: AssessmentsExportService, useValue: { exportResults: jest.fn() } },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
