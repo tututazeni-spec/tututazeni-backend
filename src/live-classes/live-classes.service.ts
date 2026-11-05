@@ -445,6 +445,66 @@ export class LiveClassesService {
     return { meetingUrl: m.joinUrl, passcode: m.passcode };
   }
 
+  /**
+   * Modo de inscrição AUTO: inscreve (LiveAttendance sem presença) todos os
+   * colaboradores activos do público-alvo (departamentos, unidades ou cargos
+   * escolhidos). Corre ao criar e ao gravar a aula; só conta quando a aula já
+   * está publicada (agendada ou em curso). Idempotente — quem já está inscrito
+   * é ignorado — e respeita o limite de participantes.
+   */
+  async autoEnrollTargets(lc: {
+    id: number;
+    topic: string;
+    status: LiveClassStatus;
+    enrollmentMode: LiveClassEnrollmentMode;
+    maxParticipants: number | null;
+    targetDeptIds: number[];
+    targetUnitIds: number[];
+    targetPositionIds: number[];
+  }): Promise<number> {
+    if (lc.enrollmentMode !== LiveClassEnrollmentMode.AUTO) return 0;
+    if (lc.status !== LiveClassStatus.AGENDADA && lc.status !== LiveClassStatus.EM_CURSO) return 0;
+    const scope: Prisma.UserWhereInput[] = [];
+    if (lc.targetDeptIds.length) scope.push({ departmentId: { in: lc.targetDeptIds } });
+    if (lc.targetUnitIds.length) scope.push({ unitId: { in: lc.targetUnitIds } });
+    if (lc.targetPositionIds.length) scope.push({ positionId: { in: lc.targetPositionIds } });
+    if (scope.length === 0) return 0;
+
+    const users = await this.prisma.read.user.findMany({
+      where: { accountStatus: 'ACTIVE', OR: scope },
+      select: { id: true },
+    });
+    const existing = await this.prisma.liveAttendance.findMany({
+      where: { liveClassId: lc.id, sessionId: null },
+      select: { userId: true },
+    });
+    const have = new Set(existing.map(e => e.userId));
+    let toCreate = users.map(u => u.id).filter(id => !have.has(id));
+    if (lc.maxParticipants != null) {
+      toCreate = toCreate.slice(0, Math.max(0, lc.maxParticipants - have.size));
+    }
+    if (toCreate.length === 0) return 0;
+    await this.prisma.liveAttendance.createMany({
+      data: toCreate.map(userId => ({
+        liveClassId: lc.id,
+        userId,
+        sessionId: null as number | null,
+      })),
+    });
+    await this.notifyAddedToLiveClass(toCreate, lc.topic, lc.id, null);
+    return toCreate.length;
+  }
+
+  private async autoEnrollSafely(lc: Parameters<LiveClassesService['autoEnrollTargets']>[0]) {
+    try {
+      await this.autoEnrollTargets(lc);
+    } catch (e: unknown) {
+      this.logger.warn(
+        `Inscrição automática da aula ${lc.id} falhou: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
   async create(dto: CreateLiveClassDto, user?: CurrentUserData) {
     if (user && isExternalInstructor(user)) {
       // Instrutor externo: a aula é sempre dele (perfil criado na primeira aula); o co-instrutor e
@@ -505,6 +565,7 @@ export class LiveClassesService {
         include: CLASS_INCLUDE,
       })
       .catch((e: unknown) => this.mapWriteError(e));
+    await this.autoEnrollSafely(lc);
     return lc;
   }
 
@@ -552,6 +613,7 @@ export class LiveClassesService {
     const result = await this.prisma.liveClass
       .update({ where: { id }, data, include: CLASS_INCLUDE })
       .catch((e: unknown) => this.mapWriteError(e));
+    await this.autoEnrollSafely(result);
     if (dto.recordingUrl && !current.recordingUrl && current.recordingPublishedAt) {
       await this.notifyRecordingAvailable(id, null, dto.topic ?? current.topic);
     }
