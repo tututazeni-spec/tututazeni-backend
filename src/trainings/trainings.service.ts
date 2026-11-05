@@ -15,6 +15,14 @@ import { AuditService } from '../common/services/audit.service';
 import { CompetenciesService } from '../competencies/competencies.service';
 import { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
 import { LearningPathCertificationService } from '../certificates/learning-path-certification.service';
+import { EnrollmentsService } from '../enrollments/enrollments.service';
+import {
+  JoinDestination,
+  JoinSessionResult,
+  courseLearnRoute,
+  remainingSharePercent,
+  sessionJoinWindow,
+} from './training-join';
 import {
   CreateTrainingDto,
   UpdateTrainingDto,
@@ -57,6 +65,7 @@ export class TrainingService {
     private readonly competencies: CompetenciesService,
     private readonly certificates: CertificateIssuanceService,
     private readonly learningPaths: LearningPathCertificationService,
+    private readonly enrollments: EnrollmentsService,
   ) {}
 
   // ─── HISTÓRICO (docs/trainings-detalhado.md pt.11 — aba "Histórico") ──────
@@ -259,7 +268,12 @@ export class TrainingService {
             userId: Number(user.id),
             status: { notIn: ['CANCELLED', 'REJECTED'] },
           },
-          select: { sessionId: true },
+          select: {
+            sessionId: true,
+            status: true,
+            joinedAt: true,
+            session: { select: { sessionDate: true, durationMinutes: true } },
+          },
         })
       : [];
 
@@ -269,6 +283,17 @@ export class TrainingService {
       totalCost,
       canManage,
       mySessionIds: mine.map(p => p.sessionId),
+      // Janela de entrada calculada no servidor (o frontend não replica a regra).
+      myParticipations: mine.map(p => {
+        const w = sessionJoinWindow(p.session);
+        return {
+          sessionId: p.sessionId,
+          status: p.status,
+          joinedAt: p.joinedAt,
+          joinOpensAt: w.opensAt,
+          joinClosesAt: w.closesAt,
+        };
+      }),
     };
   }
 
@@ -964,10 +989,10 @@ export class TrainingService {
       where: { id: session.trainingId },
       select: { completionMode: true, issueCertificate: true },
     });
-    if (training && training.completionMode !== 'MANUAL' && training.issueCertificate) {
+    if (training) {
       for (const p of participants) {
         if (presentSet.has(p.userId)) {
-          await this.issueCertificate(p.userId, session.trainingId, registrarId);
+          await this.certifyIfAttendanceCounts(p.userId, session.trainingId, training, registrarId);
         }
       }
     }
@@ -979,6 +1004,213 @@ export class TrainingService {
     });
 
     return { sessionId: dto.sessionId, attended, absent, total: participants.length };
+  }
+
+  /** Presença só conta para certificado nos modos ATTENDANCE/HYBRID de formações que o emitem. */
+  private async certifyIfAttendanceCounts(
+    userId: number,
+    trainingId: number,
+    training: { completionMode: string; issueCertificate: boolean },
+    actorId?: number,
+  ) {
+    if (training.completionMode !== 'MANUAL' && training.issueCertificate) {
+      await this.issueCertificate(userId, trainingId, actorId);
+    }
+  }
+
+  // ─── ENTRAR / INICIAR (ponte formação → execução) ─────────────────────────
+
+  /**
+   * POST /trainings/sessions/:sessionId/join — o utilizador autenticado entra na
+   * sessão em que está inscrito. Só actua sobre a inscrição do PRÓPRIO utilizador
+   * (o userId vem do token, nunca do pedido).
+   *
+   * - Janela: abre TRAINING_JOIN_EARLY_MINUTES antes do início e fecha no fim.
+   * - Online/híbrida com link → devolve o link; com curso → garante a matrícula.
+   * - Presencial (ou híbrida sem link nem curso) → só grava `joinedAt` (check-in
+   *   pedido); a presença (ATTENDED) é confirmada pelo formador em bulkAttendance.
+   * - Online sem link nem curso → erro, sem registar nada.
+   * - Idempotente: `joinedAt` só é escrito uma vez e o estado nunca retrocede.
+   */
+  async joinSession(sessionId: number, user: CurrentUserData): Promise<JoinSessionResult> {
+    const userId = Number(user.id);
+
+    const session = await this.prisma.read.trainingSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        training: {
+          select: {
+            id: true,
+            courseId: true,
+            completionMode: true,
+            minAttendancePercent: true,
+            issueCertificate: true,
+          },
+        },
+      },
+    });
+    if (!session) throw new NotFoundException('Sessão não encontrada');
+
+    // Ownership: a inscrição é procurada pela chave (sessão, utilizador do token).
+    const participant = await this.prisma.trainingParticipant.findUnique({
+      where: { sessionId_userId: { sessionId, userId } },
+    });
+    if (!participant || participant.userId !== userId) {
+      throw new NotFoundException('Não estás inscrito nesta sessão');
+    }
+    if (!['REGISTERED', 'ATTENDED', 'COMPLETED'].includes(participant.status)) {
+      throw new ForbiddenException(
+        participant.status === 'WAITLIST'
+          ? 'Estás em lista de espera para esta sessão'
+          : participant.status === 'PENDING_APPROVAL'
+            ? 'A tua inscrição ainda aguarda aprovação'
+            : 'A tua inscrição nesta sessão não está activa',
+      );
+    }
+
+    const now = new Date();
+    const window = sessionJoinWindow(session);
+    if (now < window.opensAt) {
+      // A hora de abertura vai no payload de GET /trainings/:id e /trainings/my
+      // (joinOpensAt); o filtro global de exceções só propaga `message`.
+      throw new BadRequestException('A entrada ainda não está aberta para esta sessão');
+    }
+    if (now > window.closesAt) {
+      throw new BadRequestException('A sessão já terminou');
+    }
+
+    const training = session.training;
+    const meetingUrl = session.meetingUrl?.trim() || null;
+    const courseId = training.courseId;
+
+    // Destino. Presencial nunca abre nada: só check-in.
+    let kind: 'MEETING' | 'COURSE' | 'CHECKIN';
+    if (session.modality === 'PRESENTIAL') kind = 'CHECKIN';
+    else if (meetingUrl) kind = 'MEETING';
+    else if (courseId) kind = 'COURSE';
+    else if (session.modality === 'ONLINE') {
+      throw new BadRequestException('Link ainda não disponível');
+    } else kind = 'CHECKIN';
+
+    // Matrícula no curso associado. Se o curso é o destino principal, uma falha
+    // impede a entrada (antes de registar presença); se o destino é a reunião,
+    // o curso é só um extra e a falha não bloqueia.
+    let courseRoute: string | undefined;
+    if (courseId && kind !== 'CHECKIN') {
+      if (kind === 'COURSE') {
+        await this.ensureCourseEnrollment(userId, courseId);
+        courseRoute = courseLearnRoute(courseId);
+      } else {
+        try {
+          await this.ensureCourseEnrollment(userId, courseId);
+          courseRoute = courseLearnRoute(courseId);
+        } catch (e) {
+          this.logger.warn({
+            userId,
+            sessionId,
+            courseId,
+            err: { message: e instanceof Error ? e.message : 'erro desconhecido' },
+            msg: 'Matrícula no curso associado falhou; a entrada na reunião segue',
+          });
+        }
+      }
+    }
+
+    // joinedAt: escrito uma única vez (condição joinedAt = null → seguro com cliques repetidos).
+    let joinedAt = participant.joinedAt;
+    let firstJoin = false;
+    if (!joinedAt) {
+      const claimed = await this.prisma.trainingParticipant.updateMany({
+        where: { id: participant.id, joinedAt: null },
+        data: { joinedAt: now },
+      });
+      if (claimed.count === 1) {
+        joinedAt = now;
+        firstJoin = true;
+      } else {
+        const fresh = await this.prisma.trainingParticipant.findUnique({
+          where: { id: participant.id },
+          select: { joinedAt: true },
+        });
+        joinedAt = fresh?.joinedAt ?? now;
+      }
+    }
+
+    // Presença automática (online/curso): só quando o atraso não compromete
+    // minAttendancePercent; caso contrário fica REGISTERED para o formador decidir.
+    let status: string = participant.status;
+    if (kind !== 'CHECKIN' && participant.status === 'REGISTERED') {
+      if (remainingSharePercent(session, joinedAt) >= training.minAttendancePercent) {
+        const moved = await this.prisma.trainingParticipant.updateMany({
+          where: { id: participant.id, status: 'REGISTERED' },
+          data: { status: 'ATTENDED' },
+        });
+        status = 'ATTENDED';
+        if (moved.count === 1) {
+          await this.certifyIfAttendanceCounts(userId, training.id, training, userId);
+        }
+      }
+    }
+
+    const late = joinedAt.getTime() > session.sessionDate.getTime();
+
+    if (firstJoin) {
+      this.logHistory('SESSION_JOIN', training.id, userId, {
+        sessionId,
+        destination: kind,
+        late,
+        status,
+      });
+    }
+
+    const destination: JoinDestination =
+      kind === 'MEETING'
+        ? { type: 'MEETING', url: meetingUrl }
+        : kind === 'COURSE'
+          ? { type: 'COURSE', route: courseRoute }
+          : { type: 'CHECKIN' };
+
+    return {
+      sessionId,
+      trainingId: training.id,
+      status,
+      joinedAt,
+      late,
+      destination,
+      ...(kind === 'MEETING' && courseRoute ? { courseRoute } : {}),
+    };
+  }
+
+  /** Garante a matrícula no curso associado (chave composta courseId_userId). */
+  private async ensureCourseEnrollment(userId: number, courseId: number) {
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId },
+      select: { id: true, status: true },
+    });
+    if (!course) throw new NotFoundException('O curso associado a esta formação já não existe');
+    if (course.status !== 'PUBLISHED') {
+      throw new BadRequestException('O curso associado a esta formação ainda não está publicado');
+    }
+
+    const existing = await this.prisma.enrollment.findUnique({
+      where: { courseId_userId: { courseId, userId } },
+      select: { status: true },
+    });
+    if (existing) {
+      if (existing.status === 'CANCELLED' || existing.status === 'EXPIRED') {
+        throw new BadRequestException(
+          'A tua matrícula neste curso está cancelada ou expirada. Fala com o RH.',
+        );
+      }
+      return;
+    }
+
+    try {
+      await this.enrollments.enroll({ userId, courseId, origin: 'SELF_ENROLL' });
+    } catch (e) {
+      // Corrida com outro pedido que matriculou entretanto: já está matriculado.
+      if (!(e instanceof ConflictException)) throw e;
+    }
   }
 
   // ─── APROVAÇÕES ───────────────────────────────────────────────────────────
@@ -1351,7 +1583,7 @@ export class TrainingService {
   // ─── HISTÓRICO DO UTILIZADOR ──────────────────────────────────────────────
 
   async getMyTrainings(userId: number) {
-    return this.prisma.read.trainingParticipant.findMany({
+    const rows = await this.prisma.read.trainingParticipant.findMany({
       where: { userId },
       include: {
         session: {
@@ -1368,6 +1600,7 @@ export class TrainingService {
                 thumbnailUrl: true,
                 workloadHours: true,
                 issueCertificate: true,
+                courseId: true,
                 instructor: { select: { id: true, fullName: true, avatarUrl: true } },
               },
             },
@@ -1375,6 +1608,10 @@ export class TrainingService {
         },
       },
       orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(r => {
+      const w = r.session ? sessionJoinWindow(r.session) : null;
+      return { ...r, joinOpensAt: w?.opensAt ?? null, joinClosesAt: w?.closesAt ?? null };
     });
   }
 
