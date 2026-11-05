@@ -1942,6 +1942,8 @@ export class EventsService {
       responsibleId: dto.responsibleId,
       equipment: dto.equipment ?? [],
       customEquipment: dto.customEquipment ?? [],
+      customServices: dto.customServices ?? [],
+      serviceCosts: (dto.serviceCosts ?? {}) as Prisma.InputJsonValue,
       resourcesNeeded: dto.resourcesNeeded,
       suppliers: dto.suppliers,
       catering: dto.catering,
