@@ -2,11 +2,12 @@
 import { Module } from '@nestjs/common';
 import { AssessmentsService } from './assessments.service';
 import { AssessmentsController } from './assessments.controller';
+import { AssessmentsExportService } from './assessments-export.service';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
   imports: [PrismaModule],
-  providers: [AssessmentsService],
+  providers: [AssessmentsService, AssessmentsExportService],
   controllers: [AssessmentsController],
   exports: [AssessmentsService],
 })
