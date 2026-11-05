@@ -150,6 +150,7 @@ export class UpdateCycleDto {
   @IsOptional()
   @IsEnum(EvalPopulationType)
   populationType?: EvalPopulationType;
+  @ApiPropertyOptional() @IsOptional() @IsArray() @IsInt({ each: true }) targetDeptIds?: number[];
   @ApiPropertyOptional() @IsOptional() @IsArray() @IsInt({ each: true }) targetUnitIds?: number[];
   @ApiPropertyOptional() @IsOptional() @IsArray() @IsInt({ each: true }) targetUserIds?: number[];
   @ApiPropertyOptional() @IsOptional() @IsDateString() selfEvalDueDate?: string;

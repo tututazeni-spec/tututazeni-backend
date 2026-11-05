@@ -339,6 +339,82 @@ export class CoursesService {
     return updated;
   }
 
+  /**
+   * Inscrição automática dos membros dos grupos de audiência num curso
+   * publicado: quem foi adicionado a um grupo fica matriculado sem pedir
+   * (sem passar pela aprovação — foi a gestão que o escolheu). Idempotente:
+   * quem já tem matrícula é ignorado. Só inscreve colaboradores activos.
+   */
+  async enrollAudienceMembers(
+    courseId: number,
+    opts: { groupId?: number; notify?: boolean } = {},
+  ): Promise<number> {
+    const course = await this.prisma.read.course.findUnique({
+      where: { id: courseId },
+      select: { id: true, title: true, status: true, mandatory: true },
+    });
+    if (!course || course.status !== 'PUBLISHED') return 0;
+    const groups = await this.prisma.read.courseAudienceGroup.findMany({
+      where: { courseId, ...(opts.groupId ? { id: opts.groupId } : {}) },
+      select: { userIds: true },
+    });
+    const wanted = [...new Set(groups.flatMap(g => g.userIds))];
+    if (wanted.length === 0) return 0;
+    const [active, existing] = await Promise.all([
+      this.prisma.read.user.findMany({
+        where: { id: { in: wanted }, accountStatus: 'ACTIVE' },
+        select: { id: true },
+      }),
+      this.prisma.enrollment.findMany({
+        where: { courseId, userId: { in: wanted } },
+        select: { userId: true },
+      }),
+    ]);
+    const have = new Set(existing.map(e => e.userId));
+    const toCreate = active.map(u => u.id).filter(id => !have.has(id));
+    if (toCreate.length === 0) return 0;
+    const created = await this.prisma.enrollment.createMany({
+      data: toCreate.map(userId => ({
+        courseId,
+        userId,
+        status: 'NOT_STARTED' as const,
+        mandatory: course.mandatory ?? false,
+      })),
+      skipDuplicates: true,
+    });
+    if (created.count > 0) {
+      await this.prisma.courseAnalytics.updateMany({
+        where: { courseId },
+        data: { totalEnrollments: { increment: created.count } },
+      });
+      if (opts.notify !== false) {
+        await notifyUsersSafe(this.prisma, this.logger, {
+          userIds: toCreate,
+          type: 'COURSE_ENROLLED',
+          title: 'Nova inscrição',
+          message: `Foi inscrito no curso "${course.title}"`,
+          category: 'LMS',
+          actionUrl: `/courses/${courseId}/learn`,
+          metadata: { courseId },
+        });
+      }
+    }
+    return created.count;
+  }
+
+  private async enrollAudienceSafely(
+    courseId: number,
+    opts?: { groupId?: number; notify?: boolean },
+  ) {
+    try {
+      await this.enrollAudienceMembers(courseId, opts);
+    } catch (e: unknown) {
+      this.logger.warn(
+        `Inscrição automática do curso ${courseId} falhou: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
   async publish(id: number) {
     const course = await this.findOne(id);
     if (course._count.modules === 0) {
@@ -357,6 +433,8 @@ export class CoursesService {
       data: { status: 'PUBLISHED', publishedAt: new Date() },
     });
     await this.invalidateCatalog();
+    // Membros dos grupos de audiência ficam matriculados já na publicação (o aviso de publicação cobre-os).
+    await this.enrollAudienceSafely(id, { notify: false });
     await this.notifyCoursePublished(id, published.title);
     return published;
   }
@@ -822,15 +900,22 @@ export class CoursesService {
 
   async createAudienceGroup(courseId: number, dto: CreateCourseAudienceGroupDto) {
     await this.findOne(courseId);
-    return this.prisma.courseAudienceGroup.create({
+    const group = await this.prisma.courseAudienceGroup.create({
       data: { courseId, name: dto.name, userIds: dto.userIds ?? [] },
     });
+    await this.enrollAudienceSafely(courseId, { groupId: group.id });
+    return group;
   }
 
   async updateAudienceGroup(groupId: number, dto: UpdateCourseAudienceGroupDto) {
     const group = await this.prisma.courseAudienceGroup.findUnique({ where: { id: groupId } });
     if (!group) throw new NotFoundException('Grupo não encontrado');
-    return this.prisma.courseAudienceGroup.update({ where: { id: groupId }, data: dto });
+    const updated = await this.prisma.courseAudienceGroup.update({
+      where: { id: groupId },
+      data: dto,
+    });
+    await this.enrollAudienceSafely(group.courseId, { groupId });
+    return updated;
   }
 
   async removeAudienceGroup(groupId: number) {

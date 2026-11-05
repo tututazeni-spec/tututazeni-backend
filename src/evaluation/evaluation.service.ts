@@ -270,7 +270,43 @@ export class EvaluationService {
         ...(blocks ? { blocks: toJson(blocks) } : {}),
       },
     });
+
+    // Ciclo já em curso: quem entrar na população abrangida passa a ter os seus
+    // pedidos de avaliação criados logo (idempotente — skipDuplicates).
+    const populationChanged =
+      dto.populationType !== undefined ||
+      dto.targetDeptIds !== undefined ||
+      dto.targetUnitIds !== undefined ||
+      dto.targetUserIds !== undefined;
+    if (populationChanged && campaign.status === CycleStatus.ACTIVE) {
+      await this.assignNewParticipants(id, campaign);
+    }
     return this.toPublicCampaign(campaign);
+  }
+
+  /** Cria os pedidos em falta de um ciclo activo e avisa os avaliadores dos novos. */
+  private async assignNewParticipants(
+    cycleId: number,
+    campaign: Prisma.EvaluationCampaignGetPayload<object>,
+  ) {
+    try {
+      const startedAt = new Date();
+      await this.autoAssignCycleRequests(cycleId, campaign);
+      const created = await this.prisma.evaluationRequest.findMany({
+        where: { cycleId, createdAt: { gte: startedAt } },
+        select: { evaluatorId: true },
+      });
+      await this.notifyParticipants(
+        cycleId,
+        [...new Set(created.map(r => r.evaluatorId))],
+        'EVALUATION_CYCLE_STARTED',
+        `Ciclo de avaliação "${campaign.name}" — tens novas avaliações pendentes`,
+      );
+    } catch (e: unknown) {
+      this.logger.warn(
+        `Atribuição automática do ciclo ${cycleId} falhou: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
   }
 
   async publishCycle(id: number) {
