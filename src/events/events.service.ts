@@ -1679,7 +1679,7 @@ export class EventsService {
   // convenção do resto do módulo.
 
   async getCalendar(filters: EventCalendarFilterDto) {
-    const { from, to, type, status, departmentId, unitId, responsibleId, location } = filters;
+    const { from, to, type, status, departmentId, unitId, responsibleId, location, search } = filters;
 
     const where: Prisma.EventWhereInput = {
       startAt: { gte: new Date(from), lte: new Date(to) },
@@ -1689,6 +1689,7 @@ export class EventsService {
     if (departmentId) where.departmentId = departmentId;
     if (unitId) where.unitId = unitId;
     if (location) where.location = { contains: location, mode: 'insensitive' };
+    if (search) where.title = { contains: search, mode: 'insensitive' };
     if (responsibleId) {
       where.OR = [{ responsibleId }, { responsibleId: null, organizerId: responsibleId }];
     }

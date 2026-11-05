@@ -452,6 +452,11 @@ export class EventCalendarFilterDto {
   @IsOptional()
   @IsString()
   location?: string;
+
+  @ApiPropertyOptional({ description: 'Pesquisa por nome (título) do evento' })
+  @IsOptional()
+  @IsString()
+  search?: string;
 }
 
 // ─── Filters ──────────────────────────────────────────────────────────────────
