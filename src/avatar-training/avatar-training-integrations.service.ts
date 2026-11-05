@@ -118,7 +118,19 @@ export class AvatarTrainingIntegrationsService {
     });
   }
 
-  async assertPrerequisites(userId: number, courseIds: number[]) {
+  /** Ids (de entre os dados) que ainda existem como curso. */
+  async existingCourseIds(courseIds: number[]): Promise<number[]> {
+    if (!courseIds.length) return [];
+    const rows = await this.prisma.course.findMany({
+      where: { id: { in: courseIds } },
+      select: { id: true },
+    });
+    return rows.map(r => r.id);
+  }
+
+  async assertPrerequisites(userId: number, allCourseIds: number[]) {
+    // Um curso apagado depois de ser ligado como pré-requisito já não pode bloquear ninguém.
+    const courseIds = await this.existingCourseIds(allCourseIds);
     if (!courseIds.length) return;
     const done = await this.prisma.enrollment.findMany({
       where: { userId, courseId: { in: courseIds }, status: 'COMPLETED' },
@@ -127,7 +139,17 @@ export class AvatarTrainingIntegrationsService {
     const doneIds = new Set(done.map(d => d.courseId));
     const missing = courseIds.filter(id => !doneIds.has(id));
     if (missing.length) {
-      throw new ConflictException(`Pré-requisitos por concluir (cursos: ${missing.join(', ')})`);
+      const courses = await this.prisma.course.findMany({
+        where: { id: { in: missing } },
+        select: { id: true, title: true },
+      });
+      const titles = new Map(courses.map(c => [c.id, c.title]));
+      const names = missing.map(id => `«${titles.get(id) ?? `curso ${id}`}»`);
+      throw new ConflictException(
+        missing.length === 1
+          ? `Conclua primeiro o curso ${names[0]} para iniciar esta sessão.`
+          : `Conclua primeiro os cursos ${names.join(', ')} para iniciar esta sessão.`,
+      );
     }
   }
 

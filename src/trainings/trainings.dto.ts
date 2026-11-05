@@ -406,6 +406,12 @@ export class CreateTrainingSessionDto {
   @IsInt()
   trainingId!: number;
 
+  @ApiPropertyOptional({ description: 'Título da sessão' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  title?: string;
+
   @ApiProperty({ description: 'Data e hora da sessão' })
   @IsDateString()
   sessionDate!: string;

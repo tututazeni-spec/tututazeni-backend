@@ -119,7 +119,7 @@ export class AvatarTrainingDevelopmentService {
             competencyId: c.id,
             currentLevel: next,
             source: CompetencySource.TRAINING,
-            notes: `Avatar Training: ${ctx.assignment.session.program.title} — ${ctx.assignment.session.title} (nota ${ctx.score})`,
+            notes: `Treino com Avatar: ${ctx.assignment.session.program.title} — ${ctx.assignment.session.title} (nota ${ctx.score})`,
           },
           ctx.userId,
         );
@@ -166,7 +166,7 @@ export class AvatarTrainingDevelopmentService {
     const res = await this.onboarding.completeTask(
       {
         taskInstanceId: taskId,
-        evidenceComment: `Avatar Training: ${ctx.assignment.session.program.title}`,
+        evidenceComment: `Treino com Avatar: ${ctx.assignment.session.program.title}`,
       } as never,
       user.id,
     );

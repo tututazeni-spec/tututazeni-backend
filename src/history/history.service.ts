@@ -500,7 +500,7 @@ export class HistoryService {
         impactScore: 50,
         milestone: (s.score ?? 0) >= 80,
         icon: '🤖',
-        title: `Simulação concluída: ${s.scenario?.title ?? 'Avatar Training'}${s.score ? ` (${s.score}pts)` : ''}`,
+        title: `Simulação concluída: ${s.scenario?.title ?? 'Treino com Avatar'}${s.score ? ` (${s.score}pts)` : ''}`,
         action: 'AVATAR_SESSION_COMPLETED',
         entity: 'AvatarSession',
         entityId: s.id,

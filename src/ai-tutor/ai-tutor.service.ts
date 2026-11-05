@@ -593,10 +593,14 @@ export class AiTutorService {
     const systemPrompt = `És um especialista em design instrucional e pedagogia corporativa. Responde SEMPRE em português e em formato JSON válido quando pedido.`;
 
     const settings = await this.getSettings();
+    // O limite fixo de 2048 tokens truncava o JSON a partir de ~10-15 itens
+    // (20 questões com explicação ≈ 4-5k tokens), o que fazia o parse falhar e
+    // o frontend cair no texto em bruto. O orçamento cresce com a quantidade.
+    const maxTokens = Math.min(8192, Math.max(2048, 600 + (dto.count ?? 5) * 400));
     const response = await this.aiProviders.chat(
       systemPrompt,
       [{ role: 'user', content: prompts[dto.type] }],
-      2048,
+      maxTokens,
       settings.temperature,
     );
 

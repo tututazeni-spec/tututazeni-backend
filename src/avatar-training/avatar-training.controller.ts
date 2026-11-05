@@ -167,6 +167,29 @@ export class AvatarTrainingController {
     return this.programs.createProgram(user.id, dto);
   }
 
+  // «recycle» tem de vir antes de programs/:id para não ser lido como um id.
+  @Get('programs/recycle')
+  @Roles(...AVATAR_AUTHOR_ROLES)
+  @ApiOperation({ summary: 'Reciclagem: formações eliminadas nos últimos 30 dias' })
+  listDeletedPrograms(@CurrentUser() user: CurrentUserData) {
+    return this.programs.listDeletedPrograms(user);
+  }
+
+  @Post('programs/:id/restore')
+  @HttpCode(HttpStatus.OK)
+  @Roles(...AVATAR_AUTHOR_ROLES)
+  @ApiOperation({ summary: 'Restaurar formação da reciclagem' })
+  restoreProgram(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
+    return this.programs.restoreProgram(user, id);
+  }
+
+  @Delete('programs/:id')
+  @Roles(...AVATAR_AUTHOR_ROLES)
+  @ApiOperation({ summary: 'Eliminar formação (vai para a reciclagem durante 30 dias)' })
+  removeProgram(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
+    return this.programs.removeProgram(user, id);
+  }
+
   @Get('programs/:id')
   @Roles(...AUTHENTICATED_ROLES)
   getProgram(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {

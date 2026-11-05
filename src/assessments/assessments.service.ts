@@ -75,6 +75,7 @@ export class AssessmentsService {
         title: data.title,
         description: data.description,
         imageUrl: data.imageUrl || null,
+        source: data.source ?? null,
         type: data.type,
         status: data.status ?? 'DRAFT',
         courseId: data.courseId,
@@ -251,7 +252,8 @@ export class AssessmentsService {
     if (current.status !== 'DRAFT') {
       throw new ConflictException('Só é possível editar uma avaliação antes de a publicar');
     }
-    const { questions, availableFrom, availableUntil, ...data } = dto;
+    // `source` só se define na criação.
+    const { questions, availableFrom, availableUntil, source: _source, ...data } = dto;
     this.assertValidAvailabilityWindow(availableFrom, availableUntil);
 
     if (questions) {
@@ -671,6 +673,26 @@ export class AssessmentsService {
             action: 'NOTIFY_ASSESSMENT_PASSED',
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao notificar utilizador sobre aprovação em avaliação',
+          });
+        });
+    } else if (passed === null) {
+      // Há perguntas de correcção manual — o resultado final fica pendente.
+      await this.prisma.notificationLog
+        .create({
+          data: {
+            userId,
+            type: 'ASSESSMENT_SUBMITTED',
+            message: `Concluíste a ${assessment.type === 'EXAM' ? 'avaliação formal' : 'avaliação'} "${assessment.title}". O resultado fica disponível após a correcção.`,
+            metadata: JSON.stringify({ assessmentId: assessment.id }),
+          },
+        })
+        .catch(e => {
+          this.logger.warn({
+            userId,
+            assessmentId: assessment.id,
+            action: 'NOTIFY_ASSESSMENT_SUBMITTED',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao notificar utilizador sobre avaliação submetida',
           });
         });
     } else if (passed === false) {

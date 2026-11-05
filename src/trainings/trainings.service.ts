@@ -250,11 +250,25 @@ export class TrainingService {
       ? String(user.id) === String(t.createdById ?? -1) || isPrivileged(user, PRIVILEGED_ROLES)
       : false;
 
+    // Sessões em que o utilizador autenticado já tem inscrição activa (ou em
+    // espera/aprovação) — o frontend esconde «Inscrever-me» nessas.
+    const mine = user
+      ? await this.prisma.read.trainingParticipant.findMany({
+          where: {
+            session: { trainingId: id },
+            userId: Number(user.id),
+            status: { notIn: ['CANCELLED', 'REJECTED'] },
+          },
+          select: { sessionId: true },
+        })
+      : [];
+
     return {
       ...t,
       avgRating: Math.round((avgRating._avg.rating ?? 0) * 10) / 10,
       totalCost,
       canManage,
+      mySessionIds: mine.map(p => p.sessionId),
     };
   }
 
@@ -401,7 +415,41 @@ export class TrainingService {
       data: { status: 'PUBLISHED', publishedAt: new Date() },
     });
     this.logHistory('PUBLISH', id, user.id);
+    await this.notifyTrainingPublished(id, training.title);
     return training;
+  }
+
+  /** Notifica os participantes (não cancelados/rejeitados) de que a formação foi publicada. */
+  private async notifyTrainingPublished(trainingId: number, title: string) {
+    try {
+      const participants = await this.prisma.read.trainingParticipant.findMany({
+        where: {
+          session: { trainingId },
+          status: { notIn: ['CANCELLED', 'REJECTED'] },
+        },
+        select: { userId: true },
+        distinct: ['userId'],
+      });
+      if (participants.length === 0) return;
+      await this.prisma.notificationLog.createMany({
+        data: participants.map(p => ({
+          userId: p.userId,
+          type: 'TRAINING_PUBLISHED',
+          title: 'Formação publicada',
+          message: `A formação "${title}" foi publicada e estás incluído nela.`,
+          category: 'LMS' as const,
+          actionUrl: '/trainings',
+          metadata: JSON.stringify({ trainingId }),
+        })),
+      });
+    } catch (e) {
+      this.logger.warn({
+        trainingId,
+        action: 'TRAINING_PUBLISHED',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao notificar participantes da formação publicada',
+      });
+    }
   }
 
   async archive(id: number, user: CurrentUserData) {
@@ -485,6 +533,7 @@ export class TrainingService {
     const session = await this.prisma.trainingSession.create({
       data: {
         trainingId: dto.trainingId,
+        title: dto.title,
         sessionDate: new Date(dto.sessionDate),
         sessionEndDate: dto.sessionEndDate ? new Date(dto.sessionEndDate) : null,
         durationMinutes: dto.durationMinutes,

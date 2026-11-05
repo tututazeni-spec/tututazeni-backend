@@ -650,11 +650,29 @@ export class AddKnowledgeSourceDto {
 }
 
 export class AssignAvatarSessionDto {
-  @ApiProperty({ type: [Number] })
+  @ApiPropertyOptional({ type: [Number] })
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(500)
   @IsInt({ each: true })
-  userIds: number[];
+  userIds?: number[];
+
+  @ApiPropertyOptional({
+    type: [Number],
+    description: 'Atribuir a todos os colaboradores activos destes departamentos',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @IsInt({ each: true })
+  departmentIds?: number[];
+
+  @ApiPropertyOptional({
+    description: 'Atribuir a todos os colaboradores de todos os departamentos',
+  })
+  @IsOptional()
+  @IsBoolean()
+  allDepartments?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
