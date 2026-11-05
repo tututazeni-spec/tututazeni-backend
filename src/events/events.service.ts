@@ -42,6 +42,7 @@ import {
 } from './events.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { buildCsvString } from '../common/utils/csv-export.util';
+import { notifyUsersSafe } from '../common/helpers/notification.helper';
 import { CurrentUserData } from '../common/types/current-user';
 
 // Papéis com visão global (ver stats/audit-logs) — não sofrem filtro por
@@ -107,7 +108,19 @@ export class EventsService {
     if (modalidade) where.modalidade = modalidade;
     if (mandatory !== undefined) where.mandatory = mandatory;
     if (status) where.status = status;
-    else where.status = { in: ['PUBLISHED', 'LIVE'] };
+    else {
+      // Por omissão só eventos publicados — mas ADMIN/RH veem todos os rascunhos
+      // e cada organizador vê os seus (senão o evento acabado de criar some).
+      const seesAllDrafts = !!currentUser.role?.name && DEPT_FILTER_BYPASS_ROLES.has(currentUser.role.name);
+      where.AND = [
+        {
+          OR: [
+            { status: { in: ['PUBLISHED', 'LIVE'] } },
+            seesAllDrafts ? { status: 'DRAFT' } : { status: 'DRAFT', organizerId: currentUser.id },
+          ],
+        },
+      ];
+    }
     if (upcoming) where.startAt = { gte: new Date() };
     if (departmentId) where.departmentId = departmentId;
     if (unitId) where.unitId = unitId;
@@ -259,7 +272,31 @@ export class EventsService {
   async publish(id: number) {
     const e = await this.findOne(id);
     if (!e.title || !e.startAt) throw new BadRequestException('Evento incompleto para publicação');
-    return this.prisma.event.update({ where: { id }, data: { status: 'PUBLISHED' } });
+    const wasDraft = e.status === 'DRAFT';
+    const published = await this.prisma.event.update({ where: { id }, data: { status: 'PUBLISHED' } });
+
+    // Avisar os utilizadores adicionados ao evento (só na primeira publicação).
+    if (wasDraft) {
+      try {
+        const participants = await this.prisma.read.eventParticipant.findMany({
+          where: { eventId: id, status: { notIn: ['CANCELLED', 'REJECTED'] } },
+          select: { userId: true },
+        });
+        await notifyUsersSafe(this.prisma, this.logger, {
+          userIds: participants.map(p => p.userId),
+          type: 'EVENT_PUBLISHED',
+          title: 'Novo evento',
+          message: `O evento "${e.title}" foi publicado e estás inscrito.`,
+          category: 'LMS',
+          actionUrl: '/events',
+          metadata: { eventId: id },
+        });
+      } catch (err: unknown) {
+        this.logger.warn(`Falha ao notificar participantes na publicação do evento ${id}: ${errMsg(err)}`);
+      }
+    }
+
+    return published;
   }
 
   async cancel(id: number) {
