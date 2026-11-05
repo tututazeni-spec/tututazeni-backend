@@ -745,7 +745,7 @@ export class AvatarTrainingAttemptsService {
         skip: (page - 1) * limit,
         take: limit,
         include: {
-          user: { select: { id: true, fullName: true } },
+          user: { select: { id: true, fullName: true, avatarUrl: true } },
           session: {
             select: { id: true, title: true, program: { select: { id: true, title: true } } },
           },
