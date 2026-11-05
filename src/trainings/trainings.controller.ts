@@ -360,6 +360,18 @@ export class TrainingController {
     return this.svc.registerParticipant({ sessionId, userId: user.id, allowWaitlist: true });
   }
 
+  @Post('sessions/:sessionId/join')
+  @ApiOperation({
+    summary: 'Entrar/iniciar uma sessão em que o utilizador está inscrito (regista a presença)',
+  })
+  @AnyAuthenticated()
+  joinSession(
+    @CurrentUser() user: CurrentUserData,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+  ) {
+    return this.svc.joinSession(sessionId, user);
+  }
+
   @Delete('participants/:id/cancel')
   @ApiOperation({ summary: 'Cancelar inscrição própria' })
   @ApiQuery({ name: 'reason', required: false })

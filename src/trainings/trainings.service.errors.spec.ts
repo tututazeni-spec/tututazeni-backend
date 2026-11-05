@@ -11,6 +11,7 @@ import { AuditService } from '../common/services/audit.service';
 import { CompetenciesService } from '../competencies/competencies.service';
 import { CertificateIssuanceService } from '../certificates/certificate-issuance.service';
 import { LearningPathCertificationService } from '../certificates/learning-path-certification.service';
+import { EnrollmentsService } from '../enrollments/enrollments.service';
 
 const mockAuditService = { log: jest.fn().mockResolvedValue(undefined) };
 const mockCertificates = { issue: jest.fn().mockResolvedValue({ outcome: 'ISSUED' }) };
@@ -47,6 +48,7 @@ describe('TrainingsService — registerParticipant (capacidade / lista de espera
         { provide: CompetenciesService, useValue: mockCompetenciesService },
         { provide: CertificateIssuanceService, useValue: mockCertificates },
         { provide: LearningPathCertificationService, useValue: mockLearningPaths },
+        { provide: EnrollmentsService, useValue: { enroll: jest.fn() } },
       ],
     }).compile();
     service = module.get<TrainingsService>(TrainingsService);
@@ -154,6 +156,7 @@ describe('TrainingsService — cancelParticipant (ownership + promoção da list
         { provide: CompetenciesService, useValue: mockCompetenciesService },
         { provide: CertificateIssuanceService, useValue: mockCertificates },
         { provide: LearningPathCertificationService, useValue: mockLearningPaths },
+        { provide: EnrollmentsService, useValue: { enroll: jest.fn() } },
       ],
     }).compile();
     service = module.get<TrainingsService>(TrainingsService);
@@ -216,6 +219,7 @@ describe('TrainingsService — updateParticipantStatus (emissão automática de 
         { provide: CompetenciesService, useValue: mockCompetenciesService },
         { provide: CertificateIssuanceService, useValue: mockCertificates },
         { provide: LearningPathCertificationService, useValue: mockLearningPaths },
+        { provide: EnrollmentsService, useValue: { enroll: jest.fn() } },
       ],
     }).compile();
     service = module.get<TrainingsService>(TrainingsService);
@@ -312,6 +316,7 @@ describe('TrainingsService — bulkAttendance', () => {
         { provide: CompetenciesService, useValue: mockCompetenciesService },
         { provide: CertificateIssuanceService, useValue: mockCertificates },
         { provide: LearningPathCertificationService, useValue: mockLearningPaths },
+        { provide: EnrollmentsService, useValue: { enroll: jest.fn() } },
       ],
     }).compile();
     service = module.get<TrainingsService>(TrainingsService);
@@ -358,6 +363,7 @@ describe('TrainingsService — bulkComplete', () => {
         { provide: CompetenciesService, useValue: mockCompetenciesService },
         { provide: CertificateIssuanceService, useValue: mockCertificates },
         { provide: LearningPathCertificationService, useValue: mockLearningPaths },
+        { provide: EnrollmentsService, useValue: { enroll: jest.fn() } },
       ],
     }).compile();
     service = module.get<TrainingsService>(TrainingsService);

@@ -12,9 +12,10 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AuditModule } from '../common/modules/audit.module';
 import { CompetenciesModule } from '../competencies/competencies.module';
 import { CertificatesModule } from '../certificates/certificates.module';
+import { EnrollmentsModule } from '../enrollments/enrollments.module';
 
 @Module({
-  imports: [PrismaModule, AuditModule, CompetenciesModule, CertificatesModule],
+  imports: [PrismaModule, AuditModule, CompetenciesModule, CertificatesModule, EnrollmentsModule],
   providers: [TrainingService, TrainingPlanService, TrainerService, TrainingResourceService],
   controllers: [
     TrainingController,
