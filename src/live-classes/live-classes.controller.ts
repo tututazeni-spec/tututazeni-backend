@@ -361,7 +361,7 @@ export class LiveClassesController {
     @Body() dto: AddMaterialDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.addClassMaterial(id, dto.documentId, user);
+    return this.svc.addClassMaterial(id, dto, user);
   }
 
   @Post(':id/sessions/:sessionId/materials')
@@ -374,7 +374,7 @@ export class LiveClassesController {
     @Body() dto: AddMaterialDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.addSessionMaterial(id, sessionId, dto.documentId, user);
+    return this.svc.addSessionMaterial(id, sessionId, dto, user);
   }
 
   @Post(':id/attendance')
@@ -509,6 +509,26 @@ export class LiveClassesController {
     @Param('documentId', ParseIntPipe) documentId: number,
   ) {
     return this.svc.removeClassMaterial(id, documentId);
+  }
+
+  @Delete(':id/library-materials/:itemId')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalLiveClassScope({ key: 'id' })
+  @ApiOperation({ summary: 'Remover item da Biblioteca de conteúdos da aula (secção 11)' })
+  removeLibraryMaterial(@Param('id', ParseIntPipe) id: number, @Param('itemId') itemId: string) {
+    return this.svc.removeClassLibraryMaterial(id, itemId);
+  }
+
+  @Delete(':id/sessions/:sessionId/library-materials/:itemId')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR_EXTERNO)
+  @ExternalLiveClassScope({ key: 'id', sessionKey: 'sessionId' })
+  @ApiOperation({ summary: 'Remover item da Biblioteca de conteúdos da sessão (secção 11)' })
+  removeSessionLibraryMaterial(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+    @Param('itemId') itemId: string,
+  ) {
+    return this.svc.removeSessionLibraryMaterial(id, sessionId, itemId);
   }
 
   @Delete(':id/sessions/:sessionId/materials/:documentId')

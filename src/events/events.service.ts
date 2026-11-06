@@ -42,6 +42,7 @@ import {
 } from './events.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { buildCsvString } from '../common/utils/csv-export.util';
+import { notifyUsersSafe } from '../common/helpers/notification.helper';
 import { CurrentUserData } from '../common/types/current-user';
 
 // Papéis com visão global (ver stats/audit-logs) — não sofrem filtro por
@@ -107,7 +108,20 @@ export class EventsService {
     if (modalidade) where.modalidade = modalidade;
     if (mandatory !== undefined) where.mandatory = mandatory;
     if (status) where.status = status;
-    else where.status = { in: ['PUBLISHED', 'LIVE'] };
+    else {
+      // Por omissão só eventos publicados — mas ADMIN/RH veem todos os rascunhos
+      // e cada organizador vê os seus (senão o evento acabado de criar some).
+      const seesAllDrafts =
+        !!currentUser.role?.name && DEPT_FILTER_BYPASS_ROLES.has(currentUser.role.name);
+      where.AND = [
+        {
+          OR: [
+            { status: { in: ['PUBLISHED', 'LIVE'] } },
+            seesAllDrafts ? { status: 'DRAFT' } : { status: 'DRAFT', organizerId: currentUser.id },
+          ],
+        },
+      ];
+    }
     if (upcoming) where.startAt = { gte: new Date() };
     if (departmentId) where.departmentId = departmentId;
     if (unitId) where.unitId = unitId;
@@ -248,18 +262,88 @@ export class EventsService {
     return event;
   }
 
+  /**
+   * Inscrição obrigatória: num evento publicado e marcado como obrigatório,
+   * inscreve (confirmada) os colaboradores activos do departamento/unidade do
+   * evento. Idempotente — quem já está inscrito é ignorado; respeita a
+   * capacidade e a lista de espera (ver addParticipants).
+   */
+  async autoEnrollAudience(eventId: number): Promise<number> {
+    const event = await this.prisma.read.event.findUnique({
+      where: { id: eventId },
+      select: { status: true, mandatory: true, departmentId: true, unitId: true },
+    });
+    if (!event || event.status !== 'PUBLISHED' || !event.mandatory) return 0;
+    if (event.departmentId == null && event.unitId == null) return 0;
+    const users = await this.prisma.read.user.findMany({
+      where: {
+        accountStatus: 'ACTIVE',
+        ...(event.departmentId != null ? { departmentId: event.departmentId } : {}),
+        ...(event.unitId != null ? { unitId: event.unitId } : {}),
+      },
+      select: { id: true },
+    });
+    if (users.length === 0) return 0;
+    const res = await this.addParticipants(
+      eventId,
+      users.map(u => u.id),
+    );
+    return res.success;
+  }
+
+  private async autoEnrollAudienceSafely(eventId: number) {
+    try {
+      await this.autoEnrollAudience(eventId);
+    } catch (err: unknown) {
+      this.logger.warn(`Inscrição automática do evento ${eventId} falhou: ${errMsg(err)}`);
+    }
+  }
+
   async update(id: number, dto: UpdateEventDto) {
     await this.findOne(id);
     const data: Prisma.EventUpdateInput = { ...dto };
     if (dto.startAt) data.startAt = new Date(dto.startAt);
     if (dto.endAt) data.endAt = new Date(dto.endAt);
-    return this.prisma.event.update({ where: { id }, data });
+    const updated = await this.prisma.event.update({ where: { id }, data });
+    await this.autoEnrollAudienceSafely(id);
+    return updated;
   }
 
   async publish(id: number) {
     const e = await this.findOne(id);
     if (!e.title || !e.startAt) throw new BadRequestException('Evento incompleto para publicação');
-    return this.prisma.event.update({ where: { id }, data: { status: 'PUBLISHED' } });
+    const wasDraft = e.status === 'DRAFT';
+    const published = await this.prisma.event.update({
+      where: { id },
+      data: { status: 'PUBLISHED' },
+    });
+
+    await this.autoEnrollAudienceSafely(id);
+
+    // Avisar os utilizadores adicionados ao evento (só na primeira publicação).
+    if (wasDraft) {
+      try {
+        const participants = await this.prisma.read.eventParticipant.findMany({
+          where: { eventId: id, status: { notIn: ['CANCELLED', 'REJECTED'] } },
+          select: { userId: true },
+        });
+        await notifyUsersSafe(this.prisma, this.logger, {
+          userIds: participants.map(p => p.userId),
+          type: 'EVENT_PUBLISHED',
+          title: 'Novo evento',
+          message: `O evento "${e.title}" foi publicado e estás inscrito.`,
+          category: 'LMS',
+          actionUrl: '/events',
+          metadata: { eventId: id },
+        });
+      } catch (err: unknown) {
+        this.logger.warn(
+          `Falha ao notificar participantes na publicação do evento ${id}: ${errMsg(err)}`,
+        );
+      }
+    }
+
+    return published;
   }
 
   async cancel(id: number) {
@@ -1679,7 +1763,8 @@ export class EventsService {
   // convenção do resto do módulo.
 
   async getCalendar(filters: EventCalendarFilterDto) {
-    const { from, to, type, status, departmentId, unitId, responsibleId, location } = filters;
+    const { from, to, type, status, departmentId, unitId, responsibleId, location, search } =
+      filters;
 
     const where: Prisma.EventWhereInput = {
       startAt: { gte: new Date(from), lte: new Date(to) },
@@ -1689,6 +1774,7 @@ export class EventsService {
     if (departmentId) where.departmentId = departmentId;
     if (unitId) where.unitId = unitId;
     if (location) where.location = { contains: location, mode: 'insensitive' };
+    if (search) where.title = { contains: search, mode: 'insensitive' };
     if (responsibleId) {
       where.OR = [{ responsibleId }, { responsibleId: null, organizerId: responsibleId }];
     }

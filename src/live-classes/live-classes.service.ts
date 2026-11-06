@@ -31,6 +31,7 @@ import {
 import { ZoomService } from './zoom.service';
 import { CourseCompletionService } from '../course-completion/course-completion.service';
 import {
+  AddMaterialDto,
   CreateLiveClassDto,
   UpdateLiveClassDto,
   LiveChatMessageDto,
@@ -444,6 +445,66 @@ export class LiveClassesService {
     return { meetingUrl: m.joinUrl, passcode: m.passcode };
   }
 
+  /**
+   * Modo de inscrição AUTO: inscreve (LiveAttendance sem presença) todos os
+   * colaboradores activos do público-alvo (departamentos, unidades ou cargos
+   * escolhidos). Corre ao criar e ao gravar a aula; só conta quando a aula já
+   * está publicada (agendada ou em curso). Idempotente — quem já está inscrito
+   * é ignorado — e respeita o limite de participantes.
+   */
+  async autoEnrollTargets(lc: {
+    id: number;
+    topic: string;
+    status: LiveClassStatus;
+    enrollmentMode: LiveClassEnrollmentMode;
+    maxParticipants: number | null;
+    targetDeptIds: number[];
+    targetUnitIds: number[];
+    targetPositionIds: number[];
+  }): Promise<number> {
+    if (lc.enrollmentMode !== LiveClassEnrollmentMode.AUTO) return 0;
+    if (lc.status !== LiveClassStatus.AGENDADA && lc.status !== LiveClassStatus.EM_CURSO) return 0;
+    const scope: Prisma.UserWhereInput[] = [];
+    if (lc.targetDeptIds.length) scope.push({ departmentId: { in: lc.targetDeptIds } });
+    if (lc.targetUnitIds.length) scope.push({ unitId: { in: lc.targetUnitIds } });
+    if (lc.targetPositionIds.length) scope.push({ positionId: { in: lc.targetPositionIds } });
+    if (scope.length === 0) return 0;
+
+    const users = await this.prisma.read.user.findMany({
+      where: { accountStatus: 'ACTIVE', OR: scope },
+      select: { id: true },
+    });
+    const existing = await this.prisma.liveAttendance.findMany({
+      where: { liveClassId: lc.id, sessionId: null },
+      select: { userId: true },
+    });
+    const have = new Set(existing.map(e => e.userId));
+    let toCreate = users.map(u => u.id).filter(id => !have.has(id));
+    if (lc.maxParticipants != null) {
+      toCreate = toCreate.slice(0, Math.max(0, lc.maxParticipants - have.size));
+    }
+    if (toCreate.length === 0) return 0;
+    await this.prisma.liveAttendance.createMany({
+      data: toCreate.map(userId => ({
+        liveClassId: lc.id,
+        userId,
+        sessionId: null as number | null,
+      })),
+    });
+    await this.notifyAddedToLiveClass(toCreate, lc.topic, lc.id, null);
+    return toCreate.length;
+  }
+
+  private async autoEnrollSafely(lc: Parameters<LiveClassesService['autoEnrollTargets']>[0]) {
+    try {
+      await this.autoEnrollTargets(lc);
+    } catch (e: unknown) {
+      this.logger.warn(
+        `Inscrição automática da aula ${lc.id} falhou: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
   async create(dto: CreateLiveClassDto, user?: CurrentUserData) {
     if (user && isExternalInstructor(user)) {
       // Instrutor externo: a aula é sempre dele (perfil criado na primeira aula); o co-instrutor e
@@ -504,6 +565,7 @@ export class LiveClassesService {
         include: CLASS_INCLUDE,
       })
       .catch((e: unknown) => this.mapWriteError(e));
+    await this.autoEnrollSafely(lc);
     return lc;
   }
 
@@ -551,6 +613,7 @@ export class LiveClassesService {
     const result = await this.prisma.liveClass
       .update({ where: { id }, data, include: CLASS_INCLUDE })
       .catch((e: unknown) => this.mapWriteError(e));
+    await this.autoEnrollSafely(result);
     if (dto.recordingUrl && !current.recordingUrl && current.recordingPublishedAt) {
       await this.notifyRecordingAvailable(id, null, dto.topic ?? current.topic);
     }
@@ -1760,12 +1823,20 @@ export class LiveClassesService {
   // mesmo padrão de Training.requiredResources) e resolve contra Document. ──
 
   async listMaterials(filters: MaterialsFilterDto, ownerProfileId?: number) {
-    const classWhere: Prisma.LiveClassWhereInput = { materialDocumentIds: { isEmpty: false } };
+    const classWhere: Prisma.LiveClassWhereInput = {
+      OR: [
+        { materialDocumentIds: { isEmpty: false } },
+        { materialLibraryItemIds: { isEmpty: false } },
+      ],
+    };
     if (filters.courseId) classWhere.courseId = filters.courseId;
     if (filters.instructorId) classWhere.instructorId = filters.instructorId;
 
     const sessionWhere: Prisma.LiveClassSessionWhereInput = {
-      materialDocumentIds: { isEmpty: false },
+      OR: [
+        { materialDocumentIds: { isEmpty: false } },
+        { materialLibraryItemIds: { isEmpty: false } },
+      ],
     };
     if (filters.courseId || filters.instructorId) {
       sessionWhere.liveClass = {
@@ -1786,6 +1857,7 @@ export class LiveClassesService {
           id: true,
           topic: true,
           materialDocumentIds: true,
+          materialLibraryItemIds: true,
           course: { select: { id: true, title: true } },
         },
       }),
@@ -1795,6 +1867,7 @@ export class LiveClassesService {
           id: true,
           seq: true,
           materialDocumentIds: true,
+          materialLibraryItemIds: true,
           liveClass: {
             select: { id: true, topic: true, course: { select: { id: true, title: true } } },
           },
@@ -1815,9 +1888,25 @@ export class LiveClassesService {
       arr.push(ref);
       refs.set(docId, arr);
     };
+    // Itens da Biblioteca de conteúdos (LibraryItem, id texto) usados como material.
+    const libRefs = new Map<string, MaterialRef[]>();
+    const touchLib = (itemId: string, ref: MaterialRef) => {
+      const arr = libRefs.get(itemId) ?? [];
+      arr.push(ref);
+      libRefs.set(itemId, arr);
+    };
     for (const c of classes) {
       for (const docId of c.materialDocumentIds) {
         touch(docId, {
+          liveClassId: c.id,
+          topic: c.topic,
+          course: c.course,
+          sessionId: null,
+          sessionSeq: null,
+        });
+      }
+      for (const itemId of c.materialLibraryItemIds) {
+        touchLib(itemId, {
           liveClassId: c.id,
           topic: c.topic,
           course: c.course,
@@ -1836,39 +1925,94 @@ export class LiveClassesService {
           sessionSeq: s.seq,
         });
       }
+      for (const itemId of s.materialLibraryItemIds) {
+        touchLib(itemId, {
+          liveClassId: s.liveClass.id,
+          topic: s.liveClass.topic,
+          course: s.liveClass.course,
+          sessionId: s.id,
+          sessionSeq: s.seq,
+        });
+      }
     }
 
     const documentIds = [...refs.keys()];
+    const libraryItemIds = [...libRefs.keys()];
     const { page = 1, limit = 20 } = filters;
-    if (documentIds.length === 0) return buildPaginatedResponse([], 0, page, limit);
+    if (documentIds.length === 0 && libraryItemIds.length === 0)
+      return buildPaginatedResponse([], 0, page, limit);
 
-    const documents = await this.prisma.read.document.findMany({
-      where: {
-        id: { in: documentIds },
-        deletedAt: null,
-        ...(filters.search ? { title: { contains: filters.search, mode: 'insensitive' } } : {}),
-      },
-      select: {
-        id: true,
-        title: true,
-        category: true,
-        fileUrl: true,
-        mimeType: true,
-        fileSize: true,
-        tags: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const [documents, libraryItems] = await Promise.all([
+      this.prisma.read.document.findMany({
+        where: {
+          id: { in: documentIds },
+          deletedAt: null,
+          ...(filters.search ? { title: { contains: filters.search, mode: 'insensitive' } } : {}),
+        },
+        select: {
+          id: true,
+          title: true,
+          category: true,
+          fileUrl: true,
+          mimeType: true,
+          fileSize: true,
+          tags: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.read.libraryItem.findMany({
+        where: {
+          id: { in: libraryItemIds },
+          deletedAt: null,
+          ...(filters.search ? { title: { contains: filters.search, mode: 'insensitive' } } : {}),
+        },
+        select: {
+          id: true,
+          title: true,
+          type: true,
+          categories: true,
+          fileUrl: true,
+          mimeType: true,
+          fileSize: true,
+          tags: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
 
-    const rows = documents.map(document => {
+    const docRows = documents.map(document => {
       // O externo vê o material sem o conteúdo do ficheiro (documentos inline vêm como data URL).
       const { fileUrl: _file, ...meta } = document;
       return {
+        source: 'DOCUMENT' as const,
         document: ownerProfileId === undefined ? document : meta,
         referencedBy: refs.get(document.id) ?? [],
       };
     });
+    const libraryRows = libraryItems.map(item => {
+      // Ficheiros inline (data URL) não viajam na lista; o externo nunca recebe o ficheiro.
+      const fileUrl =
+        ownerProfileId === undefined && !item.fileUrl.startsWith('data:') ? item.fileUrl : '';
+      return {
+        source: 'LIBRARY' as const,
+        document: {
+          id: item.id,
+          title: item.title,
+          category: item.categories[0] ?? item.type,
+          fileUrl,
+          mimeType: item.mimeType ?? '',
+          fileSize: item.fileSize,
+          tags: item.tags,
+          createdAt: item.createdAt,
+        },
+        referencedBy: libRefs.get(item.id) ?? [],
+      };
+    });
+    const rows = [...docRows, ...libraryRows].sort(
+      (a, b) => b.document.createdAt.getTime() - a.document.createdAt.getTime(),
+    );
     const total = rows.length;
     const start = (page - 1) * limit;
     return buildPaginatedResponse(rows.slice(start, start + limit), total, page, limit);
@@ -1891,13 +2035,42 @@ export class LiveClassesService {
     return doc;
   }
 
-  async addClassMaterial(liveClassId: number, documentId: number, user?: CurrentUserData) {
+  /** Exactamente um de documentId (Repositório) ou libraryItemId (Biblioteca de conteúdos). */
+  private parseMaterialDto(dto: AddMaterialDto) {
+    const hasDoc = dto.documentId != null;
+    const hasLib = !!dto.libraryItemId;
+    if (hasDoc === hasLib)
+      throw new BadRequestException('Indica documentId ou libraryItemId (apenas um).');
+    return { documentId: dto.documentId, libraryItemId: dto.libraryItemId };
+  }
+
+  private async assertLibraryItemExists(itemId: string, user?: CurrentUserData) {
+    const item = await this.prisma.read.libraryItem.findUnique({ where: { id: itemId } });
+    if (!item || item.deletedAt) throw new NotFoundException('Item não encontrado na Biblioteca');
+    // Tal como nos documentos, o externo só anexa o que ele próprio carregou.
+    if (user && isExternalInstructor(user) && item.uploadedById !== user.id) {
+      throw new NotFoundException('Item não encontrado na Biblioteca');
+    }
+    return item;
+  }
+
+  async addClassMaterial(liveClassId: number, dto: AddMaterialDto, user?: CurrentUserData) {
+    const { documentId, libraryItemId } = this.parseMaterialDto(dto);
     const lc = await this.findOne(liveClassId);
-    await this.assertDocumentExists(documentId, user);
-    if (lc.materialDocumentIds.includes(documentId)) return lc;
+    if (libraryItemId) {
+      await this.assertLibraryItemExists(libraryItemId, user);
+      if (lc.materialLibraryItemIds.includes(libraryItemId)) return lc;
+      return this.prisma.liveClass.update({
+        where: { id: liveClassId },
+        data: { materialLibraryItemIds: { push: libraryItemId } },
+        include: CLASS_INCLUDE,
+      });
+    }
+    await this.assertDocumentExists(documentId!, user);
+    if (lc.materialDocumentIds.includes(documentId!)) return lc;
     return this.prisma.liveClass.update({
       where: { id: liveClassId },
-      data: { materialDocumentIds: { push: documentId } },
+      data: { materialDocumentIds: { push: documentId! } },
       include: CLASS_INCLUDE,
     });
   }
@@ -1911,22 +2084,40 @@ export class LiveClassesService {
     });
   }
 
+  async removeClassLibraryMaterial(liveClassId: number, itemId: string) {
+    const lc = await this.findOne(liveClassId);
+    return this.prisma.liveClass.update({
+      where: { id: liveClassId },
+      data: { materialLibraryItemIds: lc.materialLibraryItemIds.filter(id => id !== itemId) },
+      include: CLASS_INCLUDE,
+    });
+  }
+
   async addSessionMaterial(
     liveClassId: number,
     sessionId: number,
-    documentId: number,
+    dto: AddMaterialDto,
     user?: CurrentUserData,
   ) {
+    const { documentId, libraryItemId } = this.parseMaterialDto(dto);
     const session = await this.prisma.read.liveClassSession.findUnique({
       where: { id: sessionId },
     });
     if (!session || session.liveClassId !== liveClassId)
       throw new NotFoundException('Sessão não encontrada');
-    await this.assertDocumentExists(documentId, user);
-    if (session.materialDocumentIds.includes(documentId)) return session;
+    if (libraryItemId) {
+      await this.assertLibraryItemExists(libraryItemId, user);
+      if (session.materialLibraryItemIds.includes(libraryItemId)) return session;
+      return this.prisma.liveClassSession.update({
+        where: { id: sessionId },
+        data: { materialLibraryItemIds: { push: libraryItemId } },
+      });
+    }
+    await this.assertDocumentExists(documentId!, user);
+    if (session.materialDocumentIds.includes(documentId!)) return session;
     return this.prisma.liveClassSession.update({
       where: { id: sessionId },
-      data: { materialDocumentIds: { push: documentId } },
+      data: { materialDocumentIds: { push: documentId! } },
     });
   }
 
@@ -1939,6 +2130,20 @@ export class LiveClassesService {
     return this.prisma.liveClassSession.update({
       where: { id: sessionId },
       data: { materialDocumentIds: session.materialDocumentIds.filter(id => id !== documentId) },
+    });
+  }
+
+  async removeSessionLibraryMaterial(liveClassId: number, sessionId: number, itemId: string) {
+    const session = await this.prisma.read.liveClassSession.findUnique({
+      where: { id: sessionId },
+    });
+    if (!session || session.liveClassId !== liveClassId)
+      throw new NotFoundException('Sessão não encontrada');
+    return this.prisma.liveClassSession.update({
+      where: { id: sessionId },
+      data: {
+        materialLibraryItemIds: session.materialLibraryItemIds.filter(id => id !== itemId),
+      },
     });
   }
 
