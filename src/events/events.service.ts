@@ -872,6 +872,7 @@ export class EventsService {
   async checkIn(userId: number, dto: CheckInDto) {
     const event = await this.prisma.read.event.findUnique({ where: { id: dto.eventId } });
     if (!event) throw new NotFoundException('Evento não encontrado');
+    this.assertCheckInWindow(event);
 
     const participant = await this.prisma.read.eventParticipant.findUnique({
       where: { eventId_userId: { eventId: dto.eventId, userId } },
@@ -1032,7 +1033,52 @@ export class EventsService {
     ]);
   }
 
+  /** Antecedência permitida para o check-in do próprio participante. */
+  private static readonly CHECKIN_LEAD_MS = 30 * 60_000;
+
+  /** Check-in do próprio só dentro do período do evento (e nunca em cancelado/rascunho). */
+  private assertCheckInWindow(event: { status: string; startAt: Date; endAt: Date | null }): void {
+    if (event.status === 'CANCELLED') {
+      throw new BadRequestException('Evento cancelado — check-in indisponível');
+    }
+    if (event.status === 'DRAFT') {
+      throw new BadRequestException('Evento ainda não publicado — check-in indisponível');
+    }
+    const now = Date.now();
+    if (now < event.startAt.getTime() - EventsService.CHECKIN_LEAD_MS) {
+      throw new BadRequestException('O check-in ainda não está aberto para este evento');
+    }
+    if (event.endAt && now > event.endAt.getTime()) {
+      throw new BadRequestException('O evento já terminou — check-in indisponível');
+    }
+  }
+
+  /**
+   * Fecho de presenças: inscritos CONFIRMED que nunca fizeram check-in num evento
+   * já terminado passam a NO_SHOW. Idempotente (só toca em CONFIRMED sem entrada),
+   * por isso é seguro correr em várias instâncias. Eventos cancelados/rascunho ficam de fora.
+   */
+  async markNoShowsForEndedEvents(now = new Date()): Promise<number> {
+    const r = await this.prisma.eventParticipant.updateMany({
+      where: {
+        status: 'CONFIRMED',
+        checkedInAt: null,
+        event: { endAt: { lt: now }, status: { notIn: ['CANCELLED', 'DRAFT'] } },
+      },
+      data: { status: 'NO_SHOW' },
+    });
+    return r.count;
+  }
+
   async manualCheckIn(eventId: number, userId: number, dto: ManualCheckInDto) {
+    const event = await this.prisma.read.event.findUnique({
+      where: { id: eventId },
+      select: { status: true },
+    });
+    if (!event) throw new NotFoundException('Evento não encontrado');
+    if (event.status === 'CANCELLED') {
+      throw new BadRequestException('Evento cancelado — check-in indisponível');
+    }
     const participant = await this.prisma.read.eventParticipant.findUnique({
       where: { eventId_userId: { eventId, userId } },
     });
