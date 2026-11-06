@@ -249,7 +249,7 @@ export class EventsService {
         restrictedDeptIds: dto.restrictedDeptIds ?? [],
         mandatory: dto.mandatory ?? false,
         courseId: dto.courseId,
-        responsibleId: dto.responsibleId,
+        responsibleId: dto.responsibleId ?? null,
         departmentId: dto.departmentId,
         unitId: dto.unitId,
         bannerUrl: dto.bannerUrl,
@@ -872,6 +872,7 @@ export class EventsService {
   async checkIn(userId: number, dto: CheckInDto) {
     const event = await this.prisma.read.event.findUnique({ where: { id: dto.eventId } });
     if (!event) throw new NotFoundException('Evento não encontrado');
+    this.assertCheckInWindow(event);
 
     const participant = await this.prisma.read.eventParticipant.findUnique({
       where: { eventId_userId: { eventId: dto.eventId, userId } },
@@ -1032,7 +1033,52 @@ export class EventsService {
     ]);
   }
 
+  /** Antecedência permitida para o check-in do próprio participante. */
+  private static readonly CHECKIN_LEAD_MS = 30 * 60_000;
+
+  /** Check-in do próprio só dentro do período do evento (e nunca em cancelado/rascunho). */
+  private assertCheckInWindow(event: { status: string; startAt: Date; endAt: Date | null }): void {
+    if (event.status === 'CANCELLED') {
+      throw new BadRequestException('Evento cancelado — check-in indisponível');
+    }
+    if (event.status === 'DRAFT') {
+      throw new BadRequestException('Evento ainda não publicado — check-in indisponível');
+    }
+    const now = Date.now();
+    if (now < event.startAt.getTime() - EventsService.CHECKIN_LEAD_MS) {
+      throw new BadRequestException('O check-in ainda não está aberto para este evento');
+    }
+    if (event.endAt && now > event.endAt.getTime()) {
+      throw new BadRequestException('O evento já terminou — check-in indisponível');
+    }
+  }
+
+  /**
+   * Fecho de presenças: inscritos CONFIRMED que nunca fizeram check-in num evento
+   * já terminado passam a NO_SHOW. Idempotente (só toca em CONFIRMED sem entrada),
+   * por isso é seguro correr em várias instâncias. Eventos cancelados/rascunho ficam de fora.
+   */
+  async markNoShowsForEndedEvents(now = new Date()): Promise<number> {
+    const r = await this.prisma.eventParticipant.updateMany({
+      where: {
+        status: 'CONFIRMED',
+        checkedInAt: null,
+        event: { endAt: { lt: now }, status: { notIn: ['CANCELLED', 'DRAFT'] } },
+      },
+      data: { status: 'NO_SHOW' },
+    });
+    return r.count;
+  }
+
   async manualCheckIn(eventId: number, userId: number, dto: ManualCheckInDto) {
+    const event = await this.prisma.read.event.findUnique({
+      where: { id: eventId },
+      select: { status: true },
+    });
+    if (!event) throw new NotFoundException('Evento não encontrado');
+    if (event.status === 'CANCELLED') {
+      throw new BadRequestException('Evento cancelado — check-in indisponível');
+    }
     const participant = await this.prisma.read.eventParticipant.findUnique({
       where: { eventId_userId: { eventId, userId } },
     });
@@ -1182,11 +1228,13 @@ export class EventsService {
   // o "estado" Avaliado/Pendente seja visível por linha — mesmo padrão de
   // computeCheckinState, `evaluation`/`status` calculados, nunca persistidos.
 
-  private buildEvaluationsWhere(
-    filters: EventEvaluationFilterDto,
-  ): Prisma.EventParticipantWhereInput {
+  // Só aparecem participantes que JÁ avaliaram: a base é EventFeedback (quem não
+  // avaliou não tem registo). A inscrição é lida à parte para manter o formato
+  // das linhas (status/registeredAt do participante).
+
+  private buildEvaluationsWhere(filters: EventEvaluationFilterDto): Prisma.EventFeedbackWhereInput {
     const { eventId, departmentId, unitId, search } = filters;
-    const where: Prisma.EventParticipantWhereInput = {};
+    const where: Prisma.EventFeedbackWhereInput = {};
     if (eventId) where.eventId = eventId;
     if (departmentId || unitId || search) {
       where.user = {
@@ -1203,8 +1251,8 @@ export class EventsService {
     const { skip, take } = calculatePagination(page, limit);
     const where = this.buildEvaluationsWhere(filters);
 
-    const [data, total] = await Promise.all([
-      this.prisma.read.eventParticipant.findMany({
+    const [feedbacks, total] = await Promise.all([
+      this.prisma.read.eventFeedback.findMany({
         where,
         skip,
         take,
@@ -1220,29 +1268,32 @@ export class EventsService {
             },
           },
         },
-        orderBy: { registeredAt: 'desc' },
+        orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.read.eventParticipant.count({ where }),
+      this.prisma.read.eventFeedback.count({ where }),
     ]);
 
-    // Uma leitura extra para todos os pares evento/participante da página,
-    // em vez de N consultas por linha (mesmo padrão de listParticipants).
-    const pairs = data.map(p => ({ eventId: p.eventId, userId: p.userId }));
-    const feedbacks = pairs.length
-      ? await this.prisma.read.eventFeedback.findMany({
-          where: { OR: pairs.map(p => ({ eventId: p.eventId, userId: p.userId })) },
+    const participants = feedbacks.length
+      ? await this.prisma.read.eventParticipant.findMany({
+          where: { OR: feedbacks.map(f => ({ eventId: f.eventId, userId: f.userId })) },
+          select: { id: true, eventId: true, userId: true, status: true, registeredAt: true },
         })
       : [];
-    const feedbackMap = new Map(feedbacks.map(f => [`${f.eventId}:${f.userId}`, f]));
+    const participantMap = new Map(participants.map(p => [`${p.eventId}:${p.userId}`, p]));
 
-    const enrichedData = data.map(p => {
-      const evaluation = feedbackMap.get(`${p.eventId}:${p.userId}`) ?? null;
+    const enrichedData = feedbacks.map(f => {
+      const { event, user, ...evaluation } = f;
+      const participant = participantMap.get(`${f.eventId}:${f.userId}`);
       return {
-        ...p,
+        id: participant?.id ?? f.id,
+        userId: f.userId,
+        eventId: f.eventId,
+        status: participant?.status ?? null,
+        registeredAt: participant?.registeredAt ?? f.createdAt,
+        event,
+        user,
         evaluation,
-        // Distinto de `status` (estado da inscrição, já em `p`) — nunca
-        // persistido, mesma convenção de computeCheckinState.
-        evaluationStatus: evaluation ? ('AVALIADO' as const) : ('PENDENTE' as const),
+        evaluationStatus: 'AVALIADO' as const,
       };
     });
 
@@ -1936,21 +1987,24 @@ export class EventsService {
     });
   }
 
+  // PUT = substituição completa: campos omitidos/vazios ficam a null (limpam o valor antigo).
   async upsertLogistics(eventId: number, dto: UpsertEventLogisticsDto) {
     await this.assertEventExists(eventId);
     const data = {
       responsibleId: dto.responsibleId,
       equipment: dto.equipment ?? [],
       customEquipment: dto.customEquipment ?? [],
-      resourcesNeeded: dto.resourcesNeeded,
-      suppliers: dto.suppliers,
-      catering: dto.catering,
-      transport: dto.transport,
-      accommodation: dto.accommodation,
-      security: dto.security,
-      decoration: dto.decoration,
-      budget: dto.budget,
-      actualCost: dto.actualCost,
+      customServices: dto.customServices ?? [],
+      serviceCosts: (dto.serviceCosts ?? {}) as Prisma.InputJsonValue,
+      resourcesNeeded: dto.resourcesNeeded ?? null,
+      suppliers: dto.suppliers ?? null,
+      catering: dto.catering ?? null,
+      transport: dto.transport ?? null,
+      accommodation: dto.accommodation ?? null,
+      security: dto.security ?? null,
+      decoration: dto.decoration ?? null,
+      budget: dto.budget ?? null,
+      actualCost: dto.actualCost ?? null,
       status: dto.status ?? 'PLANNED',
     };
     return this.prisma.eventLogistics.upsert({
@@ -2085,21 +2139,27 @@ export class EventsService {
     if (participants.length === 0) {
       throw new BadRequestException('Nenhum destinatário corresponde aos filtros indicados');
     }
-    const recipientIds = participants.map(p => p.userId);
+    const delivery = await this.deliverCommunication(
+      dto.channel,
+      dto.subject,
+      dto.message,
+      participants,
+    );
+    // Só é "enviada" se pelo menos um destinatário recebeu mesmo a mensagem;
+    // canal não configurado / sem contacto / erro de entrega não contam.
+    const status = delivery.deliveredIds.length > 0 ? 'SENT' : 'FAILED';
 
-    await this.deliverCommunication(dto.channel, dto.subject, dto.message, participants);
-
-    return this.prisma.eventCommunication.create({
+    const created = await this.prisma.eventCommunication.create({
       data: {
         eventId,
         type: dto.type,
         subject: dto.subject,
         message: dto.message,
         channel: dto.channel,
-        recipientIds,
-        recipientCount: recipientIds.length,
-        status: 'SENT',
-        sentAt: new Date(),
+        recipientIds: delivery.deliveredIds,
+        recipientCount: delivery.deliveredIds.length,
+        status,
+        sentAt: status === 'SENT' ? new Date() : null,
         createdById,
       },
       include: {
@@ -2107,6 +2167,16 @@ export class EventsService {
         createdBy: { select: { id: true, fullName: true } },
       },
     });
+    return {
+      ...created,
+      delivery: {
+        targeted: participants.length,
+        delivered: delivery.deliveredIds.length,
+        failed: delivery.failed,
+        skipped: delivery.skipped,
+        reason: delivery.reason,
+      },
+    };
   }
 
   private async deliverCommunication(
@@ -2117,56 +2187,93 @@ export class EventsService {
       userId: number;
       user: { id: number; email: string; phone: string | null };
     }>,
-  ): Promise<void> {
+  ): Promise<{ deliveredIds: number[]; failed: number; skipped: number; reason?: string }> {
     const onFail = (userId: number, ch: string) => (e: unknown) =>
       this.logger.warn({
         userId,
         channel: ch,
         err: { message: errMsg(e) },
-        msg: `Falha ao entregar comunicação de evento por ${ch} — registo interno já será criado`,
+        msg: `Falha ao entregar comunicação de evento por ${ch}`,
       });
 
+    // Envia um a um e conta quem recebeu de facto (sem rejeição).
+    const sendEach = async (
+      ch: string,
+      targets: typeof participants,
+      send: (p: (typeof participants)[number]) => Promise<void>,
+    ) => {
+      const results = await Promise.all(
+        targets.map(p =>
+          send(p).then(
+            () => ({ id: p.userId, ok: true }),
+            e => {
+              onFail(p.userId, ch)(e);
+              return { id: p.userId, ok: false };
+            },
+          ),
+        ),
+      );
+      return {
+        deliveredIds: results.filter(r => r.ok).map(r => r.id),
+        failed: results.filter(r => !r.ok).length,
+        skipped: participants.length - targets.length,
+        reason: undefined as string | undefined,
+      };
+    };
+    const none = (reason: string) => ({
+      deliveredIds: [] as number[],
+      failed: 0,
+      skipped: participants.length,
+      reason,
+    });
+
     if (channel === 'INNOVA_NOTIFICATION') {
-      await this.notifications.sendBulk({
-        userIds: participants.map(p => p.userId),
-        type: 'EVENT_COMMUNICATION',
-        title: subject,
-        message,
-        category: 'ENGAGEMENT',
-      });
-      return;
+      try {
+        const r = await this.notifications.sendBulk({
+          userIds: participants.map(p => p.userId),
+          type: 'EVENT_COMMUNICATION',
+          title: subject,
+          message,
+          category: 'ENGAGEMENT',
+        });
+        // sendBulk devolve só a contagem; sem IDs, assume os primeiros `sent`.
+        const sent = Math.min(r?.sent ?? 0, participants.length);
+        return {
+          deliveredIds: participants.slice(0, sent).map(p => p.userId),
+          failed: 0,
+          skipped: participants.length - sent,
+          reason:
+            sent === 0 ? 'Notificações desactivadas ou bloqueadas pelos destinatários' : undefined,
+        };
+      } catch (e) {
+        onFail(0, 'notificação interna')(e);
+        return { deliveredIds: [], failed: participants.length, skipped: 0 };
+      }
     }
 
     if (channel === 'EMAIL') {
-      await Promise.all(
-        participants.map(p =>
-          this.mail
-            .sendNotification(p.user.email, subject, message)
-            .catch(onFail(p.userId, 'email')),
-        ),
+      if (!(await this.mail.isConfigured())) return none('SMTP não configurado');
+      return sendEach(
+        'email',
+        participants.filter(p => p.user.email),
+        p => this.mail.sendNotification(p.user.email, subject, message),
       );
-      return;
     }
 
     if (channel === 'SMS') {
-      await Promise.all(
-        participants
-          .filter(p => p.user.phone)
-          .map(p => this.sms.sendSms(p.user.phone, message).catch(onFail(p.userId, 'sms'))),
+      if (!this.sms.isSmsConfigured()) return none('Twilio (SMS) não configurado');
+      return sendEach(
+        'sms',
+        participants.filter(p => p.user.phone),
+        p => this.sms.sendSms(p.user.phone, message),
       );
-      return;
     }
 
-    if (channel === 'WHATSAPP') {
-      await Promise.all(
-        participants
-          .filter(p => p.user.phone)
-          .map(p =>
-            this.sms
-              .sendWhatsApp(p.user.phone, message, 'CORPORATE_EVENT')
-              .catch(onFail(p.userId, 'whatsapp')),
-          ),
-      );
-    }
+    // WHATSAPP
+    return sendEach(
+      'whatsapp',
+      participants.filter(p => p.user.phone),
+      p => this.sms.sendWhatsApp(p.user.phone, message, 'CORPORATE_EVENT'),
+    );
   }
 }

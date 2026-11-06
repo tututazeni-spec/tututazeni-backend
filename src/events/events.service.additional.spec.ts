@@ -324,8 +324,49 @@ describe('EventsService (additional)', () => {
   // ─── checkIn ──────────────────────────────────────────────────
 
   describe('checkIn', () => {
+    const liveEvent = () => ({
+      ...baseEvent,
+      status: 'PUBLISHED',
+      startAt: new Date(Date.now() - 60 * 60_000),
+      endAt: new Date(Date.now() + 60 * 60_000),
+    });
+
+    it('deve recusar check-in antes da abertura, depois do fim e em evento cancelado', async () => {
+      const day = 24 * 60 * 60_000;
+      const cases: Array<[Record<string, unknown>, RegExp]> = [
+        [
+          { startAt: new Date(Date.now() + day), endAt: new Date(Date.now() + 2 * day) },
+          /ainda não está aberto/,
+        ],
+        [
+          { startAt: new Date(Date.now() - 2 * day), endAt: new Date(Date.now() - day) },
+          /já terminou/,
+        ],
+        [{ status: 'CANCELLED' }, /cancelado/],
+        [{ status: 'DRAFT' }, /não publicado/],
+      ];
+      for (const [patch, msg] of cases) {
+        mockPrisma.event.findUnique.mockResolvedValue({ ...liveEvent(), ...patch });
+        await expect(service.checkIn(2, { eventId: 1 } as any)).rejects.toThrow(msg);
+      }
+    });
+
+    it('deve marcar NO_SHOW só para CONFIRMED sem check-in em eventos terminados', async () => {
+      mockPrisma.eventParticipant.updateMany = jest.fn().mockResolvedValue({ count: 3 });
+      const now = new Date();
+      await expect(service.markNoShowsForEndedEvents(now)).resolves.toBe(3);
+      expect(mockPrisma.eventParticipant.updateMany).toHaveBeenCalledWith({
+        where: {
+          status: 'CONFIRMED',
+          checkedInAt: null,
+          event: { endAt: { lt: now }, status: { notIn: ['CANCELLED', 'DRAFT'] } },
+        },
+        data: { status: 'NO_SHOW' },
+      });
+    });
+
     it('deve fazer check-in de participante', async () => {
-      mockPrisma.event.findUnique.mockResolvedValue(baseEvent);
+      mockPrisma.event.findUnique.mockResolvedValue(liveEvent());
       mockPrisma.eventParticipant.findUnique = jest.fn().mockResolvedValue({
         id: 1,
         eventId: 1,

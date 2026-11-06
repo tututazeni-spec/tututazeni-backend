@@ -13,6 +13,7 @@ import {
   MaxLength,
   ArrayMaxSize,
   ValidateIf,
+  IsObject,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
@@ -644,6 +645,17 @@ export class UpsertEventLogisticsDto {
   @ArrayMaxSize(30)
   customEquipment?: string[];
 
+  @ApiPropertyOptional({
+    description: 'Serviços livres, fora dos predefinidos ("Nome: detalhe")',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(200, { each: true })
+  @ArrayMaxSize(30)
+  customServices?: string[];
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -688,6 +700,13 @@ export class UpsertEventLogisticsDto {
   @IsOptional()
   @IsNumber()
   actualCost?: number;
+
+  @ApiPropertyOptional({
+    description: 'Custo por serviço seleccionado: { catering: 120, "custom:Fotografia": null }',
+  })
+  @IsOptional()
+  @IsObject()
+  serviceCosts?: Record<string, number | null>;
 
   @ApiPropertyOptional({ enum: EventLogisticsStatus, default: EventLogisticsStatus.PLANNED })
   @IsOptional()

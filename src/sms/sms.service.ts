@@ -48,6 +48,11 @@ export class SmsService implements OnModuleInit {
     this.whatsappFrom = process.env.TWILIO_WHATSAPP_FROM;
   }
 
+  /** Há cliente Twilio e número de origem para SMS? */
+  isSmsConfigured(): boolean {
+    return !!this.client && !!this.smsFrom;
+  }
+
   async sendSms(to: string, body: string): Promise<void> {
     if (!this.client || !this.smsFrom) {
       this.logger.warn({
