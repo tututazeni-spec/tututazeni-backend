@@ -1,6 +1,7 @@
 // src/events/events.module.ts
 import { Module } from '@nestjs/common';
 import { EventsService } from './events.service';
+import { EventsAttendanceScheduler } from './events-attendance.scheduler';
 import { EventsController } from './events.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -10,7 +11,7 @@ import { CertificatesModule } from '../certificates/certificates.module';
 
 @Module({
   imports: [PrismaModule, NotificationsModule, MailModule, SmsModule, CertificatesModule],
-  providers: [EventsService],
+  providers: [EventsService, EventsAttendanceScheduler],
   controllers: [EventsController],
   exports: [EventsService],
 })
