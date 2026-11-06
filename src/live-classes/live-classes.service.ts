@@ -140,7 +140,12 @@ export class LiveClassesService {
     return (await ownInstructorProfileId(this.prisma, user)) ?? -1;
   }
 
-  async findAll(filters: LiveClassFilterDto, ownerProfileId?: number) {
+  /** Quem gere aulas vê os rascunhos (EM_PREPARACAO); os restantes só as já publicadas. */
+  seesDrafts(user: CurrentUserData): boolean {
+    return isExternalInstructor(user) || ['ADMIN', 'RH', 'INSTRUCTOR'].includes(user.role?.name ?? '');
+  }
+
+  async findAll(filters: LiveClassFilterDto, ownerProfileId?: number, hideDrafts = false) {
     const { page = 1, limit = 20 } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.LiveClassWhereInput = {};
@@ -148,6 +153,10 @@ export class LiveClassesService {
     if (filters.instructorId) where.instructorId = filters.instructorId;
     if (filters.type) where.type = filters.type;
     if (filters.status) where.status = filters.status;
+    if (hideDrafts) {
+      where.status = filters.status ?? { not: LiveClassStatus.EM_PREPARACAO };
+      if (filters.status === LiveClassStatus.EM_PREPARACAO) where.id = -1;
+    }
     if (filters.modality) where.modality = filters.modality;
     if (filters.departmentId) where.targetDeptIds = { has: filters.departmentId };
     if (filters.unitId) where.targetUnitIds = { has: filters.unitId };
@@ -543,6 +552,8 @@ export class LiveClassesService {
               ? null
               : dto.meetingPasscode?.trim() || auto?.passcode || null,
           code: dto.code ?? this.generateCode(dto.type ?? 'AULA'),
+          // Nasce em rascunho; só é visível, inscrevível e notificada depois de publicada.
+          status: LiveClassStatus.EM_PREPARACAO,
           scheduledAt,
           recurrenceEndDate: recurrenceEndDate ? new Date(recurrenceEndDate) : undefined,
           recurrenceDaysOfWeek: recurrenceDaysOfWeek ?? [],
@@ -552,6 +563,7 @@ export class LiveClassesService {
             ? {
                 create: sessionDates.map((sessionDate, i) => ({
                   seq: i + 1,
+                  status: LiveClassStatus.EM_PREPARACAO,
                   sessionDate,
                   durationMinutes: dto.duration,
                   instructorId: dto.instructorId,
@@ -681,8 +693,32 @@ export class LiveClassesService {
 
   // ─── Ações de ciclo de vida (secção 2 — "Ações") ──────────────────────────
 
+  /** Publica uma aula em rascunho: passa a AGENDADA, publica as sessões e inscreve/avisa o público-alvo. */
+  async publish(id: number) {
+    const lc = await this.findOne(id);
+    if (lc.status !== LiveClassStatus.EM_PREPARACAO) {
+      throw new ConflictException('Só uma aula em rascunho pode ser publicada');
+    }
+    const [published] = await this.prisma.$transaction([
+      this.prisma.liveClass.update({
+        where: { id },
+        data: { status: LiveClassStatus.AGENDADA },
+        include: CLASS_INCLUDE,
+      }),
+      this.prisma.liveClassSession.updateMany({
+        where: { liveClassId: id, status: LiveClassStatus.EM_PREPARACAO },
+        data: { status: LiveClassStatus.AGENDADA },
+      }),
+    ]);
+    await this.autoEnrollSafely(published);
+    return published;
+  }
+
   async start(id: number) {
     const lc = await this.findOne(id);
+    if (lc.status === LiveClassStatus.EM_PREPARACAO) {
+      throw new ConflictException('Publica a aula antes de a iniciar');
+    }
     if (lc.status === LiveClassStatus.CANCELADA || lc.status === LiveClassStatus.CONCLUIDA) {
       throw new ConflictException(`Não é possível iniciar uma aula com estado ${lc.status}`);
     }
@@ -732,7 +768,7 @@ export class LiveClassesService {
         description: lc.description,
         thumbnailUrl: lc.thumbnailUrl,
         type: lc.type,
-        status: LiveClassStatus.AGENDADA,
+        status: LiveClassStatus.EM_PREPARACAO,
         moduleId: lc.moduleId,
         lessonId: lc.lessonId,
         instructorId: lc.instructorId,
@@ -776,12 +812,16 @@ export class LiveClassesService {
   // ─── Sessões (secção 5) ────────────────────────────────────────────────────
 
   /** Todas as sessões de todas as aulas — tabela global da aba "Sessões". */
-  async listAllSessions(filters: LiveClassFilterDto, ownerProfileId?: number) {
+  async listAllSessions(filters: LiveClassFilterDto, ownerProfileId?: number, hideDrafts = false) {
     const { page = 1, limit = 20 } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.LiveClassSessionWhereInput = {};
     if (filters.instructorId) where.instructorId = filters.instructorId;
     if (filters.status) where.status = filters.status;
+    if (hideDrafts) {
+      where.status = filters.status ?? { not: LiveClassStatus.EM_PREPARACAO };
+      if (filters.status === LiveClassStatus.EM_PREPARACAO) where.id = -1;
+    }
     if (filters.courseId) where.liveClass = { courseId: filters.courseId };
     if (filters.dateFrom || filters.dateTo) {
       where.sessionDate = {
@@ -842,10 +882,29 @@ export class LiveClassesService {
         durationMinutes: dto.durationMinutes,
         instructorId: dto.instructorId,
         location: dto.location,
+        status: LiveClassStatus.EM_PREPARACAO,
         ...this.resolveSessionMeeting(dto),
         notes: dto.notes,
         thumbnailUrl: dto.thumbnailUrl || null,
       },
+      include: { instructor: { select: { id: true, name: true } } },
+    });
+  }
+
+  /** Publica uma sessão em rascunho (EM_PREPARACAO → AGENDADA). */
+  async publishSession(liveClassId: number, sessionId: number) {
+    const session = await this.prisma.read.liveClassSession.findUnique({
+      where: { id: sessionId },
+    });
+    if (!session || session.liveClassId !== liveClassId) {
+      throw new NotFoundException('Sessão não encontrada');
+    }
+    if (session.status !== LiveClassStatus.EM_PREPARACAO) {
+      throw new ConflictException('Só uma sessão em rascunho pode ser publicada');
+    }
+    return this.prisma.liveClassSession.update({
+      where: { id: sessionId },
+      data: { status: LiveClassStatus.AGENDADA },
       include: { instructor: { select: { id: true, name: true } } },
     });
   }
