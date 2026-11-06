@@ -327,6 +327,13 @@ export class TrainingController {
     return this.svc.updateSession(id, dto, user);
   }
 
+  @Patch('sessions/:id/publish')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @ApiOperation({ summary: 'Publicar sessão (rascunho → visível e com inscrições)' })
+  publishSession(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.publishSession(id, user);
+  }
+
   @Delete('sessions/:id')
   @Roles(...CAN_CREATE_TRAININGS)
   @ApiOperation({ summary: 'Eliminar sessão (sem participantes)' })

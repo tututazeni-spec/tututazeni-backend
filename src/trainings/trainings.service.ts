@@ -265,6 +265,8 @@ export class TrainingService {
 
     return {
       ...t,
+      // Rascunhos de sessão só são visíveis a quem gere a formação.
+      sessions: canManage ? t.sessions : t.sessions.filter(s => s.published),
       avgRating: Math.round((avgRating._avg.rating ?? 0) * 10) / 10,
       totalCost,
       canManage,
@@ -543,6 +545,8 @@ export class TrainingService {
         maxParticipants: dto.maxParticipants ?? 0,
         waitlistEnabled: dto.waitlistEnabled ?? true,
         notes: dto.notes,
+        // Nasce em rascunho; só fica visível e inscrevível depois de publicada.
+        published: false,
       },
     });
     this.logHistory('SESSION_CREATE', dto.trainingId, user.id, {
@@ -550,6 +554,24 @@ export class TrainingService {
       sessionDate: session.sessionDate,
     });
     return session;
+  }
+
+  /** Publica uma sessão em rascunho: passa a visível e a aceitar inscrições. */
+  async publishSession(id: number, user: CurrentUserData) {
+    const session = await this.assertCanManageSession(id, user);
+    const current = await this.prisma.read.trainingSession.findUnique({
+      where: { id: session.id },
+      select: { published: true },
+    });
+    if (current?.published) {
+      throw new ConflictException('A sessão já está publicada');
+    }
+    const updated = await this.prisma.trainingSession.update({
+      where: { id },
+      data: { published: true },
+    });
+    this.logHistory('SESSION_PUBLISH', session.trainingId, user.id, { sessionId: id });
+    return updated;
   }
 
   async updateSession(id: number, dto: UpdateTrainingSessionDto, user: CurrentUserData) {
@@ -599,6 +621,9 @@ export class TrainingService {
       },
     });
     if (!session) throw new NotFoundException('Sessão não encontrada');
+    if (!session.published) {
+      throw new ConflictException('A sessão ainda não foi publicada');
+    }
 
     // Formação com aprovação obrigatória: a inscrição fica PENDING_APPROVAL
     // sem reservar vaga (a vaga só é verificada quando um gestor aprova, ver

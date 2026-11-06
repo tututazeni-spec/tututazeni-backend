@@ -5806,6 +5806,8 @@ model TrainingSession {
   maxParticipants  Int                       @default(0)
   waitlistEnabled  Boolean                   @default(true)
   notes            String?
+  // false = rascunho (invisível e sem inscrições até «Publicar»). Sessões antigas ficam publicadas.
+  published        Boolean                   @default(true)
   createdAt        DateTime                  @default(now())
   training         Training                  @relation(fields: [trainingId], references: [id], onDelete: Cascade)
   participants     TrainingParticipant[]
