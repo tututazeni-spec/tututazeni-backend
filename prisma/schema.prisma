@@ -5827,6 +5827,9 @@ model TrainingParticipant {
   attendedHours      Float?
   cancellationReason String?
   completedAt        DateTime?
+  // Hora da primeira entrada/check-in na sessão (POST /trainings/sessions/:id/join).
+  // Só é escrita uma vez; serve para contar o atraso face a minAttendancePercent.
+  joinedAt           DateTime?
   createdAt          DateTime                  @default(now())
   updatedAt          DateTime                  @updatedAt
   session            TrainingSession           @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -7554,11 +7557,11 @@ model LiveClass {
   agenda              String?  @db.Text
   topics              String[] @default([])
   materialDocumentIds Int[]    @default([])
+  // Itens da Biblioteca de conteúdos (LibraryItem, id texto) usados como material — FK solta, como materialDocumentIds.
+  materialLibraryItemIds String[] @default([])
 
   // Etapa 6 — Presença (regra: só "Presente" com >= minAttendancePercent)
   attendanceAutoRegister Boolean @default(true)
-  // Itens da Biblioteca de conteúdos (LibraryItem, id texto) usados como material — FK solta, como materialDocumentIds.
-  materialLibraryItemIds String[] @default([])
   attendanceRequired     Boolean @default(false)
   minAttendancePercent   Int     @default(70)
   lateToleranceMinutes   Int     @default(10)
@@ -7632,10 +7635,10 @@ model LiveClassSession {
   // Secção 11 — materiais específicos desta ocorrência, além dos da Aula
   // (LiveClass.materialDocumentIds). Mesma FK "solta" para a Biblioteca.
   materialDocumentIds Int[] @default([])
+  materialLibraryItemIds String[] @default([])
 
   liveClass   LiveClass                  @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
   instructor  TrainingInstructorProfile? @relation(fields: [instructorId], references: [id], onDelete: SetNull)
-  materialLibraryItemIds String[] @default([])
   attendances LiveAttendance[]
 
   @@unique([liveClassId, seq])
@@ -10249,11 +10252,11 @@ model EventLogistics {
   responsibleId   Int?
   equipment       EventEquipmentType[] @default([])
   customEquipment String[]             @default([])
+  customServices  String[]             @default([])
+  serviceCosts    Json? // serviços seleccionados em Estado e custos: { chave: custo|null }
   resourcesNeeded String?              @db.Text
   suppliers       String?              @db.Text
   catering        String?
-  customServices  String[]             @default([])
-  serviceCosts    Json? // serviços seleccionados em Estado e custos: { chave: custo|null }
   transport       String?
   accommodation   String?
   security        String?
