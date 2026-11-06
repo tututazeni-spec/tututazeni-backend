@@ -2088,21 +2088,27 @@ export class EventsService {
     if (participants.length === 0) {
       throw new BadRequestException('Nenhum destinatário corresponde aos filtros indicados');
     }
-    const recipientIds = participants.map(p => p.userId);
+    const delivery = await this.deliverCommunication(
+      dto.channel,
+      dto.subject,
+      dto.message,
+      participants,
+    );
+    // Só é "enviada" se pelo menos um destinatário recebeu mesmo a mensagem;
+    // canal não configurado / sem contacto / erro de entrega não contam.
+    const status = delivery.deliveredIds.length > 0 ? 'SENT' : 'FAILED';
 
-    await this.deliverCommunication(dto.channel, dto.subject, dto.message, participants);
-
-    return this.prisma.eventCommunication.create({
+    const created = await this.prisma.eventCommunication.create({
       data: {
         eventId,
         type: dto.type,
         subject: dto.subject,
         message: dto.message,
         channel: dto.channel,
-        recipientIds,
-        recipientCount: recipientIds.length,
-        status: 'SENT',
-        sentAt: new Date(),
+        recipientIds: delivery.deliveredIds,
+        recipientCount: delivery.deliveredIds.length,
+        status,
+        sentAt: status === 'SENT' ? new Date() : null,
         createdById,
       },
       include: {
@@ -2110,6 +2116,16 @@ export class EventsService {
         createdBy: { select: { id: true, fullName: true } },
       },
     });
+    return {
+      ...created,
+      delivery: {
+        targeted: participants.length,
+        delivered: delivery.deliveredIds.length,
+        failed: delivery.failed,
+        skipped: delivery.skipped,
+        reason: delivery.reason,
+      },
+    };
   }
 
   private async deliverCommunication(
@@ -2120,56 +2136,93 @@ export class EventsService {
       userId: number;
       user: { id: number; email: string; phone: string | null };
     }>,
-  ): Promise<void> {
+  ): Promise<{ deliveredIds: number[]; failed: number; skipped: number; reason?: string }> {
     const onFail = (userId: number, ch: string) => (e: unknown) =>
       this.logger.warn({
         userId,
         channel: ch,
         err: { message: errMsg(e) },
-        msg: `Falha ao entregar comunicação de evento por ${ch} — registo interno já será criado`,
+        msg: `Falha ao entregar comunicação de evento por ${ch}`,
       });
 
+    // Envia um a um e conta quem recebeu de facto (sem rejeição).
+    const sendEach = async (
+      ch: string,
+      targets: typeof participants,
+      send: (p: (typeof participants)[number]) => Promise<void>,
+    ) => {
+      const results = await Promise.all(
+        targets.map(p =>
+          send(p).then(
+            () => ({ id: p.userId, ok: true }),
+            e => {
+              onFail(p.userId, ch)(e);
+              return { id: p.userId, ok: false };
+            },
+          ),
+        ),
+      );
+      return {
+        deliveredIds: results.filter(r => r.ok).map(r => r.id),
+        failed: results.filter(r => !r.ok).length,
+        skipped: participants.length - targets.length,
+        reason: undefined as string | undefined,
+      };
+    };
+    const none = (reason: string) => ({
+      deliveredIds: [] as number[],
+      failed: 0,
+      skipped: participants.length,
+      reason,
+    });
+
     if (channel === 'INNOVA_NOTIFICATION') {
-      await this.notifications.sendBulk({
-        userIds: participants.map(p => p.userId),
-        type: 'EVENT_COMMUNICATION',
-        title: subject,
-        message,
-        category: 'ENGAGEMENT',
-      });
-      return;
+      try {
+        const r = await this.notifications.sendBulk({
+          userIds: participants.map(p => p.userId),
+          type: 'EVENT_COMMUNICATION',
+          title: subject,
+          message,
+          category: 'ENGAGEMENT',
+        });
+        // sendBulk devolve só a contagem; sem IDs, assume os primeiros `sent`.
+        const sent = Math.min(r?.sent ?? 0, participants.length);
+        return {
+          deliveredIds: participants.slice(0, sent).map(p => p.userId),
+          failed: 0,
+          skipped: participants.length - sent,
+          reason:
+            sent === 0 ? 'Notificações desactivadas ou bloqueadas pelos destinatários' : undefined,
+        };
+      } catch (e) {
+        onFail(0, 'notificação interna')(e);
+        return { deliveredIds: [], failed: participants.length, skipped: 0 };
+      }
     }
 
     if (channel === 'EMAIL') {
-      await Promise.all(
-        participants.map(p =>
-          this.mail
-            .sendNotification(p.user.email, subject, message)
-            .catch(onFail(p.userId, 'email')),
-        ),
+      if (!(await this.mail.isConfigured())) return none('SMTP não configurado');
+      return sendEach(
+        'email',
+        participants.filter(p => p.user.email),
+        p => this.mail.sendNotification(p.user.email, subject, message),
       );
-      return;
     }
 
     if (channel === 'SMS') {
-      await Promise.all(
-        participants
-          .filter(p => p.user.phone)
-          .map(p => this.sms.sendSms(p.user.phone, message).catch(onFail(p.userId, 'sms'))),
+      if (!this.sms.isSmsConfigured()) return none('Twilio (SMS) não configurado');
+      return sendEach(
+        'sms',
+        participants.filter(p => p.user.phone),
+        p => this.sms.sendSms(p.user.phone, message),
       );
-      return;
     }
 
-    if (channel === 'WHATSAPP') {
-      await Promise.all(
-        participants
-          .filter(p => p.user.phone)
-          .map(p =>
-            this.sms
-              .sendWhatsApp(p.user.phone, message, 'CORPORATE_EVENT')
-              .catch(onFail(p.userId, 'whatsapp')),
-          ),
-      );
-    }
+    // WHATSAPP
+    return sendEach(
+      'whatsapp',
+      participants.filter(p => p.user.phone),
+      p => this.sms.sendWhatsApp(p.user.phone, message, 'CORPORATE_EVENT'),
+    );
   }
 }
