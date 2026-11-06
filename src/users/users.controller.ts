@@ -124,9 +124,18 @@ export class UsersController {
   @ApiOperation({ summary: 'Diretório interno (pesquisa de colaboradores)' })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'departmentId', required: false })
+  @ApiQuery({ name: 'positionId', required: false })
   @AnyAuthenticated()
-  directory(@Query('search') search?: string, @Query('departmentId') departmentId?: string) {
-    return this.svc.getDirectory(search, departmentId ? parseInt(departmentId) : undefined);
+  directory(
+    @Query('search') search?: string,
+    @Query('departmentId') departmentId?: string,
+    @Query('positionId') positionId?: string,
+  ) {
+    return this.svc.getDirectory(
+      search,
+      departmentId ? parseInt(departmentId) : undefined,
+      positionId ? parseInt(positionId) : undefined,
+    );
   }
 
   @Get('admin/dashboard')

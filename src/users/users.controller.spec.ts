@@ -136,12 +136,12 @@ describe('UsersController', () => {
 
   it('directory → getDirectory sem params', async () => {
     await controller.directory();
-    expect(mockSvc.getDirectory).toHaveBeenCalledWith(undefined, undefined);
+    expect(mockSvc.getDirectory).toHaveBeenCalledWith(undefined, undefined, undefined);
   });
 
-  it('directory → getDirectory com search e departmentId', async () => {
-    await controller.directory('Ana', '5');
-    expect(mockSvc.getDirectory).toHaveBeenCalledWith('Ana', 5);
+  it('directory → getDirectory com search, departmentId e positionId', async () => {
+    await controller.directory('Ana', '5', '7');
+    expect(mockSvc.getDirectory).toHaveBeenCalledWith('Ana', 5, 7);
   });
 
   it('adminDashboard → getAdminDashboard', async () => {
