@@ -249,7 +249,7 @@ export class EventsService {
         restrictedDeptIds: dto.restrictedDeptIds ?? [],
         mandatory: dto.mandatory ?? false,
         courseId: dto.courseId,
-        responsibleId: dto.responsibleId,
+        responsibleId: dto.responsibleId ?? null,
         departmentId: dto.departmentId,
         unitId: dto.unitId,
         bannerUrl: dto.bannerUrl,
@@ -1936,6 +1936,7 @@ export class EventsService {
     });
   }
 
+  // PUT = substituição completa: campos omitidos/vazios ficam a null (limpam o valor antigo).
   async upsertLogistics(eventId: number, dto: UpsertEventLogisticsDto) {
     await this.assertEventExists(eventId);
     const data = {
@@ -1944,15 +1945,15 @@ export class EventsService {
       customEquipment: dto.customEquipment ?? [],
       customServices: dto.customServices ?? [],
       serviceCosts: (dto.serviceCosts ?? {}) as Prisma.InputJsonValue,
-      resourcesNeeded: dto.resourcesNeeded,
-      suppliers: dto.suppliers,
-      catering: dto.catering,
-      transport: dto.transport,
-      accommodation: dto.accommodation,
-      security: dto.security,
-      decoration: dto.decoration,
-      budget: dto.budget,
-      actualCost: dto.actualCost,
+      resourcesNeeded: dto.resourcesNeeded ?? null,
+      suppliers: dto.suppliers ?? null,
+      catering: dto.catering ?? null,
+      transport: dto.transport ?? null,
+      accommodation: dto.accommodation ?? null,
+      security: dto.security ?? null,
+      decoration: dto.decoration ?? null,
+      budget: dto.budget ?? null,
+      actualCost: dto.actualCost ?? null,
       status: dto.status ?? 'PLANNED',
     };
     return this.prisma.eventLogistics.upsert({
