@@ -1228,11 +1228,13 @@ export class EventsService {
   // o "estado" Avaliado/Pendente seja visível por linha — mesmo padrão de
   // computeCheckinState, `evaluation`/`status` calculados, nunca persistidos.
 
-  private buildEvaluationsWhere(
-    filters: EventEvaluationFilterDto,
-  ): Prisma.EventParticipantWhereInput {
+  // Só aparecem participantes que JÁ avaliaram: a base é EventFeedback (quem não
+  // avaliou não tem registo). A inscrição é lida à parte para manter o formato
+  // das linhas (status/registeredAt do participante).
+
+  private buildEvaluationsWhere(filters: EventEvaluationFilterDto): Prisma.EventFeedbackWhereInput {
     const { eventId, departmentId, unitId, search } = filters;
-    const where: Prisma.EventParticipantWhereInput = {};
+    const where: Prisma.EventFeedbackWhereInput = {};
     if (eventId) where.eventId = eventId;
     if (departmentId || unitId || search) {
       where.user = {
@@ -1249,8 +1251,8 @@ export class EventsService {
     const { skip, take } = calculatePagination(page, limit);
     const where = this.buildEvaluationsWhere(filters);
 
-    const [data, total] = await Promise.all([
-      this.prisma.read.eventParticipant.findMany({
+    const [feedbacks, total] = await Promise.all([
+      this.prisma.read.eventFeedback.findMany({
         where,
         skip,
         take,
@@ -1266,29 +1268,32 @@ export class EventsService {
             },
           },
         },
-        orderBy: { registeredAt: 'desc' },
+        orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.read.eventParticipant.count({ where }),
+      this.prisma.read.eventFeedback.count({ where }),
     ]);
 
-    // Uma leitura extra para todos os pares evento/participante da página,
-    // em vez de N consultas por linha (mesmo padrão de listParticipants).
-    const pairs = data.map(p => ({ eventId: p.eventId, userId: p.userId }));
-    const feedbacks = pairs.length
-      ? await this.prisma.read.eventFeedback.findMany({
-          where: { OR: pairs.map(p => ({ eventId: p.eventId, userId: p.userId })) },
+    const participants = feedbacks.length
+      ? await this.prisma.read.eventParticipant.findMany({
+          where: { OR: feedbacks.map(f => ({ eventId: f.eventId, userId: f.userId })) },
+          select: { id: true, eventId: true, userId: true, status: true, registeredAt: true },
         })
       : [];
-    const feedbackMap = new Map(feedbacks.map(f => [`${f.eventId}:${f.userId}`, f]));
+    const participantMap = new Map(participants.map(p => [`${p.eventId}:${p.userId}`, p]));
 
-    const enrichedData = data.map(p => {
-      const evaluation = feedbackMap.get(`${p.eventId}:${p.userId}`) ?? null;
+    const enrichedData = feedbacks.map(f => {
+      const { event, user, ...evaluation } = f;
+      const participant = participantMap.get(`${f.eventId}:${f.userId}`);
       return {
-        ...p,
+        id: participant?.id ?? f.id,
+        userId: f.userId,
+        eventId: f.eventId,
+        status: participant?.status ?? null,
+        registeredAt: participant?.registeredAt ?? f.createdAt,
+        event,
+        user,
         evaluation,
-        // Distinto de `status` (estado da inscrição, já em `p`) — nunca
-        // persistido, mesma convenção de computeCheckinState.
-        evaluationStatus: evaluation ? ('AVALIADO' as const) : ('PENDENTE' as const),
+        evaluationStatus: 'AVALIADO' as const,
       };
     });
 
