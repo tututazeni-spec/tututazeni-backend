@@ -214,6 +214,24 @@ describe('EvaluationService (additional)', () => {
     });
   });
 
+  describe('getEvaluationRequestDetail', () => {
+    it('devolve result como nota numérica (ou null), nunca o registo inteiro', async () => {
+      mockPrisma.evaluationRequest.findUnique.mockResolvedValue({
+        id: 5,
+        evaluatorId: 1,
+        evaluatedId: 2,
+        cycleId: null,
+      });
+      mockPrisma.performanceEvaluation.findFirst.mockResolvedValue({ id: 9, overallScore: 3.7 });
+      const withScore = await service.getEvaluationRequestDetail(5);
+      expect(withScore.result).toBe(3.7);
+
+      mockPrisma.performanceEvaluation.findFirst.mockResolvedValue(null);
+      const without = await service.getEvaluationRequestDetail(5);
+      expect(without.result).toBeNull();
+    });
+  });
+
   // ─── updateCycle ──────────────────────────────────────────────
 
   describe('updateCycle', () => {

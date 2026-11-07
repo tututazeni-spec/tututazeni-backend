@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   NotFoundException,
   Param,
@@ -314,6 +315,16 @@ export class CertificatesController {
     return { id: cert.id, status: cert.status, revokedAt: cert.revokedAt };
   }
 
+  @Delete(':id')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary:
+      'Remover da lista de administração um certificado revogado (fica nos relatórios e na auditoria)',
+  })
+  hideRevoked(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.lifecycle.hideRevoked(id, user.id);
+  }
+
   @Post(':id/reissue')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Reemitir um certificado, ligado ao original' })
@@ -386,6 +397,15 @@ export class CertificatesController {
     await this.team.assertCanApprove(user, id);
     const cert = await this.issuance.approve(id, user.id);
     return { id: cert.id, status: cert.status };
+  }
+
+  @Delete('my/:id')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({
+    summary: 'Remover da minha lista um certificado revogado (fica nos relatórios e na auditoria)',
+  })
+  hideMine(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.me.hideRevoked(id, user);
   }
 
   @Post(':id/email-me')

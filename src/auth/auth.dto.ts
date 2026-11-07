@@ -1,11 +1,4 @@
-import {
-  IsEmail,
-  IsString,
-  MinLength,
-  MaxLength,
-  IsOptional,
-  Matches,
-} from 'class-validator';
+import { IsEmail, IsString, MinLength, MaxLength, IsOptional, Matches } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsStrongPassword } from '../common/validators/strong-password.decorator';
 

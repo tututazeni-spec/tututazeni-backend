@@ -263,6 +263,7 @@ describe('ExternalLoginSecurityService.registerDevice', () => {
     const evil = 'Mozilla\r\nvisite http://phishing.example/x ' + 'a'.repeat(500);
     await svc.registerDevice(7, DEVICE, { ip: '1.1.1.1', userAgent: evil });
     const stored = prisma.trustedDevice.upsert.mock.calls[0][0].create.userAgent as string;
+    // eslint-disable-next-line no-control-regex
     expect(stored).not.toMatch(/[\u0000-\u001f]/);
     expect(stored.length).toBeLessThanOrEqual(300);
     const sentUa = mail.sendNewDeviceAlert.mock.calls[0][2] as string;

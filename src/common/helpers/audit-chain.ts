@@ -5,6 +5,14 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { getRequestContext } from '../logging/request-context';
 import { AUDIT_SCHEMA_VERSION, resolveAuditModule } from './audit-modules';
 
+/**
+ * A cadeia é serializada por advisory lock: sob concorrência (ex.: 20 emissões em
+ * simultâneo com pool pequeno) os pedidos esperam em fila. O maxWait por omissão
+ * (2s) rebenta com "Unable to start a transaction in the given time"; esperar mais
+ * é o comportamento correcto para uma escrita de compliance.
+ */
+const AUDIT_TX_OPTIONS = { maxWait: 30_000, timeout: 30_000 };
+
 export const GENESIS_HASH = 'GENESIS';
 // Chave arbitrária estável do advisory lock que serializa a cadeia entre processos/instâncias.
 const CHAIN_LOCK_KEY = 7340001;
@@ -72,7 +80,7 @@ export async function writeChainedAuditLog(
       previousHash,
     );
     return tx.auditLog.create({ data: { ...enriched, hash, previousHash, timestamp } });
-  });
+  }, AUDIT_TX_OPTIONS);
 }
 
 /**

@@ -40,6 +40,7 @@ describe('normalizeMeeting', () => {
     [MeetingProvider.ZOOM, ''],
     [MeetingProvider.TEAMS, '   '],
     [MeetingProvider.TEAMS, '123456789'],
+    // eslint-disable-next-line no-script-url
     [MeetingProvider.ZOOM, 'javascript:alert(1)'],
     [MeetingProvider.ZOOM, 'http://zoom.us/j/123456789'],
     [MeetingProvider.ZOOM, 'https://zoom.us.evil.com/j/123456789'],

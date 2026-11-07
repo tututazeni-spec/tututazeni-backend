@@ -11,10 +11,12 @@ import {
   ParseIntPipe,
   UseGuards,
   Header,
+  Res,
   StreamableFile,
   BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { EvaluationService } from './evaluation.service';
 import { PdfService } from '../pdf/pdf.service';
 import { isEvalType, type SubmittedType } from './evaluation-insights';
@@ -53,6 +55,14 @@ import {
 import { ADMIN_RH_LIDER_GESTOR_ROLES, ADMIN_RH_ROLES } from '../auth/enums/role-groups';
 
 const ALL_ROLES = AUTHENTICATED_ROLES;
+
+const EVAL_TYPE_LABEL: Record<string, string> = {
+  SELF: 'Autoavaliação',
+  MANAGER: 'Gestor',
+  PEER: 'Par',
+  SUBORDINATE: 'Subordinado',
+  CLIENT: 'Cliente',
+};
 const MGMT_ROLES = ADMIN_RH_LIDER_GESTOR_ROLES;
 const ADMIN_ROLES = ADMIN_RH_ROLES;
 
@@ -368,6 +378,80 @@ export class EvaluationController {
   })
   getItems(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.getStructuredItems(id, user);
+  }
+
+  @Get('performance/:id/export.pdf')
+  @Roles(...ALL_ROLES)
+  @Header('Content-Type', 'application/pdf')
+  @ApiOperation({
+    summary:
+      'Exportar em PDF uma avaliação de desempenho (avaliador, avaliado, RH) — pontos fortes, melhorias e recomendações',
+  })
+  async exportPerformancePdf(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: CurrentUserData,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { ev, items } = await this.svc.getEvaluationExportData(id, user);
+    const slug = ev.evaluated.fullName
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .toLowerCase();
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="avaliacao-${slug || id}-${id}.pdf"`,
+    );
+    const lines = (rows: string[]) => rows.join('\n') || 'Sem registos.';
+    const buffer = await this.pdf.generateExecutiveReport({
+      title: `Avaliação de desempenho — ${ev.evaluated.fullName}`,
+      period: [ev.period, ev.cycle?.name].filter(Boolean).join(' · '),
+      metrics: [
+        { label: 'Colaborador', value: ev.evaluated.fullName },
+        {
+          label: 'Cargo / Departamento',
+          value:
+            [ev.evaluated.position?.name, ev.evaluated.department?.name]
+              .filter(Boolean)
+              .join(' / ') || '—',
+        },
+        { label: 'Avaliador', value: ev.evaluator.fullName },
+        { label: 'Tipo de avaliador', value: EVAL_TYPE_LABEL[ev.type] ?? ev.type },
+        {
+          label: 'Classificação',
+          value: ev.ratingLabel
+            ? `${ev.overallScore.toFixed(2)} — ${ev.ratingLabel}`
+            : ev.overallScore.toFixed(2),
+        },
+      ],
+      sections: [
+        {
+          title: 'Pontos fortes',
+          content: lines(
+            items.strengths.map(s => `${s.competency} (${s.score}/5): ${s.description}`),
+          ),
+        },
+        {
+          title: 'Áreas de melhoria',
+          content: lines(
+            items.improvements.map(
+              i => `${i.competency} (${i.score}/5, prioridade ${i.priority}): ${i.description}`,
+            ),
+          ),
+        },
+        {
+          title: 'Recomendações',
+          content: lines(
+            items.recommendations.map(
+              r => `${r.action} — ${r.objective} [${r.status}, ${r.progressPct}%]`,
+            ),
+          ),
+        },
+        ...(ev.generalComment ? [{ title: 'Comentário geral', content: ev.generalComment }] : []),
+      ],
+    });
+    return new StreamableFile(buffer);
   }
 
   @Post('performance/:id/pdi')

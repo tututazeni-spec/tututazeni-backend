@@ -142,7 +142,9 @@ export class LiveClassesService {
 
   /** Quem gere aulas vê os rascunhos (EM_PREPARACAO); os restantes só as já publicadas. */
   seesDrafts(user: CurrentUserData): boolean {
-    return isExternalInstructor(user) || ['ADMIN', 'RH', 'INSTRUCTOR'].includes(user.role?.name ?? '');
+    return (
+      isExternalInstructor(user) || ['ADMIN', 'RH', 'INSTRUCTOR'].includes(user.role?.name ?? '')
+    );
   }
 
   async findAll(filters: LiveClassFilterDto, ownerProfileId?: number, hideDrafts = false) {

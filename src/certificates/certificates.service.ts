@@ -54,7 +54,7 @@ export class CertificatesService {
 
   async listMine(userId: number) {
     const rows = await this.prisma.certificate.findMany({
-      where: { userId, deletedAt: null },
+      where: { userId, deletedAt: null, holderHiddenAt: null },
       include: {
         course: { select: { id: true, title: true, thumbnailUrl: true, category: true } },
         event: { select: { id: true, title: true } },

@@ -29,11 +29,13 @@ const codeHash = (userId: number, code: string): string => sha256(`${userId}:${c
 /** Sem caracteres de controlo (injeção de linhas) e com tamanho limitado. */
 function cleanUa(ua: string | undefined, max: number): string | undefined {
   if (!ua) return undefined;
-  // eslint-disable-next-line no-control-regex
-  return ua
-    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
-    .trim()
-    .slice(0, max);
+  return (
+    ua
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+      .trim()
+      .slice(0, max)
+  );
 }
 
 /** Para o corpo do e-mail: além do limite, sem URLs (evita links de phishing no alerta). */

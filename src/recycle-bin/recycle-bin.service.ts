@@ -104,7 +104,12 @@ export class RecycleBinService {
         await this.prisma.contentAsset.delete({ where: { id } });
         purged++;
       } catch (e) {
-        this.logger.warn({ id, kind: 'CONTENT', err: String(e), msg: 'Não foi possível apagar de vez' });
+        this.logger.warn({
+          id,
+          kind: 'CONTENT',
+          err: String(e),
+          msg: 'Não foi possível apagar de vez',
+        });
       }
     }
     for (const { id } of docs) {
@@ -112,7 +117,12 @@ export class RecycleBinService {
         await this.prisma.document.delete({ where: { id } });
         purged++;
       } catch (e) {
-        this.logger.warn({ id, kind: 'DOCUMENT', err: String(e), msg: 'Não foi possível apagar de vez' });
+        this.logger.warn({
+          id,
+          kind: 'DOCUMENT',
+          err: String(e),
+          msg: 'Não foi possível apagar de vez',
+        });
       }
     }
     return { purged };

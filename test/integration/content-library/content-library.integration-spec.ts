@@ -75,7 +75,7 @@ describe('Content Library Integration', () => {
         .expect(403);
     });
 
-    it('RH cria conteúdo (DRAFT) → 201', async () => {
+    it('RH cria conteúdo (fica ACTIVE) → 201', async () => {
       const res = await request(app.getHttpServer())
         .post('/content-library')
         .set('Authorization', `Bearer ${rhToken}`)
@@ -90,16 +90,16 @@ describe('Content Library Integration', () => {
         .expect(201);
       contentId = res.body.id;
       expect(contentId).toBeDefined();
-      expect(res.body.status).toBe('DRAFT');
+      expect(res.body.status).toBe('ACTIVE');
       expect(res.body.createdById).toBe(rhId);
     });
 
-    it('GET /content-library — conteúdo DRAFT não aparece no catálogo público → 200 sem incluir', async () => {
+    it('GET /content-library — conteúdo criado já aparece no catálogo → 200', async () => {
       const res = await request(app.getHttpServer())
         .get('/content-library')
         .set('Authorization', `Bearer ${employeeToken}`)
         .expect(200);
-      expect(res.body.data.some((c: any) => c.id === contentId)).toBe(false);
+      expect(res.body.data.some((c: any) => c.id === contentId)).toBe(true);
     });
 
     it('POST /content-library/:id/publish — RH publica → 200 e sobe versão', async () => {

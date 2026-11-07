@@ -190,8 +190,11 @@ export class CertificatesAdminService {
     q: ListCertificatesQueryDto,
     now: Date,
     scope: CertificateScope,
+    hideAdminHidden = false,
   ): Prisma.CertificateWhereInput | null {
     const and: Prisma.CertificateWhereInput[] = [{ deletedAt: null }];
+    // A lista esconde os revogados "apagados"; exportações e relatórios mantêm-nos.
+    if (hideAdminHidden) and.push({ adminHiddenAt: null });
     // O âmbito só restringe: filtros do pedido nunca o alargam.
     if (scope.kind === 'TEAM') and.push({ userId: { in: scope.userIds } });
     if (q.status) and.push(statusWhere(q.status, now));
@@ -244,7 +247,7 @@ export class CertificatesAdminService {
     const limit = q.limit ?? DEFAULT_LIMIT;
     const empty = { data: [] as AdminCertificateRow[], total: 0, page, limit, totalPages: 0 };
 
-    const where = this.buildWhere(q, now, scope);
+    const where = this.buildWhere(q, now, scope, true);
     if (!where) return empty;
     const order = q.order ?? 'desc';
     const sort = q.sort ?? 'issuedAt';

@@ -30,6 +30,34 @@ export class CertificateLifecycleService {
     return cert;
   }
 
+  /**
+   * "Remover da lista" um certificado revogado da lista de administração. Nada é eliminado:
+   * fica oculto na lista (`adminHiddenAt`) mas continua nas exportações,
+   * relatórios e na auditoria.
+   */
+  async hideRevoked(id: number, actorId: number): Promise<{ hidden: true }> {
+    const cert = await this.load(id);
+    if (!cert.revoked && cert.status !== 'REVOKED') {
+      throw new ConflictException('Só é possível remover da lista certificados revogados');
+    }
+    if (cert.adminHiddenAt) return { hidden: true };
+    await this.prisma.certificate.update({
+      where: { id },
+      data: { adminHiddenAt: new Date() },
+    });
+    await this.audit.log({
+      action: 'CERTIFICATE_HIDDEN_BY_ADMIN',
+      entity: 'Certificate',
+      entityId: id,
+      userId: actorId,
+      before: { status: 'REVOKED', visibleInList: true },
+      after: { status: 'REVOKED', visibleInList: false },
+      metadata: { holderId: cert.userId },
+      strict: true,
+    });
+    return { hidden: true };
+  }
+
   async revoke(id: number, reason: string, actorId: number): Promise<Certificate> {
     const cert = await this.load(id);
     if (cert.revoked || cert.status === 'REVOKED') {

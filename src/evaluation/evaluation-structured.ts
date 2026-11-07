@@ -284,6 +284,38 @@ export class EvaluationStructuredService {
   }
 
   /** Avaliador, avaliado (só se submetida) ou ADMIN/RH. Caso contrário 404, sem revelar existência. */
+  /**
+   * Dados de uma avaliação para exportação (PDF). Mesma regra de acesso de
+   * `getItems` (avaliador, avaliado só se submetida, ou ADMIN/RH) — reutiliza-a,
+   * por isso quem não pode ver a avaliação recebe 404 também aqui.
+   */
+  async getExportData(evaluationId: number, actor: Actor) {
+    const items = await this.getItems(evaluationId, actor);
+    const ev = await this.prisma.performanceEvaluation.findUnique({
+      where: { id: evaluationId },
+      select: {
+        type: true,
+        period: true,
+        overallScore: true,
+        ratingLabel: true,
+        generalComment: true,
+        createdAt: true,
+        isDraft: true,
+        evaluated: {
+          select: {
+            fullName: true,
+            position: { select: { name: true } },
+            department: { select: { name: true } },
+          },
+        },
+        evaluator: { select: { fullName: true } },
+        cycle: { select: { name: true } },
+      },
+    });
+    if (!ev) throw new NotFoundException('Avaliação não encontrada');
+    return { ev, items };
+  }
+
   async getItems(evaluationId: number, actor: Actor) {
     const ev = await this.loadEvaluation(evaluationId);
     const isEvaluator = ev.evaluatorId === actor.id;

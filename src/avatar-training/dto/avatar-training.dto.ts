@@ -667,7 +667,9 @@ export class AssignAvatarSessionDto {
   @IsInt({ each: true })
   departmentIds?: number[];
 
-  @ApiPropertyOptional({ description: 'Atribuir a todos os colaboradores de todos os departamentos' })
+  @ApiPropertyOptional({
+    description: 'Atribuir a todos os colaboradores de todos os departamentos',
+  })
   @IsOptional()
   @IsBoolean()
   allDepartments?: boolean;
