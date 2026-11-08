@@ -10258,8 +10258,6 @@ model EventLogistics {
   responsibleId   Int?
   equipment       EventEquipmentType[] @default([])
   customEquipment String[]             @default([])
-  customServices  String[]             @default([])
-  serviceCosts    Json? // serviços seleccionados em Estado e custos: { chave: custo|null }
   resourcesNeeded String?              @db.Text
   suppliers       String?              @db.Text
   catering        String?
