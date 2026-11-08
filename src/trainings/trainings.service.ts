@@ -1414,8 +1414,7 @@ export class TrainingService {
       }
       if (meta.trainingId !== trainingId) continue;
       // Envios antigos não têm batchId: agrupa por mensagem + minuto.
-      const key =
-        meta.batchId ?? `${r.message}|${r.createdAt.toISOString().slice(0, 16)}`;
+      const key = meta.batchId ?? `${r.message}|${r.createdAt.toISOString().slice(0, 16)}`;
       const g = groups.get(key);
       if (g) g.recipients++;
       else
