@@ -10263,6 +10263,8 @@ model EventLogistics {
   resourcesNeeded String?              @db.Text
   suppliers       String?              @db.Text
   catering        String?
+  customServices  String[]             @default([])
+  serviceCosts    Json? // serviços seleccionados em Estado e custos: { chave: custo|null }
   transport       String?
   accommodation   String?
   security        String?
