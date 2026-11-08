@@ -439,4 +439,12 @@ export class LeaveManagementController {
   processCarryOver(@Query('year') year: string, @CurrentUser() user: CurrentUserData) {
     return this.svc.processCarryOver(+year || new Date().getFullYear(), user.id);
   }
+
+  @Post('balance/carry-over/expire')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Caducar os dias transitados não gozados até 31 de Março' })
+  @ApiQuery({ name: 'year', type: Number })
+  expireCarryOver(@Query('year') year: string, @CurrentUser() user: CurrentUserData) {
+    return this.svc.expireCarryOver(+year || new Date().getFullYear(), user.id);
+  }
 }

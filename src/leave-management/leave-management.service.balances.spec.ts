@@ -48,6 +48,7 @@ function harness(opts: Opts = {}) {
     leaveBalanceHistory: {
       create: jest.fn().mockResolvedValue({}),
       findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
     },
     leaveRequest: {
       findUnique: jest.fn(),
@@ -343,6 +344,68 @@ describe('transição de saldos (§10)', () => {
     h.prisma.leaveBalanceHistory.findFirst.mockResolvedValue({ id: 1 });
     const r = await h.svc.processCarryOver(2026);
     expect(r).toMatchObject({ processed: 0, skipped: 1 });
+    expect(h.prisma.leaveBalance.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('caducidade dos dias transitados (31 de Março)', () => {
+  const type = { code: 'VACATION', annualLimit: 22, allowCarryOver: true };
+  // Transição de 2025 → 2026: saldo novo 30 = 22 anuais + 8 transitados.
+  const carried = { userId: 1, leaveTypeCode: 'VACATION', balanceAfter: 30 };
+  const setup = (
+    over: { moves?: number[]; balance?: { balance: number; reserved: number } | null } = {},
+  ) => {
+    const h = harness({ balance: over.balance });
+    h.prisma.leaveTypeConfig.findMany.mockResolvedValue([type]);
+    h.prisma.leaveBalanceHistory.findMany
+      .mockResolvedValueOnce([carried])
+      .mockResolvedValueOnce((over.moves ?? []).map(change => ({ change })));
+    return h;
+  };
+
+  it('os transitados não gozados caducam e o saldo desce', async () => {
+    const h = setup({ balance: { balance: 30, reserved: 0 } });
+    const r = await h.svc.expireCarryOver(2026, 99);
+    expect(r.results).toEqual([{ userId: 1, code: 'VACATION', expired: 8 }]);
+    expect(h.prisma.leaveBalance.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { balance: { decrement: 8 } } }),
+    );
+    expect(h.prisma.leaveBalanceHistory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          kind: 'CARRY_OVER_EXPIRY',
+          change: -8,
+          reason: 'Caducidade da transição de 2025 (31/03/2026)',
+        }),
+      }),
+    );
+  });
+
+  it('o que foi gozado desde 1 de Janeiro conta primeiro nos transitados', async () => {
+    // Gozou 5 dias (USAGE -5): sobram 3 dos 8 transitados.
+    const h = setup({ moves: [-5], balance: { balance: 25, reserved: 0 } });
+    const r = await h.svc.expireCarryOver(2026);
+    expect(r.results[0].expired).toBe(3);
+  });
+
+  it('se gozou todos os transitados nada caduca', async () => {
+    const h = setup({ moves: [-10], balance: { balance: 20, reserved: 0 } });
+    const r = await h.svc.expireCarryOver(2026);
+    expect(r.expired).toBe(0);
+    expect(h.prisma.leaveBalance.update).not.toHaveBeenCalled();
+  });
+
+  it('nunca tira dias reservados por pedidos pendentes', async () => {
+    const h = setup({ balance: { balance: 30, reserved: 27 } });
+    const r = await h.svc.expireCarryOver(2026);
+    expect(r.results[0].expired).toBe(3);
+  });
+
+  it('é idempotente: voltar a correr o mesmo ano não caduca outra vez', async () => {
+    const h = setup({ balance: { balance: 30, reserved: 0 } });
+    h.prisma.leaveBalanceHistory.findFirst.mockResolvedValue({ id: 1 });
+    const r = await h.svc.expireCarryOver(2026);
+    expect(r.expired).toBe(0);
     expect(h.prisma.leaveBalance.update).not.toHaveBeenCalled();
   });
 });

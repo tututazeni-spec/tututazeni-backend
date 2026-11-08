@@ -8,6 +8,7 @@ import {
   ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { LeaveDecision, LeaveType, Prisma } from '@prisma/client';
 import { AuditService } from '../common/services/audit.service';
@@ -829,6 +830,127 @@ export class LeaveManagementService {
     }
 
     return { processed: results.length, skipped, results };
+  }
+
+  /**
+   * Fecho do ano (1 de Janeiro): os dias não gozados transitam para o novo ano,
+   * somados ao direito anual. Idempotente por (colaborador, tipo, ano).
+   */
+  @Cron('0 1 1 1 *')
+  async runYearEndCarryOver(): Promise<void> {
+    const closing = new Date().getFullYear() - 1;
+    try {
+      const r = await this.processCarryOver(closing);
+      this.logger.log({ action: 'LEAVE_CARRY_OVER', year: closing, processed: r.processed });
+    } catch (e) {
+      this.logger.error({
+        action: 'LEAVE_CARRY_OVER',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: `Falha na transição de saldos de ${closing}`,
+      });
+    }
+  }
+
+  /** 1 de Abril: os dias transitados que não foram gozados até 31 de Março caducam. */
+  @Cron('0 1 1 4 *')
+  async runCarryOverExpiry(): Promise<void> {
+    const year = new Date().getFullYear();
+    try {
+      const r = await this.expireCarryOver(year);
+      this.logger.log({ action: 'LEAVE_CARRY_OVER_EXPIRY', year, expired: r.expired });
+    } catch (e) {
+      this.logger.error({
+        action: 'LEAVE_CARRY_OVER_EXPIRY',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: `Falha na caducidade dos dias transitados para ${year}`,
+      });
+    }
+  }
+
+  /**
+   * Caducidade dos dias transitados do ano anterior (prazo: 31 de Março de
+   * `year`). Os dias transitados são gozados primeiro (FIFO): o que sobra deles
+   * = transitado − dias debitados desde 1 de Janeiro. Nunca tira dias já
+   * reservados por pedidos pendentes. Idempotente por (colaborador, tipo, ano).
+   */
+  async expireCarryOver(year: number, actorId = 0) {
+    const results: { userId: number; code: string; expired: number }[] = [];
+    const types = await this.prisma.leaveTypeConfig.findMany({ where: { allowCarryOver: true } });
+    const typeByCode = new Map(types.map(t => [t.code, t]));
+    const carriedRows = await this.prisma.leaveBalanceHistory.findMany({
+      where: {
+        kind: 'CARRY_OVER',
+        reason: `Transição de saldo ${year - 1}`,
+        leaveTypeCode: { in: types.map(t => t.code) },
+      },
+    });
+    const expiryMarker = `Caducidade da transição de ${year - 1} (31/03/${year})`;
+    const yearStart = new Date(year, 0, 1);
+
+    for (const row of carriedRows) {
+      const lt = typeByCode.get(row.leaveTypeCode);
+      const carried = Math.max(0, row.balanceAfter - (lt?.annualLimit ?? 0));
+      if (!lt || carried <= 0) continue;
+
+      const done = await this.prisma.leaveBalanceHistory.findFirst({
+        where: {
+          userId: row.userId,
+          leaveTypeCode: row.leaveTypeCode,
+          kind: 'CARRY_OVER_EXPIRY',
+          reason: expiryMarker,
+        },
+        select: { id: true },
+      });
+      if (done) continue;
+
+      const moves = await this.prisma.leaveBalanceHistory.findMany({
+        where: {
+          userId: row.userId,
+          leaveTypeCode: row.leaveTypeCode,
+          kind: { in: ['USAGE', 'REVERSAL'] },
+          createdAt: { gte: yearStart },
+        },
+        select: { change: true },
+      });
+      const usedSinceJan = -moves.reduce((a, m) => a + m.change, 0);
+      const stillCarried = Math.max(0, carried - Math.max(0, usedSinceJan));
+
+      const expired = await this.prisma.$transaction(async tx => {
+        await this.lockBalance(tx, row.userId, row.leaveTypeCode);
+        const bal = await tx.leaveBalance.findUnique({
+          where: {
+            userId_leaveTypeCode: { userId: row.userId, leaveTypeCode: row.leaveTypeCode },
+          },
+        });
+        if (!bal) return 0;
+        const forfeit = Math.min(stillCarried, Math.max(0, bal.balance - bal.reserved));
+        if (forfeit <= 0) return 0;
+        await tx.leaveBalance.update({
+          where: {
+            userId_leaveTypeCode: { userId: row.userId, leaveTypeCode: row.leaveTypeCode },
+          },
+          data: { balance: { decrement: forfeit } },
+        });
+        await tx.leaveBalanceHistory.create({
+          data: {
+            userId: row.userId,
+            leaveTypeCode: row.leaveTypeCode,
+            leaveType: toLeaveTypeEnum(row.leaveTypeCode),
+            balanceBefore: bal.balance,
+            balanceAfter: bal.balance - forfeit,
+            change: -forfeit,
+            reason: expiryMarker,
+            kind: 'CARRY_OVER_EXPIRY',
+            updatedById: actorId,
+          },
+        });
+        return forfeit;
+      });
+      if (expired > 0) {
+        results.push({ userId: row.userId, code: row.leaveTypeCode, expired });
+      }
+    }
+    return { expired: results.length, results };
   }
 
   async getBalanceHistory(userId: number, leaveTypeCode?: string) {
