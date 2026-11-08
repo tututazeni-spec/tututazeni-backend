@@ -655,6 +655,10 @@ export class LeaveManagementService {
   // ══════════════════════════════════════════════════════════════════
 
   async getBalance(userId: number) {
+    // Primeiro acesso: sem linhas de saldo, inicializa-as (idempotente).
+    if ((await this.prisma.leaveBalance.count({ where: { userId } })) === 0) {
+      await this.initializeUserBalances(userId);
+    }
     const balances = await this.prisma.read.leaveBalance.findMany({
       where: { userId },
     });
@@ -1120,6 +1124,20 @@ export class LeaveManagementService {
 
     // 3. Saldo disponível = atribuído − já reservado por outros pedidos pendentes
     if (leaveType.annualLimit) {
+      // Colaborador que nunca foi inicializado não tem linha de saldo (só existia
+      // o endpoint manual de RH) — cria-a com o direito anual do tipo.
+      await this.prisma.leaveBalance.createMany({
+        data: [
+          {
+            userId,
+            leaveTypeCode: leaveType.code,
+            leaveType: toLeaveTypeEnum(leaveType.code),
+            balance: leaveType.annualLimit,
+            used: 0,
+          },
+        ],
+        skipDuplicates: true,
+      });
       const balance = await this.prisma.leaveBalance.findUnique({
         where: { userId_leaveTypeCode: { userId, leaveTypeCode: leaveType.code } },
       });

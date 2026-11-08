@@ -42,6 +42,8 @@ function harness(opts: Opts = {}) {
       findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn().mockResolvedValue({}),
       upsert: jest.fn().mockResolvedValue({}),
+      createMany: jest.fn().mockResolvedValue({ count: 0 }),
+      count: jest.fn().mockResolvedValue(1),
     },
     leaveBalanceHistory: {
       create: jest.fn().mockResolvedValue({}),
