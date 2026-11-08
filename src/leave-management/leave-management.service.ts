@@ -64,7 +64,7 @@ export function inMonthDayWindow(mmdd: string, start: string, end: string): bool
   return start <= end ? mmdd >= start && mmdd <= end : mmdd >= start || mmdd <= end;
 }
 
-function toLeaveTypeEnum(code: string): LeaveType | null {
+export function toLeaveTypeEnum(code: string): LeaveType | null {
   return LEAVE_TYPE_ENUM_VALUES.has(code) ? (code as LeaveType) : null;
 }
 
