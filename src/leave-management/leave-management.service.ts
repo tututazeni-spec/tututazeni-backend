@@ -65,6 +65,16 @@ export function inMonthDayWindow(mmdd: string, start: string, end: string): bool
   return start <= end ? mmdd >= start && mmdd <= end : mmdd >= start || mmdd <= end;
 }
 
+/** Último dia (inclusive, UTC) para gozar os dias transitados em `year`; `mmdd` vem das Configurações. */
+export function carryOverDeadlineDate(mmdd: string, year: number): Date {
+  const [m, d] = mmdd.split('-').map(Number);
+  const lastDay = new Date(Date.UTC(year, m, 0)).getUTCDate();
+  return new Date(Date.UTC(year, m - 1, Math.min(d, lastDay)));
+}
+
+const fmtDeadline = (d: Date) =>
+  `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`;
+
 export function toLeaveTypeEnum(code: string): LeaveType | null {
   return LEAVE_TYPE_ENUM_VALUES.has(code) ? (code as LeaveType) : null;
 }
@@ -851,11 +861,20 @@ export class LeaveManagementService {
     }
   }
 
-  /** 1 de Abril: os dias transitados que não foram gozados até 31 de Março caducam. */
-  @Cron('0 1 1 4 *')
+  /**
+   * Todos os dias, 01:00: depois do prazo (por omissão 31 de Março, configurável)
+   * caducam os dias transitados que não foram gozados. É idempotente, por isso
+   * correr todos os dias é inofensivo; só actua nos 60 dias seguintes ao prazo.
+   */
+  @Cron('0 1 * * *')
   async runCarryOverExpiry(): Promise<void> {
-    const year = new Date().getFullYear();
+    const now = new Date();
+    const year = now.getFullYear();
     try {
+      const cfg = await this.settings.current();
+      const deadline = carryOverDeadlineDate(cfg.carryOverDeadline, year);
+      if (now <= new Date(deadline.getTime() + 86_400_000)) return;
+      if (now.getTime() - deadline.getTime() > 60 * 86_400_000) return;
       const r = await this.expireCarryOver(year);
       this.logger.log({ action: 'LEAVE_CARRY_OVER_EXPIRY', year, expired: r.expired });
     } catch (e) {
@@ -868,12 +887,114 @@ export class LeaveManagementService {
   }
 
   /**
-   * Caducidade dos dias transitados do ano anterior (prazo: 31 de Março de
-   * `year`). Os dias transitados são gozados primeiro (FIFO): o que sobra deles
-   * = transitado − dias debitados desde 1 de Janeiro. Nunca tira dias já
-   * reservados por pedidos pendentes. Idempotente por (colaborador, tipo, ano).
+   * Dias de `code` que o colaborador já ocupa, dentro da janela [1 Jan, prazo]
+   * de `year`, com pedidos pendentes ou aprovados. Os dias transitados gozam-se
+   * primeiro, mas só os que caem na janela os consomem — um pedido aprovado em
+   * Março para Abril usa dias do ano, não os transitados.
+   */
+  private async carriedDaysUsedInWindow(
+    userId: number,
+    code: string,
+    year: number,
+    deadline: Date,
+    location?: string | null,
+  ): Promise<number> {
+    const yearStart = new Date(Date.UTC(year, 0, 1));
+    const reqs = await this.prisma.leaveRequest.findMany({
+      where: {
+        userId,
+        leaveTypeCode: code,
+        status: { in: [LeaveStatus.PENDING, LeaveStatus.APPROVED] },
+        startDate: { lte: deadline },
+        endDate: { gte: yearStart },
+      },
+      select: { startDate: true, endDate: true },
+    });
+    return reqs.reduce((sum, q) => {
+      const from = q.startDate > yearStart ? q.startDate : yearStart;
+      const to = q.endDate < deadline ? q.endDate : deadline;
+      return sum + (from <= to ? countWorkDays(from, to, location) : 0);
+    }, 0);
+  }
+
+  /**
+   * Pedido que passa do prazo só pode usar os dias que não são transitados: os
+   * transitados ainda por gozar ficam reservados para a janela até ao prazo.
+   */
+  private async assertCarriedDaysDeadline(
+    userId: number,
+    leaveType: Prisma.LeaveTypeConfigGetPayload<object>,
+    start: Date,
+    end: Date,
+    workDays: number,
+    available: number,
+    cfg: LeaveSettings,
+  ) {
+    const year = start.getUTCFullYear();
+    const deadline = carryOverDeadlineDate(cfg.carryOverDeadline, year);
+    if (end <= deadline) return;
+
+    const carriedRow = await this.prisma.leaveBalanceHistory.findFirst({
+      where: {
+        userId,
+        leaveTypeCode: leaveType.code,
+        kind: 'CARRY_OVER',
+        reason: `Transição de saldo ${year - 1}`,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const carried = carriedRow
+      ? Math.max(0, carriedRow.balanceAfter - (leaveType.annualLimit ?? 0))
+      : 0;
+    if (carried <= 0) return;
+    const expired = await this.prisma.leaveBalanceHistory.findFirst({
+      where: {
+        userId,
+        leaveTypeCode: leaveType.code,
+        kind: 'CARRY_OVER_EXPIRY',
+        reason: { startsWith: `Caducidade da transição de ${year - 1} (` },
+      },
+      select: { id: true },
+    });
+    if (expired) return;
+
+    const person = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { workLocation: true },
+    });
+    const used = await this.carriedDaysUsedInWindow(
+      userId,
+      leaveType.code,
+      year,
+      deadline,
+      person?.workLocation,
+    );
+    const pool = Math.max(0, carried - used);
+    if (pool <= 0) return;
+
+    const inWindow =
+      start <= deadline
+        ? countWorkDays(start, deadline < end ? deadline : end, person?.workLocation)
+        : 0;
+    const after = Math.max(0, workDays - inWindow);
+    if (after > available - pool) {
+      throw new BadRequestException(
+        `Tem ${pool} dia(s) transitado(s) por gozar que só podem ser usados até ${fmtDeadline(deadline)}. ` +
+          `Para o período depois dessa data só pode usar ${Math.max(0, available - pool)} dia(s)`,
+      );
+    }
+  }
+
+  /**
+   * Caducidade dos dias transitados do ano anterior (prazo: `carryOverDeadline`
+   * de `year`). Os dias transitados são gozados primeiro (FIFO): o que sobra
+   * deles = transitado − dias ocupados dentro da janela até ao prazo. Nunca tira
+   * dias já reservados por pedidos pendentes. Idempotente por (colaborador, tipo,
+   * ano) e notifica o colaborador.
    */
   async expireCarryOver(year: number, actorId = 0) {
+    const cfg = await this.settings.current();
+    const deadline = carryOverDeadlineDate(cfg.carryOverDeadline, year);
     const results: { userId: number; code: string; expired: number }[] = [];
     const types = await this.prisma.leaveTypeConfig.findMany({ where: { allowCarryOver: true } });
     const typeByCode = new Map(types.map(t => [t.code, t]));
@@ -884,8 +1005,8 @@ export class LeaveManagementService {
         leaveTypeCode: { in: types.map(t => t.code) },
       },
     });
-    const expiryMarker = `Caducidade da transição de ${year - 1} (31/03/${year})`;
-    const yearStart = new Date(year, 0, 1);
+    const expiryPrefix = `Caducidade da transição de ${year - 1} (`;
+    const expiryMarker = `${expiryPrefix}prazo ${fmtDeadline(deadline)})`;
 
     for (const row of carriedRows) {
       const lt = typeByCode.get(row.leaveTypeCode);
@@ -897,23 +1018,24 @@ export class LeaveManagementService {
           userId: row.userId,
           leaveTypeCode: row.leaveTypeCode,
           kind: 'CARRY_OVER_EXPIRY',
-          reason: expiryMarker,
+          reason: { startsWith: expiryPrefix },
         },
         select: { id: true },
       });
       if (done) continue;
 
-      const moves = await this.prisma.leaveBalanceHistory.findMany({
-        where: {
-          userId: row.userId,
-          leaveTypeCode: row.leaveTypeCode,
-          kind: { in: ['USAGE', 'REVERSAL'] },
-          createdAt: { gte: yearStart },
-        },
-        select: { change: true },
+      const person = await this.prisma.user.findUnique({
+        where: { id: row.userId },
+        select: { workLocation: true },
       });
-      const usedSinceJan = -moves.reduce((a, m) => a + m.change, 0);
-      const stillCarried = Math.max(0, carried - Math.max(0, usedSinceJan));
+      const usedInWindow = await this.carriedDaysUsedInWindow(
+        row.userId,
+        row.leaveTypeCode,
+        year,
+        deadline,
+        person?.workLocation,
+      );
+      const stillCarried = Math.max(0, carried - usedInWindow);
 
       const expired = await this.prisma.$transaction(async tx => {
         await this.lockBalance(tx, row.userId, row.leaveTypeCode);
@@ -948,6 +1070,11 @@ export class LeaveManagementService {
       });
       if (expired > 0) {
         results.push({ userId: row.userId, code: row.leaveTypeCode, expired });
+        await this.notifyUser(
+          row.userId,
+          'LEAVE_CARRY_OVER_EXPIRED',
+          `${expired} dia(s) de ${lt.name ?? row.leaveTypeCode} transitado(s) de ${year - 1} caducaram em ${fmtDeadline(deadline)} por não terem sido gozados.`,
+        );
       }
     }
     return { expired: results.length, results };
@@ -1267,6 +1394,17 @@ export class LeaveManagementService {
       if (workDays > available) {
         throw new BadRequestException(
           `Saldo insuficiente: tem ${available} dias disponíveis, solicitou ${workDays}`,
+        );
+      }
+      if (leaveType.allowCarryOver) {
+        await this.assertCarriedDaysDeadline(
+          userId,
+          leaveType,
+          start,
+          end,
+          workDays,
+          available,
+          cfg,
         );
       }
     }
