@@ -634,7 +634,7 @@ async function main() {
       annualLimit: 22,
       allowCarryOver: true,
       carryOverLimit: 5,
-      minNoticeDays: 15,
+      minNoticeDays: 0,
     },
     {
       code: 'SICK',
