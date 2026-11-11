@@ -38,6 +38,7 @@ import {
 import { canSeeSensitive, leaveUserFilter, ORG_WIDE_ROLES, TEAM_ROLES } from './leave-scope.helper';
 import { LeaveSettingsService } from './leave-settings.service';
 import { csvCell } from '../common/utils/csv-safe.util';
+import { avatarRef } from '../users/avatar-ref';
 
 const HOURS_PER_DAY = 8;
 /** Ocorrências que só fazem sentido com hora de início e de fim. */
@@ -92,6 +93,7 @@ const ABSENCE_INCLUDE = {
       id: true,
       fullName: true,
       employeeNumber: true,
+      avatarUrl: true,
       department: { select: { id: true, name: true } },
     },
   },
@@ -120,6 +122,22 @@ export class LeaveAbsencesService {
 
   private isManagerLike(viewer: CurrentUserData): boolean {
     return isPrivileged(viewer, [...ORG_WIDE_ROLES, ...TEAM_ROLES]);
+  }
+
+  /**
+   * Cancelar (remover) um registo: só ocorrências manuais — as da assiduidade
+   * seriam recriadas pela sincronização. Gestores/RH do âmbito cancelam;
+   * o colaborador só cancela o que ele próprio registou. Registos validados
+   * só pelo RH.
+   */
+  private canCancel(
+    a: { source: string; justificationStatus: string; userId: number; createdById: number },
+    viewer: CurrentUserData,
+  ): boolean {
+    if (a.source !== AbsenceSource.MANUAL) return false;
+    if (a.justificationStatus === AbsenceJustificationStatus.VALIDATED && !this.isOrg(viewer))
+      return false;
+    return this.isManagerLike(viewer) || (viewer.id === a.userId && a.createdById === viewer.id);
   }
 
   /** O próprio ou alguém do âmbito do perfil; caso contrário 404 (não revela existência). */
@@ -178,7 +196,7 @@ export class LeaveAbsencesService {
       const status = r.justificationStatus;
       return {
         id: r.id,
-        user: r.user,
+        user: { ...r.user, avatarUrl: avatarRef(r.user.id, r.user.avatarUrl) },
         date: r.date,
         startTime: r.startTime,
         endTime: r.endTime,
@@ -235,6 +253,7 @@ export class LeaveAbsencesService {
               status === AbsenceJustificationStatus.SUBMITTED),
           sendToHr:
             managerLike && !org && !r.sentToHrAt && status === AbsenceJustificationStatus.SUBMITTED,
+          cancel: this.canCancel(r, viewer),
         },
       };
     });
@@ -830,6 +849,47 @@ export class LeaveAbsencesService {
       ),
     );
     return (await this.toViews([updated], viewer))[0];
+  }
+
+  /**
+   * Cancela o registo: remove-o (anexos e correcções vão em cascata) e deixa na
+   * auditoria um retrato completo do que foi apagado e quem o fez.
+   */
+  async cancel(id: number, viewer: CurrentUserData) {
+    const a = await this.load(id, viewer);
+    if (a.source !== AbsenceSource.MANUAL)
+      throw new ConflictException(
+        'Ocorrências geradas pela assiduidade não podem ser canceladas — justifique ou corrija o registo',
+      );
+    if (!this.canCancel(a, viewer))
+      throw new ForbiddenException(
+        a.justificationStatus === AbsenceJustificationStatus.VALIDATED
+          ? 'Registos validados só podem ser cancelados pelo RH'
+          : 'Sem permissão para cancelar este registo',
+      );
+
+    await this.prisma.absenceRecord.delete({ where: { id } });
+    await this.audit.log({
+      action: 'ABSENCE_CANCELLED',
+      entityType: 'AbsenceRecord',
+      entityId: id,
+      userId: viewer.id,
+      metadata: {
+        ownerId: a.userId,
+        date: a.date.toISOString().slice(0, 10),
+        occurrenceType: a.occurrenceType,
+        customCategory: a.customCategory,
+        startTime: a.startTime,
+        endTime: a.endTime,
+        justificationStatus: a.justificationStatus,
+        justification: a.justification,
+        attachments: a.attachments.length,
+        createdById: a.createdById,
+      },
+    });
+    if (a.userId !== viewer.id)
+      await this.notify(a.userId, 'ABSENCE_CANCELLED', 'Um registo de ausência seu foi cancelado');
+    return { id, cancelled: true };
   }
 
   /**
