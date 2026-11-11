@@ -153,7 +153,7 @@ export class CreateDepartmentDto {
   @ApiPropertyOptional({ description: 'Área funcional' })
   @IsOptional()
   @IsString()
-  @MaxLength(120)
+  @MaxLength(500)
   functionalArea?: string;
 
   @ApiPropertyOptional({ description: 'Área de negócio' })
@@ -453,7 +453,7 @@ export class CreatePositionDto {
   @ApiPropertyOptional({ description: 'Função — distinta do nome do cargo' })
   @IsOptional()
   @IsString()
-  @MaxLength(150)
+  @MaxLength(500)
   jobFunction?: string;
 
   @ApiPropertyOptional({ description: 'Família profissional' })
