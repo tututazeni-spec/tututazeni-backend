@@ -28,6 +28,7 @@ import {
 } from './departments.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { csvCell } from '../common/utils/csv-safe.util';
+import { relatedHeadIds } from './manager-eligibility';
 
 // ─── DEPARTMENTS ──────────────────────────────────────────────────────────────
 
@@ -186,6 +187,33 @@ export class DepartmentsService {
         .join(','),
     );
     return [headers.join(','), ...lines].join('\n');
+  }
+
+  /**
+   * Quem pode ser responsável directo de um colaborador deste departamento: os do próprio
+   * departamento e os chefes do departamento superior e dos subdepartamentos.
+   */
+  async getManagerCandidates(departmentId: number) {
+    const depts = await this.prisma.read.department.findMany({
+      select: { id: true, parentId: true, headId: true },
+    });
+    if (!depts.some(d => d.id === departmentId)) {
+      throw new NotFoundException('Departamento não encontrado');
+    }
+    const headIds = relatedHeadIds(depts, departmentId);
+    return this.prisma.read.user.findMany({
+      where: { active: true, OR: [{ departmentId }, { id: { in: headIds } }] },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        avatarUrl: true,
+        position: { select: { name: true } },
+        department: { select: { id: true, name: true } },
+        role: { select: { name: true } },
+      },
+      orderBy: { fullName: 'asc' },
+    });
   }
 
   // Árvore hierárquica completa (para org chart)

@@ -213,6 +213,13 @@ export class DepartmentsController {
     return this.svc.update(id, dto, user.id);
   }
 
+  @Get(':id/manager-candidates')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Quem pode ser responsável directo de um colaborador do departamento' })
+  managerCandidates(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getManagerCandidates(id);
+  }
+
   @Post(':id/move-before')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Colocar o departamento antes de outro na hierarquia' })

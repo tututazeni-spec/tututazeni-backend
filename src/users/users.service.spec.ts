@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException } from '@nestjs/common';
+import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { getQueueToken } from '@nestjs/bull';
 import { SessionRevocationService } from '../auth/session-revocation.service';
 import { ForbiddenException } from '@nestjs/common';
@@ -291,6 +291,43 @@ describe('UsersService', () => {
       await expect(service.update(1, { email: 'outro@innova.com' })).rejects.toThrow(
         ConflictException,
       );
+    });
+
+    it('responsável directo: não pode ser o próprio colaborador', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ ...baseUser, managerId: null });
+      await expect(service.update(1, { managerId: 1 })).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('responsável directo: recusa ciclo (o novo responsável reporta ao colaborador)', async () => {
+      // utilizador 1 -> novo responsável 2, que reporta ao 1
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce({ ...baseUser, managerId: null }) // findOne(1)
+        .mockResolvedValueOnce({ managerId: 1 }); // gestor de 2 é o 1
+      await expect(service.update(1, { managerId: 2 })).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('responsável directo: recusa quem é de outro departamento', async () => {
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce({ ...baseUser, managerId: null, departmentId: 3 }) // findOne(1)
+        .mockResolvedValueOnce({ managerId: null }) // cadeia do novo responsável
+        .mockResolvedValueOnce({ departmentId: 9 }); // departamento do novo responsável
+      await expect(service.update(1, { managerId: 2 })).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('responsável directo: aceita o chefe do departamento superior', async () => {
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce({ ...baseUser, managerId: null, departmentId: 3 }) // findOne(1)
+        .mockResolvedValueOnce({ managerId: null }) // cadeia do novo responsável
+        .mockResolvedValueOnce({ departmentId: 9 }); // o novo responsável é de outro departamento
+      mockPrisma.department.findMany.mockResolvedValueOnce([
+        { id: 3, parentId: 9, headId: null },
+        { id: 9, parentId: null, headId: 2 }, // 2 chefia o departamento superior
+      ]);
+      mockPrisma.user.update.mockResolvedValue({ ...baseUser, managerId: 2 });
+      await expect(service.update(1, { managerId: 2 }, 1)).resolves.toBeDefined();
     });
   });
 

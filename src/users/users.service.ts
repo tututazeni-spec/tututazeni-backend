@@ -1,5 +1,6 @@
 import { avatarRef, avatarVersion, isDataUrl, parseAvatarDataUrl } from './avatar-ref';
 import { runAsSystem } from '../common/rls/rls-context';
+import { relatedHeadIds } from '../departments/manager-eligibility';
 import {
   BadRequestException,
   Injectable,
@@ -543,10 +544,70 @@ export class UsersService {
 
   // ─── ACTUALIZAR ───────────────────────────────────────────────────────────
 
+  /**
+   * Regra da hierarquia: o responsável directo é do mesmo departamento do colaborador, ou
+   * chefe do departamento superior / de um subdepartamento (ver manager-eligibility.ts).
+   */
+  private async assertManagerEligible(
+    userDepartmentId: number | null | undefined,
+    managerId: number,
+  ): Promise<void> {
+    if (userDepartmentId == null) {
+      throw new BadRequestException(
+        'O colaborador não tem departamento: defina o departamento antes do responsável directo',
+      );
+    }
+    const manager = await this.prisma.user.findUnique({
+      where: { id: managerId },
+      select: { departmentId: true },
+    });
+    if (!manager) throw new NotFoundException('Responsável directo não encontrado');
+    if (manager.departmentId === userDepartmentId) return;
+    const depts = await this.prisma.department.findMany({
+      select: { id: true, parentId: true, headId: true },
+    });
+    if (!relatedHeadIds(depts, userDepartmentId).includes(managerId)) {
+      throw new BadRequestException(
+        'O responsável directo tem de ser do mesmo departamento, ou chefe do departamento superior ou de um subdepartamento',
+      );
+    }
+  }
+
+  /** O novo responsável directo não pode ser o próprio nem reportar (directa ou indirectamente) ao colaborador. */
+  private async assertNoManagerCycle(userId: number, newManagerId: number): Promise<void> {
+    if (newManagerId === userId) {
+      throw new BadRequestException(
+        'Um colaborador não pode ser o seu próprio responsável directo',
+      );
+    }
+    const seen = new Set<number>();
+    let current: number | null = newManagerId;
+    while (current != null && !seen.has(current)) {
+      if (current === userId) {
+        throw new BadRequestException(
+          'Hierarquia circular: o novo responsável reporta, directa ou indirectamente, a este colaborador',
+        );
+      }
+      seen.add(current);
+      const manager: { managerId: number | null } | null = await this.prisma.user.findUnique({
+        where: { id: current },
+        select: { managerId: true },
+      });
+      current = manager?.managerId ?? null;
+    }
+  }
+
   async update(id: number, dto: UpdateUserDto, updatedById?: number, actorRole?: string) {
     const existing = await this.findOne(id);
     if (dto.roleId !== undefined && dto.roleId !== existing.roleId) {
       await this.assertCanAssignRole(dto.roleId, actorRole, id === updatedById);
+    }
+    if (dto.managerId != null && dto.managerId !== existing.managerId) {
+      await this.assertNoManagerCycle(id, dto.managerId);
+      await this.assertManagerEligible(
+        dto.departmentId !== undefined ? dto.departmentId : existing.departmentId,
+        dto.managerId,
+      );
     }
 
     let emailWarnings: string[] = [];
