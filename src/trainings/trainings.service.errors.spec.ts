@@ -73,6 +73,7 @@ describe('TrainingsService — registerParticipant (capacidade / lista de espera
   it('sessão lotada sem lista de espera → BadRequestException', async () => {
     mockPrisma.trainingParticipant.findFirst.mockResolvedValue(null);
     mockPrisma.trainingSession.findUnique.mockResolvedValue({
+      published: true,
       id: 1,
       maxParticipants: 2,
       waitlistEnabled: false,
@@ -88,6 +89,7 @@ describe('TrainingsService — registerParticipant (capacidade / lista de espera
   it('sessão lotada com lista de espera → status WAITLIST', async () => {
     mockPrisma.trainingParticipant.findFirst.mockResolvedValue(null);
     mockPrisma.trainingSession.findUnique.mockResolvedValue({
+      published: true,
       id: 1,
       maxParticipants: 2,
       waitlistEnabled: true,
@@ -106,6 +108,7 @@ describe('TrainingsService — registerParticipant (capacidade / lista de espera
   it('maxParticipants=0 significa vagas ilimitadas → REGISTERED mesmo com muitos participantes', async () => {
     mockPrisma.trainingParticipant.findFirst.mockResolvedValue(null);
     mockPrisma.trainingSession.findUnique.mockResolvedValue({
+      published: true,
       id: 1,
       maxParticipants: 0,
       waitlistEnabled: false,
@@ -124,6 +127,7 @@ describe('TrainingsService — registerParticipant (capacidade / lista de espera
   it('formação com requiresApproval → inscrição fica PENDING_APPROVAL, ignora vagas', async () => {
     mockPrisma.trainingParticipant.findFirst.mockResolvedValue(null);
     mockPrisma.trainingSession.findUnique.mockResolvedValue({
+      published: true,
       id: 1,
       maxParticipants: 0,
       waitlistEnabled: false,

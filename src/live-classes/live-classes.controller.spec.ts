@@ -9,6 +9,7 @@ import { ExternalLiveClassScopeGuard } from '../common/authz/external-live-class
 const mockSvc = {
   // âmbito do instrutor externo: undefined = sem restrição (os restantes papéis)
   ownerScope: jest.fn().mockResolvedValue(undefined),
+  seesDrafts: jest.fn().mockReturnValue(true),
   findAll: jest.fn().mockResolvedValue({ data: [], total: 0 }),
   getUpcoming: jest.fn().mockResolvedValue([]),
   findOne: jest.fn().mockResolvedValue({ id: 1 }),
@@ -60,14 +61,14 @@ describe('LiveClassesController', () => {
   it('findAll → findAll(filters)', async () => {
     const filters = {} as any;
     await controller.findAll(filters, mockUser as any);
-    expect(mockSvc.findAll).toHaveBeenCalledWith(filters, undefined);
+    expect(mockSvc.findAll).toHaveBeenCalledWith(filters, undefined, false);
   });
 
   it('findAll → o âmbito do instrutor externo segue para o serviço', async () => {
     mockSvc.ownerScope.mockResolvedValueOnce(7);
     const filters = {} as any;
     await controller.findAll(filters, mockUser as any);
-    expect(mockSvc.findAll).toHaveBeenLastCalledWith(filters, 7);
+    expect(mockSvc.findAll).toHaveBeenLastCalledWith(filters, 7, false);
   });
 
   it('upcoming → getUpcoming', async () => {
@@ -182,7 +183,7 @@ describe('LiveClassesController', () => {
   it('listAllSessions → listAllSessions(filters)', async () => {
     const filters = {} as any;
     await controller.listAllSessions(filters, mockUser as any);
-    expect(mockSvc.listAllSessions).toHaveBeenCalledWith(filters, undefined);
+    expect(mockSvc.listAllSessions).toHaveBeenCalledWith(filters, undefined, false);
   });
 
   it('listSessions → listSessions(id)', async () => {

@@ -23,6 +23,7 @@ const baseTraining = {
   status: 'PUBLISHED',
   type: 'ONLINE',
   createdById: 1,
+  sessions: [],
   _count: { participants: 0, sessions: 1, ratings: 0 },
 };
 
@@ -33,6 +34,7 @@ const baseSession = {
   trainingId: 1,
   maxParticipants: 10,
   waitlistEnabled: true,
+  published: true,
   _count: { participants: 3 },
 };
 
