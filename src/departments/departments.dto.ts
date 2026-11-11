@@ -600,6 +600,16 @@ export class HistoryFilterDto extends BaseFilterDto {
   @IsInt()
   @Type(() => Number)
   departmentId?: number;
+
+  @ApiPropertyOptional({ description: 'Data inicial (YYYY-MM-DD), inclusive' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'Data final (YYYY-MM-DD), inclusive' })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
 }
 
 // ─── Relatórios (docs/modulo_departments.md Ponto 9) ───────────────────────────

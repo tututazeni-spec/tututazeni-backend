@@ -1458,21 +1458,34 @@ export class DepartmentsService {
   // transferidos). Cada fonte é limitada a `take` antes do merge — suficiente
   // para o volume esperado por departamento sem um UNION a nível de BD.
   async getHistory(filters: HistoryFilterDto) {
-    const { page = 1, limit = 30, departmentId } = filters;
+    const { page = 1, limit = 30, departmentId, from, to } = filters;
     const sourceLimit = 300;
+    // Intervalo de datas (inclusivo); `to` só com dia vale até ao fim desse dia.
+    const fromDate = from ? new Date(from) : undefined;
+    const toDate = to ? new Date(to.length <= 10 ? `${to}T23:59:59.999Z` : to) : undefined;
+    const inRange = (field: string) =>
+      fromDate || toDate
+        ? {
+            [field]: {
+              ...(fromDate ? { gte: fromDate } : {}),
+              ...(toDate ? { lte: toDate } : {}),
+            },
+          }
+        : {};
 
     const [auditRows, headRows, transferRows, depts] = await Promise.all([
       this.prisma.read.auditLog.findMany({
         where: {
           entity: 'Department',
           ...(departmentId !== undefined ? { entityId: departmentId } : {}),
+          ...inRange('timestamp'),
         },
         include: { user: { select: { id: true, fullName: true } } },
         orderBy: { timestamp: 'desc' },
         take: sourceLimit,
       }),
       this.prisma.read.departmentHeadHistory.findMany({
-        where: departmentId !== undefined ? { departmentId } : {},
+        where: { ...(departmentId !== undefined ? { departmentId } : {}), ...inRange('startedAt') },
         include: {
           department: { select: { id: true, name: true, code: true } },
           head: { select: { id: true, fullName: true } },
@@ -1482,10 +1495,12 @@ export class DepartmentsService {
         take: sourceLimit,
       }),
       this.prisma.read.departmentTransferLog.findMany({
-        where:
-          departmentId !== undefined
+        where: {
+          ...(departmentId !== undefined
             ? { OR: [{ fromDepartmentId: departmentId }, { toDepartmentId: departmentId }] }
-            : {},
+            : {}),
+          ...inRange('transferredAt'),
+        },
         include: {
           user: { select: { id: true, fullName: true } },
           fromDepartment: { select: { id: true, name: true, code: true } },
