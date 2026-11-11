@@ -663,3 +663,9 @@ export class CreateCareerPositionDto {
   @IsArray()
   competencies?: Array<{ competencyId: number; requiredLevel: number }>;
 }
+
+export class MoveDepartmentBeforeDto {
+  @ApiProperty({ description: 'ID do departamento antes do qual este fica na hierarquia' })
+  @IsInt()
+  beforeId!: number;
+}

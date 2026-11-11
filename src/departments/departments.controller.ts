@@ -30,6 +30,7 @@ import { RolesPermissionsService } from '../roles-permissions/roles-permissions.
 import {
   CreateDepartmentDto,
   UpdateDepartmentDto,
+  MoveDepartmentBeforeDto,
   DepartmentFilterDto,
   ArchiveDepartmentDto,
   TransferMemberDto,
@@ -209,6 +210,17 @@ export class DepartmentsController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.update(id, dto, user.id);
+  }
+
+  @Post(':id/move-before')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Colocar o departamento antes de outro na hierarquia' })
+  moveBefore(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: MoveDepartmentBeforeDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.moveBefore(id, dto.beforeId, user.id);
   }
 
   @Patch(':id/deactivate')

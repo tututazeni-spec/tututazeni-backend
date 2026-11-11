@@ -198,7 +198,7 @@ export class DepartmentsService {
           unit: { select: { id: true, name: true } },
           _count: { select: { users: true, children: true } },
         },
-        orderBy: { name: 'asc' },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       }),
       // groupBy em vez de include/_count — mantém a árvore como uma única
       // query independente da lista de posições.
@@ -231,6 +231,80 @@ export class DepartmentsService {
         }));
 
     return buildTree(null, 0);
+  }
+
+  /**
+   * Reordena a hierarquia: coloca `id` imediatamente antes de `beforeId`, ao
+   * mesmo nível (assume o departamento superior de `beforeId`). Reescreve a
+   * posição (`sortOrder`) de todos os irmãos para ficar estável.
+   */
+  async moveBefore(id: number, beforeId: number, changedById: number) {
+    if (id === beforeId) {
+      throw new BadRequestException('Um departamento não pode ser colocado antes de si próprio');
+    }
+    const [dept, target] = await Promise.all([
+      this.prisma.department.findUnique({
+        where: { id },
+        select: { id: true, name: true, parentId: true, parent: { select: { name: true } } },
+      }),
+      this.prisma.department.findUnique({
+        where: { id: beforeId },
+        select: { id: true, parentId: true, parent: { select: { name: true } } },
+      }),
+    ]);
+    if (!dept) throw new NotFoundException('Departamento não encontrado');
+    if (!target) throw new NotFoundException('Departamento de destino não encontrado');
+
+    const newParentId = target.parentId;
+    if (newParentId !== null && (await this.detectCircularHierarchy(id, newParentId))) {
+      throw new BadRequestException('Hierarquia circular detectada');
+    }
+
+    const siblings = await this.prisma.department.findMany({
+      where: { parentId: newParentId, id: { not: id } },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      select: { id: true },
+    });
+    const ordered: number[] = [];
+    for (const s of siblings) {
+      if (s.id === beforeId) ordered.push(id);
+      ordered.push(s.id);
+    }
+
+    await this.prisma.$transaction(
+      ordered.map((deptId, index) =>
+        this.prisma.department.update({
+          where: { id: deptId },
+          data: deptId === id ? { sortOrder: index, parentId: newParentId } : { sortOrder: index },
+        }),
+      ),
+    );
+
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'Department',
+      entityId: id,
+      userId: changedById,
+      metadata: {
+        changes: [
+          {
+            field: 'Posição na hierarquia',
+            before: dept.parent?.name ?? 'Topo',
+            after: `antes do departamento #${beforeId}`,
+          },
+          ...(dept.parentId !== newParentId
+            ? [
+                {
+                  field: 'Departamento superior',
+                  before: dept.parent?.name ?? null,
+                  after: target.parent?.name ?? null,
+                },
+              ]
+            : []),
+        ],
+      },
+    });
+    return { message: 'Hierarquia actualizada' };
   }
 
   async findOne(id: number) {
