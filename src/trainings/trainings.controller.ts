@@ -170,6 +170,13 @@ export class TrainingController {
     return this.svc.getResults(id);
   }
 
+  @Get(':id/participants')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @ApiOperation({ summary: 'Inscritos de uma formação (todas as sessões)' })
+  trainingParticipants(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getTrainingParticipants(id);
+  }
+
   @Get(':id/participants/export')
   @Roles(...CAN_CREATE_TRAININGS)
   @Header('Content-Type', 'text/csv')
