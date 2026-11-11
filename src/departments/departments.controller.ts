@@ -31,6 +31,7 @@ import {
   CreateDepartmentDto,
   UpdateDepartmentDto,
   MoveDepartmentBeforeDto,
+  AssignPositionUserDto,
   DepartmentFilterDto,
   ArchiveDepartmentDto,
   TransferMemberDto,
@@ -440,6 +441,28 @@ export class PositionsController {
   @ApiOperation({ summary: 'Actualizar posição' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePositionDto) {
     return this.svc.update(id, dto);
+  }
+
+  @Post(':id/assign')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Atribuir o cargo a um colaborador' })
+  assignUser(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AssignPositionUserDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.assignUser(id, dto.userId, user.id);
+  }
+
+  @Delete(':id/users/:userId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Retirar o cargo a um colaborador' })
+  unassignUser(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.unassignUser(id, userId, user.id);
   }
 
   @Delete(':id')

@@ -1889,7 +1889,10 @@ export class UnitsService {
 
 @Injectable()
 export class PositionsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   // Picker leve usado por outros módulos (ex.: wizard de aulas ao vivo,
   // formulário de formações) — devolve sempre um array simples. O catálogo
@@ -1931,6 +1934,67 @@ export class PositionsService {
       headcountOccupied: p.users.length,
       vacancies: Math.max((p.headcountPlanned ?? 0) - p.users.length, 0),
     };
+  }
+
+  /** Atribui o cargo a um colaborador (User.positionId); regista na auditoria. */
+  async assignUser(positionId: number, userId: number, performedById: number) {
+    const position = await this.prisma.position.findUnique({
+      where: { id: positionId },
+      select: {
+        id: true,
+        name: true,
+        active: true,
+        headcountPlanned: true,
+        _count: { select: { users: true } },
+      },
+    });
+    if (!position) throw new NotFoundException('Cargo não encontrado');
+    if (!position.active) throw new BadRequestException('O cargo está inactivo');
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, positionId: true, position: { select: { name: true } } },
+    });
+    if (!user) throw new NotFoundException('Colaborador não encontrado');
+    if (user.positionId === positionId) {
+      throw new ConflictException('O colaborador já tem este cargo');
+    }
+    if (position.headcountPlanned && position._count.users >= position.headcountPlanned) {
+      throw new BadRequestException('Sem vagas disponíveis neste cargo');
+    }
+    await this.prisma.user.update({ where: { id: userId }, data: { positionId } });
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'User',
+      entityId: userId,
+      userId: performedById,
+      metadata: {
+        changes: [{ field: 'Cargo', before: user.position?.name ?? null, after: position.name }],
+      },
+    });
+    return { message: 'Cargo atribuído' };
+  }
+
+  /** Retira o cargo a um colaborador que o tenha. */
+  async unassignUser(positionId: number, userId: number, performedById: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, positionId: true, position: { select: { name: true } } },
+    });
+    if (!user) throw new NotFoundException('Colaborador não encontrado');
+    if (user.positionId !== positionId) {
+      throw new BadRequestException('O colaborador não tem este cargo');
+    }
+    await this.prisma.user.update({ where: { id: userId }, data: { positionId: null } });
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'User',
+      entityId: userId,
+      userId: performedById,
+      metadata: {
+        changes: [{ field: 'Cargo', before: user.position?.name ?? null, after: null }],
+      },
+    });
+    return { message: 'Cargo retirado' };
   }
 
   async create(dto: CreatePositionDto) {

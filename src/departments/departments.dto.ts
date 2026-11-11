@@ -669,3 +669,9 @@ export class MoveDepartmentBeforeDto {
   @IsInt()
   beforeId!: number;
 }
+
+export class AssignPositionUserDto {
+  @ApiProperty({ description: 'ID do colaborador a quem atribuir o cargo' })
+  @IsInt()
+  userId!: number;
+}

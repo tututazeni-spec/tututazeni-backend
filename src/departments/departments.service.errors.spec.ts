@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { UnitsService, PositionsService, CareersService } from './departments.service';
+import { AuditService } from '../common/services/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const mockPrisma = {
@@ -28,6 +29,7 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
   },
+  user: { findUnique: jest.fn(), update: jest.fn() },
   careerPosition: { findUnique: jest.fn(), create: jest.fn() },
   positionCompetency: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
   userCareer: {
@@ -38,7 +40,11 @@ const mockPrisma = {
 
 function makeModule<T>(cls: new (...args: any[]) => T) {
   return Test.createTestingModule({
-    providers: [cls as any, { provide: PrismaService, useValue: mockPrisma }],
+    providers: [
+      cls as any,
+      { provide: PrismaService, useValue: mockPrisma },
+      { provide: AuditService, useValue: { log: jest.fn() } },
+    ],
   }).compile();
 }
 
@@ -136,6 +142,60 @@ describe('PositionsService — erros', () => {
   it('remove inexistente → NotFoundException', async () => {
     mockPrisma.position.findUnique.mockResolvedValue(null);
     await expect(service.remove(1)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  describe('assignUser / unassignUser', () => {
+    const position = {
+      id: 4,
+      name: 'Analista',
+      active: true,
+      headcountPlanned: 2,
+      _count: { users: 1 },
+    };
+    const user = { id: 7, positionId: null, position: null };
+
+    it('cargo inexistente → NotFoundException', async () => {
+      mockPrisma.position.findUnique.mockResolvedValue(null);
+      await expect(service.assignUser(4, 7, 1)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('colaborador já com o cargo → ConflictException', async () => {
+      mockPrisma.position.findUnique.mockResolvedValue(position);
+      mockPrisma.user.findUnique.mockResolvedValue({ ...user, positionId: 4 });
+      await expect(service.assignUser(4, 7, 1)).rejects.toBeInstanceOf(ConflictException);
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('sem vagas → BadRequestException', async () => {
+      mockPrisma.position.findUnique.mockResolvedValue({ ...position, _count: { users: 2 } });
+      mockPrisma.user.findUnique.mockResolvedValue(user);
+      await expect(service.assignUser(4, 7, 1)).rejects.toBeInstanceOf(BadRequestException);
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('atribui: grava positionId no colaborador', async () => {
+      mockPrisma.position.findUnique.mockResolvedValue(position);
+      mockPrisma.user.findUnique.mockResolvedValue(user);
+      await service.assignUser(4, 7, 1);
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 7 },
+        data: { positionId: 4 },
+      });
+    });
+
+    it('retirar a quem não tem o cargo → BadRequestException', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ ...user, positionId: 9 });
+      await expect(service.unassignUser(4, 7, 1)).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('retira: positionId passa a null', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ ...user, positionId: 4 });
+      await service.unassignUser(4, 7, 1);
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 7 },
+        data: { positionId: null },
+      });
+    });
   });
 
   it('create: nome duplicado no mesmo departamento → ConflictException', async () => {
