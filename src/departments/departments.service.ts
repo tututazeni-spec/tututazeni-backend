@@ -28,6 +28,7 @@ import {
 } from './departments.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { csvCell } from '../common/utils/csv-safe.util';
+import { relatedHeadIds } from './manager-eligibility';
 
 // ─── DEPARTMENTS ──────────────────────────────────────────────────────────────
 
@@ -188,6 +189,33 @@ export class DepartmentsService {
     return [headers.join(','), ...lines].join('\n');
   }
 
+  /**
+   * Quem pode ser responsável directo de um colaborador deste departamento: os do próprio
+   * departamento e os chefes do departamento superior e dos subdepartamentos.
+   */
+  async getManagerCandidates(departmentId: number) {
+    const depts = await this.prisma.read.department.findMany({
+      select: { id: true, parentId: true, headId: true },
+    });
+    if (!depts.some(d => d.id === departmentId)) {
+      throw new NotFoundException('Departamento não encontrado');
+    }
+    const headIds = relatedHeadIds(depts, departmentId);
+    return this.prisma.read.user.findMany({
+      where: { active: true, OR: [{ departmentId }, { id: { in: headIds } }] },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        avatarUrl: true,
+        position: { select: { name: true } },
+        department: { select: { id: true, name: true } },
+        role: { select: { name: true } },
+      },
+      orderBy: { fullName: 'asc' },
+    });
+  }
+
   // Árvore hierárquica completa (para org chart)
   async getTree() {
     const [all, positionCounts] = await Promise.all([
@@ -198,7 +226,7 @@ export class DepartmentsService {
           unit: { select: { id: true, name: true } },
           _count: { select: { users: true, children: true } },
         },
-        orderBy: { name: 'asc' },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       }),
       // groupBy em vez de include/_count — mantém a árvore como uma única
       // query independente da lista de posições.
@@ -231,6 +259,80 @@ export class DepartmentsService {
         }));
 
     return buildTree(null, 0);
+  }
+
+  /**
+   * Reordena a hierarquia: coloca `id` imediatamente antes de `beforeId`, ao
+   * mesmo nível (assume o departamento superior de `beforeId`). Reescreve a
+   * posição (`sortOrder`) de todos os irmãos para ficar estável.
+   */
+  async moveBefore(id: number, beforeId: number, changedById: number) {
+    if (id === beforeId) {
+      throw new BadRequestException('Um departamento não pode ser colocado antes de si próprio');
+    }
+    const [dept, target] = await Promise.all([
+      this.prisma.department.findUnique({
+        where: { id },
+        select: { id: true, name: true, parentId: true, parent: { select: { name: true } } },
+      }),
+      this.prisma.department.findUnique({
+        where: { id: beforeId },
+        select: { id: true, parentId: true, parent: { select: { name: true } } },
+      }),
+    ]);
+    if (!dept) throw new NotFoundException('Departamento não encontrado');
+    if (!target) throw new NotFoundException('Departamento de destino não encontrado');
+
+    const newParentId = target.parentId;
+    if (newParentId !== null && (await this.detectCircularHierarchy(id, newParentId))) {
+      throw new BadRequestException('Hierarquia circular detectada');
+    }
+
+    const siblings = await this.prisma.department.findMany({
+      where: { parentId: newParentId, id: { not: id } },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      select: { id: true },
+    });
+    const ordered: number[] = [];
+    for (const s of siblings) {
+      if (s.id === beforeId) ordered.push(id);
+      ordered.push(s.id);
+    }
+
+    await this.prisma.$transaction(
+      ordered.map((deptId, index) =>
+        this.prisma.department.update({
+          where: { id: deptId },
+          data: deptId === id ? { sortOrder: index, parentId: newParentId } : { sortOrder: index },
+        }),
+      ),
+    );
+
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'Department',
+      entityId: id,
+      userId: changedById,
+      metadata: {
+        changes: [
+          {
+            field: 'Posição na hierarquia',
+            before: dept.parent?.name ?? 'Topo',
+            after: `antes do departamento #${beforeId}`,
+          },
+          ...(dept.parentId !== newParentId
+            ? [
+                {
+                  field: 'Departamento superior',
+                  before: dept.parent?.name ?? null,
+                  after: target.parent?.name ?? null,
+                },
+              ]
+            : []),
+        ],
+      },
+    });
+    return { message: 'Hierarquia actualizada' };
   }
 
   async findOne(id: number) {
@@ -1356,21 +1458,34 @@ export class DepartmentsService {
   // transferidos). Cada fonte é limitada a `take` antes do merge — suficiente
   // para o volume esperado por departamento sem um UNION a nível de BD.
   async getHistory(filters: HistoryFilterDto) {
-    const { page = 1, limit = 30, departmentId } = filters;
+    const { page = 1, limit = 30, departmentId, from, to } = filters;
     const sourceLimit = 300;
+    // Intervalo de datas (inclusivo); `to` só com dia vale até ao fim desse dia.
+    const fromDate = from ? new Date(from) : undefined;
+    const toDate = to ? new Date(to.length <= 10 ? `${to}T23:59:59.999Z` : to) : undefined;
+    const inRange = (field: string) =>
+      fromDate || toDate
+        ? {
+            [field]: {
+              ...(fromDate ? { gte: fromDate } : {}),
+              ...(toDate ? { lte: toDate } : {}),
+            },
+          }
+        : {};
 
     const [auditRows, headRows, transferRows, depts] = await Promise.all([
       this.prisma.read.auditLog.findMany({
         where: {
           entity: 'Department',
           ...(departmentId !== undefined ? { entityId: departmentId } : {}),
+          ...inRange('timestamp'),
         },
         include: { user: { select: { id: true, fullName: true } } },
         orderBy: { timestamp: 'desc' },
         take: sourceLimit,
       }),
       this.prisma.read.departmentHeadHistory.findMany({
-        where: departmentId !== undefined ? { departmentId } : {},
+        where: { ...(departmentId !== undefined ? { departmentId } : {}), ...inRange('startedAt') },
         include: {
           department: { select: { id: true, name: true, code: true } },
           head: { select: { id: true, fullName: true } },
@@ -1380,10 +1495,12 @@ export class DepartmentsService {
         take: sourceLimit,
       }),
       this.prisma.read.departmentTransferLog.findMany({
-        where:
-          departmentId !== undefined
+        where: {
+          ...(departmentId !== undefined
             ? { OR: [{ fromDepartmentId: departmentId }, { toDepartmentId: departmentId }] }
-            : {},
+            : {}),
+          ...inRange('transferredAt'),
+        },
         include: {
           user: { select: { id: true, fullName: true } },
           fromDepartment: { select: { id: true, name: true, code: true } },
@@ -1815,7 +1932,10 @@ export class UnitsService {
 
 @Injectable()
 export class PositionsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   // Picker leve usado por outros módulos (ex.: wizard de aulas ao vivo,
   // formulário de formações) — devolve sempre um array simples. O catálogo
@@ -1857,6 +1977,67 @@ export class PositionsService {
       headcountOccupied: p.users.length,
       vacancies: Math.max((p.headcountPlanned ?? 0) - p.users.length, 0),
     };
+  }
+
+  /** Atribui o cargo a um colaborador (User.positionId); regista na auditoria. */
+  async assignUser(positionId: number, userId: number, performedById: number) {
+    const position = await this.prisma.position.findUnique({
+      where: { id: positionId },
+      select: {
+        id: true,
+        name: true,
+        active: true,
+        headcountPlanned: true,
+        _count: { select: { users: true } },
+      },
+    });
+    if (!position) throw new NotFoundException('Cargo não encontrado');
+    if (!position.active) throw new BadRequestException('O cargo está inactivo');
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, positionId: true, position: { select: { name: true } } },
+    });
+    if (!user) throw new NotFoundException('Colaborador não encontrado');
+    if (user.positionId === positionId) {
+      throw new ConflictException('O colaborador já tem este cargo');
+    }
+    if (position.headcountPlanned && position._count.users >= position.headcountPlanned) {
+      throw new BadRequestException('Sem vagas disponíveis neste cargo');
+    }
+    await this.prisma.user.update({ where: { id: userId }, data: { positionId } });
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'User',
+      entityId: userId,
+      userId: performedById,
+      metadata: {
+        changes: [{ field: 'Cargo', before: user.position?.name ?? null, after: position.name }],
+      },
+    });
+    return { message: 'Cargo atribuído' };
+  }
+
+  /** Retira o cargo a um colaborador que o tenha. */
+  async unassignUser(positionId: number, userId: number, performedById: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, positionId: true, position: { select: { name: true } } },
+    });
+    if (!user) throw new NotFoundException('Colaborador não encontrado');
+    if (user.positionId !== positionId) {
+      throw new BadRequestException('O colaborador não tem este cargo');
+    }
+    await this.prisma.user.update({ where: { id: userId }, data: { positionId: null } });
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'User',
+      entityId: userId,
+      userId: performedById,
+      metadata: {
+        changes: [{ field: 'Cargo', before: user.position?.name ?? null, after: null }],
+      },
+    });
+    return { message: 'Cargo retirado' };
   }
 
   async create(dto: CreatePositionDto) {
