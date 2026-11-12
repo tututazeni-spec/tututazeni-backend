@@ -1344,6 +1344,8 @@ model Department {
   annualBudget             Float?
   trainingBudget           Int?
   parentId                 Int?
+  /// Posição entre departamentos do mesmo nível (menor = primeiro na hierarquia)
+  sortOrder                Int                     @default(0)
   headId                   Int?
   deputyHeadId             Int?
   directManagerId          Int?

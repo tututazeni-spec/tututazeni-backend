@@ -30,6 +30,8 @@ import { RolesPermissionsService } from '../roles-permissions/roles-permissions.
 import {
   CreateDepartmentDto,
   UpdateDepartmentDto,
+  MoveDepartmentBeforeDto,
+  AssignPositionUserDto,
   DepartmentFilterDto,
   ArchiveDepartmentDto,
   TransferMemberDto,
@@ -209,6 +211,24 @@ export class DepartmentsController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.update(id, dto, user.id);
+  }
+
+  @Get(':id/manager-candidates')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Quem pode ser responsável directo de um colaborador do departamento' })
+  managerCandidates(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getManagerCandidates(id);
+  }
+
+  @Post(':id/move-before')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Colocar o departamento antes de outro na hierarquia' })
+  moveBefore(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: MoveDepartmentBeforeDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.moveBefore(id, dto.beforeId, user.id);
   }
 
   @Patch(':id/deactivate')
@@ -428,6 +448,28 @@ export class PositionsController {
   @ApiOperation({ summary: 'Actualizar posição' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePositionDto) {
     return this.svc.update(id, dto);
+  }
+
+  @Post(':id/assign')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Atribuir o cargo a um colaborador' })
+  assignUser(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AssignPositionUserDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.assignUser(id, dto.userId, user.id);
+  }
+
+  @Delete(':id/users/:userId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Retirar o cargo a um colaborador' })
+  unassignUser(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.unassignUser(id, userId, user.id);
   }
 
   @Delete(':id')

@@ -153,7 +153,7 @@ export class CreateDepartmentDto {
   @ApiPropertyOptional({ description: 'Área funcional' })
   @IsOptional()
   @IsString()
-  @MaxLength(120)
+  @MaxLength(500)
   functionalArea?: string;
 
   @ApiPropertyOptional({ description: 'Área de negócio' })
@@ -453,7 +453,7 @@ export class CreatePositionDto {
   @ApiPropertyOptional({ description: 'Função — distinta do nome do cargo' })
   @IsOptional()
   @IsString()
-  @MaxLength(150)
+  @MaxLength(500)
   jobFunction?: string;
 
   @ApiPropertyOptional({ description: 'Família profissional' })
@@ -600,6 +600,16 @@ export class HistoryFilterDto extends BaseFilterDto {
   @IsInt()
   @Type(() => Number)
   departmentId?: number;
+
+  @ApiPropertyOptional({ description: 'Data inicial (YYYY-MM-DD), inclusive' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'Data final (YYYY-MM-DD), inclusive' })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
 }
 
 // ─── Relatórios (docs/modulo_departments.md Ponto 9) ───────────────────────────
@@ -662,4 +672,16 @@ export class CreateCareerPositionDto {
   @IsOptional()
   @IsArray()
   competencies?: Array<{ competencyId: number; requiredLevel: number }>;
+}
+
+export class MoveDepartmentBeforeDto {
+  @ApiProperty({ description: 'ID do departamento antes do qual este fica na hierarquia' })
+  @IsInt()
+  beforeId!: number;
+}
+
+export class AssignPositionUserDto {
+  @ApiProperty({ description: 'ID do colaborador a quem atribuir o cargo' })
+  @IsInt()
+  userId!: number;
 }

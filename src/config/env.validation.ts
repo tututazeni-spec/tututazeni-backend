@@ -117,7 +117,7 @@ export const envValidationSchema = Joi.object({
   SESSION_IDLE_TIMEOUT_MS: Joi.number().default(1_800_000),
 
   // SMTP — opcionais (sem SMTP_HOST, emails não são enviados; app arranca na mesma)
-  // `.allow('')` — o .env.example traz `SMTP_PASS=` vazio e isso não deve impedir o arranque
+  // `.allow('')` — o .env.example traz `SMTP_PASS=` vazio e Joi rejeita '' por omissão
   SMTP_HOST: Joi.string().allow('').optional(),
   SMTP_PORT: Joi.number().port().optional().default(587),
   SMTP_USER: Joi.string().allow('').optional(),

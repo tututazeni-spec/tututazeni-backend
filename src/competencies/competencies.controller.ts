@@ -61,6 +61,13 @@ export class CompetenciesController {
     return this.svc.findAll(filters);
   }
 
+  @Get('overview/:id/users')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Visão Geral — utilizadores com lacuna e com a competência' })
+  overviewCompetencyUsers(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getOverviewCompetencyUsers(id);
+  }
+
   @Get('overview')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Visão Geral — painel de KPIs organizacionais de competências' })

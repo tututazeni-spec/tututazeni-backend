@@ -1431,6 +1431,51 @@ export class CompetenciesService {
     };
   }
 
+  /**
+   * Visão Geral → clique numa competência: utilizadores com lacuna
+   * (targetLevel > currentLevel) e todos os utilizadores que a têm avaliada.
+   */
+  async getOverviewCompetencyUsers(competencyId: number) {
+    const competency = await this.prisma.read.competency.findUnique({
+      where: { id: competencyId },
+      select: { id: true, name: true, category: true },
+    });
+    if (!competency) throw new NotFoundException('Competência não encontrada');
+
+    const rows = await this.prisma.read.userCompetency.findMany({
+      where: { competencyId },
+      select: {
+        userId: true,
+        currentLevel: true,
+        targetLevel: true,
+        user: {
+          select: {
+            fullName: true,
+            avatarUrl: true,
+            department: { select: { name: true } },
+            position: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { currentLevel: 'desc' },
+    });
+
+    const users = rows.map(r => ({
+      userId: r.userId,
+      fullName: r.user.fullName,
+      avatarUrl: r.user.avatarUrl,
+      department: r.user.department?.name ?? null,
+      position: r.user.position?.name ?? null,
+      currentLevel: r.currentLevel,
+      targetLevel: r.targetLevel,
+    }));
+    const withGap = users
+      .filter(u => (u.targetLevel ?? 0) > u.currentLevel)
+      .sort((a, b) => b.targetLevel! - b.currentLevel - (a.targetLevel! - a.currentLevel));
+
+    return { competency, withGap, withCompetency: users };
+  }
+
   async getRecommendations(userId: number) {
     const user = await this.prisma.read.user.findUnique({
       where: { id: userId },

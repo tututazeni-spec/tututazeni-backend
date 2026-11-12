@@ -1746,6 +1746,29 @@ export class TrainingService {
   // docs/trainings-detalhado.md pt.6 — "exportar participantes". Agrega
   // todas as sessões da formação (não só uma), mesmo padrão de
   // getAttendanceReport/getResults abaixo.
+  /** Inscritos de uma formação (todas as sessões), sem repetir colaboradores. */
+  async getTrainingParticipants(trainingId: number) {
+    const rows = await this.prisma.read.trainingParticipant.findMany({
+      where: { trainingId },
+      select: {
+        id: true,
+        status: true,
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            avatarUrl: true,
+            department: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    const seen = new Set<number>();
+    return rows.filter(r => (seen.has(r.user.id) ? false : (seen.add(r.user.id), true)));
+  }
+
   async exportParticipantsCsv(trainingId: number): Promise<string> {
     const training = await this.prisma.read.training.findUnique({
       where: { id: trainingId },

@@ -54,6 +54,7 @@ describe('LeaveAbsencesService', () => {
         findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn(),
         update: jest.fn(),
+        delete: jest.fn().mockResolvedValue({}),
       },
       absenceRevision: { create: jest.fn() },
       leaveRequest: { findFirst: jest.fn().mockResolvedValue(null) },
@@ -172,6 +173,34 @@ describe('LeaveAbsencesService', () => {
           changes: { date: ['2026-10-05', '2026-10-06'] },
         }),
       });
+    });
+  });
+
+  describe('cancel', () => {
+    it('o colaborador cancela o que ele próprio registou', async () => {
+      prisma.absenceRecord.findUnique.mockResolvedValue(absence());
+      await expect(svc.cancel(10, employee)).resolves.toEqual({ id: 10, cancelled: true });
+      expect(prisma.absenceRecord.delete).toHaveBeenCalledWith({ where: { id: 10 } });
+    });
+
+    it('o colaborador não cancela o que outro registou em seu nome', async () => {
+      prisma.absenceRecord.findUnique.mockResolvedValue(absence({ createdById: 2 }));
+      await expect(svc.cancel(10, employee)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.absenceRecord.delete).not.toHaveBeenCalled();
+    });
+
+    it('ocorrências da assiduidade não se cancelam', async () => {
+      prisma.absenceRecord.findUnique.mockResolvedValue(absence({ source: 'ATTENDANCE' }));
+      await expect(svc.cancel(10, hr)).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.absenceRecord.delete).not.toHaveBeenCalled();
+    });
+
+    it('registos validados só o RH cancela', async () => {
+      prisma.absenceRecord.findUnique.mockResolvedValue(
+        absence({ justificationStatus: AbsenceJustificationStatus.VALIDATED }),
+      );
+      await expect(svc.cancel(10, manager)).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(svc.cancel(10, hr)).resolves.toEqual({ id: 10, cancelled: true });
     });
   });
 

@@ -197,6 +197,12 @@ export class LeaveLicensesService {
           r.createdById && r.createdById !== r.userId
             ? { id: r.createdById, fullName: creatorName.get(r.createdById) ?? null }
             : null,
+        // Mesma regra de `canAct` em LeaveApprovalsService: a etapa em aberto
+        // de menor nível (as anteriores já decididas) é do próprio utilizador.
+        canApprove:
+          r.status === LeaveStatus.PENDING &&
+          !!pendingApproval &&
+          pendingApproval.approverId === viewer.id,
         canCancel:
           isOwnerOrOrg &&
           [LeaveStatus.DRAFT, LeaveStatus.PENDING, LeaveStatus.APPROVED].includes(

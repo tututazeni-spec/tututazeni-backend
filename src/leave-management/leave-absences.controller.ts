@@ -133,6 +133,13 @@ export class LeaveAbsencesController {
     return this.svc.correct(id, dto, user);
   }
 
+  @Patch(':id/cancel')
+  @ApiOperation({ summary: 'Cancelar registo de ausência manual (fica na auditoria)' })
+  @AnyAuthenticated()
+  cancel(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.cancel(id, user);
+  }
+
   @Post(':id/forward')
   @Roles(...REVIEWER_ROLES)
   @ApiOperation({ summary: 'Encaminhar para o gestor' })
