@@ -222,7 +222,10 @@ export class InstructorInvitesService {
     });
   }
 
-  async resend(inviteId: string, actorId: number): Promise<{ inviteId: string }> {
+  async resend(
+    inviteId: string,
+    actorId: number,
+  ): Promise<{ inviteId: string; emailSent: boolean }> {
     const old = await this.prisma.instructorInvite.findUnique({
       where: { id: inviteId },
       include: { user: { select: { fullName: true, accessExpiresAt: true } } },
@@ -242,14 +245,26 @@ export class InstructorInvitesService {
     const remaining = old.user.accessExpiresAt
       ? Math.max(1, Math.ceil((old.user.accessExpiresAt.getTime() - Date.now()) / DAY_MS))
       : DEFAULT_ACCESS_DAYS;
-    await this.mail.sendInstructorInvite(old.email, old.user.fullName, token, remaining);
+    // Como em create(): o novo convite já está gravado; uma falha de SMTP não pode
+    // rebentar com 500 — devolve emailSent=false para o admin tentar de novo.
+    let emailSent = true;
+    try {
+      await this.mail.sendInstructorInvite(old.email, old.user.fullName, token, remaining);
+    } catch (e) {
+      emailSent = false;
+      this.logger.warn({
+        userId: old.userId,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao reenviar e-mail de convite de instrutor',
+      });
+    }
     await this.audit.log({
       action: 'INSTRUCTOR_INVITE_RESENT',
       entity: 'InstructorInvite',
       userId: actorId,
-      metadata: { previous: inviteId, inviteId: created.id },
+      metadata: { previous: inviteId, inviteId: created.id, emailSent },
     });
-    return { inviteId: created.id };
+    return { inviteId: created.id, emailSent };
   }
 
   private async findExternal(userId: number) {

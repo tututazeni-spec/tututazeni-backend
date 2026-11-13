@@ -252,6 +252,13 @@ export class TrainingController {
 
   // ── Comunicação / notificações ────────────────────────────────────────────
 
+  @Get(':id/communications')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @ApiOperation({ summary: 'Listar comunicações já enviadas aos participantes' })
+  communications(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.listCommunications(id, user);
+  }
+
   @Post(':id/notify')
   @Roles(...CAN_CREATE_TRAININGS)
   @ApiOperation({ summary: 'Enviar comunicação a todos os participantes activos' })
@@ -332,6 +339,13 @@ export class TrainingController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.updateSession(id, dto, user);
+  }
+
+  @Patch('sessions/:id/publish')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @ApiOperation({ summary: 'Publicar sessão (rascunho → visível e com inscrições)' })
+  publishSession(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.publishSession(id, user);
   }
 
   @Delete('sessions/:id')

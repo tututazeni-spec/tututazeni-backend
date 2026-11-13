@@ -42,6 +42,7 @@ export interface LeaveSettings {
   // Saldo e transição de dias
   carryOverEnabled: boolean;
   carryOverMaxDays: number | null; // tecto global (o tipo pode ter um menor)
+  carryOverDeadline: string; // MM-DD: último dia para gozar os dias transitados
   // Antecedência
   minNoticeDays: number | null; // por omissão para tipos sem antecedência própria
   maxAdvanceDays: number | null; // quão cedo se pode pedir
@@ -85,6 +86,7 @@ export const DEFAULT_LEAVE_SETTINGS: LeaveSettings = {
   ],
   carryOverEnabled: true,
   carryOverMaxDays: null,
+  carryOverDeadline: '03-31',
   minNoticeDays: null,
   maxAdvanceDays: null,
   documentRequiredCategories: [],
@@ -163,6 +165,11 @@ export class UpdateLeaveSettingsDto {
   @Min(0)
   @Max(365)
   carryOverMaxDays?: number | null;
+
+  @ApiPropertyOptional({ description: 'MM-DD', default: '03-31' })
+  @IsOptional()
+  @Matches(MONTH_DAY)
+  carryOverDeadline?: string;
 
   @ApiPropertyOptional({ nullable: true })
   @IsOptional()

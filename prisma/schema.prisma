@@ -5814,6 +5814,8 @@ model TrainingSession {
   maxParticipants  Int                       @default(0)
   waitlistEnabled  Boolean                   @default(true)
   notes            String?
+  // false = rascunho (invisível e sem inscrições até «Publicar»). Sessões antigas ficam publicadas.
+  published        Boolean                   @default(true)
   createdAt        DateTime                  @default(now())
   training         Training                  @relation(fields: [trainingId], references: [id], onDelete: Cascade)
   participants     TrainingParticipant[]
@@ -7563,11 +7565,11 @@ model LiveClass {
   agenda              String?  @db.Text
   topics              String[] @default([])
   materialDocumentIds Int[]    @default([])
+  // Itens da Biblioteca de conteúdos (LibraryItem, id texto) usados como material — FK solta, como materialDocumentIds.
+  materialLibraryItemIds String[] @default([])
 
   // Etapa 6 — Presença (regra: só "Presente" com >= minAttendancePercent)
   attendanceAutoRegister Boolean @default(true)
-  // Itens da Biblioteca de conteúdos (LibraryItem, id texto) usados como material — FK solta, como materialDocumentIds.
-  materialLibraryItemIds String[] @default([])
   attendanceRequired     Boolean @default(false)
   minAttendancePercent   Int     @default(70)
   lateToleranceMinutes   Int     @default(10)
@@ -7641,10 +7643,10 @@ model LiveClassSession {
   // Secção 11 — materiais específicos desta ocorrência, além dos da Aula
   // (LiveClass.materialDocumentIds). Mesma FK "solta" para a Biblioteca.
   materialDocumentIds Int[] @default([])
-
-  liveClass   LiveClass                  @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
   instructor  TrainingInstructorProfile? @relation(fields: [instructorId], references: [id], onDelete: SetNull)
   materialLibraryItemIds String[] @default([])
+
+  liveClass   LiveClass                  @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
   attendances LiveAttendance[]
 
   @@unique([liveClassId, seq])

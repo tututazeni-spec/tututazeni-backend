@@ -42,14 +42,18 @@ function harness(opts: Opts = {}) {
       findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn().mockResolvedValue({}),
       upsert: jest.fn().mockResolvedValue({}),
+      createMany: jest.fn().mockResolvedValue({ count: 0 }),
+      count: jest.fn().mockResolvedValue(1),
     },
     leaveBalanceHistory: {
       create: jest.fn().mockResolvedValue({}),
       findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
     },
     leaveRequest: {
       findUnique: jest.fn(),
       findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
       create: jest.fn().mockImplementation(async ({ data }) => {
         Object.assign(created, { id: 77, createdAt: new Date('2026-10-04'), ...data });
         delete created.documents;
@@ -342,6 +346,181 @@ describe('transição de saldos (§10)', () => {
     const r = await h.svc.processCarryOver(2026);
     expect(r).toMatchObject({ processed: 0, skipped: 1 });
     expect(h.prisma.leaveBalance.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('caducidade dos dias transitados (prazo configurável, 31/03 por omissão)', () => {
+  const type = { code: 'VACATION', name: 'Férias', annualLimit: 22, allowCarryOver: true };
+  // Transição de 2025 → 2026: saldo novo 30 = 22 anuais + 8 transitados.
+  const carried = { userId: 1, leaveTypeCode: 'VACATION', balanceAfter: 30 };
+  const req = (startDate: string, endDate: string) => ({
+    startDate: new Date(startDate),
+    endDate: new Date(endDate),
+  });
+  const setup = (
+    over: {
+      reqs?: Array<{ startDate: Date; endDate: Date }>;
+      balance?: { balance: number; reserved: number } | null;
+      settings?: Partial<LeaveSettings>;
+    } = {},
+  ) => {
+    const h = harness({ balance: over.balance, settings: over.settings });
+    h.prisma.leaveTypeConfig.findMany.mockResolvedValue([type]);
+    h.prisma.leaveBalanceHistory.findMany.mockResolvedValue([carried]);
+    h.prisma.leaveRequest.findMany.mockResolvedValue(over.reqs ?? []);
+    return h;
+  };
+
+  it('os transitados não gozados caducam, o saldo desce e o colaborador é avisado', async () => {
+    const h = setup({ balance: { balance: 30, reserved: 0 } });
+    const r = await h.svc.expireCarryOver(2026, 99);
+    expect(r.results).toEqual([{ userId: 1, code: 'VACATION', expired: 8 }]);
+    expect(h.prisma.leaveBalance.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { balance: { decrement: 8 } } }),
+    );
+    expect(h.prisma.leaveBalanceHistory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          kind: 'CARRY_OVER_EXPIRY',
+          change: -8,
+          reason: 'Caducidade da transição de 2025 (prazo 31/03/2026)',
+        }),
+      }),
+    );
+    expect(h.prisma.notificationLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ userId: 1, type: 'LEAVE_CARRY_OVER_EXPIRED' }),
+      }),
+    );
+  });
+
+  it('o que foi gozado dentro da janela conta primeiro nos transitados', async () => {
+    // 12–16 Jan 2026 = 5 dias úteis dentro da janela: sobram 3 dos 8 transitados.
+    const h = setup({
+      reqs: [req('2026-01-12', '2026-01-16')],
+      balance: { balance: 25, reserved: 0 },
+    });
+    const r = await h.svc.expireCarryOver(2026);
+    expect(r.results[0].expired).toBe(3);
+  });
+
+  it('só os dias do pedido que caem até ao prazo consomem os transitados', async () => {
+    // 30 Mar – 3 Abr 2026: só 30 e 31 de Março (2 dias úteis) estão na janela.
+    const h = setup({
+      reqs: [req('2026-03-30', '2026-04-03')],
+      balance: { balance: 25, reserved: 0 },
+    });
+    const r = await h.svc.expireCarryOver(2026);
+    expect(r.results[0].expired).toBe(6);
+  });
+
+  it('um pedido todo depois do prazo não consome transitados', async () => {
+    // O repositório só devolve pedidos que tocam a janela; um pedido de Abril não vem.
+    const h = setup({ balance: { balance: 25, reserved: 0 } });
+    const r = await h.svc.expireCarryOver(2026);
+    expect(r.results[0].expired).toBe(8);
+  });
+
+  it('se gozou todos os transitados nada caduca', async () => {
+    const h = setup({
+      reqs: [req('2026-01-05', '2026-01-16'), req('2026-02-02', '2026-02-06')],
+      balance: { balance: 20, reserved: 0 },
+    });
+    const r = await h.svc.expireCarryOver(2026);
+    expect(r.expired).toBe(0);
+    expect(h.prisma.leaveBalance.update).not.toHaveBeenCalled();
+    expect(h.prisma.notificationLog.create).not.toHaveBeenCalled();
+  });
+
+  it('nunca tira dias reservados por pedidos pendentes', async () => {
+    const h = setup({ balance: { balance: 30, reserved: 27 } });
+    const r = await h.svc.expireCarryOver(2026);
+    expect(r.results[0].expired).toBe(3);
+  });
+
+  it('é idempotente: voltar a correr o mesmo ano não caduca outra vez', async () => {
+    const h = setup({ balance: { balance: 30, reserved: 0 } });
+    h.prisma.leaveBalanceHistory.findFirst.mockResolvedValue({ id: 1 });
+    const r = await h.svc.expireCarryOver(2026);
+    expect(r.expired).toBe(0);
+    expect(h.prisma.leaveBalance.update).not.toHaveBeenCalled();
+  });
+
+  it('respeita o prazo definido nas Configurações', async () => {
+    // Prazo 30/04: um pedido 13–17 Abril conta dentro da janela (5 dias).
+    const h = setup({
+      settings: { carryOverDeadline: '04-30' },
+      reqs: [req('2026-04-13', '2026-04-17')],
+      balance: { balance: 25, reserved: 0 },
+    });
+    const r = await h.svc.expireCarryOver(2026);
+    expect(r.results[0].expired).toBe(3);
+    expect(h.prisma.leaveBalanceHistory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reason: 'Caducidade da transição de 2025 (prazo 30/04/2026)',
+        }),
+      }),
+    );
+  });
+});
+
+describe('pedido que passa do prazo não usa os dias transitados', () => {
+  // 2031 não tem transição real; usamos 2031 como ano corrente do pedido.
+  const type = {
+    code: 'VACATION',
+    name: 'Férias',
+    annualLimit: 22,
+    allowCarryOver: true,
+    countWorkDaysOnly: true,
+    autoApprove: false,
+    requiresDocument: false,
+    isSensitive: false,
+    category: 'STATUTORY',
+  };
+  const carriedRow = { balanceAfter: 30 }; // 22 + 8 transitados
+
+  const run = async (
+    startDate: string,
+    endDate: string,
+    balance: { balance: number; reserved: number },
+    windowReqs: Array<{ startDate: Date; endDate: Date }> = [],
+  ) => {
+    const h = harness({ type, balance });
+    h.prisma.leaveBalanceHistory.findFirst.mockImplementation(
+      async ({ where }: { where: { kind: string } }) =>
+        where.kind === 'CARRY_OVER' ? carriedRow : null,
+    );
+    h.prisma.leaveRequest.findMany.mockResolvedValue(windowReqs);
+    return { h, run: () => h.svc.create(dto({ startDate, endDate }), 10) };
+  };
+
+  it('um pedido todo até ao prazo pode usar os transitados', async () => {
+    // 10–14 Fev 2031 (5 dias); saldo 30 disponíveis.
+    const { run: go } = await run('2031-02-10', '2031-02-14', { balance: 5, reserved: 0 });
+    await expect(go()).resolves.toBeDefined();
+  });
+
+  it('depois do prazo só pode usar o que não é transitado', async () => {
+    // Saldo disponível 10 com 8 transitados por gozar: depois do prazo só 2.
+    // 7–11 Abril 2031 = 5 dias → recusado.
+    const { run: go } = await run('2031-04-07', '2031-04-11', { balance: 10, reserved: 0 });
+    await expect(go()).rejects.toThrow(/transitado/);
+  });
+
+  it('depois do prazo pode usar os dias do ano se sobrarem além dos transitados', async () => {
+    // Disponível 22 com 8 transitados: 14 utilizáveis depois do prazo → 5 dias passam.
+    const { run: go } = await run('2031-04-07', '2031-04-11', { balance: 22, reserved: 0 });
+    await expect(go()).resolves.toBeDefined();
+  });
+
+  it('os transitados já gozados na janela libertam o pedido de Abril', async () => {
+    // Gozou 8 dias na janela: já não há transitados por gozar (saldo 10 chega para 5).
+    const used = [
+      { startDate: new Date('2031-01-06'), endDate: new Date('2031-01-15') }, // 8 dias úteis
+    ];
+    const { run: go } = await run('2031-04-07', '2031-04-11', { balance: 10, reserved: 0 }, used);
+    await expect(go()).resolves.toBeDefined();
   });
 });
 

@@ -64,7 +64,7 @@ export class LiveClassesController {
   @AnyAuthenticated()
   @AllowExternal()
   async findAll(@Query() filters: LiveClassFilterDto, @CurrentUser() user: CurrentUserData) {
-    return this.svc.findAll(filters, await this.svc.ownerScope(user));
+    return this.svc.findAll(filters, await this.svc.ownerScope(user), !this.svc.seesDrafts(user));
   }
 
   @Get('upcoming')
@@ -106,7 +106,11 @@ export class LiveClassesController {
     @Query() filters: LiveClassFilterDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.listAllSessions(filters, await this.svc.ownerScope(user));
+    return this.svc.listAllSessions(
+      filters,
+      await this.svc.ownerScope(user),
+      !this.svc.seesDrafts(user),
+    );
   }
 
   @Get('participants')
@@ -307,6 +311,25 @@ export class LiveClassesController {
   @AnyAuthenticated()
   postResponse(@CurrentUser() user: CurrentUserData, @Body() dto: PostClassResponseDto) {
     return this.svc.submitPostResponse(user.id, dto);
+  }
+
+  @Post(':id/publish')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
+  @ExternalLiveClassScope({ key: 'id' })
+  @ApiOperation({ summary: 'Publicar aula (rascunho → agendada)' })
+  publish(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.publish(id);
+  }
+
+  @Post(':id/sessions/:sessionId/publish')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
+  @ExternalLiveClassScope({ key: 'id' })
+  @ApiOperation({ summary: 'Publicar sessão (rascunho → agendada)' })
+  publishSession(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+  ) {
+    return this.svc.publishSession(id, sessionId);
   }
 
   @Post(':id/start')

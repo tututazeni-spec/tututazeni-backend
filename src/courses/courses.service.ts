@@ -1938,8 +1938,8 @@ export class CoursesService {
 
   /** Turmas OPEN (default), ACTIVE ou CLOSED de todos os cursos. INSTRUCTOR vê só as suas. */
   async listOpenCohorts(user: CurrentUserData, status = 'OPEN') {
-    if (status !== 'OPEN' && status !== 'ACTIVE' && status !== 'CLOSED') {
-      throw new BadRequestException('status deve ser OPEN, ACTIVE ou CLOSED');
+    if (status !== 'DRAFT' && status !== 'OPEN' && status !== 'ACTIVE' && status !== 'CLOSED') {
+      throw new BadRequestException('status deve ser DRAFT, OPEN, ACTIVE ou CLOSED');
     }
     const cohorts = await this.prisma.read.courseCohort.findMany({
       where: {
@@ -2047,7 +2047,8 @@ export class CoursesService {
         room: dto.room,
         schedule: dto.schedule,
         capacity,
-        status: 'OPEN',
+        // Nasce em rascunho; só fica visível/inscrevível depois de publicada.
+        status: 'DRAFT',
         startDate: new Date(dto.startDate),
         endDate: dto.endDate ? new Date(dto.endDate) : null,
         // Nested create: turma e participantes gravados atomicamente.
@@ -2110,6 +2111,17 @@ export class CoursesService {
       this.logger.log(`Turmas: ${activated.count} activada(s), ${closed.count} encerrada(s)`);
     }
     return { activated: activated.count, closed: closed.count };
+  }
+
+  /** Publica uma turma em rascunho: passa a OPEN (inscrições abertas). */
+  async publishCohort(id: number, user: CurrentUserData) {
+    const cohort = await this.prisma.courseCohort.findUnique({ where: { id } });
+    if (!cohort) throw new NotFoundException('Turma não encontrada');
+    this.assertCohortAccess(cohort, user);
+    if (cohort.status !== 'DRAFT') {
+      throw new ConflictException('Só uma turma em rascunho pode ser publicada');
+    }
+    return this.prisma.courseCohort.update({ where: { id }, data: { status: 'OPEN' } });
   }
 
   async closeCohort(id: number, user: CurrentUserData) {

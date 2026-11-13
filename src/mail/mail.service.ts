@@ -187,7 +187,13 @@ export class MailService implements OnModuleInit {
     token: string,
     accessDays: number,
   ): Promise<void> {
-    const link = `${process.env.APP_URL ?? ''}/auth/instructor-invite?token=${token}`;
+    // A página é do frontend: FRONTEND_URL (primeiro valor se houver vários), senão APP_URL.
+    const base = (
+      process.env.FRONTEND_URL?.split(',')[0]?.trim() ||
+      process.env.APP_URL ||
+      ''
+    ).replace(/\/+$/, '');
+    const link = `${base}/auth/instructor-invite?token=${token}`;
     await this.send({
       to: email,
       subject: 'Convite de instrutor — INNOVA',
