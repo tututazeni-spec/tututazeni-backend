@@ -34,6 +34,8 @@ export const LARGE_BODY_PREFIXES: readonly string[] = [
   '/library',
   '/content-library',
   '/documents',
+  // Documentos do plano de onboarding: PDF até 3 MB em data URL base64 (~4 MB no JSON).
+  '/onboarding/documents',
   // Respostas com ficheiro (FILE_UPLOAD) vão inline em base64 no save/submit da tentativa.
   '/assessments/attempts',
   '/crm-funders',
