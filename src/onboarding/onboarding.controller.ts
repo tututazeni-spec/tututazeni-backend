@@ -26,6 +26,7 @@ import {
   CreateTemplateTaskDto,
   UpdateTemplateTaskDto,
   CreateOnboardingPlanDto,
+  UpdateOnboardingTeamDto,
   CompleteTaskDto,
   SkipTaskDto,
   ApproveTaskDto,
@@ -276,6 +277,13 @@ export class OnboardingController {
   @ApiOperation({ summary: 'Criar plano de onboarding para colaborador' })
   create(@Body() dto: CreateOnboardingPlanDto) {
     return this.svc.create(dto);
+  }
+
+  @Patch(':id/team')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Atribuir/alterar gestor, buddy e RH responsável do plano' })
+  updateTeam(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateOnboardingTeamDto) {
+    return this.svc.updateTeam(id, dto);
   }
 
   @Post('auto-assign/:userId')

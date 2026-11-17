@@ -14,6 +14,7 @@ import {
   CreateTemplateTaskDto,
   UpdateTemplateTaskDto,
   CreateOnboardingPlanDto,
+  UpdateOnboardingTeamDto,
   CompleteTaskDto,
   SkipTaskDto,
   ApproveTaskDto,
@@ -439,6 +440,61 @@ export class OnboardingService {
     }
 
     return this.findOne(plan.id);
+  }
+
+  async updateTeam(id: number, dto: UpdateOnboardingTeamDto) {
+    const plan = await this.prisma.onboardingPlan.findUnique({
+      where: { id },
+      select: { id: true, userId: true, buddyId: true },
+    });
+    if (!plan) throw new NotFoundException('Plano de onboarding não encontrado');
+
+    const ids = [dto.buddyId, dto.managerId, dto.hrResponsibleId].filter(
+      (v): v is number => typeof v === 'number',
+    );
+    if (ids.length > 0) {
+      const found = await this.prisma.user.findMany({
+        where: { id: { in: ids } },
+        select: { id: true },
+      });
+      if (found.length !== new Set(ids).size) {
+        throw new BadRequestException('Utilizador indicado não encontrado');
+      }
+      if (ids.includes(plan.userId)) {
+        throw new BadRequestException('O colaborador não pode ser da sua própria equipa de apoio');
+      }
+    }
+
+    const data: Prisma.OnboardingPlanUncheckedUpdateInput = {};
+    if (dto.buddyId !== undefined) data.buddyId = dto.buddyId;
+    if (dto.managerId !== undefined) data.managerId = dto.managerId;
+    if (dto.hrResponsibleId !== undefined) data.hrResponsibleId = dto.hrResponsibleId;
+    if (Object.keys(data).length > 0) {
+      await this.prisma.onboardingPlan.update({ where: { id }, data });
+    }
+
+    if (typeof dto.buddyId === 'number' && dto.buddyId !== plan.buddyId) {
+      await this.prisma.notificationLog
+        .create({
+          data: {
+            userId: dto.buddyId,
+            type: 'ONBOARDING_BUDDY_ASSIGNED',
+            message: `Você foi atribuído como buddy de um novo colaborador`,
+            metadata: JSON.stringify({}),
+          },
+        })
+        .catch(e => {
+          this.logger.warn({
+            userId: dto.buddyId,
+            action: 'ONBOARDING_BUDDY_ASSIGNED',
+            planId: id,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao criar notificação de atribuição de buddy',
+          });
+        });
+    }
+
+    return this.findOne(id);
   }
 
   async createFromTemplate(userId: number, positionId?: number, departmentId?: number) {
