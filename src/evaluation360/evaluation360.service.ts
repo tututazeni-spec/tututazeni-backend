@@ -2071,9 +2071,18 @@ export class Evaluation360Service {
         where: { cycleId, evaluatorId, evaluateeId, status: { not: 'COMPLETED' } },
         data: { status: 'COMPLETED', completedAt: new Date() },
       });
+      // Com todas as atribuições do avaliado concluídas, o participante fica
+      // concluído (recolha terminada); a nota final continua a ser calculada
+      // em calculateCycleResults.
+      const remaining = await this.prisma.evaluatorAssignment.count({
+        where: { cycleId, evaluateeId, status: { not: 'COMPLETED' } },
+      });
       await this.prisma.cycleParticipant.updateMany({
         where: { cycleId, userId: evaluateeId },
-        data: { status: 'IN_PROGRESS' },
+        data:
+          remaining === 0
+            ? { status: 'COMPLETED', completedAt: new Date() }
+            : { status: 'IN_PROGRESS' },
       });
       // Análise de sentimento assíncrona
       this.events.emit('response.submitted', { responseId: response.id, cycleId });
