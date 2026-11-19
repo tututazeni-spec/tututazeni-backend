@@ -1613,7 +1613,15 @@ export class Evaluation360Service {
       }),
     );
 
-    return suggestions;
+    // Quem acumula papéis (ex.: par e subordinado, ou gestor e par) avalia
+    // apenas uma vez — fica o primeiro papel sugerido (SELF > gestor > par >
+    // subordinado).
+    const seen = new Set<string>();
+    return suggestions.filter(s => {
+      if (seen.has(s.userId)) return false;
+      seen.add(s.userId);
+      return true;
+    });
   }
 
   async assignEvaluators(cycleId: string, dto: BulkAssignEvaluatorsDto, user: CurrentUserData) {
@@ -1641,6 +1649,16 @@ export class Evaluation360Service {
           results.errors.push(`Colaborador ${assign.evaluateeId} não encontrado na sua equipa`);
           continue;
         }
+      }
+      // Um avaliador só avalia cada colaborador uma vez por ciclo, mesmo com
+      // papéis diferentes (ex.: par e subordinado).
+      const duplicate = await this.prisma.evaluatorAssignment.findFirst({
+        where: { cycleId, evaluateeId: assign.evaluateeId, evaluatorId: assign.evaluatorId },
+        select: { id: true },
+      });
+      if (duplicate) {
+        results.skipped++;
+        continue;
       }
       try {
         await this.prisma.evaluatorAssignment.create({
@@ -1857,13 +1875,15 @@ export class Evaluation360Service {
       where: { cycleId },
       select: { evaluateeId: true, evaluatorId: true, role: true },
     });
-    const existingKeys = new Set(existing.map(a => `${a.evaluateeId}:${a.evaluatorId}:${a.role}`));
+    // Chave sem o papel: um avaliador só avalia cada colaborador uma vez,
+    // mesmo que acumule papéis (ex.: par e subordinado).
+    const existingKeys = new Set(existing.map(a => `${a.evaluateeId}:${a.evaluatorId}`));
 
     const toCreate: Prisma.EvaluatorAssignmentCreateManyInput[] = [];
     for (const participant of participants) {
       const suggestions = await this.buildEvaluatorSuggestions(participant.userId);
       for (const s of suggestions) {
-        const key = `${participant.userId}:${s.userId}:${s.role}`;
+        const key = `${participant.userId}:${s.userId}`;
         if (existingKeys.has(key)) continue;
         existingKeys.add(key);
         toCreate.push({
