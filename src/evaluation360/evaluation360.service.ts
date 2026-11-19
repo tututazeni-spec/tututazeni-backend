@@ -2084,6 +2084,21 @@ export class Evaluation360Service {
             ? { status: 'COMPLETED', completedAt: new Date() }
             : { status: 'IN_PROGRESS' },
       });
+      // Recolha terminada → calcula já o resultado do avaliado, para aparecer
+      // em "Os Meus Resultados". Falha aqui não pode perder a submissão.
+      if (remaining === 0) {
+        try {
+          await this.results.calculateSingleParticipantResult(cycleId, evaluateeId);
+        } catch (err: unknown) {
+          this.logger.warn({
+            action: 'EVAL360_AUTO_CALCULATE_RESULT',
+            entityId: evaluateeId,
+            cycleId,
+            err: { message: err instanceof Error ? err.message : String(err) },
+            msg: 'Falha ao calcular automaticamente o resultado do participante',
+          });
+        }
+      }
       // Análise de sentimento assíncrona
       this.events.emit('response.submitted', { responseId: response.id, cycleId });
     }

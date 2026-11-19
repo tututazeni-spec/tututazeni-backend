@@ -69,6 +69,22 @@ export class Evaluation360ResultsCalculator {
     return { processed: participants.length };
   }
 
+  // Calcula (ou recalcula) só o resultado de um participante — usado quando a
+  // última avaliação dele é submetida, para o separador "Resultados" não
+  // depender de ADMIN/RH carregarem em "Calcular" no ciclo inteiro.
+  async calculateSingleParticipantResult(cycleId: string, participantId: string) {
+    const cycle = await this.prisma.eval360Cycle.findUnique({
+      where: { id: cycleId },
+      include: { competencies: { include: { competency: true } } },
+    });
+    if (!cycle || cycle.deletedAt) return null;
+    const benchmarks = await this.computeCycleCompetencyBenchmarks(
+      cycleId,
+      cycle.competencies.map(c => c.competencyId),
+    );
+    return this.calculateParticipantResult(cycle, participantId, benchmarks);
+  }
+
   private async computeCycleCompetencyBenchmarks(
     cycleId: string,
     competencyIds: number[],
