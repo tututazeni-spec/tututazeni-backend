@@ -2065,8 +2065,10 @@ export class Evaluation360Service {
     }
 
     if (dto.submit) {
-      await this.prisma.evaluatorAssignment.update({
-        where: { id: assignment.id },
+      // Fecha também as atribuições duplicadas do mesmo par avaliador/avaliado
+      // (papéis acumulados, ex.: par e subordinado): é uma só avaliação.
+      await this.prisma.evaluatorAssignment.updateMany({
+        where: { cycleId, evaluatorId, evaluateeId, status: { not: 'COMPLETED' } },
         data: { status: 'COMPLETED', completedAt: new Date() },
       });
       await this.prisma.cycleParticipant.updateMany({
