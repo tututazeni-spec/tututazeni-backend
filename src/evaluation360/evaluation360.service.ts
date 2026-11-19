@@ -871,13 +871,15 @@ export class Evaluation360Service {
 
   async deleteQuestionnaire(id: string, actorId: string) {
     const questionnaire = await this.findQuestionnaireOrFail(id);
-    if (questionnaire.status !== 'DRAFT')
+    if (questionnaire.status === 'PUBLISHED')
       throw new BadRequestException(
-        'Apenas questionários em rascunho podem ser eliminados — arquive-o se já foi usado.',
+        'Um questionário publicado tem de ser arquivado antes de ser eliminado.',
       );
     const inUse = await this.prisma.eval360Cycle.count({ where: { questionnaireId: id } });
     if (inUse > 0)
-      throw new BadRequestException('Este questionário já foi usado por um ciclo — arquive-o.');
+      throw new BadRequestException(
+        'Este questionário já foi usado por um ciclo e não pode ser eliminado.',
+      );
 
     await this.prisma.eval360Questionnaire.delete({ where: { id } });
     await this.audit.log({
