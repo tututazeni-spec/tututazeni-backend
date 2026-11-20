@@ -5136,6 +5136,7 @@ model OnboardingTemplate {
   durationDays    Int                      @default(30)
   learningPathId  Int?
   welcomeVideoUrl String?
+  welcomeMessage  String?
   active          Boolean                  @default(true)
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt

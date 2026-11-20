@@ -242,7 +242,15 @@ export class OnboardingService {
     return this.prisma.read.onboardingPlan.findMany({
       where: { userId },
       include: {
-        template: { select: { id: true, name: true, durationDays: true, welcomeVideoUrl: true } },
+        template: {
+          select: {
+            id: true,
+            name: true,
+            durationDays: true,
+            welcomeVideoUrl: true,
+            welcomeMessage: true,
+          },
+        },
         buddy: {
           select: {
             id: true,
@@ -355,8 +363,7 @@ export class OnboardingService {
     });
     const managerId = dto.managerId ?? defaults?.managerId ?? undefined;
     const buddyId = dto.buddyId ?? defaults?.mentorId ?? undefined;
-    const hrResponsibleId =
-      dto.hrResponsibleId ?? defaults?.hrResponsibleId ?? undefined;
+    const hrResponsibleId = dto.hrResponsibleId ?? defaults?.hrResponsibleId ?? undefined;
 
     // O colaborador nunca pode ser o seu próprio gestor directo, buddy ou RH
     // responsável (mesma regra de updateTeam).
@@ -611,6 +618,31 @@ export class OnboardingService {
       templateId: template.id,
       managerId: user?.managerId ?? undefined,
     });
+  }
+
+  /**
+   * Atribuição automática ao criar um utilizador: se existir um plano activo
+   * definido para o cargo do utilizador (template.positionId), cria-lhe o
+   * plano. Prefere o template do mesmo departamento; sem template para o
+   * cargo, não faz nada (templates genéricos NÃO se atribuem sozinhos).
+   */
+  async autoAssignForNewUser(
+    userId: number,
+    positionId?: number | null,
+    departmentId?: number | null,
+  ) {
+    if (!positionId) return null;
+    const templates = await this.prisma.read.onboardingTemplate.findMany({
+      where: { active: true, positionId },
+      select: { id: true, departmentId: true },
+      orderBy: { id: 'asc' },
+    });
+    if (templates.length === 0) return null;
+    const template =
+      templates.find(t => departmentId != null && t.departmentId === departmentId) ??
+      templates.find(t => t.departmentId == null) ??
+      templates[0];
+    return this.create({ userId, templateId: template.id });
   }
 
   // ─── TAREFAS ──────────────────────────────────────────────────────────────
