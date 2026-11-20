@@ -346,6 +346,18 @@ export class OnboardingController {
     return this.svc.createPlanTask(id, dto);
   }
 
+  @Post('templates/:templateId/plan-tasks')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary: 'Criar tarefa avulso para todos os colaboradores de um plano (template)',
+  })
+  createTemplatePlansTask(
+    @Param('templateId', ParseIntPipe) templateId: number,
+    @Body() dto: CreatePlanTaskDto,
+  ) {
+    return this.svc.createTemplatePlansTask(templateId, dto);
+  }
+
   @Get(':id/task-assignee-candidates')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({

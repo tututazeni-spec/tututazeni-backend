@@ -7,7 +7,10 @@ const plan = { id: 7, userId: 1, templateId: 3, managerId: 2, buddyId: 3, hrResp
 
 const tx = {
   onboardingTemplateTask: { create: jest.fn().mockResolvedValue({ id: 50 }) },
-  onboardingTaskInstance: { create: jest.fn().mockResolvedValue({ id: 90 }) },
+  onboardingTaskInstance: {
+    create: jest.fn().mockResolvedValue({ id: 90 }),
+    createMany: jest.fn().mockResolvedValue({ count: 2 }),
+  },
 };
 const users: Record<number, any> = {
   1: { id: 1, active: true, departmentId: 10, role: { name: 'COLABORADOR' } },
@@ -20,7 +23,8 @@ const prisma: any = {
     findUnique: jest.fn(({ where }: any) => Promise.resolve(users[where.id] ?? null)),
     findMany: jest.fn().mockResolvedValue([]),
   },
-  onboardingPlan: { findUnique: jest.fn() },
+  onboardingPlan: { findUnique: jest.fn(), findMany: jest.fn() },
+  onboardingTemplate: { findUnique: jest.fn() },
   onboardingTemplateTask: { aggregate: jest.fn().mockResolvedValue({ _max: { seq: 4 } }) },
   onboardingTaskInstance: {
     findUnique: jest.fn(),
@@ -80,6 +84,22 @@ describe('OnboardingService — tarefas avulsas e atribuição', () => {
     await expect(svc.createPlanTask(7, { ...dto, dueDate: '2026-11-01' })).rejects.toThrow(
       BadRequestException,
     );
+  });
+
+  it('sem colaborador: cria uma instância por plano activo do template', async () => {
+    prisma.onboardingTemplate.findUnique.mockResolvedValue({ id: 3, tasks: [] });
+    prisma.onboardingPlan.findMany.mockResolvedValue([{ id: 7 }, { id: 8 }]);
+    const r = await svc.createTemplatePlansTask(3, dto);
+    expect(r).toEqual({ created: 2 });
+    const rows = tx.onboardingTaskInstance.createMany.mock.calls[0][0].data;
+    expect(rows.map((x: any) => x.planId)).toEqual([7, 8]);
+    expect(tx.onboardingTemplateTask.create.mock.calls[0][0].data.isAdHoc).toBe(true);
+  });
+
+  it('sem colaborador e sem planos activos recusa', async () => {
+    prisma.onboardingTemplate.findUnique.mockResolvedValue({ id: 3, tasks: [] });
+    prisma.onboardingPlan.findMany.mockResolvedValue([]);
+    await expect(svc.createTemplatePlansTask(3, dto)).rejects.toThrow(BadRequestException);
   });
 
   it('404 se o plano não existe', async () => {
