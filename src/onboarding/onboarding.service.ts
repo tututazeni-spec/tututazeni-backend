@@ -8,6 +8,7 @@
 } from '@nestjs/common';
 import { Prisma, ResponsibleRole, EvalType, EvalPurpose, EvalStage } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertAdminEvaluatedByOtherAdmin } from '../evaluation/evaluation-admin-rule';
 import {
   CreateOnboardingTemplateDto,
   UpdateOnboardingTemplateDto,
@@ -1522,6 +1523,10 @@ export class OnboardingService {
         'Não é possível determinar o avaliador: o plano não tem gestor nem responsável de RH',
       );
     }
+
+    // Um admin nunca se avalia a si próprio: a avaliação de integração de um
+    // administrador tem de ser feita por outro administrador.
+    await assertAdminEvaluatedByOtherAdmin(this.prisma, evaluatorId, plan.userId);
 
     const request = await this.prisma.evaluationRequest.create({
       data: {
