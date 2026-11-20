@@ -299,6 +299,51 @@ export class CompleteTaskDto {
   evidenceUrl?: string;
 }
 
+// Tarefa criada avulso num plano (aba Tarefas) — só ADMIN/RH.
+export class CreatePlanTaskDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(200)
+  title!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  description?: string;
+
+  @ApiProperty({ enum: TaskCategory })
+  @IsEnum(TaskCategory)
+  category!: TaskCategory;
+
+  @ApiProperty({ enum: TaskPhase })
+  @IsEnum(TaskPhase)
+  phase!: TaskPhase;
+
+  @ApiPropertyOptional({ description: 'Prazo (data ISO)' })
+  @IsOptional()
+  @IsDateString()
+  dueDate?: string;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  isMandatory?: boolean;
+
+  @ApiPropertyOptional({ description: 'Colaborador, gestor, buddy ou RH do plano' })
+  @IsOptional()
+  @IsInt()
+  assigneeId?: number;
+}
+
+// Atribuir/alterar a pessoa de uma tarefa existente; `null` remove a atribuição.
+export class AssignTaskDto {
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsInt()
+  assigneeId?: number | null;
+}
+
 export class SkipTaskDto {
   @ApiProperty()
   @IsInt()
