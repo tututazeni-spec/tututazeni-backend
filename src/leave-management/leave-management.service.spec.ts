@@ -26,6 +26,8 @@ const leaveBalance = {
   findMany: jest.fn(),
   update: jest.fn(),
   create: jest.fn(),
+  createMany: jest.fn().mockResolvedValue({ count: 0 }),
+  count: jest.fn().mockResolvedValue(1),
 };
 const leaveBalanceHistory = {
   create: jest.fn().mockResolvedValue({}),

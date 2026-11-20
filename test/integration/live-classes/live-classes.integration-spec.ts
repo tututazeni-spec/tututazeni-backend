@@ -125,6 +125,32 @@ describe('Live Classes Integration', () => {
         .expect(201);
       liveClassId = res.body.id;
       expect(res.body.course.id).toBe(courseId);
+      expect(res.body.status).toBe('EM_PREPARACAO');
+      await request(app.getHttpServer())
+        .post(`/live-classes/${liveClassId}/publish`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(201);
+    });
+
+    it('colaborador não vê rascunhos — só depois de publicada', async () => {
+      // liveClassId já foi publicada acima; um rascunho novo fica oculto.
+      const draft = await request(app.getHttpServer())
+        .post('/live-classes')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({
+          courseId,
+          topic: 'Rascunho oculto',
+          scheduledAt: new Date(Date.now() + 3600000).toISOString(),
+          duration: 60,
+        })
+        .expect(201);
+      extraLiveClassIds.push(draft.body.id);
+      const res = await request(app.getHttpServer())
+        .get('/live-classes')
+        .query({ courseId })
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      expect(res.body.data.some((c: any) => c.id === draft.body.id)).toBe(false);
     });
 
     it('GET /live-classes — lista com filtro por curso', async () => {
@@ -293,6 +319,10 @@ describe('Live Classes Integration', () => {
         .expect(201);
       actionClassId = res.body.id;
       extraLiveClassIds.push(actionClassId);
+      await request(app.getHttpServer())
+        .post(`/live-classes/${actionClassId}/publish`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(201);
     });
 
     it('RH inicia a aula → EM_CURSO', async () => {
@@ -319,7 +349,7 @@ describe('Live Classes Integration', () => {
         .post(`/live-classes/${actionClassId}/duplicate`)
         .set('Authorization', `Bearer ${rhToken}`)
         .expect(201);
-      expect(res.body.status).toBe('AGENDADA');
+      expect(res.body.status).toBe('EM_PREPARACAO'); // cópia nasce como rascunho
       expect(res.body.id).not.toBe(actionClassId);
       extraLiveClassIds.push(res.body.id);
     });
@@ -363,6 +393,10 @@ describe('Live Classes Integration', () => {
         .expect(201);
       recurringClassId = res.body.id;
       extraLiveClassIds.push(recurringClassId);
+      await request(app.getHttpServer())
+        .post(`/live-classes/${recurringClassId}/publish`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(201);
 
       const sessions = await request(app.getHttpServer())
         .get(`/live-classes/${recurringClassId}/sessions`)

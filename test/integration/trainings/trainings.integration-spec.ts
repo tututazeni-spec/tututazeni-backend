@@ -205,6 +205,13 @@ describe('Trainings Integration', () => {
       sessionId = res.body.id;
     });
 
+    it('RH publica a sessão (inscrições só abrem depois de publicada)', async () => {
+      await request(app.getHttpServer())
+        .patch(`/trainings/sessions/${sessionId}/publish`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+    });
+
     it('colaborador inscreve-se (1ª vaga → REGISTERED)', async () => {
       const res = await request(app.getHttpServer())
         .post(`/trainings/sessions/${sessionId}/self-register`)

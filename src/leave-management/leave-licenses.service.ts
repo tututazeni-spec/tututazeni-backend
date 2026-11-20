@@ -6,6 +6,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { avatarRef } from '../users/avatar-ref';
 import { CurrentUserData } from '../common/types/current-user';
 import { buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { isPrivileged } from '../common/authz/ownership';
@@ -115,6 +116,7 @@ export class LeaveLicensesService {
               id: true,
               fullName: true,
               employeeNumber: true,
+              avatarUrl: true,
               department: { select: { id: true, name: true } },
             },
           },
@@ -154,7 +156,7 @@ export class LeaveLicensesService {
       const isOwnerOrOrg = viewer.id === r.userId || canSeePayroll;
       return {
         id: r.id,
-        user: r.user,
+        user: { ...r.user, avatarUrl: avatarRef(r.user.id, r.user.avatarUrl) },
         leaveTypeCode: r.leaveTypeCode,
         type: type
           ? {

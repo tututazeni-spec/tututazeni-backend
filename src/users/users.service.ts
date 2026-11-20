@@ -931,9 +931,10 @@ export class UsersService {
 
   // ─── DIRETÓRIO INTERNO ────────────────────────────────────────────────────
 
-  async getDirectory(search?: string, departmentId?: number) {
+  async getDirectory(search?: string, departmentId?: number, positionId?: number) {
     const where: Prisma.UserWhereInput = { active: true };
     if (departmentId) where.departmentId = departmentId;
+    if (positionId) where.positionId = positionId;
     if (search) {
       where.OR = [
         { fullName: { contains: search, mode: 'insensitive' } },
@@ -968,7 +969,7 @@ export class UsersService {
         orderBy: { fullName: 'asc' },
         // Listar um departamento inteiro (sem pesquisa) não tem limite — é usado
         // para adicionar todos os membros a uma turma. Pesquisa livre fica a 100.
-        take: departmentId && !search ? undefined : 100,
+        take: (departmentId || positionId) && !search ? undefined : 100,
       }),
     );
     return rows.map(u => ({ ...u, avatarUrl: avatarRef(u.id, u.avatarUrl) }));

@@ -279,6 +279,8 @@ export class TrainingService {
 
     return {
       ...t,
+      // Rascunhos de sessão só são visíveis a quem gere a formação.
+      sessions: canManage ? t.sessions : t.sessions.filter(s => s.published),
       avgRating: Math.round((avgRating._avg.rating ?? 0) * 10) / 10,
       totalCost,
       canManage,
@@ -568,6 +570,8 @@ export class TrainingService {
         maxParticipants: dto.maxParticipants ?? 0,
         waitlistEnabled: dto.waitlistEnabled ?? true,
         notes: dto.notes,
+        // Nasce em rascunho; só fica visível e inscrevível depois de publicada.
+        published: false,
       },
     });
     this.logHistory('SESSION_CREATE', dto.trainingId, user.id, {
@@ -575,6 +579,24 @@ export class TrainingService {
       sessionDate: session.sessionDate,
     });
     return session;
+  }
+
+  /** Publica uma sessão em rascunho: passa a visível e a aceitar inscrições. */
+  async publishSession(id: number, user: CurrentUserData) {
+    const session = await this.assertCanManageSession(id, user);
+    const current = await this.prisma.read.trainingSession.findUnique({
+      where: { id: session.id },
+      select: { published: true },
+    });
+    if (current?.published) {
+      throw new ConflictException('A sessão já está publicada');
+    }
+    const updated = await this.prisma.trainingSession.update({
+      where: { id },
+      data: { published: true },
+    });
+    this.logHistory('SESSION_PUBLISH', session.trainingId, user.id, { sessionId: id });
+    return updated;
   }
 
   async updateSession(id: number, dto: UpdateTrainingSessionDto, user: CurrentUserData) {
@@ -624,6 +646,9 @@ export class TrainingService {
       },
     });
     if (!session) throw new NotFoundException('Sessão não encontrada');
+    if (!session.published) {
+      throw new ConflictException('A sessão ainda não foi publicada');
+    }
 
     // Formação com aprovação obrigatória: a inscrição fica PENDING_APPROVAL
     // sem reservar vaga (a vaga só é verificada quando um gestor aprova, ver
@@ -1338,6 +1363,7 @@ export class TrainingService {
     });
 
     let sent = 0;
+    const batchId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     for (const p of participants) {
       await this.prisma.notificationLog
         .create({
@@ -1345,7 +1371,7 @@ export class TrainingService {
             userId: p.userId,
             type: 'TRAINING_ANNOUNCEMENT',
             message: dto.message,
-            metadata: JSON.stringify({ trainingId }),
+            metadata: JSON.stringify({ trainingId, batchId, sentById: user.id }),
           },
         })
         .then(() => sent++)
@@ -1361,6 +1387,59 @@ export class TrainingService {
     }
 
     return { message: 'Notificações enviadas', sent, total: participants.length };
+  }
+
+  /** Comunicações já enviadas aos participantes (uma entrada por envio). */
+  async listCommunications(trainingId: number, user: CurrentUserData) {
+    await this.assertCanManage(trainingId, user);
+    const rows = await this.prisma.read.notificationLog.findMany({
+      where: {
+        type: 'TRAINING_ANNOUNCEMENT',
+        metadata: { contains: `"trainingId":${trainingId}` },
+      },
+      select: { message: true, metadata: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+      take: 5000,
+    });
+    const groups = new Map<
+      string,
+      { message: string; sentAt: Date; recipients: number; sentById: number | null }
+    >();
+    for (const r of rows) {
+      let meta: { trainingId?: number; batchId?: string; sentById?: number } = {};
+      try {
+        meta = JSON.parse(r.metadata ?? '{}');
+      } catch {
+        continue;
+      }
+      if (meta.trainingId !== trainingId) continue;
+      // Envios antigos não têm batchId: agrupa por mensagem + minuto.
+      const key = meta.batchId ?? `${r.message}|${r.createdAt.toISOString().slice(0, 16)}`;
+      const g = groups.get(key);
+      if (g) g.recipients++;
+      else
+        groups.set(key, {
+          message: r.message,
+          sentAt: r.createdAt,
+          recipients: 1,
+          sentById: meta.sentById ?? null,
+        });
+    }
+    const list = [...groups.values()].slice(0, 50);
+    const ids = [...new Set(list.map(g => g.sentById).filter((x): x is number => x != null))];
+    const users = ids.length
+      ? await this.prisma.read.user.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, fullName: true },
+        })
+      : [];
+    const names = new Map(users.map(u => [u.id, u.fullName]));
+    return list.map(g => ({
+      message: g.message,
+      sentAt: g.sentAt,
+      recipients: g.recipients,
+      sentBy: g.sentById != null ? (names.get(g.sentById) ?? null) : null,
+    }));
   }
 
   // ─── DOCUMENTOS ADMINISTRATIVOS ────────────────────────────────────────────

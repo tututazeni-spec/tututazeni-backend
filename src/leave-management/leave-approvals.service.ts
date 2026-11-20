@@ -3,6 +3,7 @@
 // etapa (LeaveApproval), com prazo, estado de espera e histórico de
 // reatribuições. A decisão em si continua em LeaveManagementService
 // (processApproval), para o saldo ter um único ponto de contabilização.
+import { avatarRef } from '../users/avatar-ref';
 import {
   BadRequestException,
   ForbiddenException,
@@ -110,6 +111,7 @@ export class LeaveApprovalsService {
                 select: {
                   id: true,
                   fullName: true,
+                  avatarUrl: true,
                   department: { select: { id: true, name: true } },
                 },
               },
@@ -189,7 +191,10 @@ export class LeaveApprovalsService {
           startDate: a.request.startDate,
           endDate: a.request.endDate,
           workDays: a.request.workDays,
-          user: a.request.user,
+          user: {
+            ...a.request.user,
+            avatarUrl: avatarRef(a.request.user.id, a.request.user.avatarUrl),
+          },
           type: hideType
             ? { code: 'UNAVAILABLE', name: 'Indisponível', color: '#94A3B8' }
             : {
