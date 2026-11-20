@@ -347,6 +347,12 @@ export class OnboardingService {
     // OnboardingTemplate totalmente tipado (incl. `tasks`).
     const template = await this.findOneTemplate(dto.templateId);
 
+    // O colaborador nunca pode ser o seu próprio gestor directo, buddy ou RH
+    // responsável (mesma regra de updateTeam).
+    if ([dto.managerId, dto.buddyId, dto.hrResponsibleId].includes(dto.userId)) {
+      throw new BadRequestException('O colaborador não pode ser da sua própria equipa de apoio');
+    }
+
     // Verificar se já existe plano activo para este utilizador
     const existing = await this.prisma.onboardingPlan.findFirst({
       where: { userId: dto.userId, status: { in: ['NOT_STARTED', 'IN_PROGRESS'] } },
