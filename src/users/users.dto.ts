@@ -191,6 +191,18 @@ export class CreateUserDto {
   @IsInt()
   managerId?: number;
 
+  /** Mentor/buddy do onboarding — pré-preenche o plano de integração. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  mentorId?: number;
+
+  /** RH responsável do onboarding — pré-preenche o plano de integração. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  hrResponsibleId?: number;
+
   @ApiPropertyOptional()
   @IsOptional()
   @EmptyStringToUndefined()
@@ -433,6 +445,18 @@ export class UserFilterDto extends BaseFilterDto {
   @IsInt()
   @Type(() => Number)
   managerId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  mentorId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  hrResponsibleId?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
