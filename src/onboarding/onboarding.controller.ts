@@ -30,6 +30,8 @@ import {
   UpdateOnboardingTeamDto,
   CompleteTaskDto,
   SkipTaskDto,
+  CreatePlanTaskDto,
+  AssignTaskDto,
   ApproveTaskDto,
   UploadDocumentDto,
   ValidateDocumentDto,
@@ -335,6 +337,20 @@ export class OnboardingController {
   @AnyAuthenticated()
   completeTask(@CurrentUser() user: CurrentUserData, @Body() dto: CompleteTaskDto) {
     return this.svc.completeTask(dto, user.id);
+  }
+
+  @Post(':id/tasks')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Criar tarefa avulso num plano' })
+  createPlanTask(@Param('id', ParseIntPipe) id: number, @Body() dto: CreatePlanTaskDto) {
+    return this.svc.createPlanTask(id, dto);
+  }
+
+  @Patch('tasks/:taskId/assignee')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Atribuir/alterar a pessoa responsável por uma tarefa do plano' })
+  assignTask(@Param('taskId', ParseIntPipe) taskId: number, @Body() dto: AssignTaskDto) {
+    return this.svc.assignTask(taskId, dto.assigneeId ?? null);
   }
 
   @Post('tasks/skip')

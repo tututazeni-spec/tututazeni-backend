@@ -6,7 +6,7 @@
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
-import { Prisma, EvalType, EvalPurpose, EvalStage } from '@prisma/client';
+import { Prisma, ResponsibleRole, EvalType, EvalPurpose, EvalStage } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateOnboardingTemplateDto,
@@ -14,6 +14,7 @@ import {
   CreateTemplateTaskDto,
   UpdateTemplateTaskDto,
   CreateOnboardingPlanDto,
+  CreatePlanTaskDto,
   UpdateOnboardingTeamDto,
   CompleteTaskDto,
   SkipTaskDto,
@@ -51,8 +52,8 @@ export class OnboardingService {
         position: { select: { id: true, name: true } },
         department: { select: { id: true, name: true } },
         unit: { select: { id: true, name: true } },
-        tasks: { orderBy: { seq: 'asc' } },
-        _count: { select: { plans: true, tasks: true } },
+        tasks: { where: { isAdHoc: false }, orderBy: { seq: 'asc' } },
+        _count: { select: { plans: true, tasks: { where: { isAdHoc: false } } } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -62,7 +63,7 @@ export class OnboardingService {
     const t = await this.prisma.read.onboardingTemplate.findUnique({
       where: { id },
       include: {
-        tasks: { orderBy: { seq: 'asc' } },
+        tasks: { where: { isAdHoc: false }, orderBy: { seq: 'asc' } },
         _count: { select: { plans: true } },
       },
     });
@@ -288,7 +289,7 @@ export class OnboardingService {
             position: { select: { name: true } },
           },
         },
-        template: { include: { tasks: { orderBy: { seq: 'asc' } } } },
+        template: { include: { tasks: { where: { isAdHoc: false }, orderBy: { seq: 'asc' } } } },
         buddy: {
           select: {
             id: true,
@@ -305,7 +306,11 @@ export class OnboardingService {
           select: { id: true, fullName: true, email: true, avatarUrl: true },
         },
         taskInstances: {
-          include: { templateTask: true, approvedBy: { select: { id: true, fullName: true } } },
+          include: {
+            templateTask: true,
+            approvedBy: { select: { id: true, fullName: true } },
+            assignee: { select: { id: true, fullName: true, avatarUrl: true } },
+          },
           orderBy: { templateTask: { seq: 'asc' } },
         },
         documents: true,
@@ -847,6 +852,7 @@ export class OnboardingService {
         take,
         include: {
           templateTask: true,
+          assignee: { select: { id: true, fullName: true, avatarUrl: true } },
           plan: {
             select: {
               id: true,
@@ -866,6 +872,117 @@ export class OnboardingService {
     });
 
     return buildPaginatedResponse(withPriority, total, page, limit);
+  }
+
+  // Tarefa criada avulso num plano (aba Tarefas). Guarda uma tarefa de template
+  // marcada `isAdHoc` no template do plano — fica fora da Estrutura do template
+  // e dos planos novos — e a instância só para este plano.
+  async createPlanTask(planId: number, dto: CreatePlanTaskDto) {
+    const plan = await this.prisma.read.onboardingPlan.findUnique({ where: { id: planId } });
+    if (!plan) throw new NotFoundException('Plano de onboarding não encontrado');
+    if (dto.assigneeId != null) this.assertPlanMember(plan, dto.assigneeId);
+
+    const last = await this.prisma.read.onboardingTemplateTask.aggregate({
+      where: { templateId: plan.templateId },
+      _max: { seq: true },
+    });
+    const responsible: ResponsibleRole =
+      dto.assigneeId == null
+        ? 'HR'
+        : dto.assigneeId === plan.userId
+          ? 'SELF'
+          : dto.assigneeId === plan.managerId
+            ? 'MANAGER'
+            : dto.assigneeId === plan.buddyId
+              ? 'BUDDY'
+              : 'HR';
+
+    const instance = await this.prisma.$transaction(async tx => {
+      const templateTask = await tx.onboardingTemplateTask.create({
+        data: {
+          templateId: plan.templateId,
+          title: dto.title,
+          description: dto.description,
+          category: dto.category,
+          type: 'TASK',
+          phase: dto.phase,
+          responsible,
+          isMandatory: dto.isMandatory ?? true,
+          xpReward: 10,
+          seq: (last._max.seq ?? 0) + 1,
+          isAdHoc: true,
+        },
+      });
+      return tx.onboardingTaskInstance.create({
+        data: {
+          planId,
+          templateTaskId: templateTask.id,
+          status: 'PENDING',
+          dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+          assigneeId: dto.assigneeId ?? null,
+        },
+        include: { templateTask: true },
+      });
+    });
+    await this.notifyTaskAssignee(dto.assigneeId, dto.title);
+    return instance;
+  }
+
+  async assignTask(taskId: number, assigneeId: number | null) {
+    const instance = await this.prisma.read.onboardingTaskInstance.findUnique({
+      where: { id: taskId },
+      include: { plan: true, templateTask: true },
+    });
+    if (!instance) throw new NotFoundException('Tarefa não encontrada');
+    if (assigneeId != null) this.assertPlanMember(instance.plan, assigneeId);
+    const updated = await this.prisma.onboardingTaskInstance.update({
+      where: { id: taskId },
+      data: { assigneeId },
+      include: { assignee: { select: { id: true, fullName: true, avatarUrl: true } } },
+    });
+    if (assigneeId != null && assigneeId !== instance.assigneeId) {
+      await this.notifyTaskAssignee(assigneeId, instance.templateTask.title);
+    }
+    return updated;
+  }
+
+  // Só quem faz parte do plano pode receber tarefas: colaborador, gestor, buddy, RH.
+  private assertPlanMember(
+    plan: {
+      userId: number;
+      managerId: number | null;
+      buddyId: number | null;
+      hrResponsibleId: number | null;
+    },
+    userId: number,
+  ) {
+    const members = [plan.userId, plan.managerId, plan.buddyId, plan.hrResponsibleId];
+    if (!members.includes(userId)) {
+      throw new BadRequestException(
+        'A tarefa só pode ser atribuída ao colaborador, ao gestor, ao buddy ou ao RH responsável do plano',
+      );
+    }
+  }
+
+  private async notifyTaskAssignee(assigneeId: number | null | undefined, title: string) {
+    if (assigneeId == null) return;
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId: assigneeId,
+          type: 'ONBOARDING_TASK_ASSIGNED',
+          message: `Foi-lhe atribuída a tarefa de onboarding «${title}»`,
+          metadata: JSON.stringify({}),
+        },
+      })
+      .catch(e => {
+        this.logger.warn({
+          userId: assigneeId,
+          action: 'ONBOARDING_TASK_ASSIGNED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de atribuição de tarefa',
+        });
+      });
   }
 
   // ─── DOCUMENTOS ───────────────────────────────────────────────────────────

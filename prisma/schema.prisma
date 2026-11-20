@@ -825,6 +825,7 @@ model User {
   onboardingAsManager           OnboardingPlan[]         @relation("OnboardingManager")
   onboardingAsHR                OnboardingPlan[]         @relation("OnboardingHR")
   taskApprovals                 OnboardingTaskInstance[] @relation("TaskApprover")
+  onboardingTasksAssigned       OnboardingTaskInstance[] @relation("OnboardingTaskAssignee")
   documentsUploaded             OnboardingDocument[]     @relation("DocUploader")
   documentsValidated            OnboardingDocument[]     @relation("DocValidator")
   onboardingCheckinsResponsible OnboardingCheckin[]      @relation("OnboardingCheckinResponsible")
@@ -5160,6 +5161,10 @@ model OnboardingTemplateTask {
   requiresApproval Boolean                  @default(false)
   requiresEvidence Boolean                  @default(false)
   seq              Int
+  // Tarefa criada avulso num único plano (aba Tarefas): vive no template do
+  // plano só para manter a relação, mas não aparece na Estrutura do template
+  // nem é copiada para planos novos.
+  isAdHoc          Boolean                  @default(false)
   template         OnboardingTemplate       @relation(fields: [templateId], references: [id], onDelete: Cascade)
   course           Course?                  @relation(fields: [courseId], references: [id])
   instances        OnboardingTaskInstance[]
@@ -5220,8 +5225,12 @@ model OnboardingTaskInstance {
   plan            OnboardingPlan         @relation(fields: [planId], references: [id], onDelete: Cascade)
   templateTask    OnboardingTemplateTask @relation(fields: [templateTaskId], references: [id])
   approvedBy      User?                  @relation("TaskApprover", fields: [approvedById], references: [id])
+  // Pessoa a quem a tarefa foi atribuída (colaborador, gestor, buddy ou RH do plano).
+  assigneeId      Int?
+  assignee        User?                  @relation("OnboardingTaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
 
   @@unique([planId, templateTaskId])
+  @@index([assigneeId])
   @@index([planId])
   @@index([templateTaskId])
 }
