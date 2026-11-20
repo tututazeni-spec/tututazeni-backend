@@ -15,6 +15,7 @@ import {
   HttpStatus,
   Header,
   StreamableFile,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { OnboardingService } from './onboarding.service';
@@ -277,6 +278,22 @@ export class OnboardingController {
   @ApiOperation({ summary: 'Criar plano de onboarding para colaborador' })
   create(@Body() dto: CreateOnboardingPlanDto) {
     return this.svc.create(dto);
+  }
+
+  @Get(':id/team-candidates')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Utilizadores elegíveis para um papel da equipa de apoio do plano' })
+  @ApiQuery({ name: 'role', enum: ['manager', 'buddy', 'hr'] })
+  @ApiQuery({ name: 'search', required: false })
+  teamCandidates(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('role') role: string,
+    @Query('search') search?: string,
+  ) {
+    if (role !== 'manager' && role !== 'buddy' && role !== 'hr') {
+      throw new BadRequestException('role deve ser manager, buddy ou hr');
+    }
+    return this.svc.teamCandidates(id, role, search);
   }
 
   @Patch(':id/team')

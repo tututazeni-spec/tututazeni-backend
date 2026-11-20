@@ -442,6 +442,48 @@ export class OnboardingService {
     return this.findOne(plan.id);
   }
 
+  /**
+   * Quem pode ser atribuído a cada papel da equipa de apoio de um plano:
+   * gestor = mesmo departamento do colaborador; RH responsável = perfil RH;
+   * buddy/mentor = qualquer colaborador activo. Nunca o próprio colaborador.
+   */
+  async teamCandidates(id: number, role: 'manager' | 'buddy' | 'hr', search?: string) {
+    const plan = await this.prisma.onboardingPlan.findUnique({
+      where: { id },
+      select: { userId: true, user: { select: { departmentId: true } } },
+    });
+    if (!plan) throw new NotFoundException('Plano de onboarding não encontrado');
+
+    const where: Prisma.UserWhereInput = { active: true, id: { not: plan.userId } };
+    if (role === 'manager') {
+      const departmentId = plan.user?.departmentId;
+      if (!departmentId) return [];
+      where.departmentId = departmentId;
+    }
+    if (role === 'hr') where.role = { name: Role.RH };
+    const term = search?.trim();
+    if (term) {
+      where.OR = [
+        { fullName: { contains: term, mode: 'insensitive' } },
+        { email: { contains: term, mode: 'insensitive' } },
+      ];
+    }
+
+    return this.prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        avatarUrl: true,
+        position: { select: { name: true } },
+        department: { select: { name: true } },
+      },
+      orderBy: { fullName: 'asc' },
+      take: 50,
+    });
+  }
+
   async updateTeam(id: number, dto: UpdateOnboardingTeamDto) {
     const plan = await this.prisma.onboardingPlan.findUnique({
       where: { id },
@@ -455,13 +497,34 @@ export class OnboardingService {
     if (ids.length > 0) {
       const found = await this.prisma.user.findMany({
         where: { id: { in: ids } },
-        select: { id: true },
+        select: { id: true, departmentId: true, role: { select: { name: true } } },
       });
       if (found.length !== new Set(ids).size) {
         throw new BadRequestException('Utilizador indicado não encontrado');
       }
       if (ids.includes(plan.userId)) {
         throw new BadRequestException('O colaborador não pode ser da sua própria equipa de apoio');
+      }
+
+      // Gestor directo: do mesmo departamento do colaborador. RH responsável:
+      // tem de ter o perfil RH. O buddy/mentor é livre.
+      if (typeof dto.managerId === 'number') {
+        const owner = await this.prisma.user.findUnique({
+          where: { id: plan.userId },
+          select: { departmentId: true },
+        });
+        const manager = found.find(u => u.id === dto.managerId);
+        if (!owner?.departmentId || manager?.departmentId !== owner.departmentId) {
+          throw new BadRequestException(
+            'O gestor directo tem de ser do mesmo departamento do colaborador',
+          );
+        }
+      }
+      if (typeof dto.hrResponsibleId === 'number') {
+        const hr = found.find(u => u.id === dto.hrResponsibleId);
+        if (hr?.role?.name !== Role.RH) {
+          throw new BadRequestException('O RH responsável tem de ser um utilizador do RH');
+        }
       }
     }
 
