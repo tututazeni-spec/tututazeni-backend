@@ -937,6 +937,56 @@ export class OnboardingService {
     return instance;
   }
 
+  // Tarefa avulso para TODOS os colaboradores com planos activos de um template
+  // (filtro "Colaborador" = Todos). Uma só tarefa de template, uma instância por
+  // plano; sem responsável (atribui-se depois, por linha).
+  async createTemplatePlansTask(templateId: number, dto: CreatePlanTaskDto) {
+    const startDate = new Date(dto.startDate);
+    const dueDate = new Date(dto.dueDate);
+    if (dueDate < startDate) {
+      throw new BadRequestException('A data de fim não pode ser anterior à data de início');
+    }
+    await this.findOneTemplate(templateId);
+    const plans = await this.prisma.read.onboardingPlan.findMany({
+      where: { templateId, status: { in: ['NOT_STARTED', 'IN_PROGRESS'] } },
+      select: { id: true },
+    });
+    if (plans.length === 0) {
+      throw new BadRequestException('Este plano não tem colaboradores com onboarding activo');
+    }
+    const last = await this.prisma.read.onboardingTemplateTask.aggregate({
+      where: { templateId },
+      _max: { seq: true },
+    });
+    return this.prisma.$transaction(async tx => {
+      const templateTask = await tx.onboardingTemplateTask.create({
+        data: {
+          templateId,
+          title: dto.title,
+          description: dto.description,
+          category: dto.category,
+          type: 'TASK',
+          phase: dto.phase,
+          responsible: 'HR',
+          isMandatory: dto.isMandatory ?? true,
+          xpReward: 10,
+          seq: (last._max.seq ?? 0) + 1,
+          isAdHoc: true,
+        },
+      });
+      await tx.onboardingTaskInstance.createMany({
+        data: plans.map(p => ({
+          planId: p.id,
+          templateTaskId: templateTask.id,
+          status: 'PENDING' as const,
+          startDate,
+          dueDate,
+        })),
+      });
+      return { created: plans.length };
+    });
+  }
+
   async assignTask(taskId: number, assigneeId: number | null) {
     const instance = await this.prisma.read.onboardingTaskInstance.findUnique({
       where: { id: taskId },
