@@ -720,6 +720,8 @@ model User {
   positionId   Int?
   unitId       Int?
   managerId    Int?
+  mentorId     Int?
+  hrResponsibleId Int?
 
   // ─── Relações Organizacionais ─────────────────────────────────
   role                      Role?                       @relation(fields: [roleId], references: [id], onDelete: SetNull)
@@ -728,6 +730,10 @@ model User {
   unit                      Unit?                       @relation(fields: [unitId], references: [id])
   manager                   User?                       @relation("Hierarchy", fields: [managerId], references: [id])
   subordinates              User[]                      @relation("Hierarchy")
+  mentor                    User?                       @relation("UserMentor", fields: [mentorId], references: [id])
+  mentees                   User[]                      @relation("UserMentor")
+  hrResponsible             User?                       @relation("UserHrResponsible", fields: [hrResponsibleId], references: [id])
+  hrResponsibleFor          User[]                      @relation("UserHrResponsible")
   qualifications            UserQualification[]
   languages                 UserLanguage[]
   externalCertifications    UserExternalCertification[]
@@ -1129,6 +1135,8 @@ model User {
   @@index([accountStatus])
   @@index([departmentId])
   @@index([managerId])
+  @@index([mentorId])
+  @@index([hrResponsibleId])
   @@index([active])
   @@index([roleId])
   @@index([unitId])

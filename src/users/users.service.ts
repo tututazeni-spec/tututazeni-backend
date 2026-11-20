@@ -72,6 +72,8 @@ const USER_SELECT_SAFE = {
   positionId: true,
   unitId: true,
   managerId: true,
+  mentorId: true,
+  hrResponsibleId: true,
 };
 
 const USER_INCLUDE_BASIC = {
@@ -420,6 +422,8 @@ export class UsersService {
             positionId: dto.positionId,
             unitId: dto.unitId,
             managerId: dto.managerId,
+            mentorId: dto.mentorId,
+            hrResponsibleId: dto.hrResponsibleId,
             roleId: dto.roleId,
             hireDate: dto.hireDate ? new Date(dto.hireDate) : null,
             hrStatus: dto.hrStatus ?? 'ACTIVE',

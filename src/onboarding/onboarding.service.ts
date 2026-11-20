@@ -347,9 +347,20 @@ export class OnboardingService {
     // OnboardingTemplate totalmente tipado (incl. `tasks`).
     const template = await this.findOneTemplate(dto.templateId);
 
+    // Gestor directo, mentor e RH responsável definidos no registo do
+    // utilizador servem de predefinição quando o pedido não os indica.
+    const defaults = await this.prisma.read.user.findUnique({
+      where: { id: dto.userId },
+      select: { managerId: true, mentorId: true, hrResponsibleId: true },
+    });
+    const managerId = dto.managerId ?? defaults?.managerId ?? undefined;
+    const buddyId = dto.buddyId ?? defaults?.mentorId ?? undefined;
+    const hrResponsibleId =
+      dto.hrResponsibleId ?? defaults?.hrResponsibleId ?? undefined;
+
     // O colaborador nunca pode ser o seu próprio gestor directo, buddy ou RH
     // responsável (mesma regra de updateTeam).
-    if ([dto.managerId, dto.buddyId, dto.hrResponsibleId].includes(dto.userId)) {
+    if ([managerId, buddyId, hrResponsibleId].includes(dto.userId)) {
       throw new BadRequestException('O colaborador não pode ser da sua própria equipa de apoio');
     }
 
@@ -367,9 +378,9 @@ export class OnboardingService {
         templateId: dto.templateId,
         startDate,
         expectedEndDate: new Date(startDate.getTime() + template.durationDays * 24 * 3600 * 1000),
-        buddyId: dto.buddyId,
-        managerId: dto.managerId ?? null,
-        hrResponsibleId: dto.hrResponsibleId,
+        buddyId,
+        managerId: managerId ?? null,
+        hrResponsibleId,
         status: 'NOT_STARTED',
         xpEarned: 0,
       },
@@ -404,7 +415,7 @@ export class OnboardingService {
         planId: plan.id,
         type: type as Prisma.OnboardingCheckinCreateManyInput['type'],
         dueDate: new Date(startDate.getTime() + offset * 24 * 3600 * 1000),
-        responsibleId: dto.managerId ?? null,
+        responsibleId: managerId ?? null,
       })),
     });
 
@@ -429,11 +440,11 @@ export class OnboardingService {
       });
 
     // Notificar buddy
-    if (dto.buddyId) {
+    if (buddyId) {
       await this.prisma.notificationLog
         .create({
           data: {
-            userId: dto.buddyId,
+            userId: buddyId,
             type: 'ONBOARDING_BUDDY_ASSIGNED',
             message: `Você foi atribuído como buddy de um novo colaborador`,
             metadata: JSON.stringify({}),
@@ -441,7 +452,7 @@ export class OnboardingService {
         })
         .catch(e => {
           this.logger.warn({
-            userId: dto.buddyId,
+            userId: buddyId,
             action: 'ONBOARDING_BUDDY_ASSIGNED',
             planId: plan.id,
             err: { message: e instanceof Error ? e.message : String(e) },
