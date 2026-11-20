@@ -199,6 +199,12 @@ export class CreateOnboardingTemplateDto {
   @IsWebLink()
   welcomeVideoUrl?: string;
 
+  @ApiPropertyOptional({ description: 'Mensagem de boas-vindas mostrada ao colaborador' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  welcomeMessage?: string;
+
   @ApiPropertyOptional({ default: true })
   @IsOptional()
   @IsBoolean()
