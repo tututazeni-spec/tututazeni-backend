@@ -5213,6 +5213,8 @@ model OnboardingTaskInstance {
   planId          Int
   templateTaskId  Int
   status          TaskStatus             @default(PENDING)
+  // Início do período da tarefa (só em tarefas avulso; as de template usam apenas dueDate).
+  startDate       DateTime?
   dueDate         DateTime?
   completedAt     DateTime?
   evidenceComment String?
