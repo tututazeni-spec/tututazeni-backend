@@ -94,7 +94,7 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:report": "playwright show-report test/e2e/reports",
     "db:verify-replica": "node scripts/verify-replica.cjs",
-    "test:regression": "cross-env NODE_ENV=test jest --config test/jest-smoke.json --runInBand --forceExit"
+    "test:regression": "cross-env NODE_ENV=test NODE_OPTIONS=--max-old-space-size=4096 jest --config test/jest-smoke.json --runInBand --forceExit"
   },
   "lint-staged": {
     "src/**/*.ts": [
