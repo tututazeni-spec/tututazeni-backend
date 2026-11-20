@@ -346,6 +346,16 @@ export class OnboardingController {
     return this.svc.createPlanTask(id, dto);
   }
 
+  @Get(':id/task-assignee-candidates')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary: 'Responsáveis possíveis (mesmo departamento ou RH) para tarefas do plano',
+  })
+  @ApiQuery({ name: 'search', required: false })
+  taskAssigneeCandidates(@Param('id', ParseIntPipe) id: number, @Query('search') search?: string) {
+    return this.svc.taskAssigneeCandidates(id, search);
+  }
+
   @Patch('tasks/:taskId/assignee')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Atribuir/alterar a pessoa responsável por uma tarefa do plano' })

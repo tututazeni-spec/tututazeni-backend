@@ -320,17 +320,20 @@ export class CreatePlanTaskDto {
   @IsEnum(TaskPhase)
   phase!: TaskPhase;
 
-  @ApiPropertyOptional({ description: 'Prazo (data ISO)' })
-  @IsOptional()
+  @ApiProperty({ description: 'Data de início (ISO)' })
   @IsDateString()
-  dueDate?: string;
+  startDate!: string;
+
+  @ApiProperty({ description: 'Data de fim (ISO)' })
+  @IsDateString()
+  dueDate!: string;
 
   @ApiPropertyOptional({ default: true })
   @IsOptional()
   @IsBoolean()
   isMandatory?: boolean;
 
-  @ApiPropertyOptional({ description: 'Colaborador, gestor, buddy ou RH do plano' })
+  @ApiPropertyOptional({ description: 'Mesmo departamento do colaborador ou RH' })
   @IsOptional()
   @IsInt()
   assigneeId?: number;

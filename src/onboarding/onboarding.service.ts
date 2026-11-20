@@ -880,22 +880,30 @@ export class OnboardingService {
   async createPlanTask(planId: number, dto: CreatePlanTaskDto) {
     const plan = await this.prisma.read.onboardingPlan.findUnique({ where: { id: planId } });
     if (!plan) throw new NotFoundException('Plano de onboarding não encontrado');
-    if (dto.assigneeId != null) this.assertPlanMember(plan, dto.assigneeId);
+
+    const startDate = new Date(dto.startDate);
+    const dueDate = new Date(dto.dueDate);
+    if (dueDate < startDate) {
+      throw new BadRequestException('A data de fim não pode ser anterior à data de início');
+    }
+    const assignee =
+      dto.assigneeId != null ? await this.assertEligibleAssignee(plan, dto.assigneeId) : null;
 
     const last = await this.prisma.read.onboardingTemplateTask.aggregate({
       where: { templateId: plan.templateId },
       _max: { seq: true },
     });
-    const responsible: ResponsibleRole =
-      dto.assigneeId == null
-        ? 'HR'
-        : dto.assigneeId === plan.userId
-          ? 'SELF'
-          : dto.assigneeId === plan.managerId
-            ? 'MANAGER'
-            : dto.assigneeId === plan.buddyId
-              ? 'BUDDY'
-              : 'HR';
+    const responsible: ResponsibleRole = !assignee
+      ? 'HR'
+      : assignee.id === plan.userId
+        ? 'SELF'
+        : assignee.id === plan.managerId
+          ? 'MANAGER'
+          : assignee.id === plan.buddyId
+            ? 'BUDDY'
+            : assignee.role?.name === Role.RH
+              ? 'HR'
+              : 'BUDDY';
 
     const instance = await this.prisma.$transaction(async tx => {
       const templateTask = await tx.onboardingTemplateTask.create({
@@ -918,7 +926,8 @@ export class OnboardingService {
           planId,
           templateTaskId: templateTask.id,
           status: 'PENDING',
-          dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+          startDate,
+          dueDate,
           assigneeId: dto.assigneeId ?? null,
         },
         include: { templateTask: true },
@@ -934,7 +943,7 @@ export class OnboardingService {
       include: { plan: true, templateTask: true },
     });
     if (!instance) throw new NotFoundException('Tarefa não encontrada');
-    if (assigneeId != null) this.assertPlanMember(instance.plan, assigneeId);
+    if (assigneeId != null) await this.assertEligibleAssignee(instance.plan, assigneeId);
     const updated = await this.prisma.onboardingTaskInstance.update({
       where: { id: taskId },
       data: { assigneeId },
@@ -946,22 +955,66 @@ export class OnboardingService {
     return updated;
   }
 
-  // Só quem faz parte do plano pode receber tarefas: colaborador, gestor, buddy, RH.
-  private assertPlanMember(
-    plan: {
-      userId: number;
-      managerId: number | null;
-      buddyId: number | null;
-      hrResponsibleId: number | null;
-    },
-    userId: number,
-  ) {
-    const members = [plan.userId, plan.managerId, plan.buddyId, plan.hrResponsibleId];
-    if (!members.includes(userId)) {
+  // Responsáveis possíveis de uma tarefa do plano: utilizadores activos do mesmo
+  // departamento do colaborador ou com perfil RH.
+  async taskAssigneeCandidates(planId: number, search?: string) {
+    const plan = await this.prisma.read.onboardingPlan.findUnique({
+      where: { id: planId },
+      select: { user: { select: { departmentId: true } } },
+    });
+    if (!plan) throw new NotFoundException('Plano de onboarding não encontrado');
+
+    const departmentId = plan.user?.departmentId;
+    const eligible: Prisma.UserWhereInput[] = [{ role: { name: Role.RH } }];
+    if (departmentId) eligible.push({ departmentId });
+    const where: Prisma.UserWhereInput = { active: true, AND: [{ OR: eligible }] };
+    const term = search?.trim();
+    if (term) {
+      (where.AND as Prisma.UserWhereInput[]).push({
+        OR: [
+          { fullName: { contains: term, mode: 'insensitive' } },
+          { email: { contains: term, mode: 'insensitive' } },
+        ],
+      });
+    }
+    return this.prisma.read.user.findMany({
+      where,
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        avatarUrl: true,
+        position: { select: { name: true } },
+        department: { select: { name: true } },
+        role: { select: { name: true } },
+      },
+      orderBy: { fullName: 'asc' },
+      take: 50,
+    });
+  }
+
+  // O responsável tem de ser do mesmo departamento do colaborador ou do RH.
+  private async assertEligibleAssignee(plan: { userId: number }, userId: number) {
+    const [owner, assignee] = await Promise.all([
+      this.prisma.read.user.findUnique({
+        where: { id: plan.userId },
+        select: { departmentId: true },
+      }),
+      this.prisma.read.user.findUnique({
+        where: { id: userId },
+        select: { id: true, active: true, departmentId: true, role: { select: { name: true } } },
+      }),
+    ]);
+    if (!assignee || !assignee.active) {
+      throw new BadRequestException('Utilizador indicado não encontrado');
+    }
+    const sameDepartment = !!owner?.departmentId && assignee.departmentId === owner.departmentId;
+    if (!sameDepartment && assignee.role?.name !== Role.RH) {
       throw new BadRequestException(
-        'A tarefa só pode ser atribuída ao colaborador, ao gestor, ao buddy ou ao RH responsável do plano',
+        'O responsável tem de ser do mesmo departamento do colaborador ou do RH',
       );
     }
+    return assignee;
   }
 
   private async notifyTaskAssignee(assigneeId: number | null | undefined, title: string) {

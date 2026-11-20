@@ -9,7 +9,17 @@ const tx = {
   onboardingTemplateTask: { create: jest.fn().mockResolvedValue({ id: 50 }) },
   onboardingTaskInstance: { create: jest.fn().mockResolvedValue({ id: 90 }) },
 };
+const users: Record<number, any> = {
+  1: { id: 1, active: true, departmentId: 10, role: { name: 'COLABORADOR' } },
+  3: { id: 3, active: true, departmentId: 10, role: { name: 'COLABORADOR' } },
+  4: { id: 4, active: true, departmentId: 20, role: { name: 'RH' } },
+  99: { id: 99, active: true, departmentId: 30, role: { name: 'COLABORADOR' } },
+};
 const prisma: any = {
+  user: {
+    findUnique: jest.fn(({ where }: any) => Promise.resolve(users[where.id] ?? null)),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   onboardingPlan: { findUnique: jest.fn() },
   onboardingTemplateTask: { aggregate: jest.fn().mockResolvedValue({ _max: { seq: 4 } }) },
   onboardingTaskInstance: {
@@ -32,7 +42,13 @@ describe('OnboardingService — tarefas avulsas e atribuição', () => {
     svc = mod.get(OnboardingService);
   });
 
-  const dto = { title: 'Visita', category: 'SOCIAL', phase: 'DAY_1' } as any;
+  const dto = {
+    title: 'Visita',
+    category: 'SOCIAL',
+    phase: 'DAY_1',
+    startDate: '2026-12-01',
+    dueDate: '2026-12-05',
+  } as any;
 
   it('cria tarefa avulsa (isAdHoc) com seq seguinte e notifica o atribuído', async () => {
     await svc.createPlanTask(7, { ...dto, assigneeId: 3 });
@@ -45,15 +61,25 @@ describe('OnboardingService — tarefas avulsas e atribuição', () => {
     expect(tx.onboardingTaskInstance.create.mock.calls[0][0].data).toMatchObject({
       planId: 7,
       assigneeId: 3,
+      startDate: new Date('2026-12-01'),
+      dueDate: new Date('2026-12-05'),
     });
     expect(prisma.notificationLog.create).toHaveBeenCalledTimes(1);
   });
 
-  it('recusa atribuir a quem não pertence ao plano', async () => {
+  it('recusa responsável de outro departamento que não é RH', async () => {
     await expect(svc.createPlanTask(7, { ...dto, assigneeId: 99 })).rejects.toThrow(
       BadRequestException,
     );
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('aceita RH de outro departamento e recusa data de fim anterior ao início', async () => {
+    await svc.createPlanTask(7, { ...dto, assigneeId: 4 });
+    expect(tx.onboardingTemplateTask.create.mock.calls[0][0].data.responsible).toBe('HR');
+    await expect(svc.createPlanTask(7, { ...dto, dueDate: '2026-11-01' })).rejects.toThrow(
+      BadRequestException,
+    );
   });
 
   it('404 se o plano não existe', async () => {
@@ -64,12 +90,12 @@ describe('OnboardingService — tarefas avulsas e atribuição', () => {
   it('assignTask valida membro, grava e notifica só se mudou', async () => {
     prisma.onboardingTaskInstance.findUnique.mockResolvedValue({
       id: 90,
-      assigneeId: 2,
+      assigneeId: 3,
       plan,
       templateTask: { title: 'T' },
     });
     await expect(svc.assignTask(90, 99)).rejects.toThrow(BadRequestException);
-    await svc.assignTask(90, 2);
+    await svc.assignTask(90, 3);
     expect(prisma.notificationLog.create).not.toHaveBeenCalled();
     await svc.assignTask(90, 4);
     expect(prisma.notificationLog.create).toHaveBeenCalledTimes(1);
