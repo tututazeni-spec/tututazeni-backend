@@ -1439,12 +1439,21 @@ export class OnboardingService {
   }
 
   async findAllCheckins(filters: OnboardingCheckinFilterDto) {
-    const { page = 1, limit = 20, status, type, planId, overdue } = filters;
+    const {
+      page = 1,
+      limit = 20,
+      status,
+      type,
+      planId,
+      departmentId,
+      overdue,
+    } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const now = new Date();
 
     const where: Prisma.OnboardingCheckinWhereInput = {};
     if (planId) where.planId = planId;
+    if (departmentId) where.plan = { user: { departmentId } };
     if (type) where.type = type;
     if (overdue) {
       where.status = 'PENDING';

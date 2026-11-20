@@ -672,6 +672,12 @@ export class OnboardingCheckinFilterDto extends BaseFilterDto {
   @Type(() => Number)
   planId?: number;
 
+  @ApiPropertyOptional({ description: 'Departamento do colaborador' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
   @ApiPropertyOptional({ description: 'Só check-ins em atraso (prazo passado, ainda pendentes)' })
   @IsOptional()
   @Type(() => Boolean)
