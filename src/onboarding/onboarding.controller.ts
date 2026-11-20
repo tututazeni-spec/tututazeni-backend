@@ -281,7 +281,7 @@ export class OnboardingController {
   }
 
   @Get(':id/team-candidates')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Utilizadores elegíveis para um papel da equipa de apoio do plano' })
   @ApiQuery({ name: 'role', enum: ['manager', 'buddy', 'hr'] })
   @ApiQuery({ name: 'search', required: false })
@@ -297,7 +297,7 @@ export class OnboardingController {
   }
 
   @Patch(':id/team')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Atribuir/alterar gestor, buddy e RH responsável do plano' })
   updateTeam(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateOnboardingTeamDto) {
     return this.svc.updateTeam(id, dto);
