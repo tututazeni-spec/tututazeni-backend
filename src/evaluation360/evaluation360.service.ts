@@ -871,13 +871,15 @@ export class Evaluation360Service {
 
   async deleteQuestionnaire(id: string, actorId: string) {
     const questionnaire = await this.findQuestionnaireOrFail(id);
-    if (questionnaire.status !== 'DRAFT')
+    if (questionnaire.status === 'PUBLISHED')
       throw new BadRequestException(
-        'Apenas questionários em rascunho podem ser eliminados — arquive-o se já foi usado.',
+        'Um questionário publicado tem de ser arquivado antes de ser eliminado.',
       );
     const inUse = await this.prisma.eval360Cycle.count({ where: { questionnaireId: id } });
     if (inUse > 0)
-      throw new BadRequestException('Este questionário já foi usado por um ciclo — arquive-o.');
+      throw new BadRequestException(
+        'Este questionário já foi usado por um ciclo e não pode ser eliminado.',
+      );
 
     await this.prisma.eval360Questionnaire.delete({ where: { id } });
     await this.audit.log({
@@ -1613,7 +1615,15 @@ export class Evaluation360Service {
       }),
     );
 
-    return suggestions;
+    // Quem acumula papéis (ex.: par e subordinado, ou gestor e par) avalia
+    // apenas uma vez — fica o primeiro papel sugerido (SELF > gestor > par >
+    // subordinado).
+    const seen = new Set<string>();
+    return suggestions.filter(s => {
+      if (seen.has(s.userId)) return false;
+      seen.add(s.userId);
+      return true;
+    });
   }
 
   async assignEvaluators(cycleId: string, dto: BulkAssignEvaluatorsDto, user: CurrentUserData) {
@@ -1641,6 +1651,16 @@ export class Evaluation360Service {
           results.errors.push(`Colaborador ${assign.evaluateeId} não encontrado na sua equipa`);
           continue;
         }
+      }
+      // Um avaliador só avalia cada colaborador uma vez por ciclo, mesmo com
+      // papéis diferentes (ex.: par e subordinado).
+      const duplicate = await this.prisma.evaluatorAssignment.findFirst({
+        where: { cycleId, evaluateeId: assign.evaluateeId, evaluatorId: assign.evaluatorId },
+        select: { id: true },
+      });
+      if (duplicate) {
+        results.skipped++;
+        continue;
       }
       try {
         await this.prisma.evaluatorAssignment.create({
@@ -1857,13 +1877,15 @@ export class Evaluation360Service {
       where: { cycleId },
       select: { evaluateeId: true, evaluatorId: true, role: true },
     });
-    const existingKeys = new Set(existing.map(a => `${a.evaluateeId}:${a.evaluatorId}:${a.role}`));
+    // Chave sem o papel: um avaliador só avalia cada colaborador uma vez,
+    // mesmo que acumule papéis (ex.: par e subordinado).
+    const existingKeys = new Set(existing.map(a => `${a.evaluateeId}:${a.evaluatorId}`));
 
     const toCreate: Prisma.EvaluatorAssignmentCreateManyInput[] = [];
     for (const participant of participants) {
       const suggestions = await this.buildEvaluatorSuggestions(participant.userId);
       for (const s of suggestions) {
-        const key = `${participant.userId}:${s.userId}:${s.role}`;
+        const key = `${participant.userId}:${s.userId}`;
         if (existingKeys.has(key)) continue;
         existingKeys.add(key);
         toCreate.push({
@@ -2045,14 +2067,40 @@ export class Evaluation360Service {
     }
 
     if (dto.submit) {
-      await this.prisma.evaluatorAssignment.update({
-        where: { id: assignment.id },
+      // Fecha também as atribuições duplicadas do mesmo par avaliador/avaliado
+      // (papéis acumulados, ex.: par e subordinado): é uma só avaliação.
+      await this.prisma.evaluatorAssignment.updateMany({
+        where: { cycleId, evaluatorId, evaluateeId, status: { not: 'COMPLETED' } },
         data: { status: 'COMPLETED', completedAt: new Date() },
+      });
+      // Com todas as atribuições do avaliado concluídas, o participante fica
+      // concluído (recolha terminada); a nota final continua a ser calculada
+      // em calculateCycleResults.
+      const remaining = await this.prisma.evaluatorAssignment.count({
+        where: { cycleId, evaluateeId, status: { not: 'COMPLETED' } },
       });
       await this.prisma.cycleParticipant.updateMany({
         where: { cycleId, userId: evaluateeId },
-        data: { status: 'IN_PROGRESS' },
+        data:
+          remaining === 0
+            ? { status: 'COMPLETED', completedAt: new Date() }
+            : { status: 'IN_PROGRESS' },
       });
+      // Recolha terminada → calcula já o resultado do avaliado, para aparecer
+      // em "Os Meus Resultados". Falha aqui não pode perder a submissão.
+      if (remaining === 0) {
+        try {
+          await this.results.calculateSingleParticipantResult(cycleId, evaluateeId);
+        } catch (err: unknown) {
+          this.logger.warn({
+            action: 'EVAL360_AUTO_CALCULATE_RESULT',
+            entityId: evaluateeId,
+            cycleId,
+            err: { message: err instanceof Error ? err.message : String(err) },
+            msg: 'Falha ao calcular automaticamente o resultado do participante',
+          });
+        }
+      }
       // Análise de sentimento assíncrona
       this.events.emit('response.submitted', { responseId: response.id, cycleId });
     }
