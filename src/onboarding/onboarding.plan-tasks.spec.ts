@@ -22,6 +22,7 @@ const prisma: any = {
   user: {
     findUnique: jest.fn(({ where }: any) => Promise.resolve(users[where.id] ?? null)),
     findMany: jest.fn().mockResolvedValue([]),
+    findFirst: jest.fn().mockResolvedValue(null),
   },
   onboardingPlan: { findUnique: jest.fn(), findMany: jest.fn() },
   onboardingTemplate: { findUnique: jest.fn() },
@@ -94,6 +95,17 @@ describe('OnboardingService — tarefas avulsas e atribuição', () => {
     const rows = tx.onboardingTaskInstance.createMany.mock.calls[0][0].data;
     expect(rows.map((x: any) => x.planId)).toEqual([7, 8]);
     expect(tx.onboardingTemplateTask.create.mock.calls[0][0].data.isAdHoc).toBe(true);
+  });
+
+  it('sem colaborador: responsável só do RH', async () => {
+    prisma.onboardingTemplate.findUnique.mockResolvedValue({ id: 3, tasks: [] });
+    prisma.onboardingPlan.findMany.mockResolvedValue([{ id: 7 }]);
+    await expect(svc.createTemplatePlansTask(3, { ...dto, assigneeId: 99 })).rejects.toThrow(
+      BadRequestException,
+    );
+    prisma.user.findFirst.mockResolvedValueOnce({ id: 4 });
+    await svc.createTemplatePlansTask(3, { ...dto, assigneeId: 4 });
+    expect(tx.onboardingTaskInstance.createMany.mock.calls[0][0].data[0].assigneeId).toBe(4);
   });
 
   it('sem colaborador e sem planos activos recusa', async () => {

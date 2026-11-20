@@ -947,6 +947,19 @@ export class OnboardingService {
       throw new BadRequestException('A data de fim não pode ser anterior à data de início');
     }
     await this.findOneTemplate(templateId);
+    // Para todos os colaboradores só pode haver um responsável comum: do RH
+    // (os restantes dependem do departamento de cada colaborador).
+    if (dto.assigneeId != null) {
+      const hr = await this.prisma.read.user.findFirst({
+        where: { id: dto.assigneeId, active: true, role: { name: Role.RH } },
+        select: { id: true },
+      });
+      if (!hr) {
+        throw new BadRequestException(
+          'Para todos os colaboradores, o responsável tem de ser do RH',
+        );
+      }
+    }
     const plans = await this.prisma.read.onboardingPlan.findMany({
       where: { templateId, status: { in: ['NOT_STARTED', 'IN_PROGRESS'] } },
       select: { id: true },
@@ -981,6 +994,7 @@ export class OnboardingService {
           status: 'PENDING' as const,
           startDate,
           dueDate,
+          assigneeId: dto.assigneeId ?? null,
         })),
       });
       return { created: plans.length };
@@ -1026,6 +1040,32 @@ export class OnboardingService {
           { email: { contains: term, mode: 'insensitive' } },
         ],
       });
+    }
+    return this.prisma.read.user.findMany({
+      where,
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        avatarUrl: true,
+        position: { select: { name: true } },
+        department: { select: { name: true } },
+        role: { select: { name: true } },
+      },
+      orderBy: { fullName: 'asc' },
+      take: 50,
+    });
+  }
+
+  // Responsáveis possíveis quando a tarefa é para todos os colaboradores do plano: RH.
+  async templateTaskAssigneeCandidates(search?: string) {
+    const where: Prisma.UserWhereInput = { active: true, role: { name: Role.RH } };
+    const term = search?.trim();
+    if (term) {
+      where.OR = [
+        { fullName: { contains: term, mode: 'insensitive' } },
+        { email: { contains: term, mode: 'insensitive' } },
+      ];
     }
     return this.prisma.read.user.findMany({
       where,

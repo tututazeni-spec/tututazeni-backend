@@ -358,6 +358,15 @@ export class OnboardingController {
     return this.svc.createTemplatePlansTask(templateId, dto);
   }
 
+  @Get('templates/:templateId/task-assignee-candidates')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary: 'Responsáveis (RH) para tarefa dirigida a todos os colaboradores do plano',
+  })
+  templateTaskAssigneeCandidates(@Query('search') search?: string) {
+    return this.svc.templateTaskAssigneeCandidates(search);
+  }
+
   @Get(':id/task-assignee-candidates')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({
