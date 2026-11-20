@@ -262,6 +262,25 @@ export class CreateOnboardingPlanDto {
   hrResponsibleId?: number;
 }
 
+// Atribuição da equipa de apoio a um plano já criado. `null` remove a pessoa
+// atribuída; campo ausente deixa-o como está.
+export class UpdateOnboardingTeamDto {
+  @ApiPropertyOptional({ description: 'ID do buddy (mentor) ou null para remover', nullable: true })
+  @IsOptional()
+  @IsInt()
+  buddyId?: number | null;
+
+  @ApiPropertyOptional({ description: 'ID do gestor direto ou null para remover', nullable: true })
+  @IsOptional()
+  @IsInt()
+  managerId?: number | null;
+
+  @ApiPropertyOptional({ description: 'ID do responsável RH ou null para remover', nullable: true })
+  @IsOptional()
+  @IsInt()
+  hrResponsibleId?: number | null;
+}
+
 // ─── Task instance ────────────────────────────────────────────────────────────
 
 export class CompleteTaskDto {
