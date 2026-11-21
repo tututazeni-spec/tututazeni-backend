@@ -6,6 +6,7 @@ import { AvatarRefInterceptor } from './avatar-ref.interceptor';
 import { UsersController } from './users.controller';
 import { UserQualificationsService } from './user-qualifications.service';
 import { UserQualificationsController } from './user-qualifications.controller';
+import { OnboardingModule } from '../onboarding/onboarding.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { MailModule } from '../mail/mail.module';
 import { PasswordResetService } from '../auth/password-reset.service';
@@ -20,6 +21,7 @@ import { SettingsModule } from '../settings/settings.module';
 @Module({
   imports: [
     PrismaModule,
+    OnboardingModule,
     MailModule,
     BullModule.registerQueue({ name: 'email' }),
     EmployeesModule,

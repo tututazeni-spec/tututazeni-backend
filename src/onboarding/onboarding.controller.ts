@@ -30,6 +30,8 @@ import {
   UpdateOnboardingTeamDto,
   CompleteTaskDto,
   SkipTaskDto,
+  CreatePlanTaskDto,
+  AssignTaskDto,
   ApproveTaskDto,
   UploadDocumentDto,
   ValidateDocumentDto,
@@ -281,7 +283,7 @@ export class OnboardingController {
   }
 
   @Get(':id/team-candidates')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Utilizadores elegíveis para um papel da equipa de apoio do plano' })
   @ApiQuery({ name: 'role', enum: ['manager', 'buddy', 'hr'] })
   @ApiQuery({ name: 'search', required: false })
@@ -297,7 +299,7 @@ export class OnboardingController {
   }
 
   @Patch(':id/team')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Atribuir/alterar gestor, buddy e RH responsável do plano' })
   updateTeam(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateOnboardingTeamDto) {
     return this.svc.updateTeam(id, dto);
@@ -335,6 +337,51 @@ export class OnboardingController {
   @AnyAuthenticated()
   completeTask(@CurrentUser() user: CurrentUserData, @Body() dto: CompleteTaskDto) {
     return this.svc.completeTask(dto, user.id);
+  }
+
+  @Post(':id/tasks')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Criar tarefa avulso num plano' })
+  createPlanTask(@Param('id', ParseIntPipe) id: number, @Body() dto: CreatePlanTaskDto) {
+    return this.svc.createPlanTask(id, dto);
+  }
+
+  @Post('templates/:templateId/plan-tasks')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary: 'Criar tarefa avulso para todos os colaboradores de um plano (template)',
+  })
+  createTemplatePlansTask(
+    @Param('templateId', ParseIntPipe) templateId: number,
+    @Body() dto: CreatePlanTaskDto,
+  ) {
+    return this.svc.createTemplatePlansTask(templateId, dto);
+  }
+
+  @Get('templates/:templateId/task-assignee-candidates')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary: 'Responsáveis (RH) para tarefa dirigida a todos os colaboradores do plano',
+  })
+  templateTaskAssigneeCandidates(@Query('search') search?: string) {
+    return this.svc.templateTaskAssigneeCandidates(search);
+  }
+
+  @Get(':id/task-assignee-candidates')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary: 'Responsáveis possíveis (mesmo departamento ou RH) para tarefas do plano',
+  })
+  @ApiQuery({ name: 'search', required: false })
+  taskAssigneeCandidates(@Param('id', ParseIntPipe) id: number, @Query('search') search?: string) {
+    return this.svc.taskAssigneeCandidates(id, search);
+  }
+
+  @Patch('tasks/:taskId/assignee')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Atribuir/alterar a pessoa responsável por uma tarefa do plano' })
+  assignTask(@Param('taskId', ParseIntPipe) taskId: number, @Body() dto: AssignTaskDto) {
+    return this.svc.assignTask(taskId, dto.assigneeId ?? null);
   }
 
   @Post('tasks/skip')

@@ -15,6 +15,7 @@ import { WebhookEventType } from '../api-integration/api-integration.dto';
 import { Prisma } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
+import { OnboardingService } from '../onboarding/onboarding.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { BillingLimitsService } from '../billing/billing-limits.service';
@@ -72,6 +73,8 @@ const USER_SELECT_SAFE = {
   positionId: true,
   unitId: true,
   managerId: true,
+  mentorId: true,
+  hrResponsibleId: true,
 };
 
 const USER_INCLUDE_BASIC = {
@@ -102,6 +105,8 @@ export class UsersService {
     @Optional() private readonly planLimits?: BillingLimitsService,
     // Webhooks: publica employee.created. Optional pelo mesmo motivo.
     @Optional() private readonly events?: PlatformEventsService,
+    // Atribui automaticamente o plano de integração do cargo ao novo utilizador.
+    @Optional() private readonly onboarding?: OnboardingService,
   ) {}
 
   // ─── Sanitizar (remover password) ────────────────────────────────────────
@@ -420,6 +425,8 @@ export class UsersService {
             positionId: dto.positionId,
             unitId: dto.unitId,
             managerId: dto.managerId,
+            mentorId: dto.mentorId,
+            hrResponsibleId: dto.hrResponsibleId,
             roleId: dto.roleId,
             hireDate: dto.hireDate ? new Date(dto.hireDate) : null,
             hrStatus: dto.hrStatus ?? 'ACTIVE',
@@ -530,6 +537,19 @@ export class UsersService {
           action: 'USER_CREATED',
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao registar notificação de criação de conta',
+        });
+      });
+
+    // Plano de integração do cargo (se o cargo tiver um plano activo).
+    // Falha aqui nunca impede a criação da conta.
+    await this.onboarding
+      ?.autoAssignForNewUser(user.id, dto.positionId, dto.departmentId)
+      .catch((e: unknown) => {
+        this.logger.warn({
+          userId: user.id,
+          action: 'ONBOARDING_AUTO_ASSIGN',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao atribuir automaticamente o plano de integração',
         });
       });
 

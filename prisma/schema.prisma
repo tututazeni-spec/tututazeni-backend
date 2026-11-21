@@ -720,6 +720,8 @@ model User {
   positionId   Int?
   unitId       Int?
   managerId    Int?
+  mentorId     Int?
+  hrResponsibleId Int?
 
   // ─── Relações Organizacionais ─────────────────────────────────
   role                      Role?                       @relation(fields: [roleId], references: [id], onDelete: SetNull)
@@ -728,6 +730,10 @@ model User {
   unit                      Unit?                       @relation(fields: [unitId], references: [id])
   manager                   User?                       @relation("Hierarchy", fields: [managerId], references: [id])
   subordinates              User[]                      @relation("Hierarchy")
+  mentor                    User?                       @relation("UserMentor", fields: [mentorId], references: [id])
+  mentees                   User[]                      @relation("UserMentor")
+  hrResponsible             User?                       @relation("UserHrResponsible", fields: [hrResponsibleId], references: [id])
+  hrResponsibleFor          User[]                      @relation("UserHrResponsible")
   qualifications            UserQualification[]
   languages                 UserLanguage[]
   externalCertifications    UserExternalCertification[]
@@ -825,6 +831,7 @@ model User {
   onboardingAsManager           OnboardingPlan[]         @relation("OnboardingManager")
   onboardingAsHR                OnboardingPlan[]         @relation("OnboardingHR")
   taskApprovals                 OnboardingTaskInstance[] @relation("TaskApprover")
+  onboardingTasksAssigned       OnboardingTaskInstance[] @relation("OnboardingTaskAssignee")
   documentsUploaded             OnboardingDocument[]     @relation("DocUploader")
   documentsValidated            OnboardingDocument[]     @relation("DocValidator")
   onboardingCheckinsResponsible OnboardingCheckin[]      @relation("OnboardingCheckinResponsible")
@@ -1128,6 +1135,8 @@ model User {
   @@index([accountStatus])
   @@index([departmentId])
   @@index([managerId])
+  @@index([mentorId])
+  @@index([hrResponsibleId])
   @@index([active])
   @@index([roleId])
   @@index([unitId])
@@ -5127,6 +5136,7 @@ model OnboardingTemplate {
   durationDays    Int                      @default(30)
   learningPathId  Int?
   welcomeVideoUrl String?
+  welcomeMessage  String?
   active          Boolean                  @default(true)
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
@@ -5160,6 +5170,10 @@ model OnboardingTemplateTask {
   requiresApproval Boolean                  @default(false)
   requiresEvidence Boolean                  @default(false)
   seq              Int
+  // Tarefa criada avulso num único plano (aba Tarefas): vive no template do
+  // plano só para manter a relação, mas não aparece na Estrutura do template
+  // nem é copiada para planos novos.
+  isAdHoc          Boolean                  @default(false)
   template         OnboardingTemplate       @relation(fields: [templateId], references: [id], onDelete: Cascade)
   course           Course?                  @relation(fields: [courseId], references: [id])
   instances        OnboardingTaskInstance[]
@@ -5208,6 +5222,8 @@ model OnboardingTaskInstance {
   planId          Int
   templateTaskId  Int
   status          TaskStatus             @default(PENDING)
+  // Início do período da tarefa (só em tarefas avulso; as de template usam apenas dueDate).
+  startDate       DateTime?
   dueDate         DateTime?
   completedAt     DateTime?
   evidenceComment String?
@@ -5220,8 +5236,12 @@ model OnboardingTaskInstance {
   plan            OnboardingPlan         @relation(fields: [planId], references: [id], onDelete: Cascade)
   templateTask    OnboardingTemplateTask @relation(fields: [templateTaskId], references: [id])
   approvedBy      User?                  @relation("TaskApprover", fields: [approvedById], references: [id])
+  // Pessoa a quem a tarefa foi atribuída (colaborador, gestor, buddy ou RH do plano).
+  assigneeId      Int?
+  assignee        User?                  @relation("OnboardingTaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
 
   @@unique([planId, templateTaskId])
+  @@index([assigneeId])
   @@index([planId])
   @@index([templateTaskId])
 }
