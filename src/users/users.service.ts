@@ -34,6 +34,7 @@ import {
 import {
   CreateUserDto,
   UpdateUserDto,
+  UpdateOrgOptionsDto,
   UpdateProfileDto,
   UserFilterDto,
   BulkActionDto,
@@ -378,6 +379,62 @@ export class UsersService {
   }
 
   /**
+   * Substitui as listas de unidades e áreas de um departamento. Unidades com id
+   * são renomeadas, sem id são criadas (ou reutilizadas pelo nome); as que
+   * saem da lista só deixam de ser oferecidas — a unidade em si não é apagada.
+   */
+  async updateOrgOptions(dto: UpdateOrgOptionsDto) {
+    const dept = await this.prisma.department.findUnique({
+      where: { id: dto.departmentId },
+      select: { id: true },
+    });
+    if (!dept) throw new NotFoundException('Departamento não encontrado');
+
+    const unitIds: number[] = [];
+    for (const u of dto.units) {
+      const name = u.name.trim();
+      if (!name) continue;
+      if (u.id) {
+        const clash = await this.prisma.unit.findFirst({
+          where: { name: { equals: name, mode: 'insensitive' }, id: { not: u.id } },
+          select: { id: true },
+        });
+        if (clash) throw new ConflictException(`Já existe uma unidade chamada "${name}"`);
+        await this.prisma.unit.update({ where: { id: u.id }, data: { name } });
+        unitIds.push(u.id);
+      } else {
+        const id = await this.resolveUnitName(name);
+        if (id) unitIds.push(id);
+      }
+    }
+    const areas = [...new Set(dto.areas.map(a => a.trim()).filter(Boolean))];
+
+    await this.prisma.$transaction([
+      this.prisma.departmentUnit.deleteMany({
+        where: { departmentId: dto.departmentId, unitId: { notIn: unitIds } },
+      }),
+      ...unitIds.map(unitId =>
+        this.prisma.departmentUnit.upsert({
+          where: { departmentId_unitId: { departmentId: dto.departmentId, unitId } },
+          update: {},
+          create: { departmentId: dto.departmentId, unitId },
+        }),
+      ),
+      this.prisma.departmentArea.deleteMany({
+        where: { departmentId: dto.departmentId, name: { notIn: areas } },
+      }),
+      ...areas.map(name =>
+        this.prisma.departmentArea.upsert({
+          where: { departmentId_name: { departmentId: dto.departmentId, name } },
+          update: {},
+          create: { departmentId: dto.departmentId, name },
+        }),
+      ),
+    ]);
+    return this.getOrgOptions(dto.departmentId);
+  }
+
+  /**
    * Listas do formulário de utilizador para um departamento: unidades e áreas já
    * usadas por quem lá trabalha, mais as definidas na ficha do próprio departamento.
    */
@@ -390,6 +447,7 @@ export class UsersService {
           functionalArea: true,
           businessArea: true,
           areas: { select: { name: true } },
+          unitOptions: { select: { unitId: true } },
         },
       }),
       this.prisma.read.user.findMany({
@@ -400,6 +458,7 @@ export class UsersService {
     ]);
     const unitIds = new Set<number>();
     if (dept?.unitId) unitIds.add(dept.unitId);
+    for (const o of dept?.unitOptions ?? []) unitIds.add(o.unitId);
     for (const r of rows) if (r.unitId) unitIds.add(r.unitId);
     const areas = new Set<string>();
     const listed = (dept?.areas ?? []).map(a => a.name);

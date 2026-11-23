@@ -642,3 +642,33 @@ export class ModuleAuditLogFilterDto extends BaseFilterDto {
   @IsDateString()
   to?: string;
 }
+
+export class OrgUnitItemDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  id?: number;
+
+  @ApiProperty()
+  @IsString()
+  @MaxLength(120)
+  name!: string;
+}
+
+export class UpdateOrgOptionsDto {
+  @ApiProperty()
+  @IsInt()
+  departmentId!: number;
+
+  @ApiProperty({ type: [OrgUnitItemDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => OrgUnitItemDto)
+  units!: OrgUnitItemDto[];
+
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(120, { each: true })
+  areas!: string[];
+}

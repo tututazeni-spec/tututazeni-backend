@@ -1389,6 +1389,7 @@ model Department {
   processOwnerFor          Department[]            @relation("DeptProcessOwner")
   users                    User[]                  @relation("DeptMembers")
   areas                    DepartmentArea[]
+  unitOptions              DepartmentUnit[]
   processInstances         ProcessInstance[]       @relation("ProcessInstanceDepartment")
   positions                Position[]
   headHistory              DepartmentHeadHistory[]
@@ -1475,6 +1476,17 @@ model DepartmentArea {
   @@unique([departmentId, name])
 }
 
+/// Unidades oferecidas na lista de um departamento (formulário de utilizador)
+model DepartmentUnit {
+  id           Int        @id @default(autoincrement())
+  departmentId Int
+  unitId       Int
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  unit         Unit       @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@unique([departmentId, unitId])
+}
+
 model Unit {
   id                   Int                          @id @default(autoincrement())
   name                 String
@@ -1489,6 +1501,7 @@ model Unit {
   email                String?
   users                User[]
   departments          Department[]
+  departmentOptions    DepartmentUnit[]
   processInstances     ProcessInstance[]            @relation("ProcessInstanceUnit")
   operationalMetrics   OperationalMetric[]
   leadershipTargetings LeadershipProgramTargeting[]
