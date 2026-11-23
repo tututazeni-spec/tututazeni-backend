@@ -661,6 +661,8 @@ model User {
   preferredName        String?
   nationality          String?
   identificationNumber String?
+  /// BILHETE_IDENTIDADE | PASSAPORTE | CARTAO_RESIDENTE | TITULO_RESIDENCIA
+  identificationType   String?
 
   // ─── Contacto (docs/modulo_users.md Ponto 2) ───────────────────
   personalEmail         String?

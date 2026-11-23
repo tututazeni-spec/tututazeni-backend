@@ -5,6 +5,7 @@ import {
   IsBoolean,
   IsInt,
   IsEnum,
+  IsIn,
   IsArray,
   ValidateNested,
   MaxLength,
@@ -127,6 +128,15 @@ export class CreateUserDto {
   @IsString()
   @MaxLength(40)
   identificationNumber?: string;
+
+  @ApiPropertyOptional({
+    enum: ['BILHETE_IDENTIDADE', 'PASSAPORTE', 'CARTAO_RESIDENTE', 'TITULO_RESIDENCIA'],
+    description: 'Tipo do documento de identificação',
+  })
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsIn(['BILHETE_IDENTIDADE', 'PASSAPORTE', 'CARTAO_RESIDENTE', 'TITULO_RESIDENCIA'])
+  identificationType?: string;
 
   @ApiPropertyOptional({ description: 'Número de Identificação Fiscal' })
   @IsOptional()

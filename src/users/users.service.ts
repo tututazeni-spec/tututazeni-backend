@@ -540,6 +540,7 @@ export class UsersService {
             preferredName: dto.preferredName,
             nationality: dto.nationality,
             identificationNumber: dto.identificationNumber,
+            identificationType: dto.identificationType,
             nif: encryptPii(dto.nif),
             personalEmail: dto.personalEmail,
             alternatePhone: dto.alternatePhone,
