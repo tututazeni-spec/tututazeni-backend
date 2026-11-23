@@ -259,6 +259,7 @@ export class PayrollInsightsService {
       select: {
         id: true,
         fullName: true,
+        avatarUrl: true,
         employeeNumber: true,
         nif: true,
         nib: true,
