@@ -6888,6 +6888,46 @@ model CountryConfig {
   @@index([countryCode, active])
 }
 
+enum DeductionTypeStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum DeductionCalcMethod {
+  PERCENT
+  FIXED
+}
+
+/// Dedução/imposto adicional definido por ADMIN/RH. Nasce em DRAFT e só aparece
+/// na tabela "Por tipo de dedução" depois de publicado.
+model DeductionType {
+  id            Int                   @id @default(autoincrement())
+  name          String
+  description   String?
+  calcMethod    DeductionCalcMethod   @default(PERCENT)
+  /// PERCENT: fracção (0.03 = 3%); FIXED: montante em AOA por colaborador.
+  value         Float
+  mandatory     Boolean               @default(false)
+  status        DeductionTypeStatus   @default(DRAFT)
+  createdById   Int?
+  publishedById Int?
+  publishedAt   DateTime?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@index([status])
+}
+
+/// Ajustes de apresentação dos tipos de dedução de base (INSS, IRT, seguro…),
+/// que não têm linha própria: "Obrigatório" editado e/ou removido da tabela.
+/// Não altera o cálculo dos recibos.
+model DeductionTypeSetting {
+  code      String   @id
+  mandatory Boolean?
+  hidden    Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}
+
 model IrtBracket {
   id        Int           @id @default(autoincrement())
   configId  Int

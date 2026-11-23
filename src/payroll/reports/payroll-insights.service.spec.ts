@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PayrollInsightsService } from './payroll-insights.service';
 
 const slip = (over: Record<string, unknown> = {}) => ({
@@ -38,6 +38,7 @@ const slip = (over: Record<string, unknown> = {}) => ({
 
 describe('PayrollInsightsService', () => {
   let read: any;
+  let write: any;
   let svc: PayrollInsightsService;
 
   beforeEach(() => {
@@ -50,8 +51,26 @@ describe('PayrollInsightsService', () => {
         findMany: jest.fn().mockResolvedValue([]),
       },
       countryConfig: { findFirst: jest.fn().mockResolvedValue(null) },
+      deductionType: { findMany: jest.fn().mockResolvedValue([]) },
+      deductionTypeSetting: { findMany: jest.fn().mockResolvedValue([]) },
     };
-    svc = new PayrollInsightsService({ read } as any);
+    write = {
+      deductionTypeSetting: {
+        upsert: jest.fn().mockResolvedValue({}),
+        deleteMany: jest.fn().mockResolvedValue({ count: 2 }),
+      },
+      deductionType: {
+        create: jest
+          .fn()
+          .mockImplementation(({ data }: any) => Promise.resolve({ id: 1, ...data })),
+        findUnique: jest.fn(),
+        update: jest
+          .fn()
+          .mockImplementation(({ data }: any) => Promise.resolve({ id: 1, ...data })),
+        delete: jest.fn().mockResolvedValue({}),
+      },
+    };
+    svc = new PayrollInsightsService({ read, ...write } as any);
   });
 
   describe('overview', () => {
@@ -106,6 +125,98 @@ describe('PayrollInsightsService', () => {
         '10% (0 – 100 000 AOA)',
         '15% (100 000 – 200 000 AOA)',
       ]);
+    });
+  });
+
+  describe('deduções adicionais', () => {
+    it('só as publicadas entram em "Por tipo de dedução"', async () => {
+      read.deductionType.findMany.mockResolvedValue([
+        { id: 7, name: 'Seguro de vida', mandatory: false },
+      ]);
+      const d = await svc.deductions('2026-09');
+      expect(read.deductionType.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { status: 'PUBLISHED' } }),
+      );
+      expect(d.types.find(t => t.code === 'CUSTOM_7')).toMatchObject({
+        name: 'Seguro de vida',
+        custom: true,
+        total: 0,
+      });
+    });
+
+    it('nasce em rascunho', async () => {
+      const r = await svc.createDeductionType(
+        { name: ' Seguro ', calcMethod: 'PERCENT', value: 0.02 },
+        5,
+      );
+      expect(r).toMatchObject({ name: 'Seguro', status: 'DRAFT', createdById: 5 });
+    });
+
+    it('rejeita percentagem acima de 100%', async () => {
+      await expect(
+        svc.createDeductionType({ name: 'X', calcMethod: 'PERCENT', value: 3 }, 1),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('publica um rascunho e recusa publicar duas vezes', async () => {
+      write.deductionType.findUnique.mockResolvedValueOnce({ id: 1, status: 'DRAFT' });
+      const r = await svc.publishDeductionType(1, 9);
+      expect(r).toMatchObject({ status: 'PUBLISHED', publishedById: 9 });
+      write.deductionType.findUnique.mockResolvedValueOnce({ id: 1, status: 'PUBLISHED' });
+      await expect(svc.publishDeductionType(1, 9)).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('não edita nem elimina deduções já publicadas', async () => {
+      write.deductionType.findUnique.mockResolvedValue({ id: 1, status: 'PUBLISHED', value: 1 });
+      await expect(svc.updateDeductionType(1, { name: 'Y' })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      await expect(svc.deleteDeductionType(1)).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  describe('editar / remover da tabela', () => {
+    it('tipo de base removido some da tabela e "Obrigatório" editado prevalece', async () => {
+      read.deductionTypeSetting.findMany.mockResolvedValue([
+        { code: 'IRT', hidden: true, mandatory: null },
+        { code: 'HEALTH', hidden: false, mandatory: true },
+      ]);
+      const d = await svc.deductions('2026-09');
+      expect(d.types.find(t => t.code === 'IRT')).toBeUndefined();
+      expect(d.types.find(t => t.code === 'HEALTH')!.mandatory).toBe(true);
+      expect(d.types.find(t => t.code === 'INSS_EMPLOYEE')!.mandatory).toBe(true);
+    });
+
+    it('tipo de base: guarda definição em vez de apagar', async () => {
+      await svc.setDeductionMandatory('LOAN', true);
+      expect(write.deductionTypeSetting.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { code: 'LOAN' } }),
+      );
+      await svc.removeDeductionFromTable('IRT');
+      expect(write.deductionTypeSetting.upsert).toHaveBeenLastCalledWith(
+        expect.objectContaining({ create: { code: 'IRT', hidden: true } }),
+      );
+    });
+
+    it('tipo adicional: edita e elimina a própria linha', async () => {
+      write.deductionType.findUnique.mockResolvedValue({ id: 7, status: 'PUBLISHED' });
+      await svc.setDeductionMandatory('CUSTOM_7', true);
+      expect(write.deductionType.update).toHaveBeenCalledWith({
+        where: { id: 7 },
+        data: { mandatory: true },
+      });
+      await svc.removeDeductionFromTable('CUSTOM_7');
+      expect(write.deductionType.delete).toHaveBeenCalledWith({ where: { id: 7 } });
+    });
+
+    it('código desconhecido → 404', async () => {
+      await expect(svc.setDeductionMandatory('XPTO', true)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('repor tipos de base', async () => {
+      expect(await svc.restoreDeductionDefaults()).toEqual({ restored: 2 });
     });
   });
 

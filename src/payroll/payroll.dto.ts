@@ -10,6 +10,9 @@ import {
   IsBoolean,
   IsDateString,
   IsEnum,
+  IsIn,
+  MaxLength,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
@@ -370,6 +373,42 @@ export class PayrollReportFilterDto {
   @IsString()
   status?: string;
 }
+
+export class CreateDeductionTypeDto {
+  @ApiProperty({ example: 'Seguro de vida' })
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  name: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @ApiProperty({ enum: ['PERCENT', 'FIXED'] })
+  @IsIn(['PERCENT', 'FIXED'])
+  calcMethod: 'PERCENT' | 'FIXED';
+
+  @ApiProperty({ description: 'PERCENT: fracção (0.03 = 3%). FIXED: montante em AOA.' })
+  @IsNumber()
+  @Min(0)
+  value: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  mandatory?: boolean;
+}
+
+export class SetDeductionMandatoryDto {
+  @ApiProperty()
+  @IsBoolean()
+  mandatory: boolean;
+}
+
+export class UpdateDeductionTypeDto extends PartialType(CreateDeductionTypeDto) {}
 
 export class SocialSecurityConfigDto {
   @ApiProperty({ example: 0.03 })
