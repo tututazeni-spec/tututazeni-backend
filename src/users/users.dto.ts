@@ -186,6 +186,12 @@ export class CreateUserDto {
   @IsInt()
   unitId?: number;
 
+  @ApiPropertyOptional({ description: 'Nome de uma unidade nova ou existente (usado se unitId não vier)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  unitName?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsInt()

@@ -146,6 +146,15 @@ export class UsersController {
   }
 
   // Rota estática — antes de ':id'.
+  @Get('org-options')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Unidades e áreas já usadas num departamento (listas do formulário de utilizador)' })
+  @ApiQuery({ name: 'departmentId', required: true })
+  orgOptions(@Query('departmentId', ParseIntPipe) departmentId: number) {
+    return this.svc.getOrgOptions(departmentId);
+  }
+
+  // Rota estática — antes de ':id'.
   @Get('email-check')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Sugestão e validação de email conforme o formato do tenant' })

@@ -356,6 +356,64 @@ export class UsersService {
 
   // ─── CRIAR ────────────────────────────────────────────────────────────────
 
+  /**
+   * Unidade escrita à mão no formulário: reutiliza a que já existe com esse nome
+   * (sem distinguir maiúsculas) ou cria uma nova com código gerado.
+   */
+  private async resolveUnitName(name?: string): Promise<number | undefined> {
+    const clean = name?.trim();
+    if (!clean) return undefined;
+    const found = await this.prisma.unit.findFirst({
+      where: { name: { equals: clean, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (found) return found.id;
+    let n = (await this.prisma.unit.count()) + 1;
+    let code = `UNI-${String(n).padStart(3, '0')}`;
+    while (await this.prisma.unit.findFirst({ where: { code }, select: { id: true } })) {
+      n += 1;
+      code = `UNI-${String(n).padStart(3, '0')}`;
+    }
+    return (await this.prisma.unit.create({ data: { name: clean, code } })).id;
+  }
+
+  /**
+   * Listas do formulário de utilizador para um departamento: unidades e áreas já
+   * usadas por quem lá trabalha, mais as definidas na ficha do próprio departamento.
+   */
+  async getOrgOptions(departmentId: number) {
+    const [dept, rows] = await Promise.all([
+      this.prisma.read.department.findUnique({
+        where: { id: departmentId },
+        select: { unitId: true, functionalArea: true, businessArea: true },
+      }),
+      this.prisma.read.user.findMany({
+        where: { departmentId },
+        select: { unitId: true, area: true },
+        distinct: ['unitId', 'area'],
+      }),
+    ]);
+    const unitIds = new Set<number>();
+    if (dept?.unitId) unitIds.add(dept.unitId);
+    for (const r of rows) if (r.unitId) unitIds.add(r.unitId);
+    const areas = new Set<string>();
+    for (const a of [dept?.functionalArea, dept?.businessArea, ...rows.map(r => r.area)]) {
+      if (a?.trim()) areas.add(a.trim());
+    }
+    const units = unitIds.size
+      ? await this.prisma.read.unit.findMany({
+          where: { id: { in: [...unitIds] } },
+          select: { id: true, name: true },
+          orderBy: { name: 'asc' },
+        })
+      : [];
+    return {
+      units,
+      areas: [...areas].sort((x, y) => x.localeCompare(y, 'pt')),
+      departmentUnitId: dept?.unitId ?? null,
+    };
+  }
+
   async create(
     dto: CreateUserDto,
     createdById?: number,
@@ -363,6 +421,8 @@ export class UsersService {
   ) {
     await this.assertCanAssignRole(dto.roleId, opts.actorRole);
     await this.planLimits?.assertCanAddUser();
+    dto = { ...dto, unitId: dto.unitId ?? (await this.resolveUnitName(dto.unitName)) };
+    delete dto.unitName;
     if (this.settings && !opts.skipPolicy) dto = await this.settings.applyUserPolicy(dto);
 
     // Guards de unicidade antes da escrita: força primary para não validar contra réplica atrasada.
@@ -619,6 +679,8 @@ export class UsersService {
 
   async update(id: number, dto: UpdateUserDto, updatedById?: number, actorRole?: string) {
     const existing = await this.findOne(id);
+    dto = { ...dto, unitId: dto.unitId ?? (await this.resolveUnitName(dto.unitName)) };
+    delete dto.unitName;
     if (dto.roleId !== undefined && dto.roleId !== existing.roleId) {
       await this.assertCanAssignRole(dto.roleId, actorRole, id === updatedById);
     }
