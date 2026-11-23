@@ -19,6 +19,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Request, Response } from 'express';
+import { getClientIp } from '../../common/helpers/client-ip';
 
 import { PayslipsService, type AnnualExport, type AnnualExportField } from './payslips.service';
 import { EmployeeCompensationService } from '../remuneration/employee-compensation.service';
@@ -137,7 +138,7 @@ export class PayslipsController {
     @Req() req: Request,
   ) {
     const payslip = await this.svc.findOne(id, user);
-    await this.svc.logAccess(id, user.id, 'VIEW', req.ip);
+    await this.svc.logAccess(id, user.id, 'VIEW', getClientIp(req));
     return payslip;
   }
 
@@ -155,7 +156,7 @@ export class PayslipsController {
     if (!payslip) throw new NotFoundException('Recibo não encontrado');
 
     const buffer = await this.payslipPdf.render(id);
-    await this.svc.logAccess(id, user.id, 'DOWNLOAD', req.ip);
+    await this.svc.logAccess(id, user.id, 'DOWNLOAD', getClientIp(req));
 
     res.set({
       'Content-Type': 'application/pdf',
@@ -241,7 +242,7 @@ export class PayslipsController {
     @Req() req: Request,
   ) {
     const payslip = await this.svc.findOne(id, user);
-    await this.svc.logAccess(id, user.id, 'ADMIN_VIEW', req.ip);
+    await this.svc.logAccess(id, user.id, 'ADMIN_VIEW', getClientIp(req));
     return payslip;
   }
 
@@ -266,7 +267,7 @@ export class PayslipsController {
     if (!payslip) throw new NotFoundException('Recibo não encontrado');
 
     const buffer = await this.payslipPdf.render(id);
-    await this.svc.logAccess(id, user.id, 'DOWNLOAD', req.ip);
+    await this.svc.logAccess(id, user.id, 'DOWNLOAD', getClientIp(req));
 
     res.set({
       'Content-Type': 'application/pdf',
