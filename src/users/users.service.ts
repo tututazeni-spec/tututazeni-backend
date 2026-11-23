@@ -385,7 +385,12 @@ export class UsersService {
     const [dept, rows] = await Promise.all([
       this.prisma.read.department.findUnique({
         where: { id: departmentId },
-        select: { unitId: true, functionalArea: true, businessArea: true },
+        select: {
+          unitId: true,
+          functionalArea: true,
+          businessArea: true,
+          areas: { select: { name: true } },
+        },
       }),
       this.prisma.read.user.findMany({
         where: { departmentId },
@@ -397,7 +402,8 @@ export class UsersService {
     if (dept?.unitId) unitIds.add(dept.unitId);
     for (const r of rows) if (r.unitId) unitIds.add(r.unitId);
     const areas = new Set<string>();
-    for (const a of [dept?.functionalArea, dept?.businessArea, ...rows.map(r => r.area)]) {
+    const listed = (dept?.areas ?? []).map(a => a.name);
+    for (const a of [...listed, dept?.functionalArea, dept?.businessArea, ...rows.map(r => r.area)]) {
       if (a?.trim()) areas.add(a.trim());
     }
     const units = unitIds.size

@@ -1388,6 +1388,7 @@ model Department {
   processOwnerDepartment   Department?             @relation("DeptProcessOwner", fields: [processOwnerDepartmentId], references: [id])
   processOwnerFor          Department[]            @relation("DeptProcessOwner")
   users                    User[]                  @relation("DeptMembers")
+  areas                    DepartmentArea[]
   processInstances         ProcessInstance[]       @relation("ProcessInstanceDepartment")
   positions                Position[]
   headHistory              DepartmentHeadHistory[]
@@ -1461,6 +1462,17 @@ enum UnitType {
   BRANCH
   REMOTE
   PROJECT
+}
+
+/// Lista de áreas de um departamento (escolha no formulário de utilizador)
+model DepartmentArea {
+  id           Int        @id @default(autoincrement())
+  departmentId Int
+  name         String
+  createdAt    DateTime   @default(now())
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([departmentId, name])
 }
 
 model Unit {
