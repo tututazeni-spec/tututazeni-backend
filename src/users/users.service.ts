@@ -23,6 +23,7 @@ import { SecuritySettingsService } from '../settings/security-settings.service';
 import { SessionRevocationService } from '../auth/session-revocation.service';
 import { hashPassword, verifyPassword } from '../common/security/password-hasher';
 import { decryptUserPii, encryptPii } from '../common/security/pii-crypto';
+import { assertValidAngolanIban, nibFromIban, normalizeIban } from '../common/helpers/iban';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { flattenRolePermissions } from '../common/utils/role-permissions';
 import {
@@ -462,7 +463,12 @@ export class UsersService {
     for (const r of rows) if (r.unitId) unitIds.add(r.unitId);
     const areas = new Set<string>();
     const listed = (dept?.areas ?? []).map(a => a.name);
-    for (const a of [...listed, dept?.functionalArea, dept?.businessArea, ...rows.map(r => r.area)]) {
+    for (const a of [
+      ...listed,
+      dept?.functionalArea,
+      dept?.businessArea,
+      ...rows.map(r => r.area),
+    ]) {
       if (a?.trim()) areas.add(a.trim());
     }
     const units = unitIds.size
@@ -477,6 +483,22 @@ export class UsersService {
       areas: [...areas].sort((x, y) => x.localeCompare(y, 'pt')),
       departmentUnitId: dept?.unitId ?? null,
     };
+  }
+
+  /**
+   * Dados bancários do salário: valida o IBAN angolano e cifra IBAN e NIB (o NIB
+   * deriva do IBAN, é o que o ficheiro bancário usa). `undefined` = não mexer.
+   */
+  private bankData(dto: { iban?: string; salaryBankName?: string }) {
+    const out: { iban?: string | null; nib?: string | null; salaryBankName?: string | null } = {};
+    if (dto.salaryBankName !== undefined) out.salaryBankName = dto.salaryBankName.trim() || null;
+    if (dto.iban !== undefined) {
+      const iban = normalizeIban(dto.iban);
+      if (iban) assertValidAngolanIban(iban);
+      out.iban = encryptPii(iban);
+      out.nib = encryptPii(iban ? nibFromIban(iban) : null);
+    }
+    return out;
   }
 
   async create(
@@ -542,6 +564,7 @@ export class UsersService {
             identificationNumber: dto.identificationNumber,
             identificationType: dto.identificationType,
             nif: encryptPii(dto.nif),
+            ...this.bankData(dto),
             personalEmail: dto.personalEmail,
             alternatePhone: dto.alternatePhone,
             address: dto.address,
@@ -784,6 +807,7 @@ export class UsersService {
 
     const data: Prisma.UserUpdateInput = { ...dto };
     if (dto.nif !== undefined) data.nif = encryptPii(dto.nif);
+    Object.assign(data, this.bankData(dto));
     // Nunca deixa passar a senha do DTO em claro (ex.: '' é falsy e escapava ao hash).
     delete data.password;
     if (dto.password) throw new BadRequestException(PASSWORD_BY_ADMIN_MESSAGE);

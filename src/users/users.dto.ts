@@ -145,6 +145,23 @@ export class CreateUserDto {
   @MaxLength(40)
   nif?: string;
 
+  @ApiPropertyOptional({ description: 'Banco que recebe o salário (nome)' })
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  @MaxLength(120)
+  salaryBankName?: string;
+
+  @ApiPropertyOptional({
+    description: 'IBAN angolano da conta de salário (AO + 23 dígitos); o NIB deriva dele',
+    example: 'AO06004000010123456789012',
+  })
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  @MaxLength(40)
+  iban?: string;
+
   // ─── Dados de contacto ────────────────────────────────────────────────────
 
   @ApiPropertyOptional()
@@ -196,7 +213,9 @@ export class CreateUserDto {
   @IsInt()
   unitId?: number;
 
-  @ApiPropertyOptional({ description: 'Nome de uma unidade nova ou existente (usado se unitId não vier)' })
+  @ApiPropertyOptional({
+    description: 'Nome de uma unidade nova ou existente (usado se unitId não vier)',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(120)

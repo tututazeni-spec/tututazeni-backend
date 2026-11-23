@@ -685,6 +685,8 @@ model User {
   exitDate             DateTime?
   nif                  String? // Número de Identificação Fiscal — usado no processamento de recibos de vencimento
   nib                  String? // Número de Identificação Bancária — conta para pagamento de salário
+  iban                 String? // IBAN da conta que recebe o salário (cifrado, como o NIB)
+  salaryBankName       String? // Banco que recebe o salário
   priorExperienceYears Float? // anos de experiência anterior à empresa; null = nunca preenchido
 
   // ─── Dados Profissionais (docs/modulo_users.md Ponto 2) ────────

@@ -17,6 +17,8 @@ const SENSITIVE_FIELDS = [
   'emergencyContactPhone',
   'nif',
   'nib',
+  'iban',
+  'salaryBankName',
   'hireDate',
   'exitDate',
   'employeeNumber',

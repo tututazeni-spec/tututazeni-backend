@@ -44,16 +44,19 @@ export function decryptPii(stored: string | null | undefined): string | null {
 }
 
 /** Devolve cópia com `nif`/`nib` decifrados (só toca nos campos presentes). */
-export function decryptUserPii<T extends { nif?: string | null; nib?: string | null }>(user: T): T;
-export function decryptUserPii<T extends { nif?: string | null; nib?: string | null }>(
-  user: T | null | undefined,
-): T | null | undefined;
-export function decryptUserPii<T extends { nif?: string | null; nib?: string | null }>(
-  user: T | null | undefined,
-): T | null | undefined {
+export function decryptUserPii<
+  T extends { nif?: string | null; nib?: string | null; iban?: string | null },
+>(user: T): T;
+export function decryptUserPii<
+  T extends { nif?: string | null; nib?: string | null; iban?: string | null },
+>(user: T | null | undefined): T | null | undefined;
+export function decryptUserPii<
+  T extends { nif?: string | null; nib?: string | null; iban?: string | null },
+>(user: T | null | undefined): T | null | undefined {
   if (!user) return user;
   const out = { ...user };
   if ('nif' in out) out.nif = decryptPii(out.nif);
   if ('nib' in out) out.nib = decryptPii(out.nib);
+  if ('iban' in out) out.iban = decryptPii(out.iban);
   return out;
 }
