@@ -25,6 +25,7 @@ import { PayslipsService, type AnnualExport, type AnnualExportField } from './pa
 import { EmployeeCompensationService } from '../remuneration/employee-compensation.service';
 import { PdfService } from '../../pdf/pdf.service';
 import { PayslipPdfService } from './payslip-pdf.service';
+import { PayslipSimulationService } from './payslip-simulation.service';
 import {
   CreatePayslipDto,
   UpdatePayslipDto,
@@ -50,6 +51,7 @@ export class PayslipsController {
     private readonly pdf: PdfService,
     private readonly compensation: EmployeeCompensationService,
     private readonly payslipPdf: PayslipPdfService,
+    private readonly simulation: PayslipSimulationService,
   ) {}
 
   // ── Colaborador ────────────────────────────────────────────────────────────
@@ -192,7 +194,15 @@ export class PayslipsController {
   @HttpCode(HttpStatus.OK)
   @AnyAuthenticated()
   simulate(@Body() dto: SimulatePayslipDto) {
-    return this.svc.simulate(dto);
+    return this.simulation.simulate(dto);
+  }
+
+  // Regras fiscais (IRT/INSS) usadas na simulação — mesma fonte dos processamentos.
+  @Get('tax-rules')
+  @ApiOperation({ summary: 'Regras fiscais (IRT/INSS) do ano usadas no simulador' })
+  @AnyAuthenticated()
+  taxRules(@Query('year') year?: string) {
+    return this.simulation.taxRules(year ? Number(year) : undefined);
   }
 
   // ── Admin / RH ─────────────────────────────────────────────────────────────

@@ -36,6 +36,8 @@ export interface PayrollContext {
   skipInss?: boolean;
   skipIrt?: boolean;
   skipOtherDeductions?: boolean; // seguro de saúde, quota sindical, adiantamento
+  /** Simulação: ignora a compensação gravada do colaborador e usa só os valores do contexto. */
+  ignoreCompensation?: boolean;
 }
 
 export interface PayrollLineItem {
@@ -68,7 +70,30 @@ export interface PayrollResult {
   employeeSocialSecurity: number;
   // Detalhe
   taxBracketApplied?: string;
+  /** Base sobre a qual o IRT foi calculado (tributável − INSS colaborador). */
+  irtBase?: number;
+  /** Escalão IRT aplicado (null se isento / sem tabela). */
+  taxBracket?: IrtBracketUsed | null;
 }
+
+export interface IrtBracketUsed {
+  min: number;
+  max: number | null;
+  rate: number;
+  deduction: number;
+}
+
+// Valores por omissão de Angola além das tabelas INSS/IRT. Partilhados com o
+// editor de regras fiscais: ao gravar pela primeira vez as regras de um ano,
+// estes valores são preservados (senão o processamento perderia o seguro de
+// saúde, a quota sindical e os subsídios por omissão).
+export const ANGOLA_DEFAULT_EXTRAS = {
+  defaultFoodAllowance: 25000,
+  defaultTransportAllowance: 15000,
+  healthInsuranceRate: 0.02,
+  unionFeeRate: 0.01,
+  guaranteeFundRate: 0.005,
+} as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -82,7 +107,9 @@ export class PayrollEngineService {
 
   async calculate(ctx: PayrollContext, period: string): Promise<PayrollResult> {
     const config = await this.loadCountryConfig(ctx.countryCode, ctx.taxYear);
-    const compensation = await this.loadEmployeeCompensation(ctx.userId);
+    const compensation = ctx.ignoreCompensation
+      ? null
+      : await this.loadEmployeeCompensation(ctx.userId);
 
     // Resolver base salary: compensação específica do colaborador > input
     const baseSalary = compensation?.baseSalary ?? ctx.baseSalary;
@@ -218,8 +245,8 @@ export class PayrollEngineService {
 
     // ── Base tributável IRT = bruto tributável - INSS colaborador ────
     const irtBase = Math.max(0, taxableBase - ssEmployee);
-    const { irt, bracketLabel } = ctx.skipIrt
-      ? { irt: 0, bracketLabel: 'Não calculado' }
+    const { irt, bracketLabel, bracket } = ctx.skipIrt
+      ? { irt: 0, bracketLabel: 'Não calculado', bracket: null as IrtBracketUsed | null }
       : this.calculateIRT(irtBase, config.irtBrackets ?? []);
 
     if (irt > 0) {
@@ -307,6 +334,8 @@ export class PayrollEngineService {
       employerSocialSecurity: empSs,
       totalEmployerCost,
       taxBracketApplied: bracketLabel,
+      irtBase: +irtBase.toFixed(2),
+      taxBracket: bracket,
     };
   }
 
@@ -317,8 +346,8 @@ export class PayrollEngineService {
   calculateIRT(
     base: number,
     brackets: Array<{ min: number; max?: number | null; rate: number; deduction?: number | null }>,
-  ): { irt: number; bracketLabel: string } {
-    if (!brackets.length) return { irt: 0, bracketLabel: 'Isento' };
+  ): { irt: number; bracketLabel: string; bracket: IrtBracketUsed | null } {
+    if (!brackets.length) return { irt: 0, bracketLabel: 'Isento', bracket: null };
 
     const sorted = [...brackets].sort((a, b) => a.min - b.min);
 
@@ -329,7 +358,16 @@ export class PayrollEngineService {
         const baseTax = bracket.deduction ?? 0; // pré-calculado para o escalão
         const tax = baseTax + excess * bracket.rate;
         const label = `${(bracket.rate * 100).toFixed(0)}% (${bracket.min.toLocaleString('pt-AO')} – ${max === Infinity ? '∞' : max.toLocaleString('pt-AO')} AOA)`;
-        return { irt: Math.max(0, tax), bracketLabel: label };
+        return {
+          irt: Math.max(0, tax),
+          bracketLabel: label,
+          bracket: {
+            min: bracket.min,
+            max: bracket.max ?? null,
+            rate: bracket.rate,
+            deduction: baseTax,
+          },
+        };
       }
     }
 
@@ -340,6 +378,12 @@ export class PayrollEngineService {
     return {
       irt: Math.max(0, tax),
       bracketLabel: `${(last.rate * 100).toFixed(0)}% (acima de ${last.min.toLocaleString('pt-AO')} AOA)`,
+      bracket: {
+        min: last.min,
+        max: last.max ?? null,
+        rate: last.rate,
+        deduction: last.deduction ?? 0,
+      },
     };
   }
 
@@ -384,8 +428,8 @@ export class PayrollEngineService {
       locale: 'pt-AO',
       taxYear,
       minimumWage: 70000,
-      defaultFoodAllowance: 25000,
-      defaultTransportAllowance: 15000,
+      defaultFoodAllowance: ANGOLA_DEFAULT_EXTRAS.defaultFoodAllowance,
+      defaultTransportAllowance: ANGOLA_DEFAULT_EXTRAS.defaultTransportAllowance,
 
       // Tabela IRT Angola 2026 (Lei 18/14 e actualizações)
       // ⚠️ Confirmar tabela actualizada com AGT antes de produção
@@ -402,9 +446,9 @@ export class PayrollEngineService {
       // INSS Angola: 3% colaborador, 8% empregador (Lei 7/04)
       socialSecurity: { employeeRate: 0.03, employerRate: 0.08, ceiling: null as number },
 
-      healthInsuranceRate: 0.02,
-      unionFeeRate: 0.01,
-      guaranteeFundRate: 0.005,
+      healthInsuranceRate: ANGOLA_DEFAULT_EXTRAS.healthInsuranceRate,
+      unionFeeRate: ANGOLA_DEFAULT_EXTRAS.unionFeeRate,
+      guaranteeFundRate: ANGOLA_DEFAULT_EXTRAS.guaranteeFundRate,
     };
   }
 }

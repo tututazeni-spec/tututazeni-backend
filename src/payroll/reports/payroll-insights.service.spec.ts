@@ -300,5 +300,30 @@ describe('PayrollInsightsService', () => {
         ),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
+
+    it('primeira gravação do ano preserva os valores por omissão de Angola', async () => {
+      const upsert = jest.fn().mockResolvedValue({ id: 7 });
+      const tx = {
+        countryConfig: { upsert, findUnique: jest.fn().mockResolvedValue({ id: 7 }) },
+        irtBracket: {
+          deleteMany: jest.fn().mockResolvedValue({}),
+          createMany: jest.fn().mockResolvedValue({}),
+        },
+      };
+      (svc as any).prisma.$transaction = (fn: (t: unknown) => unknown) => fn(tx);
+
+      await svc.upsertTaxConfig(dto([{ min: 0, max: null, rate: 0 }]));
+
+      const arg = upsert.mock.calls[0][0];
+      expect(arg.create).toMatchObject({
+        healthInsuranceRate: 0.02,
+        unionFeeRate: 0.01,
+        guaranteeFundRate: 0.005,
+        defaultFoodAllowance: 25000,
+        defaultTransportAllowance: 15000,
+      });
+      // actualização de um ano já existente não mexe nesses valores
+      expect(arg.update).not.toHaveProperty('healthInsuranceRate');
+    });
   });
 });

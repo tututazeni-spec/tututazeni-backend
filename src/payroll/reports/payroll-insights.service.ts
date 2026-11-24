@@ -12,6 +12,7 @@ import {
   buildPaginatedResponse,
 } from '../../common/helpers/pagination.helper';
 import { money } from '../taxes/money.util';
+import { ANGOLA_DEFAULT_EXTRAS } from '../taxes/payroll-engine.service';
 import {
   PayrollReportFilterDto,
   PayrollEmployeesFilterDto,
@@ -592,7 +593,14 @@ export class PayrollInsightsService {
       const cfg = await tx.countryConfig.upsert({
         where: { countryCode_taxYear: { countryCode, taxYear: dto.taxYear } },
         update: data,
-        create: { countryCode, taxYear: dto.taxYear, ...data },
+        // Primeira gravação do ano: mantém os valores por omissão de Angola
+        // (seguro de saúde, quota sindical…) que o motor já aplicava sem BD.
+        create: {
+          countryCode,
+          taxYear: dto.taxYear,
+          ...(countryCode === 'AO' ? ANGOLA_DEFAULT_EXTRAS : {}),
+          ...data,
+        },
       });
       await tx.irtBracket.deleteMany({ where: { configId: cfg.id } });
       await tx.irtBracket.createMany({

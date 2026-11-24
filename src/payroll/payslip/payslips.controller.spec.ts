@@ -5,6 +5,7 @@ import { PayslipsService } from './payslips.service';
 import { EmployeeCompensationService } from '../remuneration/employee-compensation.service';
 import { PdfService } from '../../pdf/pdf.service';
 import { PayslipPdfService } from './payslip-pdf.service';
+import { PayslipSimulationService } from './payslip-simulation.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 
@@ -45,6 +46,11 @@ const annualExportFixture = {
   },
 };
 
+const mockSimulation = {
+  simulate: jest.fn().mockResolvedValue({}),
+  taxRules: jest.fn().mockResolvedValue({}),
+};
+
 const mockSvc = {
   getMyPayslips: jest.fn().mockResolvedValue([]),
   annualSummary: jest.fn().mockResolvedValue({}),
@@ -54,7 +60,6 @@ const mockSvc = {
   logAccess: jest.fn().mockResolvedValue({}),
   acknowledge: jest.fn().mockResolvedValue({}),
   createDispute: jest.fn().mockResolvedValue({ id: 1 }),
-  simulate: jest.fn().mockResolvedValue({}),
   findAll: jest.fn().mockResolvedValue({ data: [], total: 0 }),
   hrDashboard: jest.fn().mockResolvedValue({}),
   getAccessLogs: jest.fn().mockResolvedValue([]),
@@ -105,6 +110,7 @@ describe('PayslipsController', () => {
         { provide: PdfService, useValue: mockPdf },
         { provide: EmployeeCompensationService, useValue: mockCompensation },
         { provide: PayslipPdfService, useValue: mockPayslipPdf },
+        { provide: PayslipSimulationService, useValue: mockSimulation },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -243,10 +249,17 @@ describe('PayslipsController', () => {
     expect(mockSvc.createDispute).toHaveBeenCalledWith(4, mockUser, dto);
   });
 
-  it('simulate → simulate(dto)', async () => {
+  it('simulate → PayslipSimulationService.simulate(dto)', async () => {
     const dto = {} as any;
     await controller.simulate(dto);
-    expect(mockSvc.simulate).toHaveBeenCalledWith(dto);
+    expect(mockSimulation.simulate).toHaveBeenCalledWith(dto);
+  });
+
+  it('taxRules → PayslipSimulationService.taxRules(year)', async () => {
+    await controller.taxRules('2026');
+    expect(mockSimulation.taxRules).toHaveBeenCalledWith(2026);
+    await controller.taxRules();
+    expect(mockSimulation.taxRules).toHaveBeenLastCalledWith(undefined);
   });
 
   it('findAll → findAll(filters)', async () => {

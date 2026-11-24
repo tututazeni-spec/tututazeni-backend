@@ -608,27 +608,6 @@ export class PayslipsService {
     };
   }
 
-  // ─── SIMULAÇÃO ─────────────────────────────────────────────────────────────
-  simulate(dto: SimulatePayslipDto) {
-    const totals = this.computeTotals(dto);
-    const irtInfo = this.calcIRT(dto.baseSalary);
-
-    return {
-      input: dto,
-      grossSalary: totals.grossSalary,
-      incomeTax: totals.incomeTax,
-      socialSecurity: totals.socialSecurity,
-      employerInss: totals.employerInss,
-      totalDeductions: totals.totalDeductions,
-      netSalary: totals.netSalary,
-      irtDetails: {
-        bracket: irtInfo.bracket,
-        formula: irtInfo.formula,
-        effectiveRate: totals.grossSalary > 0 ? (totals.incomeTax / totals.grossSalary) * 100 : 0,
-      },
-    };
-  }
-
   // ─── ABRIR DISPUTA ─────────────────────────────────────────────────────────
   async createDispute(payslipId: number, user: CurrentUserData, dto: CreateDisputeDto) {
     const p = await this.findOne(payslipId, user);

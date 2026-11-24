@@ -175,6 +175,8 @@ export class EmployeeCompensationService {
       baseSalary: c.baseSalary,
       foodAllowance: c.foodAllowance,
       transportAllowance: c.transportAllowance,
+      // Componentes extra do registo: nos processamentos entram como rendimento tributável.
+      otherAllowances: (c.components ?? []).reduce((sum, x) => sum + (x.value ?? 0), 0),
       bankName: c.bankName,
       ibanMasked: this.maskIban(decryptPii(c.iban)),
       effectiveFrom: c.effectiveFrom,
