@@ -383,6 +383,5 @@ function annualReportInput(data: AnnualExport) {
           : 'Sem recibos emitidos neste ano.',
       },
     ],
-    companyName: 'INNOVA',
   };
 }

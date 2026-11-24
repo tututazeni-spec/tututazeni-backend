@@ -1,6 +1,8 @@
 // src/pdf/pdf.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
+import { PrismaService } from '../prisma/prisma.service';
+import { type ExportBranding, resolveExportBranding } from '../common/helpers/export-branding';
 
 @Injectable()
 export class PdfService {
@@ -11,18 +13,37 @@ export class PdfService {
     return doc;
   }
 
-  private addHeader(doc: PDFKit.PDFDocument, companyName = 'INNOVA') {
+  constructor(@Optional() private readonly prisma?: PrismaService) {}
+
+  /** Nome + logo do tenant (Definições › Visão geral › Identidade). `companyName` explícito tem prioridade. */
+  private async branding(companyName?: string): Promise<ExportBranding> {
+    const b = await resolveExportBranding(this.prisma);
+    return companyName?.trim() ? { ...b, name: companyName.trim() } : b;
+  }
+
+  private addHeader(doc: PDFKit.PDFDocument, branding: ExportBranding) {
+    let textX = 50;
+    if (branding.logo) {
+      try {
+        doc.image(branding.logo, 50, 38, { fit: [90, 44] });
+        textX = 150;
+      } catch {
+        // logo corrompido: o cabeçalho sai só com o nome
+      }
+    }
     doc
       .fontSize(20)
       .font('Helvetica-Bold')
-      .text(companyName, 50, 45)
-      .fontSize(10)
-      .font('Helvetica')
-      .text('Plataforma de Gestão de Talentos', 50, 70)
+      .text(branding.name, textX, 45, { lineBreak: false })
       .moveTo(50, 90)
       .lineTo(545, 90)
-      .stroke()
-      .moveDown();
+      .stroke();
+    // Repõe o cursor onde o cabeçalho original o deixava (x=50, após a linha de
+    // subtítulo a 10pt em y=70), para o corpo do documento ficar na mesma posição.
+    doc.fontSize(10).font('Helvetica');
+    doc.x = 50;
+    doc.y = 70 + doc.currentLineHeight();
+    doc.moveDown();
   }
 
   private addFooter(doc: PDFKit.PDFDocument, pageNum: number) {
@@ -48,7 +69,7 @@ export class PdfService {
     withWatermark?: boolean;
   }): Promise<Buffer> {
     const doc = this.createDoc('Declaração');
-    this.addHeader(doc, data.config?.companyName);
+    this.addHeader(doc, await this.branding(data.config?.companyName));
 
     doc
       .moveDown()
@@ -95,7 +116,7 @@ export class PdfService {
     signerPosition?: string;
   }): Promise<Buffer> {
     const doc = this.createDoc('Declaração de Trabalho');
-    this.addHeader(doc, data.companyName);
+    this.addHeader(doc, await this.branding(data.companyName));
 
     doc
       .moveDown(2)
@@ -139,7 +160,7 @@ export class PdfService {
     companyName?: string;
   }): Promise<Buffer> {
     const doc = this.createDoc('Certificado');
-    this.addHeader(doc, data.companyName);
+    this.addHeader(doc, await this.branding(data.companyName));
 
     doc
       .moveDown(2)
@@ -199,7 +220,7 @@ export class PdfService {
     stampHash?: string;
   }): Promise<Buffer> {
     const doc = this.createDoc('Recibo de Vencimento');
-    this.addHeader(doc, data.companyName);
+    this.addHeader(doc, await this.branding(data.companyName));
 
     const cur = data.currencySymbol ?? '€';
     const totalAllowances = data.allowances.reduce((s, a) => s + a.amount, 0);
@@ -276,7 +297,7 @@ export class PdfService {
     companyName?: string;
   }): Promise<Buffer> {
     const doc = this.createDoc(data.title);
-    this.addHeader(doc, data.companyName);
+    this.addHeader(doc, await this.branding(data.companyName));
 
     doc
       .moveDown()

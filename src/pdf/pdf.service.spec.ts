@@ -36,3 +36,27 @@ describe('PdfService', () => {
     });
   });
 });
+
+describe('PdfService — identidade do tenant no cabeçalho', () => {
+  const PNG_1X1 =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  const mk = (logoUrl: string | null) =>
+    ({
+      tenantConfig: {
+        findFirst: jest.fn().mockResolvedValue({ id: 't1' }),
+        findUnique: jest.fn().mockResolvedValue({ tenantName: 'Acme Lda', logoUrl }),
+      },
+    }) as never;
+  const exec = (svc: PdfService) =>
+    svc.generateExecutiveReport({ title: 'R', period: '2026', metrics: [], sections: [] });
+
+  it('gera PDF com o logo do tenant (e maior do que sem logo)', async () => {
+    const { resetDefaultTenantCache } = await import('../common/helpers/tenant.helper');
+    resetDefaultTenantCache();
+    const withLogo = await exec(new PdfService(mk(PNG_1X1)));
+    resetDefaultTenantCache();
+    const without = await exec(new PdfService(mk(null)));
+    expect(withLogo.subarray(0, 4).toString()).toBe('%PDF');
+    expect(withLogo.length).toBeGreaterThan(without.length);
+  });
+});
