@@ -24,6 +24,7 @@ import {
   ExperienceDto,
   ExternalCertificationDto,
   LanguageDto,
+  PriorExperienceDto,
   QualificationDto,
 } from './user-qualifications.dto';
 
@@ -140,5 +141,27 @@ export class UserQualificationsController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.setExperience(userId, dto.priorExperienceYears, user);
+  }
+
+  @Post('prior-experiences')
+  @ApiOperation({ summary: 'Adicionar experiência profissional anterior (empresa, função, anos)' })
+  @AnyAuthenticated()
+  addPriorExperience(
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: PriorExperienceDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.addPriorExperience(userId, dto, user);
+  }
+
+  @Delete('prior-experiences/:id')
+  @ApiOperation({ summary: 'Apagar experiência profissional anterior' })
+  @AnyAuthenticated()
+  removePriorExperience(
+    @Param('userId', ParseIntPipe) userId: number,
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.removePriorExperience(userId, id, user);
   }
 }

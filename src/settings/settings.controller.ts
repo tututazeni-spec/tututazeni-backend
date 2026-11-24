@@ -23,6 +23,7 @@ import { SecuritySettingsService } from './security-settings.service';
 import { NotificationSettingsService } from './notification-settings.service';
 import { IntegrationSettingsService } from './integration-settings.service';
 import { CertificateSettingsService } from './certificate-settings.service';
+import { CareerSettingsService } from './career-settings.service';
 import { PrivacySettingsService } from './privacy-settings.service';
 import { PersonalDataService } from './personal-data.service';
 import { LicenseSettingsService } from './license-settings.service';
@@ -47,6 +48,7 @@ import {
   TwoFactorCodeDto,
   UpdateAuthSettingsDto,
   UpdateBackupSettingsDto,
+  UpdateCareerSettingsDto,
   UpdateCertificateSettingsDto,
   UpdateCertificateTemplateDto,
   UpdateDataSubjectRequestDto,
@@ -82,6 +84,7 @@ export class SettingsController {
     private readonly whatsapp: WhatsAppSettingsService,
     private readonly backups: BackupSettingsService,
     private readonly system: SystemSettingsService,
+    private readonly career: CareerSettingsService,
   ) {}
 
   // Qualquer utilizador autenticado: nome da plataforma, logo e formatos.
@@ -346,6 +349,25 @@ export class SettingsController {
   @ApiOperation({ summary: 'Estado da ligação WhatsApp e consumo face aos limites' })
   whatsAppStatus() {
     return this.integrations.whatsAppStatus();
+  }
+
+  // ─── Carreira ─────────────────────────────────────────────────────────────
+
+  @Get('career')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Limiares dos Critérios de Promoção' })
+  careerSettings() {
+    return this.career.get();
+  }
+
+  @Put('career')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Actualizar limiares dos Critérios de Promoção' })
+  updateCareerSettings(
+    @Body() dto: UpdateCareerSettingsDto,
+    @CurrentUser() admin: CurrentUserData,
+  ) {
+    return this.career.update(dto, admin.id);
   }
 
   // ─── §7 Certificados ──────────────────────────────────────────────────────

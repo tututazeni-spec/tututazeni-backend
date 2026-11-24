@@ -2,7 +2,12 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCanAccess } from '../common/authz/ownership';
 import { CurrentUserData } from '../common/types/current-user';
-import { ExternalCertificationDto, LanguageDto, QualificationDto } from './user-qualifications.dto';
+import {
+  ExternalCertificationDto,
+  LanguageDto,
+  PriorExperienceDto,
+  QualificationDto,
+} from './user-qualifications.dto';
 
 import { ADMIN_RH_ROLES } from '../auth/enums/role-groups';
 
@@ -31,13 +36,14 @@ export class UserQualificationsService {
 
   async getProfile(userId: number, user: CurrentUserData) {
     this.guardUser(userId, user);
-    const [qualifications, languages, certifications, owner] = await Promise.all([
+    const [qualifications, languages, certifications, priorExperiences, owner] = await Promise.all([
       this.prisma.read.userQualification.findMany({ where: { userId }, orderBy: { id: 'asc' } }),
       this.prisma.read.userLanguage.findMany({ where: { userId }, orderBy: { id: 'asc' } }),
       this.prisma.read.userExternalCertification.findMany({
         where: { userId },
         orderBy: { id: 'asc' },
       }),
+      this.prisma.read.userPriorExperience.findMany({ where: { userId }, orderBy: { id: 'asc' } }),
       this.prisma.read.user.findUnique({
         where: { id: userId },
         select: { priorExperienceYears: true },
@@ -47,6 +53,7 @@ export class UserQualificationsService {
       qualifications,
       languages,
       certifications,
+      priorExperiences,
       priorExperienceYears: owner?.priorExperienceYears ?? null,
     };
   }
@@ -146,5 +153,38 @@ export class UserQualificationsService {
     this.guardUser(userId, user);
     await this.prisma.user.update({ where: { id: userId }, data: { priorExperienceYears: years } });
     return { userId, priorExperienceYears: years };
+  }
+
+  // Mantém User.priorExperienceYears (lido pelo Simulador de Carreira) igual à
+  // soma das experiências detalhadas; sem nenhuma, volta a "nunca preenchido".
+  private async syncExperienceTotal(userId: number): Promise<number | null> {
+    const rows = await this.prisma.userPriorExperience.findMany({
+      where: { userId },
+      select: { years: true },
+    });
+    const total =
+      rows.length === 0 ? null : Math.round(rows.reduce((sum, r) => sum + r.years, 0) * 10) / 10;
+    await this.prisma.user.update({ where: { id: userId }, data: { priorExperienceYears: total } });
+    return total;
+  }
+
+  async addPriorExperience(userId: number, dto: PriorExperienceDto, user: CurrentUserData) {
+    this.guardUser(userId, user);
+    const created = await this.prisma.userPriorExperience.create({
+      data: { userId, company: dto.company.trim(), role: dto.role.trim(), years: dto.years },
+    });
+    const priorExperienceYears = await this.syncExperienceTotal(userId);
+    return { ...created, priorExperienceYears };
+  }
+
+  async removePriorExperience(userId: number, id: number, user: CurrentUserData) {
+    this.guardItem(
+      await this.prisma.read.userPriorExperience.findUnique({ where: { id } }),
+      userId,
+      user,
+    );
+    await this.prisma.userPriorExperience.delete({ where: { id } });
+    const priorExperienceYears = await this.syncExperienceTotal(userId);
+    return { id, deleted: true, priorExperienceYears };
   }
 }

@@ -24,6 +24,12 @@ function makeService() {
       findUnique: jest.fn().mockResolvedValue({ id: 4, userId: 7 }),
       delete: jest.fn().mockResolvedValue({}),
     },
+    userPriorExperience: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findUnique: jest.fn().mockResolvedValue({ id: 6, userId: 7 }),
+      create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: 6, ...data })),
+      delete: jest.fn().mockResolvedValue({}),
+    },
     userExternalCertification: {
       findMany: jest.fn().mockResolvedValue([]),
       findUnique: jest.fn().mockResolvedValue({ id: 5, userId: 7 }),
@@ -75,6 +81,7 @@ describe('UserQualificationsService — ownership', () => {
       qualifications: [],
       languages: [],
       certifications: [],
+      priorExperiences: [],
       priorExperienceYears: null,
     });
   });
@@ -127,5 +134,42 @@ describe('UserQualificationsService — ownership', () => {
       where: { id: 7 },
       data: { priorExperienceYears: 4 },
     });
+  });
+});
+
+describe('UserQualificationsService — experiência anterior detalhada', () => {
+  it('adiciona e recalcula o total de anos do utilizador', async () => {
+    const { service, prisma } = makeService();
+    prisma.userPriorExperience.findMany.mockResolvedValue([{ years: 2 }, { years: 1.5 }]);
+    const r = await service.addPriorExperience(
+      7,
+      { company: 'Sonangol', role: 'Analista', years: 1.5 },
+      owner,
+    );
+    expect(prisma.userPriorExperience.create).toHaveBeenCalledWith({
+      data: { userId: 7, company: 'Sonangol', role: 'Analista', years: 1.5 },
+    });
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 7 },
+      data: { priorExperienceYears: 3.5 },
+    });
+    expect(r.priorExperienceYears).toBe(3.5);
+  });
+
+  it('ao remover a última, o total volta a null', async () => {
+    const { service, prisma } = makeService();
+    await service.removePriorExperience(7, 6, owner);
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 7 },
+      data: { priorExperienceYears: null },
+    });
+  });
+
+  it('outro colaborador não escreve no perfil alheio', async () => {
+    const { service, prisma } = makeService();
+    await expect(
+      service.addPriorExperience(7, { company: 'X', role: 'Y', years: 1 }, other),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.userPriorExperience.create).not.toHaveBeenCalled();
   });
 });

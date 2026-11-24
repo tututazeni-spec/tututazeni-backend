@@ -688,6 +688,7 @@ model User {
   iban                 String? // IBAN da conta que recebe o salário (cifrado, como o NIB)
   salaryBankName       String? // Banco que recebe o salário
   priorExperienceYears Float? // anos de experiência anterior à empresa; null = nunca preenchido
+  priorExperiences     UserPriorExperience[]
 
   // ─── Dados Profissionais (docs/modulo_users.md Ponto 2) ────────
   // Empresa/área/função/categoria/localização/centro de custo/horário: sem
@@ -3633,6 +3634,20 @@ model UserQualification {
   year        Int?
   createdAt   DateTime       @default(now())
   user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Experiência profissional anterior à empresa (empresa, função e duração). A
+// soma dos anos mantém User.priorExperienceYears, que o Simulador de Carreira lê.
+model UserPriorExperience {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  company   String
+  role      String
+  years     Float
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -9199,6 +9214,7 @@ model TenantConfig {
   integrationSettingsJson  String?
   // ─── Certificados / Privacidade (LPDP) / Licença e Módulos (docs/modulo_settings.md §7-9) ───
   certificateSettingsJson  String?
+  careerSettingsJson       String? // limiares dos Critérios de Promoção
   privacySettingsJson      String?
   moduleFlagsJson          String?
   // ─── Email (docs/modulo_settings.md §12) — templates e assinatura ───

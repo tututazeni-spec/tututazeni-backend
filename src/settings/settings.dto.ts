@@ -7,6 +7,7 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
@@ -479,6 +480,38 @@ export class TestSmtpDto {
   @IsOptional()
   @IsEmail()
   to?: string;
+}
+
+// ─── Carreira (Critérios de Promoção) ────────────────────────────────────────
+
+export class UpdateCareerSettingsDto {
+  @ApiPropertyOptional({ description: 'Meses mínimos desde a admissão' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(240)
+  minMonthsInRole?: number;
+
+  @ApiPropertyOptional({ description: 'Score médio mínimo de performance (0–5)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(5)
+  minPerformanceScore?: number;
+
+  @ApiPropertyOptional({ description: '% mínima de competências cumpridas' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  minCompetenciesPct?: number;
+
+  @ApiPropertyOptional({ description: '% mínima de competências para "pronto em 12 meses"' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  readyIn12mCompetenciesPct?: number;
 }
 
 // ─── §7 Certificados ─────────────────────────────────────────────────────────

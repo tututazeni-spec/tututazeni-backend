@@ -48,6 +48,7 @@ function buildMockPrisma() {
     auditLog: crud(),
     userPoints: crud(),
     profile: crud(),
+    tenantConfig: crud(),
   };
 }
 
