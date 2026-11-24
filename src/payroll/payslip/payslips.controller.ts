@@ -19,11 +19,13 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Request, Response } from 'express';
+import { getClientIp } from '../../common/helpers/client-ip';
 
 import { PayslipsService, type AnnualExport, type AnnualExportField } from './payslips.service';
 import { EmployeeCompensationService } from '../remuneration/employee-compensation.service';
 import { PdfService } from '../../pdf/pdf.service';
 import { PayslipPdfService } from './payslip-pdf.service';
+import { PayslipSimulationService } from './payslip-simulation.service';
 import {
   CreatePayslipDto,
   UpdatePayslipDto,
@@ -49,6 +51,7 @@ export class PayslipsController {
     private readonly pdf: PdfService,
     private readonly compensation: EmployeeCompensationService,
     private readonly payslipPdf: PayslipPdfService,
+    private readonly simulation: PayslipSimulationService,
   ) {}
 
   // ── Colaborador ────────────────────────────────────────────────────────────
@@ -137,7 +140,7 @@ export class PayslipsController {
     @Req() req: Request,
   ) {
     const payslip = await this.svc.findOne(id, user);
-    await this.svc.logAccess(id, user.id, 'VIEW', req.ip);
+    await this.svc.logAccess(id, user.id, 'VIEW', getClientIp(req));
     return payslip;
   }
 
@@ -155,7 +158,7 @@ export class PayslipsController {
     if (!payslip) throw new NotFoundException('Recibo não encontrado');
 
     const buffer = await this.payslipPdf.render(id);
-    await this.svc.logAccess(id, user.id, 'DOWNLOAD', req.ip);
+    await this.svc.logAccess(id, user.id, 'DOWNLOAD', getClientIp(req));
 
     res.set({
       'Content-Type': 'application/pdf',
@@ -191,7 +194,15 @@ export class PayslipsController {
   @HttpCode(HttpStatus.OK)
   @AnyAuthenticated()
   simulate(@Body() dto: SimulatePayslipDto) {
-    return this.svc.simulate(dto);
+    return this.simulation.simulate(dto);
+  }
+
+  // Regras fiscais (IRT/INSS) usadas na simulação — mesma fonte dos processamentos.
+  @Get('tax-rules')
+  @ApiOperation({ summary: 'Regras fiscais (IRT/INSS) do ano usadas no simulador' })
+  @AnyAuthenticated()
+  taxRules(@Query('year') year?: string) {
+    return this.simulation.taxRules(year ? Number(year) : undefined);
   }
 
   // ── Admin / RH ─────────────────────────────────────────────────────────────
@@ -241,7 +252,7 @@ export class PayslipsController {
     @Req() req: Request,
   ) {
     const payslip = await this.svc.findOne(id, user);
-    await this.svc.logAccess(id, user.id, 'ADMIN_VIEW', req.ip);
+    await this.svc.logAccess(id, user.id, 'ADMIN_VIEW', getClientIp(req));
     return payslip;
   }
 
@@ -266,7 +277,7 @@ export class PayslipsController {
     if (!payslip) throw new NotFoundException('Recibo não encontrado');
 
     const buffer = await this.payslipPdf.render(id);
-    await this.svc.logAccess(id, user.id, 'DOWNLOAD', req.ip);
+    await this.svc.logAccess(id, user.id, 'DOWNLOAD', getClientIp(req));
 
     res.set({
       'Content-Type': 'application/pdf',
@@ -372,6 +383,5 @@ function annualReportInput(data: AnnualExport) {
           : 'Sem recibos emitidos neste ano.',
       },
     ],
-    companyName: 'INNOVA',
   };
 }

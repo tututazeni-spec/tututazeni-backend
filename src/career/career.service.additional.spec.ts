@@ -58,6 +58,10 @@ const baseCareerPath = {
 };
 
 const mockPrisma: any = {
+  tenantConfig: {
+    findFirst: jest.fn().mockResolvedValue({ id: 'tenant-1' }),
+    findUnique: jest.fn().mockResolvedValue(null),
+  },
   user: {
     findUnique: jest.fn(),
     findMany: jest.fn().mockResolvedValue([]),

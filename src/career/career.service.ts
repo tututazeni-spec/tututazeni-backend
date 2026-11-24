@@ -7,6 +7,8 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
+import { parseCareerSettings } from '../settings/career-settings';
 import { Prisma, ReviewStatus, CareerPlanStatus, GoalType } from '@prisma/client';
 import { CareerPlansService } from './career-plans.service';
 import {
@@ -319,7 +321,16 @@ export class CareerService {
     const recommendedCourses =
       gapCompetencyIds.length > 0
         ? await this.prisma.read.courseCompetency.findMany({
-            where: { competencyId: { in: gapCompetencyIds } },
+            where: {
+              competencyId: { in: gapCompetencyIds },
+              // Só cursos que o colaborador ainda pode fazer: publicados, não
+              // apagados e ainda não concluídos por ele.
+              course: {
+                status: 'PUBLISHED',
+                deletedAt: null,
+                id: { notIn: completedCourseIds.map(e => e.courseId) },
+              },
+            },
             include: {
               course: { select: { id: true, title: true, thumbnailUrl: true, status: true } },
             },
@@ -346,9 +357,15 @@ export class CareerService {
       performanceAvg: Math.round((performanceAvg._avg.score ?? 0) * 10) / 10,
       recommendedCourses: recommendedCourses.map(rc => rc.course),
       summary: {
-        totalRequirements: totalReqs,
-        requirementsMet: metCount,
-        requirementsGap: totalReqs - metCount,
+        // Competências do cargo + requisitos estruturados (habilitações,
+        // experiência, idiomas, certificações).
+        totalRequirements: totalReqs + requirementChecks.length,
+        requirementsMet: metCount + requirementChecks.filter(c => c.status === 'MET').length,
+        requirementsGap:
+          totalReqs +
+          requirementChecks.length -
+          metCount -
+          requirementChecks.filter(c => c.status === 'MET').length,
         optionalMet,
         optionalTotal,
         noData,
@@ -1049,35 +1066,47 @@ export class CareerService {
       ),
     ]);
 
+    const tenantId = await resolveDefaultTenantId(this.prisma);
+    const tenantCfg = await this.prisma.tenantConfig.findUnique({
+      where: { id: tenantId },
+      select: { careerSettingsJson: true },
+    });
+    const cfg = parseCareerSettings(tenantCfg?.careerSettingsJson);
+
     const metGaps = gaps.filter(g => g.status === 'MET').length;
     const totalGaps = gaps.length;
     const gapsPct = totalGaps > 0 ? Math.round((metGaps / totalGaps) * 100) : 100;
     const perfScore = avgPerformance._avg.score ?? 0;
-    const timeReqMet = monthsInRole >= 12;
-    const performanceMet = perfScore >= 3.5;
-    const competenciesMet = gapsPct >= 80;
+    const timeReqMet = monthsInRole >= cfg.minMonthsInRole;
+    const performanceMet = perfScore >= cfg.minPerformanceScore;
+    const competenciesMet = gapsPct >= cfg.minCompetenciesPct;
 
     return {
       eligible: timeReqMet && performanceMet && competenciesMet,
       criteria: {
-        time: { met: timeReqMet, value: monthsInRole, required: 12, label: 'Meses no cargo' },
+        time: {
+          met: timeReqMet,
+          value: monthsInRole,
+          required: cfg.minMonthsInRole,
+          label: 'Meses no cargo',
+        },
         performance: {
           met: performanceMet,
           value: Math.round(perfScore * 10) / 10,
-          required: 3.5,
+          required: cfg.minPerformanceScore,
           label: 'Score de performance',
         },
         competencies: {
           met: competenciesMet,
           value: gapsPct,
-          required: 80,
+          required: cfg.minCompetenciesPct,
           label: '% de competências cumpridas',
         },
       },
       recommendation:
         timeReqMet && performanceMet && competenciesMet
           ? 'READY_NOW'
-          : performanceMet && gapsPct >= 60
+          : performanceMet && gapsPct >= cfg.readyIn12mCompetenciesPct
             ? 'READY_12M'
             : 'NOT_READY',
     };
@@ -1426,9 +1455,7 @@ export class CareerService {
     const totalUsers = careerAnalytics.overview.totalUsers;
     const alerts: string[] = [];
     if (totalUsers > 0 && employeesWithoutPlan / totalUsers > 0.5) {
-      alerts.push(
-        `🚨 ${employeesWithoutPlan} de ${totalUsers} colaboradores sem plano de carreira`,
-      );
+      alerts.push(`${employeesWithoutPlan} de ${totalUsers} colaboradores sem plano de carreira`);
     }
 
     return {

@@ -66,8 +66,8 @@ export const ALERT_TYPE: Record<AlertRuleKey, string> = {
 // actionUrl canónico por regra — só as 5 regras de §4.1 (dashboard.getAlerts)
 // tinham um; §4.2/§4.3/§4.4 não expõem actionUrl.
 const ACTION_URL: Partial<Record<AlertRuleKey, string>> = {
-  SURVEYS_PENDING: '/engagement',
-  EVAL_360_PENDING: '/evaluations/pending',
+  SURVEYS_PENDING: '/dashboard-rh?tab=engagement',
+  EVAL_360_PENDING: '/evaluation360',
   PDI_ACTIONS_OVERDUE: '/development-plans',
   // A regra conta cursos obrigatórios por concluir (course.mandatory +
   // enrollments, ver evaluateRule_MANDATORY_TRAINING_PENDING) — o dado
@@ -76,7 +76,7 @@ const ACTION_URL: Partial<Record<AlertRuleKey, string>> = {
   // existiu como rota Next.js (content-library é uma única page com tabs
   // via Radix, sem sub-rotas) — clicar em "Ver" dava 404.
   MANDATORY_TRAINING_PENDING: '/courses',
-  TEAM_PERFORMANCE_AT_RISK: '/evaluations',
+  TEAM_PERFORMANCE_AT_RISK: '/evaluation',
 };
 
 const SEVERITY_ORDER: Record<MetricAlertSeverity, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };

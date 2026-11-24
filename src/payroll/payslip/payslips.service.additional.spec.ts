@@ -96,20 +96,6 @@ describe('PayslipsService — totais, overrides e criação', () => {
     service = module.get<PayslipsService>(PayslipsService);
   });
 
-  it('simulate: aplica IRT automático e calcula netSalary/effectiveRate', () => {
-    const out = service.simulate({ baseSalary: 250_000, bonuses: 10_000 } as any);
-    expect(out.grossSalary).toBe(260_000);
-    expect(out.incomeTax).toBeCloseTo(11_500);
-    expect(out.socialSecurity).toBeCloseTo(250_000 * 0.03);
-    expect(out.netSalary).toBeCloseTo(260_000 - 11_500 - 250_000 * 0.03);
-    expect(out.irtDetails.effectiveRate).toBeGreaterThan(0);
-  });
-
-  it('simulate: effectiveRate é 0 quando grossSalary é 0', () => {
-    const out = service.simulate({ baseSalary: 0 } as any);
-    expect(out.irtDetails.effectiveRate).toBe(0);
-  });
-
   it('create: irtOverride e inssOverride sobrepõem o cálculo automático', async () => {
     mockPrisma.payslip.findFirst.mockResolvedValue(null);
     mockPrisma.payslip.create.mockImplementation(({ data }: any) => Promise.resolve(data));

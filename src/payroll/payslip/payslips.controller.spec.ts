@@ -5,6 +5,7 @@ import { PayslipsService } from './payslips.service';
 import { EmployeeCompensationService } from '../remuneration/employee-compensation.service';
 import { PdfService } from '../../pdf/pdf.service';
 import { PayslipPdfService } from './payslip-pdf.service';
+import { PayslipSimulationService } from './payslip-simulation.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 
@@ -45,6 +46,11 @@ const annualExportFixture = {
   },
 };
 
+const mockSimulation = {
+  simulate: jest.fn().mockResolvedValue({}),
+  taxRules: jest.fn().mockResolvedValue({}),
+};
+
 const mockSvc = {
   getMyPayslips: jest.fn().mockResolvedValue([]),
   annualSummary: jest.fn().mockResolvedValue({}),
@@ -54,7 +60,6 @@ const mockSvc = {
   logAccess: jest.fn().mockResolvedValue({}),
   acknowledge: jest.fn().mockResolvedValue({}),
   createDispute: jest.fn().mockResolvedValue({ id: 1 }),
-  simulate: jest.fn().mockResolvedValue({}),
   findAll: jest.fn().mockResolvedValue({ data: [], total: 0 }),
   hrDashboard: jest.fn().mockResolvedValue({}),
   getAccessLogs: jest.fn().mockResolvedValue([]),
@@ -85,7 +90,7 @@ const mockCompensation = {
 };
 
 const mockUser = { id: 1, email: 'test@innova.com', role: { name: 'ADMIN' } };
-const mockReq = { ip: '127.0.0.1' } as any;
+const mockReq = { ip: '203.0.113.5', headers: {}, socket: { remoteAddress: '203.0.113.5' } } as any;
 const mockRes = () => {
   const res: any = {};
   res.set = jest.fn().mockReturnValue(res);
@@ -105,6 +110,7 @@ describe('PayslipsController', () => {
         { provide: PdfService, useValue: mockPdf },
         { provide: EmployeeCompensationService, useValue: mockCompensation },
         { provide: PayslipPdfService, useValue: mockPayslipPdf },
+        { provide: PayslipSimulationService, useValue: mockSimulation },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -185,7 +191,7 @@ describe('PayslipsController', () => {
     expect(mockSvc.findOne).toHaveBeenCalledWith(3, mockUser);
     expect(mockPayslipPdf.render).toHaveBeenCalledWith(3);
     expect(mockPdf.generatePayslip).not.toHaveBeenCalled();
-    expect(mockSvc.logAccess).toHaveBeenCalledWith(3, 1, 'DOWNLOAD', '127.0.0.1');
+    expect(mockSvc.logAccess).toHaveBeenCalledWith(3, 1, 'DOWNLOAD', '203.0.113.5');
     expect(res.set).toHaveBeenCalledWith(
       expect.objectContaining({ 'Content-Type': 'application/pdf' }),
     );
@@ -229,7 +235,7 @@ describe('PayslipsController', () => {
   it('myPayslip → findOne + logAccess', async () => {
     await controller.myPayslip(3, mockUser as any, mockReq);
     expect(mockSvc.findOne).toHaveBeenCalledWith(3, mockUser);
-    expect(mockSvc.logAccess).toHaveBeenCalledWith(3, 1, 'VIEW', '127.0.0.1');
+    expect(mockSvc.logAccess).toHaveBeenCalledWith(3, 1, 'VIEW', '203.0.113.5');
   });
 
   it('acknowledge → acknowledge(id, user)', async () => {
@@ -243,10 +249,17 @@ describe('PayslipsController', () => {
     expect(mockSvc.createDispute).toHaveBeenCalledWith(4, mockUser, dto);
   });
 
-  it('simulate → simulate(dto)', async () => {
+  it('simulate → PayslipSimulationService.simulate(dto)', async () => {
     const dto = {} as any;
     await controller.simulate(dto);
-    expect(mockSvc.simulate).toHaveBeenCalledWith(dto);
+    expect(mockSimulation.simulate).toHaveBeenCalledWith(dto);
+  });
+
+  it('taxRules → PayslipSimulationService.taxRules(year)', async () => {
+    await controller.taxRules('2026');
+    expect(mockSimulation.taxRules).toHaveBeenCalledWith(2026);
+    await controller.taxRules();
+    expect(mockSimulation.taxRules).toHaveBeenLastCalledWith(undefined);
   });
 
   it('findAll → findAll(filters)', async () => {
@@ -263,7 +276,7 @@ describe('PayslipsController', () => {
   it('findOne (admin) → findOne + logAccess(ADMIN_VIEW)', async () => {
     await controller.findOne(2, mockUser as any, mockReq);
     expect(mockSvc.findOne).toHaveBeenCalledWith(2, mockUser);
-    expect(mockSvc.logAccess).toHaveBeenCalledWith(2, 1, 'ADMIN_VIEW', '127.0.0.1');
+    expect(mockSvc.logAccess).toHaveBeenCalledWith(2, 1, 'ADMIN_VIEW', '203.0.113.5');
   });
 
   it('accessLogs → getAccessLogs(id)', async () => {

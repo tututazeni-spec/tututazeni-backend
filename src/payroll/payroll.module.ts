@@ -14,6 +14,7 @@ import { PayrollInsightsService } from './reports/payroll-insights.service';
 import { PayrollPaymentsService } from './payments/payroll-payments.service';
 import { PayrollOpsController } from './payroll-ops.controller';
 import { PayslipPdfService } from './payslip/payslip-pdf.service';
+import { PayslipSimulationService } from './payslip/payslip-simulation.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuditModule } from '../common/modules/audit.module';
 
@@ -27,6 +28,7 @@ import { AuditModule } from '../common/modules/audit.module';
     SalaryComponentService,
     EmployeeCompensationService,
     PayslipPdfService,
+    PayslipSimulationService,
     PayrollInsightsService,
     PayrollPaymentsService,
   ],

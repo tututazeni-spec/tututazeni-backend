@@ -81,3 +81,23 @@ export class ExperienceDto {
   @Max(60)
   priorExperienceYears!: number;
 }
+
+export class PriorExperienceDto {
+  @ApiProperty({ description: 'Empresa anterior' })
+  @IsString()
+  @MinLength(2)
+  @MaxLength(200)
+  company!: string;
+
+  @ApiProperty({ description: 'Função desempenhada' })
+  @IsString()
+  @MinLength(2)
+  @MaxLength(200)
+  role!: string;
+
+  @ApiProperty({ description: 'Anos de experiência nessa empresa, antes de entrar na actual' })
+  @IsNumber()
+  @Min(0)
+  @Max(60)
+  years!: number;
+}

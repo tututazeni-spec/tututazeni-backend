@@ -173,6 +173,7 @@ export class SimulatePayslipDto {
   @ApiPropertyOptional() @IsOptional() @IsNumber() overtime?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() bonuses?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() mealAllowance?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() transportAllowance?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() otherAllowances?: number;
 }
 

@@ -15,6 +15,7 @@ import { WebhookEventType } from '../api-integration/api-integration.dto';
 import { Prisma } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
+import { OnboardingService } from '../onboarding/onboarding.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { BillingLimitsService } from '../billing/billing-limits.service';
@@ -22,6 +23,7 @@ import { SecuritySettingsService } from '../settings/security-settings.service';
 import { SessionRevocationService } from '../auth/session-revocation.service';
 import { hashPassword, verifyPassword } from '../common/security/password-hasher';
 import { decryptUserPii, encryptPii } from '../common/security/pii-crypto';
+import { assertValidAngolanIban, nibFromIban, normalizeIban } from '../common/helpers/iban';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { flattenRolePermissions } from '../common/utils/role-permissions';
 import {
@@ -33,6 +35,7 @@ import {
 import {
   CreateUserDto,
   UpdateUserDto,
+  UpdateOrgOptionsDto,
   UpdateProfileDto,
   UserFilterDto,
   BulkActionDto,
@@ -72,6 +75,8 @@ const USER_SELECT_SAFE = {
   positionId: true,
   unitId: true,
   managerId: true,
+  mentorId: true,
+  hrResponsibleId: true,
 };
 
 const USER_INCLUDE_BASIC = {
@@ -102,6 +107,8 @@ export class UsersService {
     @Optional() private readonly planLimits?: BillingLimitsService,
     // Webhooks: publica employee.created. Optional pelo mesmo motivo.
     @Optional() private readonly events?: PlatformEventsService,
+    // Atribui automaticamente o plano de integração do cargo ao novo utilizador.
+    @Optional() private readonly onboarding?: OnboardingService,
   ) {}
 
   // ─── Sanitizar (remover password) ────────────────────────────────────────
@@ -351,6 +358,149 @@ export class UsersService {
 
   // ─── CRIAR ────────────────────────────────────────────────────────────────
 
+  /**
+   * Unidade escrita à mão no formulário: reutiliza a que já existe com esse nome
+   * (sem distinguir maiúsculas) ou cria uma nova com código gerado.
+   */
+  private async resolveUnitName(name?: string): Promise<number | undefined> {
+    const clean = name?.trim();
+    if (!clean) return undefined;
+    const found = await this.prisma.unit.findFirst({
+      where: { name: { equals: clean, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (found) return found.id;
+    let n = (await this.prisma.unit.count()) + 1;
+    let code = `UNI-${String(n).padStart(3, '0')}`;
+    while (await this.prisma.unit.findFirst({ where: { code }, select: { id: true } })) {
+      n += 1;
+      code = `UNI-${String(n).padStart(3, '0')}`;
+    }
+    return (await this.prisma.unit.create({ data: { name: clean, code } })).id;
+  }
+
+  /**
+   * Substitui as listas de unidades e áreas de um departamento. Unidades com id
+   * são renomeadas, sem id são criadas (ou reutilizadas pelo nome); as que
+   * saem da lista só deixam de ser oferecidas — a unidade em si não é apagada.
+   */
+  async updateOrgOptions(dto: UpdateOrgOptionsDto) {
+    const dept = await this.prisma.department.findUnique({
+      where: { id: dto.departmentId },
+      select: { id: true },
+    });
+    if (!dept) throw new NotFoundException('Departamento não encontrado');
+
+    const unitIds: number[] = [];
+    for (const u of dto.units) {
+      const name = u.name.trim();
+      if (!name) continue;
+      if (u.id) {
+        const clash = await this.prisma.unit.findFirst({
+          where: { name: { equals: name, mode: 'insensitive' }, id: { not: u.id } },
+          select: { id: true },
+        });
+        if (clash) throw new ConflictException(`Já existe uma unidade chamada "${name}"`);
+        await this.prisma.unit.update({ where: { id: u.id }, data: { name } });
+        unitIds.push(u.id);
+      } else {
+        const id = await this.resolveUnitName(name);
+        if (id) unitIds.push(id);
+      }
+    }
+    const areas = [...new Set(dto.areas.map(a => a.trim()).filter(Boolean))];
+
+    await this.prisma.$transaction([
+      this.prisma.departmentUnit.deleteMany({
+        where: { departmentId: dto.departmentId, unitId: { notIn: unitIds } },
+      }),
+      ...unitIds.map(unitId =>
+        this.prisma.departmentUnit.upsert({
+          where: { departmentId_unitId: { departmentId: dto.departmentId, unitId } },
+          update: {},
+          create: { departmentId: dto.departmentId, unitId },
+        }),
+      ),
+      this.prisma.departmentArea.deleteMany({
+        where: { departmentId: dto.departmentId, name: { notIn: areas } },
+      }),
+      ...areas.map(name =>
+        this.prisma.departmentArea.upsert({
+          where: { departmentId_name: { departmentId: dto.departmentId, name } },
+          update: {},
+          create: { departmentId: dto.departmentId, name },
+        }),
+      ),
+    ]);
+    return this.getOrgOptions(dto.departmentId);
+  }
+
+  /**
+   * Listas do formulário de utilizador para um departamento: unidades e áreas já
+   * usadas por quem lá trabalha, mais as definidas na ficha do próprio departamento.
+   */
+  async getOrgOptions(departmentId: number) {
+    const [dept, rows] = await Promise.all([
+      this.prisma.read.department.findUnique({
+        where: { id: departmentId },
+        select: {
+          unitId: true,
+          functionalArea: true,
+          businessArea: true,
+          areas: { select: { name: true } },
+          unitOptions: { select: { unitId: true } },
+        },
+      }),
+      this.prisma.read.user.findMany({
+        where: { departmentId },
+        select: { unitId: true, area: true },
+        distinct: ['unitId', 'area'],
+      }),
+    ]);
+    const unitIds = new Set<number>();
+    if (dept?.unitId) unitIds.add(dept.unitId);
+    for (const o of dept?.unitOptions ?? []) unitIds.add(o.unitId);
+    for (const r of rows) if (r.unitId) unitIds.add(r.unitId);
+    const areas = new Set<string>();
+    const listed = (dept?.areas ?? []).map(a => a.name);
+    for (const a of [
+      ...listed,
+      dept?.functionalArea,
+      dept?.businessArea,
+      ...rows.map(r => r.area),
+    ]) {
+      if (a?.trim()) areas.add(a.trim());
+    }
+    const units = unitIds.size
+      ? await this.prisma.read.unit.findMany({
+          where: { id: { in: [...unitIds] } },
+          select: { id: true, name: true },
+          orderBy: { name: 'asc' },
+        })
+      : [];
+    return {
+      units,
+      areas: [...areas].sort((x, y) => x.localeCompare(y, 'pt')),
+      departmentUnitId: dept?.unitId ?? null,
+    };
+  }
+
+  /**
+   * Dados bancários do salário: valida o IBAN angolano e cifra IBAN e NIB (o NIB
+   * deriva do IBAN, é o que o ficheiro bancário usa). `undefined` = não mexer.
+   */
+  private bankData(dto: { iban?: string; salaryBankName?: string }) {
+    const out: { iban?: string | null; nib?: string | null; salaryBankName?: string | null } = {};
+    if (dto.salaryBankName !== undefined) out.salaryBankName = dto.salaryBankName.trim() || null;
+    if (dto.iban !== undefined) {
+      const iban = normalizeIban(dto.iban);
+      if (iban) assertValidAngolanIban(iban);
+      out.iban = encryptPii(iban);
+      out.nib = encryptPii(iban ? nibFromIban(iban) : null);
+    }
+    return out;
+  }
+
   async create(
     dto: CreateUserDto,
     createdById?: number,
@@ -358,6 +508,8 @@ export class UsersService {
   ) {
     await this.assertCanAssignRole(dto.roleId, opts.actorRole);
     await this.planLimits?.assertCanAddUser();
+    dto = { ...dto, unitId: dto.unitId ?? (await this.resolveUnitName(dto.unitName)) };
+    delete dto.unitName;
     if (this.settings && !opts.skipPolicy) dto = await this.settings.applyUserPolicy(dto);
 
     // Guards de unicidade antes da escrita: força primary para não validar contra réplica atrasada.
@@ -410,7 +562,9 @@ export class UsersService {
             preferredName: dto.preferredName,
             nationality: dto.nationality,
             identificationNumber: dto.identificationNumber,
+            identificationType: dto.identificationType,
             nif: encryptPii(dto.nif),
+            ...this.bankData(dto),
             personalEmail: dto.personalEmail,
             alternatePhone: dto.alternatePhone,
             address: dto.address,
@@ -420,6 +574,8 @@ export class UsersService {
             positionId: dto.positionId,
             unitId: dto.unitId,
             managerId: dto.managerId,
+            mentorId: dto.mentorId,
+            hrResponsibleId: dto.hrResponsibleId,
             roleId: dto.roleId,
             hireDate: dto.hireDate ? new Date(dto.hireDate) : null,
             hrStatus: dto.hrStatus ?? 'ACTIVE',
@@ -533,6 +689,19 @@ export class UsersService {
         });
       });
 
+    // Plano de integração do cargo (se o cargo tiver um plano activo).
+    // Falha aqui nunca impede a criação da conta.
+    await this.onboarding
+      ?.autoAssignForNewUser(user.id, dto.positionId, dto.departmentId)
+      .catch((e: unknown) => {
+        this.logger.warn({
+          userId: user.id,
+          action: 'ONBOARDING_AUTO_ASSIGN',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao atribuir automaticamente o plano de integração',
+        });
+      });
+
     // Registar auditoria
     await this.writeAuditLog(user.id, createdById ?? user.id, 'USER_CREATED', {
       email: user.email,
@@ -599,6 +768,8 @@ export class UsersService {
 
   async update(id: number, dto: UpdateUserDto, updatedById?: number, actorRole?: string) {
     const existing = await this.findOne(id);
+    dto = { ...dto, unitId: dto.unitId ?? (await this.resolveUnitName(dto.unitName)) };
+    delete dto.unitName;
     if (dto.roleId !== undefined && dto.roleId !== existing.roleId) {
       await this.assertCanAssignRole(dto.roleId, actorRole, id === updatedById);
     }
@@ -636,6 +807,7 @@ export class UsersService {
 
     const data: Prisma.UserUpdateInput = { ...dto };
     if (dto.nif !== undefined) data.nif = encryptPii(dto.nif);
+    Object.assign(data, this.bankData(dto));
     // Nunca deixa passar a senha do DTO em claro (ex.: '' é falsy e escapava ao hash).
     delete data.password;
     if (dto.password) throw new BadRequestException(PASSWORD_BY_ADMIN_MESSAGE);

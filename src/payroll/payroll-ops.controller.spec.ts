@@ -39,9 +39,10 @@ describe('PayrollOpsController', () => {
       expect(Reflect.getMetadata(ROLES_KEY, PayrollOpsController)).toEqual([Role.ADMIN, Role.RH]);
     });
 
-    it('alterar regras INSS/IRT é exclusivo de ADMIN', () => {
+    it('alterar regras INSS/IRT é permitido a ADMIN e RH', () => {
       expect(Reflect.getMetadata(ROLES_KEY, PayrollOpsController.prototype.upsertTaxes)).toEqual([
         Role.ADMIN,
+        Role.RH,
       ]);
     });
   });

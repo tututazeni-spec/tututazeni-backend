@@ -13,7 +13,6 @@ import {
   UpdatePayslipDto,
   PayslipFilterDto,
   BulkCreatePayslipDto,
-  SimulatePayslipDto,
   CreateDisputeDto,
   DisputeFilterDto,
   ResolveDisputeDto,
@@ -79,6 +78,10 @@ type PayslipAmountField =
   | 'incomeTax'
   | 'socialSecurity'
   | 'employerInss'
+  | 'healthInsurance'
+  | 'loanDeduction'
+  | 'advanceDeduction'
+  | 'otherDeductions'
   | 'totalDeductions';
 
 // Colunas monetárias exportadas no resumo anual (CSV/PDF). Subconjunto de
@@ -181,7 +184,7 @@ export class PayslipsService {
         payslipId,
         userId,
         action,
-        err: { message: e instanceof Error ? e.message : String(e) },
+        err: { message: e instanceof Error ? e.message : JSON.stringify(e) },
         msg: 'Falha ao registar log de acesso ao recibo',
       });
     }
@@ -374,7 +377,7 @@ export class PayslipsService {
 
         results.created++;
       } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : String(e);
+        const message = e instanceof Error ? e.message : JSON.stringify(e);
         results.errors.push(`User ${u.id}: ${message}`);
         this.logger.error({
           userId: u.id,
@@ -590,27 +593,17 @@ export class PayslipsService {
       bonuses: diff('bonuses'),
       overtime: diff('overtime'),
       totalDeductions: diff('totalDeductions'),
-    };
-  }
-
-  // ─── SIMULAÇÃO ─────────────────────────────────────────────────────────────
-  simulate(dto: SimulatePayslipDto) {
-    const totals = this.computeTotals(dto);
-    const irtInfo = this.calcIRT(dto.baseSalary);
-
-    return {
-      input: dto,
-      grossSalary: totals.grossSalary,
-      incomeTax: totals.incomeTax,
-      socialSecurity: totals.socialSecurity,
-      employerInss: totals.employerInss,
-      totalDeductions: totals.totalDeductions,
-      netSalary: totals.netSalary,
-      irtDetails: {
-        bracket: irtInfo.bracket,
-        formula: irtInfo.formula,
-        effectiveRate: totals.grossSalary > 0 ? (totals.incomeTax / totals.grossSalary) * 100 : 0,
-      },
+      // Restantes linhas do recibo, para a vista comparar mostrar o mesmo
+      // detalhe de Remunerações / Deduções que o detalhe do recibo.
+      mealAllowance: diff('mealAllowance'),
+      vacationAllowance: diff('vacationAllowance'),
+      christmasAllowance: diff('christmasAllowance'),
+      otherAllowances: diff('otherAllowances'),
+      employerInss: diff('employerInss'),
+      healthInsurance: diff('healthInsurance'),
+      loanDeduction: diff('loanDeduction'),
+      advanceDeduction: diff('advanceDeduction'),
+      otherDeductions: diff('otherDeductions'),
     };
   }
 

@@ -4,6 +4,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -21,6 +22,9 @@ import { Role } from '../auth/enums/role.enum';
 import { PayrollInsightsService } from './reports/payroll-insights.service';
 import { PayrollPaymentsService } from './payments/payroll-payments.service';
 import {
+  CreateDeductionTypeDto,
+  UpdateDeductionTypeDto,
+  SetDeductionMandatoryDto,
   CreatePayrollPaymentDto,
   PayrollEmployeesFilterDto,
   PayrollReportFilterDto,
@@ -70,10 +74,62 @@ export class PayrollOpsController {
   }
 
   @Put('taxes')
-  @Roles(Role.ADMIN)
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar/actualizar regras INSS/IRT de um ano' })
   upsertTaxes(@Body() dto: UpsertTaxConfigDto) {
     return this.insights.upsertTaxConfig(dto);
+  }
+
+  // ─── Deduções/impostos adicionais (rascunho → publicado) ──────────────────
+  @Get('deduction-types')
+  @ApiOperation({ summary: 'Deduções/impostos adicionais (rascunhos e publicados)' })
+  listDeductionTypes() {
+    return this.insights.listDeductionTypes();
+  }
+
+  @Post('deduction-types')
+  @ApiOperation({ summary: 'Criar dedução/imposto (nasce em rascunho)' })
+  createDeductionType(@Body() dto: CreateDeductionTypeDto, @CurrentUser() user: CurrentUserData) {
+    return this.insights.createDeductionType(dto, user.id);
+  }
+
+  @Patch('deduction-types/:id')
+  @ApiOperation({ summary: 'Editar dedução em rascunho' })
+  updateDeductionType(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateDeductionTypeDto) {
+    return this.insights.updateDeductionType(id, dto);
+  }
+
+  @Post('deduction-types/:id/publish')
+  @ApiOperation({ summary: 'Publicar dedução (passa a aparecer em "Por tipo de dedução")' })
+  publishDeductionType(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.insights.publishDeductionType(id, user.id);
+  }
+
+  @Patch('deduction-types/code/:code')
+  @ApiOperation({ summary: 'Editar "Obrigatório" de um tipo da tabela' })
+  setDeductionMandatory(@Param('code') code: string, @Body() dto: SetDeductionMandatoryDto) {
+    return this.insights.setDeductionMandatory(code, dto.mandatory);
+  }
+
+  @Delete('deduction-types/code/:code')
+  @ApiOperation({ summary: 'Remover um tipo da tabela "Por tipo de dedução"' })
+  removeDeductionFromTable(@Param('code') code: string) {
+    return this.insights.removeDeductionFromTable(code);
+  }
+
+  @Post('deduction-types/restore-defaults')
+  @ApiOperation({ summary: 'Repor os tipos de base removidos/editados' })
+  restoreDeductionDefaults() {
+    return this.insights.restoreDeductionDefaults();
+  }
+
+  @Delete('deduction-types/:id')
+  @ApiOperation({ summary: 'Eliminar dedução em rascunho' })
+  deleteDeductionType(@Param('id', ParseIntPipe) id: number) {
+    return this.insights.deleteDeductionType(id);
   }
 
   @Get('reports/:type')

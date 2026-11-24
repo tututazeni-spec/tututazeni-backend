@@ -88,7 +88,6 @@ export function buildPdfInput(p: SlipForPdf): PdfPayslipInput {
     deductions,
     netSalary: p.netSalary,
     currencySymbol: 'AOA',
-    companyName: 'INNOVA',
     receiptCode: p.receiptCode ?? undefined,
     issuedAt: (p as { issuedAt?: string | Date }).issuedAt ?? undefined,
   };

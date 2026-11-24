@@ -12,10 +12,13 @@ import {
   buildPaginatedResponse,
 } from '../../common/helpers/pagination.helper';
 import { money } from '../taxes/money.util';
+import { ANGOLA_DEFAULT_EXTRAS } from '../taxes/payroll-engine.service';
 import {
   PayrollReportFilterDto,
   PayrollEmployeesFilterDto,
   UpsertTaxConfigDto,
+  CreateDeductionTypeDto,
+  UpdateDeductionTypeDto,
 } from '../payroll.dto';
 
 const PERIOD_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -259,6 +262,7 @@ export class PayrollInsightsService {
       select: {
         id: true,
         fullName: true,
+        avatarUrl: true,
         employeeNumber: true,
         nif: true,
         nib: true,
@@ -314,7 +318,7 @@ export class PayrollInsightsService {
   async deductions(period?: string) {
     const target = period ?? new Date().toISOString().slice(0, 7);
     if (!PERIOD_RE.test(target)) throw new BadRequestException('Período inválido (AAAA-MM)');
-    const [payslips, config] = await Promise.all([
+    const [payslips, config, customTypes, settings] = await Promise.all([
       this.prisma.read.payslip.findMany({
         where: { period: target },
         select: {
@@ -331,7 +335,13 @@ export class PayrollInsightsService {
         },
       }),
       this.taxConfig(Number(target.slice(0, 4))),
+      this.prisma.read.deductionType.findMany({
+        where: { status: 'PUBLISHED' },
+        orderBy: { publishedAt: 'asc' },
+      }),
+      this.prisma.read.deductionTypeSetting.findMany(),
     ]);
+    const settingOf = new Map(settings.map(s => [s.code, s]));
     const types = [
       {
         code: 'INSS_EMPLOYEE',
@@ -390,13 +400,28 @@ export class PayrollInsightsService {
     return {
       period: target,
       employees: payslips.length,
-      types: types.map(t => ({
-        code: t.code,
-        name: t.name,
-        mandatory: t.mandatory,
-        total: sum(payslips, t.pick),
-        employeesAffected: payslips.filter(p => (t.pick(p) ?? 0) > 0).length,
-      })),
+      types: [
+        ...types
+          .filter(t => !settingOf.get(t.code)?.hidden)
+          .map(t => ({
+            code: t.code,
+            name: t.name,
+            mandatory: settingOf.get(t.code)?.mandatory ?? t.mandatory,
+            custom: false,
+            total: sum(payslips, t.pick),
+            employeesAffected: payslips.filter(p => (t.pick(p) ?? 0) > 0).length,
+          })),
+        // Publicadas por ADMIN/RH: ainda não entram no cálculo dos recibos,
+        // por isso não têm total nem colaboradores afectados.
+        ...customTypes.map(t => ({
+          code: `CUSTOM_${t.id}`,
+          name: t.name,
+          mandatory: t.mandatory,
+          custom: true,
+          total: 0,
+          employeesAffected: 0,
+        })),
+      ],
       inss: {
         contributoryBase: sum(payslips, p => p.grossSalary),
         employeeTotal: sum(payslips, p => p.socialSecurity),
@@ -412,6 +437,133 @@ export class PayrollInsightsService {
       },
       config,
     };
+  }
+
+  // ─── Deduções/impostos adicionais (rascunho → publicado) ──────────────────
+  listDeductionTypes() {
+    return this.prisma.read.deductionType.findMany({ orderBy: { createdAt: 'desc' } });
+  }
+
+  private assertDeductionValue(calcMethod: string, value: number) {
+    if (calcMethod === 'PERCENT' && value > 1)
+      throw new BadRequestException(
+        'Percentagem inválida: use uma fracção entre 0 e 1 (3% = 0,03).',
+      );
+  }
+
+  async createDeductionType(dto: CreateDeductionTypeDto, userId: number) {
+    this.assertDeductionValue(dto.calcMethod, dto.value);
+    return this.prisma.deductionType.create({
+      data: {
+        name: dto.name.trim(),
+        description: dto.description?.trim() || null,
+        calcMethod: dto.calcMethod,
+        value: dto.value,
+        mandatory: dto.mandatory ?? false,
+        status: 'DRAFT',
+        createdById: userId,
+      },
+    });
+  }
+
+  async updateDeductionType(id: number, dto: UpdateDeductionTypeDto) {
+    const current = await this.prisma.deductionType.findUnique({ where: { id } });
+    if (!current) throw new NotFoundException('Dedução não encontrada.');
+    if (current.status !== 'DRAFT')
+      throw new BadRequestException('Só é possível editar deduções em rascunho.');
+    this.assertDeductionValue(dto.calcMethod ?? current.calcMethod, dto.value ?? current.value);
+    return this.prisma.deductionType.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined && { name: dto.name.trim() }),
+        ...(dto.description !== undefined && { description: dto.description.trim() || null }),
+        ...(dto.calcMethod !== undefined && { calcMethod: dto.calcMethod }),
+        ...(dto.value !== undefined && { value: dto.value }),
+        ...(dto.mandatory !== undefined && { mandatory: dto.mandatory }),
+      },
+    });
+  }
+
+  async publishDeductionType(id: number, userId: number) {
+    const current = await this.prisma.deductionType.findUnique({ where: { id } });
+    if (!current) throw new NotFoundException('Dedução não encontrada.');
+    if (current.status === 'PUBLISHED')
+      throw new BadRequestException('Esta dedução já está publicada.');
+    return this.prisma.deductionType.update({
+      where: { id },
+      data: { status: 'PUBLISHED', publishedAt: new Date(), publishedById: userId },
+    });
+  }
+
+  private customId(code: string): number | null {
+    const m = /^CUSTOM_(\d+)$/.exec(code);
+    return m ? Number(m[1]) : null;
+  }
+
+  private static readonly BASE_CODES = [
+    'INSS_EMPLOYEE',
+    'INSS_EMPLOYER',
+    'IRT',
+    'HEALTH',
+    'LOAN',
+    'ADVANCE',
+    'OTHER',
+  ];
+
+  /** Edita "Obrigatório" de qualquer tipo da tabela (de base ou adicional). */
+  async setDeductionMandatory(code: string, mandatory: boolean) {
+    const id = this.customId(code);
+    if (id != null) {
+      const current = await this.prisma.deductionType.findUnique({ where: { id } });
+      if (!current) throw new NotFoundException('Dedução não encontrada.');
+      await this.prisma.deductionType.update({ where: { id }, data: { mandatory } });
+    } else {
+      if (!PayrollInsightsService.BASE_CODES.includes(code))
+        throw new NotFoundException('Tipo de dedução desconhecido.');
+      await this.prisma.deductionTypeSetting.upsert({
+        where: { code },
+        update: { mandatory },
+        create: { code, mandatory },
+      });
+    }
+    return { code, mandatory };
+  }
+
+  /**
+   * Remove um tipo da tabela. Os adicionais são eliminados; os de base são
+   * apenas ocultados (o cálculo dos recibos não muda).
+   */
+  async removeDeductionFromTable(code: string) {
+    const id = this.customId(code);
+    if (id != null) {
+      const current = await this.prisma.deductionType.findUnique({ where: { id } });
+      if (!current) throw new NotFoundException('Dedução não encontrada.');
+      await this.prisma.deductionType.delete({ where: { id } });
+    } else {
+      if (!PayrollInsightsService.BASE_CODES.includes(code))
+        throw new NotFoundException('Tipo de dedução desconhecido.');
+      await this.prisma.deductionTypeSetting.upsert({
+        where: { code },
+        update: { hidden: true },
+        create: { code, hidden: true },
+      });
+    }
+    return { code, removed: true };
+  }
+
+  /** Volta a mostrar os tipos de base removidos e repõe o "Obrigatório" original. */
+  async restoreDeductionDefaults() {
+    const r = await this.prisma.deductionTypeSetting.deleteMany({});
+    return { restored: r.count };
+  }
+
+  async deleteDeductionType(id: number) {
+    const current = await this.prisma.deductionType.findUnique({ where: { id } });
+    if (!current) throw new NotFoundException('Dedução não encontrada.');
+    if (current.status !== 'DRAFT')
+      throw new BadRequestException('Só é possível eliminar deduções em rascunho.');
+    await this.prisma.deductionType.delete({ where: { id } });
+    return { deleted: true };
   }
 
   /** Regras fiscais/contributivas por ano — configuráveis (nunca hardcoded). */
@@ -441,7 +593,14 @@ export class PayrollInsightsService {
       const cfg = await tx.countryConfig.upsert({
         where: { countryCode_taxYear: { countryCode, taxYear: dto.taxYear } },
         update: data,
-        create: { countryCode, taxYear: dto.taxYear, ...data },
+        // Primeira gravação do ano: mantém os valores por omissão de Angola
+        // (seguro de saúde, quota sindical…) que o motor já aplicava sem BD.
+        create: {
+          countryCode,
+          taxYear: dto.taxYear,
+          ...(countryCode === 'AO' ? ANGOLA_DEFAULT_EXTRAS : {}),
+          ...data,
+        },
       });
       await tx.irtBracket.deleteMany({ where: { configId: cfg.id } });
       await tx.irtBracket.createMany({

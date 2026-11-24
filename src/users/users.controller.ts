@@ -23,6 +23,7 @@ import { UsersService } from './users.service';
 import {
   CreateUserDto,
   UpdateUserDto,
+  UpdateOrgOptionsDto,
   UpdateProfileDto,
   UpdateMyAvatarDto,
   UserFilterDto,
@@ -152,6 +153,24 @@ export class UsersController {
   @ApiOperation({ summary: 'Histórico & Auditoria do módulo (docs/modulo_users.md Ponto 6)' })
   moduleAuditLogs(@Query() filters: ModuleAuditLogFilterDto) {
     return this.svc.getModuleAuditLogs(filters);
+  }
+
+  // Rota estática — antes de ':id'.
+  @Get('org-options')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary: 'Unidades e áreas já usadas num departamento (listas do formulário de utilizador)',
+  })
+  @ApiQuery({ name: 'departmentId', required: true })
+  orgOptions(@Query('departmentId', ParseIntPipe) departmentId: number) {
+    return this.svc.getOrgOptions(departmentId);
+  }
+
+  @Put('org-options')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Editar as listas de unidades e áreas de um departamento' })
+  updateOrgOptions(@Body() dto: UpdateOrgOptionsDto) {
+    return this.svc.updateOrgOptions(dto);
   }
 
   // Rota estática — antes de ':id'.

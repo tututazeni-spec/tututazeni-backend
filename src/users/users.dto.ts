@@ -5,6 +5,7 @@ import {
   IsBoolean,
   IsInt,
   IsEnum,
+  IsIn,
   IsArray,
   ValidateNested,
   MaxLength,
@@ -128,12 +129,38 @@ export class CreateUserDto {
   @MaxLength(40)
   identificationNumber?: string;
 
+  @ApiPropertyOptional({
+    enum: ['BILHETE_IDENTIDADE', 'PASSAPORTE', 'CARTAO_RESIDENTE', 'TITULO_RESIDENCIA'],
+    description: 'Tipo do documento de identificação',
+  })
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsIn(['BILHETE_IDENTIDADE', 'PASSAPORTE', 'CARTAO_RESIDENTE', 'TITULO_RESIDENCIA'])
+  identificationType?: string;
+
   @ApiPropertyOptional({ description: 'Número de Identificação Fiscal' })
   @IsOptional()
   @EmptyStringToUndefined()
   @IsString()
   @MaxLength(40)
   nif?: string;
+
+  @ApiPropertyOptional({ description: 'Banco que recebe o salário (nome)' })
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  @MaxLength(120)
+  salaryBankName?: string;
+
+  @ApiPropertyOptional({
+    description: 'IBAN angolano da conta de salário (AO + 23 dígitos); o NIB deriva dele',
+    example: 'AO06004000010123456789012',
+  })
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  @MaxLength(40)
+  iban?: string;
 
   // ─── Dados de contacto ────────────────────────────────────────────────────
 
@@ -186,10 +213,30 @@ export class CreateUserDto {
   @IsInt()
   unitId?: number;
 
+  @ApiPropertyOptional({
+    description: 'Nome de uma unidade nova ou existente (usado se unitId não vier)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  unitName?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsInt()
   managerId?: number;
+
+  /** Mentor/buddy do onboarding — pré-preenche o plano de integração. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  mentorId?: number;
+
+  /** RH responsável do onboarding — pré-preenche o plano de integração. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  hrResponsibleId?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -438,6 +485,18 @@ export class UserFilterDto extends BaseFilterDto {
   @IsOptional()
   @IsInt()
   @Type(() => Number)
+  mentorId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  hrResponsibleId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
   roleId?: number;
 
   @ApiPropertyOptional({ enum: AccountStatus })
@@ -611,4 +670,34 @@ export class ModuleAuditLogFilterDto extends BaseFilterDto {
   @EmptyStringToUndefined()
   @IsDateString()
   to?: string;
+}
+
+export class OrgUnitItemDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  id?: number;
+
+  @ApiProperty()
+  @IsString()
+  @MaxLength(120)
+  name!: string;
+}
+
+export class UpdateOrgOptionsDto {
+  @ApiProperty()
+  @IsInt()
+  departmentId!: number;
+
+  @ApiProperty({ type: [OrgUnitItemDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => OrgUnitItemDto)
+  units!: OrgUnitItemDto[];
+
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(120, { each: true })
+  areas!: string[];
 }

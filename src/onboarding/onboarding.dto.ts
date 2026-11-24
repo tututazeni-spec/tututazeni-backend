@@ -199,6 +199,12 @@ export class CreateOnboardingTemplateDto {
   @IsWebLink()
   welcomeVideoUrl?: string;
 
+  @ApiPropertyOptional({ description: 'Mensagem de boas-vindas mostrada ao colaborador' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  welcomeMessage?: string;
+
   @ApiPropertyOptional({ default: true })
   @IsOptional()
   @IsBoolean()
@@ -297,6 +303,54 @@ export class CompleteTaskDto {
   @IsOptional()
   @IsWebLink({ allowRelative: true })
   evidenceUrl?: string;
+}
+
+// Tarefa criada avulso num plano (aba Tarefas) — só ADMIN/RH.
+export class CreatePlanTaskDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(200)
+  title!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  description?: string;
+
+  @ApiProperty({ enum: TaskCategory })
+  @IsEnum(TaskCategory)
+  category!: TaskCategory;
+
+  @ApiProperty({ enum: TaskPhase })
+  @IsEnum(TaskPhase)
+  phase!: TaskPhase;
+
+  @ApiProperty({ description: 'Data de início (ISO)' })
+  @IsDateString()
+  startDate!: string;
+
+  @ApiProperty({ description: 'Data de fim (ISO)' })
+  @IsDateString()
+  dueDate!: string;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  isMandatory?: boolean;
+
+  @ApiPropertyOptional({ description: 'Mesmo departamento do colaborador ou RH' })
+  @IsOptional()
+  @IsInt()
+  assigneeId?: number;
+}
+
+// Atribuir/alterar a pessoa de uma tarefa existente; `null` remove a atribuição.
+export class AssignTaskDto {
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsInt()
+  assigneeId?: number | null;
 }
 
 export class SkipTaskDto {
@@ -617,6 +671,12 @@ export class OnboardingCheckinFilterDto extends BaseFilterDto {
   @IsInt()
   @Type(() => Number)
   planId?: number;
+
+  @ApiPropertyOptional({ description: 'Departamento do colaborador' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
 
   @ApiPropertyOptional({ description: 'Só check-ins em atraso (prazo passado, ainda pendentes)' })
   @IsOptional()

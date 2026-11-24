@@ -13,6 +13,7 @@ import { CurrentUserData } from '../common/decorators';
 import { isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { OneOnOneService } from '../one-on-one/one-on-one.service';
+import { assertAdminEvaluatedByOtherAdmin, findActiveAdminIds } from './evaluation-admin-rule';
 import {
   CreateCycleDto,
   UpdateCycleDto,
@@ -456,11 +457,11 @@ export class EvaluationService {
     // GROUP usa a lista explícita de utilizadores; ALL/DEPARTMENT/UNIT (ou
     // nenhum populationType, comportamento pré-existente) combinam os
     // filtros de departamento/unidade indicados.
-    let users: { id: number; managerId: number | null }[];
+    let users: { id: number; managerId: number | null; role?: { name: string } | null }[];
     if (campaign.populationType === 'GROUP' && campaign.targetUserIds?.length) {
       users = await this.prisma.read.user.findMany({
         where: { active: true, id: { in: campaign.targetUserIds } },
-        select: { id: true, managerId: true },
+        select: { id: true, managerId: true, role: { select: { name: true } } },
       });
     } else {
       const scopeFilter: Prisma.UserWhereInput = {};
@@ -468,9 +469,18 @@ export class EvaluationService {
       if (campaign.targetUnitIds?.length) scopeFilter.unitId = { in: campaign.targetUnitIds };
       users = await this.prisma.read.user.findMany({
         where: { active: true, ...scopeFilter },
-        select: { id: true, managerId: true },
+        select: { id: true, managerId: true, role: { select: { name: true } } },
       });
     }
+
+    // Admins: sem autoavaliação aqui; o avaliador é outro admin (o gestor, se
+    // for admin; senão o primeiro outro admin activo).
+    const adminIds = await findActiveAdminIds(this.prisma);
+    const adminSet = new Set(adminIds);
+    const adminEvaluatorFor = (u: { id: number; managerId: number | null }): number | null => {
+      if (u.managerId && u.managerId !== u.id && adminSet.has(u.managerId)) return u.managerId;
+      return adminIds.find(id => id !== u.id) ?? null;
+    };
 
     const assignments: Prisma.EvaluationRequestCreateManyInput[] = [];
     const selfModels: EvalCampaignModel[] = [
@@ -487,6 +497,20 @@ export class EvaluationService {
     ];
 
     for (const u of users) {
+      if (u.role?.name === 'ADMIN') {
+        if (managerModels.includes(campaign.model)) {
+          const evaluatorId = adminEvaluatorFor(u);
+          if (evaluatorId) {
+            assignments.push({
+              cycleId,
+              evaluatorId,
+              evaluatedId: u.id,
+              type: EvalType.MANAGER,
+            });
+          }
+        }
+        continue;
+      }
       if (selfModels.includes(campaign.model)) {
         assignments.push({ cycleId, evaluatorId: u.id, evaluatedId: u.id, type: EvalType.SELF });
       }
@@ -855,6 +879,8 @@ export class EvaluationService {
       });
       if (!isTeamMember) throw new NotFoundException('Colaborador não encontrado');
     }
+
+    await assertAdminEvaluatedByOtherAdmin(this.prisma, dto.evaluatorId, dto.evaluatedId);
 
     const existing = await this.prisma.evaluationRequest
       .findFirst({
@@ -1263,6 +1289,8 @@ export class EvaluationService {
     if (request.status === RequestStatus.COMPLETED) {
       throw new ConflictException('Avaliação já submetida');
     }
+    // Um admin não se avalia a si próprio (cobre pedidos já existentes).
+    await assertAdminEvaluatedByOtherAdmin(this.prisma, evaluatorId, request.evaluatedId);
 
     validateStructuredItems(dto, { requireEvidence: request.cycle?.requireEvidence ?? false });
     await this.structured.assertResponsiblesExist(dto.recommendationItems);
@@ -1490,6 +1518,7 @@ export class EvaluationService {
   // ══════════════════════════════════════════════════════
 
   async create(evaluatorId: number, dto: CreateEvaluationDto) {
+    await assertAdminEvaluatedByOtherAdmin(this.prisma, evaluatorId, dto.evaluatedId);
     const avgScore = dto.criteria.length
       ? +(dto.criteria.reduce((s, c) => s + c.score, 0) / dto.criteria.length).toFixed(2)
       : 0;

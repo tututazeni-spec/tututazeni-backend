@@ -82,6 +82,31 @@ describe('OnboardingService', () => {
     service = module.get<OnboardingService>(OnboardingService);
   });
 
+  describe('autoAssignForNewUser', () => {
+    it('sem cargo não faz nada', async () => {
+      expect(await service.autoAssignForNewUser(5, null, 2)).toBeNull();
+      expect(mockPrisma.onboardingTemplate.findMany).not.toHaveBeenCalled();
+    });
+
+    it('sem template para o cargo não cria plano', async () => {
+      mockPrisma.onboardingTemplate.findMany.mockResolvedValue([]);
+      expect(await service.autoAssignForNewUser(5, 7, 2)).toBeNull();
+    });
+
+    it('prefere o template do mesmo departamento', async () => {
+      mockPrisma.onboardingTemplate.findMany.mockResolvedValue([
+        { id: 10, departmentId: null },
+        { id: 11, departmentId: 2 },
+      ]);
+      const create = jest.spyOn(service, 'create').mockResolvedValue({ id: 99 } as never);
+      await service.autoAssignForNewUser(5, 7, 2);
+      expect(mockPrisma.onboardingTemplate.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { active: true, positionId: 7 } }),
+      );
+      expect(create).toHaveBeenCalledWith({ userId: 5, templateId: 11 });
+    });
+  });
+
   describe('findAllTemplates', () => {
     it('deve retornar templates', async () => {
       mockPrisma.onboardingTemplate.findMany.mockResolvedValue([baseTemplate]);
