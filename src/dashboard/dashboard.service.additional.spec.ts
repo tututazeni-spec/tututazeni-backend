@@ -319,7 +319,7 @@ describe('DashboardService (additional)', () => {
           severity: 'MEDIUM',
           message: '2 survey(s) por responder',
           count: 2,
-          actionUrl: '/engagement',
+          actionUrl: '/dashboard-rh?tab=engagement',
           scope: 'user',
         },
         {
@@ -328,7 +328,7 @@ describe('DashboardService (additional)', () => {
           severity: 'HIGH',
           message: '1 avaliação(ões) 360° pendentes',
           count: 1,
-          actionUrl: '/evaluations/pending',
+          actionUrl: '/evaluation360',
           scope: 'user',
         },
         {
@@ -347,13 +347,13 @@ describe('DashboardService (additional)', () => {
           type: 'EVALUATION',
           message: '1 avaliação(ões) 360° pendentes',
           priority: 'URGENT',
-          actionUrl: '/evaluations/pending',
+          actionUrl: '/evaluation360',
         },
         {
           type: 'SURVEY',
           message: '2 survey(s) por responder',
           priority: 'ATTENTION',
-          actionUrl: '/engagement',
+          actionUrl: '/dashboard-rh?tab=engagement',
         },
         {
           type: 'TRAINING',
@@ -381,7 +381,7 @@ describe('DashboardService (additional)', () => {
             severity: 'HIGH',
             message: '2 membro(s) da equipa com performance abaixo da média',
             count: 2,
-            actionUrl: '/evaluations',
+            actionUrl: '/evaluation',
             scope: 'team',
           },
         ]);
@@ -398,7 +398,7 @@ describe('DashboardService (additional)', () => {
           type: 'PERFORMANCE',
           message: '2 membro(s) da equipa com performance abaixo da média',
           priority: 'URGENT',
-          actionUrl: '/evaluations',
+          actionUrl: '/evaluation',
         },
       ]);
     });

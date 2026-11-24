@@ -681,7 +681,7 @@ describe('MetricsAggregationService', () => {
           severity: 'MEDIUM',
           scope: 'user',
           count: 2,
-          actionUrl: '/engagement',
+          actionUrl: '/dashboard-rh?tab=engagement',
         });
         expect(mockPrisma.engagementSurvey.count).toHaveBeenCalledWith({
           where: { status: 'ACTIVE', responses: { none: { userId: 42 } } },
