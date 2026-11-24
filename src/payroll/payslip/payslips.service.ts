@@ -79,6 +79,10 @@ type PayslipAmountField =
   | 'incomeTax'
   | 'socialSecurity'
   | 'employerInss'
+  | 'healthInsurance'
+  | 'loanDeduction'
+  | 'advanceDeduction'
+  | 'otherDeductions'
   | 'totalDeductions';
 
 // Colunas monetárias exportadas no resumo anual (CSV/PDF). Subconjunto de
@@ -590,6 +594,17 @@ export class PayslipsService {
       bonuses: diff('bonuses'),
       overtime: diff('overtime'),
       totalDeductions: diff('totalDeductions'),
+      // Restantes linhas do recibo, para a vista comparar mostrar o mesmo
+      // detalhe de Remunerações / Deduções que o detalhe do recibo.
+      mealAllowance: diff('mealAllowance'),
+      vacationAllowance: diff('vacationAllowance'),
+      christmasAllowance: diff('christmasAllowance'),
+      otherAllowances: diff('otherAllowances'),
+      employerInss: diff('employerInss'),
+      healthInsurance: diff('healthInsurance'),
+      loanDeduction: diff('loanDeduction'),
+      advanceDeduction: diff('advanceDeduction'),
+      otherDeductions: diff('otherDeductions'),
     };
   }
 
