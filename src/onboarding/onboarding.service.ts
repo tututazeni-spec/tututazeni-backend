@@ -1440,15 +1440,7 @@ export class OnboardingService {
   }
 
   async findAllCheckins(filters: OnboardingCheckinFilterDto) {
-    const {
-      page = 1,
-      limit = 20,
-      status,
-      type,
-      planId,
-      departmentId,
-      overdue,
-    } = filters;
+    const { page = 1, limit = 20, status, type, planId, departmentId, overdue } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const now = new Date();
 

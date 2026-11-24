@@ -12,7 +12,7 @@ describe('iban', () => {
   it('aceita o IBAN com controlo correcto e deriva o NIB', () => {
     // O controlo do exemplo é calculado aqui para o teste não depender de um IBAN real.
     const body = '004000010123456789012';
-    let check = 98 - Number(BigInt(body + '102400') % 97n);
+    const check = 98 - Number(BigInt(body + '102400') % 97n);
     const iban = `AO${String(check).padStart(2, '0')}${body}`;
     expect(isValidAngolanIban(iban)).toBe(true);
     expect(nibFromIban(iban)).toBe(body);

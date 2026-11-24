@@ -13,7 +13,6 @@ import {
   UpdatePayslipDto,
   PayslipFilterDto,
   BulkCreatePayslipDto,
-  SimulatePayslipDto,
   CreateDisputeDto,
   DisputeFilterDto,
   ResolveDisputeDto,
@@ -185,7 +184,7 @@ export class PayslipsService {
         payslipId,
         userId,
         action,
-        err: { message: e instanceof Error ? e.message : String(e) },
+        err: { message: e instanceof Error ? e.message : JSON.stringify(e) },
         msg: 'Falha ao registar log de acesso ao recibo',
       });
     }
@@ -378,7 +377,7 @@ export class PayslipsService {
 
         results.created++;
       } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : String(e);
+        const message = e instanceof Error ? e.message : JSON.stringify(e);
         results.errors.push(`User ${u.id}: ${message}`);
         this.logger.error({
           userId: u.id,
