@@ -10,6 +10,7 @@ import { buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { isPrivileged } from '../common/authz/ownership';
 import { leaveScopeOf, leaveUserFilter, ORG_WIDE_ROLES, TEAM_ROLES } from './leave-scope.helper';
 import { LeaveSettingsService } from './leave-settings.service';
+import { toLeaveTypeEnum } from './leave-management.service';
 import {
   DurationPreviewDto,
   LeaveStatus,
@@ -351,8 +352,26 @@ export class LeaveOverviewService {
       workDays = +(dto.hours / cfg.hoursPerDay).toFixed(2);
     }
 
+    // Colaborador nunca inicializado não tem linha de saldo: cria-a com o direito
+    // anual do tipo (igual ao que a submissão faz), senão o preview mostraria 0.
+    if (type.annualLimit) {
+      await this.prisma.leaveBalance.createMany({
+        data: [
+          {
+            userId: targetId,
+            leaveTypeCode: dto.leaveTypeCode,
+            leaveType: toLeaveTypeEnum(dto.leaveTypeCode),
+            balance: type.annualLimit,
+            used: 0,
+          },
+        ],
+        skipDuplicates: true,
+      });
+    }
+
     const [balance, overlap] = await Promise.all([
-      this.prisma.read.leaveBalance.findUnique({
+      // Primário (não a réplica): pode ter sido criado mesmo acima.
+      this.prisma.leaveBalance.findUnique({
         where: { userId_leaveTypeCode: { userId: targetId, leaveTypeCode: dto.leaveTypeCode } },
       }),
       this.prisma.read.leaveRequest.findFirst({

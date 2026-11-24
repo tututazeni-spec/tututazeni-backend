@@ -686,6 +686,17 @@ export class CoursesController {
     return this.svc.updateCohort(cohortId, omitForExternal(user, dto, ['instructorId']), user);
   }
 
+  @Patch('cohorts/:cohortId/publish')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
+  @ApiOperation({ summary: 'Publicar turma (rascunho → inscrições abertas)' })
+  @HttpCode(HttpStatus.OK)
+  publishCohort(
+    @Param('cohortId', ParseIntPipe) cohortId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.publishCohort(cohortId, user);
+  }
+
   @Patch('cohorts/:cohortId/close')
   @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR, Role.INSTRUCTOR_EXTERNO)
   @ApiOperation({ summary: 'Encerrar turma' })

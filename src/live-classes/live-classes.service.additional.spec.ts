@@ -336,12 +336,12 @@ describe('LiveClassesService (additional)', () => {
   });
 
   describe('duplicate', () => {
-    it('cria uma cópia com estado AGENDADA e novo código', async () => {
+    it('cria uma cópia em preparação e com novo código', async () => {
       mockPrisma.liveClass.findUnique.mockResolvedValue(baseLiveClass);
       mockPrisma.liveClass.create.mockResolvedValue({ ...baseLiveClass, id: 2, topic: 'Cópia' });
       const result = await service.duplicate(1);
       expect(mockPrisma.liveClass.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ status: 'AGENDADA' }) }),
+        expect.objectContaining({ data: expect.objectContaining({ status: 'EM_PREPARACAO' }) }),
       );
       expect(result).toBeDefined();
     });

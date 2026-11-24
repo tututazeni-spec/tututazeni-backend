@@ -79,6 +79,7 @@ describe('TrainingsService — Turmas & Participantes (pts 5-6)', () => {
         .mockResolvedValueOnce(null) // existing na sessão de destino
         .mockResolvedValueOnce(null); // waitlist a promover na origem
       mockPrisma.trainingSession.findUnique.mockResolvedValue({
+        published: true,
         maxParticipants: 0,
         waitlistEnabled: true,
         _count: { participants: 0 },
@@ -106,6 +107,7 @@ describe('TrainingsService — Turmas & Participantes (pts 5-6)', () => {
   describe('bulkRegisterParticipants', () => {
     it('regista quem consegue e reporta falhas individualmente', async () => {
       mockPrisma.trainingSession.findUnique.mockResolvedValue({
+        published: true,
         maxParticipants: 0,
         waitlistEnabled: true,
         _count: { participants: 0 },

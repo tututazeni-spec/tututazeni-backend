@@ -55,6 +55,7 @@ const baseTraining = {
   status: 'PUBLISHED',
   type: 'ONLINE',
   createdById: 1,
+  sessions: [],
   participants: [],
   _count: { participants: 0, sessions: 1 },
 };

@@ -633,8 +633,8 @@ async function main() {
       isPaid: true,
       annualLimit: 22,
       allowCarryOver: true,
-      carryOverLimit: 5,
-      minNoticeDays: 15,
+      carryOverLimit: null, // todos os dias não gozados transitam (gozo até 31/03)
+      minNoticeDays: 0,
     },
     {
       code: 'SICK',
